@@ -1,0 +1,2 @@
+-- Flyway is disabled by default while the project is still schema-first through Hibernate.
+-- Enable Flyway only after replacing this baseline with real DDL migrations for the UUID v7 schema.

@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5444/skillswapdb}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # UUID v7 changed primary-key types; use a fresh dev schema instead of updating an old BIGINT schema.
+      ddl-auto: create
+    show-sql: true
+
+application:
+  security:
+    jwt:
+      secret-key: ${JWT_SECRET_KEY:c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
+  upload:
+    dir: ./uploads/files
+
+logging:
+  level:
+    "[org.hibernate.SQL]": DEBUG
+    "[org.hibernate.orm.jdbc.bind]": TRACE

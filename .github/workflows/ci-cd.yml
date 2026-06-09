@@ -1,0 +1,36 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven # Cache thư viện giúp build nhanh hơn ở các lần sau
+
+    - name: Compile and Build
+      run: mvn clean package -DskipTests
+
+    - name: Run Unit Tests
+      run: mvn test
+
+  # Phân hệ Deploy (Sẽ kích hoạt nếu bạn có VPS/Server)
+  # deploy:
+  #   needs: build-and-test
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Deploy to Production
+  #       run: echo "Cấu hình SSH vào VPS và pull docker image tại đây..."

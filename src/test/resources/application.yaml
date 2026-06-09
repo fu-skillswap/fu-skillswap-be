@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  flyway:
+    enabled: false
+
+application:
+  cors:
+    allowed-origin-patterns: http://localhost:3000
+  security:
+    jwt:
+      secret-key: c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0
+      expiration: 86400000
+      refresh-token:
+        expiration: 604800000
+    google:
+      client-id: test-google-client-id
+  upload:
+    dir: ./target/uploads-test

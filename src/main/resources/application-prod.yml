@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    # Lấy từ Environment Variables trên Neon
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: ${HIBERNATE_DDL_AUTO:update}
+    show-sql: false
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    baseline-on-migrate: false
+
+logging:
+  level:
+    root: INFO
