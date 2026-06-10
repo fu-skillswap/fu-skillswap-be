@@ -13,7 +13,9 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleAuthService;
+import com.fptu.exe.skillswap.modules.identity.service.IdentityLoginTransactionService;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
+import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,10 +24,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,10 +56,16 @@ class IdentityServiceTest {
     private GoogleAuthService googleAuthService;
 
     @Mock
+    private IdentityLoginTransactionService identityLoginTransactionService;
+
+    @Mock
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
     private JwtProperties jwtProperties;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private IdentityService identityService;
@@ -85,47 +95,30 @@ class IdentityServiceTest {
     @Test
     void loginWithGoogle_newUser_shouldCreateAndReturnTokens() {
         GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
-        
+        TokenResponse expected = TokenResponse.builder()
+                .accessToken("access_token")
+                .refreshToken("refresh_token")
+                .build();
+
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.empty());
-        when(userRepository.findByEmailIncludingDeleted("test@gmail.com")).thenReturn(Optional.empty());
-        
-        // Mock save user
-        when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
-            User u = invocation.getArgument(0);
-            u.setId(UUID.randomUUID());
-            return u;
-        });
-
-        // Mock token generation settings
-        JwtProperties.Jwt jwtSetting = new JwtProperties.Jwt();
-        jwtSetting.getRefreshToken().setExpiration(604800000L);
-        when(jwtProperties.getJwt()).thenReturn(jwtSetting);
-
-        when(jwtTokenProvider.generateAccessToken(any(UUID.class), anyString(), anyList()))
-                .thenReturn("access_token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh_token");
-        when(jwtTokenProvider.hashToken("refresh_token")).thenReturn("refresh_token_hash");
+        when(identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUserInfo)).thenReturn(expected);
 
         TokenResponse tokenResponse = identityService.loginWithGoogle(request);
 
         assertNotNull(tokenResponse);
         assertEquals("access_token", tokenResponse.getAccessToken());
         assertEquals("refresh_token", tokenResponse.getRefreshToken());
-        
-        verify(userRepository, times(2)).save(any(User.class));
-        verify(userRoleRepository, times(1)).save(any(UserRole.class));
-        verify(oauthAccountRepository, times(1)).save(any(OauthAccount.class));
-        verify(userSessionRepository, times(1)).save(any(UserSession.class));
+        verify(googleAuthService, times(1)).verifyToken("valid_token");
+        verify(identityLoginTransactionService, times(1)).loginWithVerifiedGoogleUser(googleUserInfo);
     }
 
     @Test
-    void loginWithGoogle_bannedUser_shouldThrowException() {
+    void loginWithGoogle_transactionServiceThrowsBaseException_shouldPropagate() {
         GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
-        activeUser.setStatus(UserStatus.BANNED);
+        BaseException expected = new BaseException(ErrorCode.USER_BANNED, "Tài khoản của bạn đã bị khóa");
 
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
+        when(identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUserInfo)).thenThrow(expected);
 
         BaseException exception = assertThrows(BaseException.class, () -> identityService.loginWithGoogle(request));
         assertEquals(ErrorCode.USER_BANNED, exception.getErrorCode());
@@ -133,48 +126,33 @@ class IdentityServiceTest {
     }
 
     @Test
-    void loginWithGoogle_inactiveUser_shouldThrowException() {
+    void loginWithGoogle_googleVerificationFails_shouldNotOpenTransaction() {
         GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
-        activeUser.setStatus(UserStatus.INACTIVE);
+        BaseException expected = new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
 
-        when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
+        when(googleAuthService.verifyToken("valid_token")).thenThrow(expected);
 
         BaseException exception = assertThrows(BaseException.class, () -> identityService.loginWithGoogle(request));
-        assertEquals(ErrorCode.USER_INACTIVE, exception.getErrorCode());
-        assertEquals("Tài khoản của bạn chưa hoạt động", exception.getMessage());
+        assertEquals(ErrorCode.OAUTH_VERIFICATION_FAILED, exception.getErrorCode());
+        verifyNoInteractions(identityLoginTransactionService);
     }
 
     @Test
-    void loginWithGoogle_softDeletedUser_shouldReactivateAndLogin() {
+    void loginWithGoogle_softDeletedUser_shouldDelegateToTransactionService() {
         GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
-        activeUser.setDeletedAt(LocalDateTime.now().minusDays(1));
-        activeUser.setStatus(UserStatus.INACTIVE);
+        TokenResponse expected = TokenResponse.builder()
+                .accessToken("access_token")
+                .refreshToken("refresh_token")
+                .build();
 
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
-
-        // Mock save user
-        when(userRepository.save(any(User.class))).thenReturn(activeUser);
-
-        // Mock token generation settings
-        JwtProperties.Jwt jwtSetting = new JwtProperties.Jwt();
-        jwtSetting.getRefreshToken().setExpiration(604800000L);
-        when(jwtProperties.getJwt()).thenReturn(jwtSetting);
-
-        when(jwtTokenProvider.generateAccessToken(any(UUID.class), anyString(), anyList()))
-                .thenReturn("access_token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh_token");
-        when(jwtTokenProvider.hashToken("refresh_token")).thenReturn("refresh_token_hash");
+        when(identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUserInfo)).thenReturn(expected);
 
         TokenResponse tokenResponse = identityService.loginWithGoogle(request);
 
         assertNotNull(tokenResponse);
-        assertNull(activeUser.getDeletedAt());
-        assertEquals(UserStatus.ACTIVE, activeUser.getStatus());
         assertEquals("access_token", tokenResponse.getAccessToken());
-        
-        verify(userRepository, times(1)).save(activeUser);
+        verify(identityLoginTransactionService, times(1)).loginWithVerifiedGoogleUser(googleUserInfo);
     }
 
     @Test
@@ -257,5 +235,59 @@ class IdentityServiceTest {
 
         assertTrue(session.isRevoked());
         verify(userSessionRepository, times(1)).save(session);
+    }
+
+    // ===== getCurrentUser tests =====
+
+    @Test
+    void getCurrentUser_userWithProfile_shouldReturnProfileCompletedTrue() {
+        // Arrange
+        when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
+        when(userRoleRepository.findByUserId(activeUserId)).thenReturn(List.of());
+
+        // Giả lập academic module set hasStudentProfile = true khi xử lý event
+        doAnswer(invocation -> {
+            ProfileStatusQuery query = invocation.getArgument(0);
+            query.setHasStudentProfile(true);
+            return null;
+        }).when(eventPublisher).publishEvent(any(ProfileStatusQuery.class));
+
+        // Act
+        UserMeResponse response = identityService.getCurrentUser(activeUserId);
+
+        // Assert
+        assertNotNull(response);
+        assertTrue(response.isProfileCompleted(), "profileCompleted phải là true khi đã có StudentProfile");
+        assertTrue(response.isHasStudentProfile(), "hasStudentProfile phải là true");
+        assertEquals(activeUser.getEmail(), response.getEmail());
+        verify(eventPublisher, times(1)).publishEvent(any(ProfileStatusQuery.class));
+    }
+
+    @Test
+    void getCurrentUser_userWithoutProfile_shouldReturnProfileCompletedFalse() {
+        // Arrange
+        when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
+        when(userRoleRepository.findByUserId(activeUserId)).thenReturn(List.of());
+
+        // eventPublisher.publishEvent() không làm gì → query giữ giá trị mặc định false
+        doNothing().when(eventPublisher).publishEvent(any(ProfileStatusQuery.class));
+
+        // Act
+        UserMeResponse response = identityService.getCurrentUser(activeUserId);
+
+        // Assert
+        assertNotNull(response);
+        assertFalse(response.isProfileCompleted(), "profileCompleted phải là false khi chưa có StudentProfile");
+        assertFalse(response.isHasStudentProfile(), "hasStudentProfile phải là false");
+        verify(eventPublisher, times(1)).publishEvent(any(ProfileStatusQuery.class));
+    }
+
+    @Test
+    void getCurrentUser_userNotFound_shouldThrowException() {
+        when(userRepository.findById(activeUserId)).thenReturn(Optional.empty());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> identityService.getCurrentUser(activeUserId));
+        assertEquals(ErrorCode.USER_NOT_FOUND, exception.getErrorCode());
     }
 }

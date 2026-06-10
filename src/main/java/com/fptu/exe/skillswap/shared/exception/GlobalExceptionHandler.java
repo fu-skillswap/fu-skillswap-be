@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.shared.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -34,6 +35,13 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .orElse("Validation error");
 
+        return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String msg = String.format("Giá trị không hợp lệ cho tham số '%s': %s",
+                ex.getName(), ex.getValue());
         return buildResponse(ErrorCode.INVALID_INPUT, msg);
     }
 
