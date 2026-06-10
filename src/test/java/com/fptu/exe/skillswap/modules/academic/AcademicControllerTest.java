@@ -57,7 +57,7 @@ class AcademicControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS_0200"))
-                .andExpect(jsonPath("$.data", hasSize(22))) // 7 + 2 + 3 + 2 + 8 = 22
+                .andExpect(jsonPath("$.data", hasSize(27))) // CNTT(8)+CTTT(3)+NN(4)+LUAT(3)+QTKD(9)=27
                 .andExpect(jsonPath("$.data[0].code").exists())
                 .andExpect(jsonPath("$.data[0].nameVi").exists());
     }
@@ -75,7 +75,15 @@ class AcademicControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("SUCCESS_0200"))
-                .andExpect(jsonPath("$.data", hasSize(7)))
+                .andExpect(jsonPath("$.data", hasSize(8)))
                 .andExpect(jsonPath("$.data[0].code").value("CNTT_KTPM"));
+    }
+
+    @Test
+    void getSpecializationsByProgram_invalidUUID_shouldReturn400() throws Exception {
+        // Path variable không phải UUID hợp lệ → Spring MethodArgumentTypeMismatch → 400
+        mockMvc.perform(get("/api/academic-programs/not-a-valid-uuid/specializations")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
     }
 }

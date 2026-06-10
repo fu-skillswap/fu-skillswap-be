@@ -68,22 +68,26 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(cntt, "CNTT_CNOTS", "Công nghệ ô tô số", "Digital Automotive Technology");
         seedSpecialization(cntt, "CNTT_HTTT", "Hệ thống thông tin", "Information Systems");
         seedSpecialization(cntt, "CNTT_TKDHMT", "Thiết kế đồ hoạ và mỹ thuật số", "Graphic and Digital Art Design");
+        seedSpecialization(cntt, "CNTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 2. CTTT
         AcademicProgram cttt = seedProgram("CTTT", "Khối ngành Công nghệ truyền thông", "Communication Technology");
         seedSpecialization(cttt, "CTTT_TTDPM", "Truyền thông đa phương tiện", "Multimedia Communications");
         seedSpecialization(cttt, "CTTT_QHCC", "Quan hệ công chúng", "Public Relations");
+        seedSpecialization(cttt, "CTTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 3. NN
         AcademicProgram nn = seedProgram("NN", "Khối ngành Ngôn ngữ", "Languages");
         seedSpecialization(nn, "NN_NNA", "Ngôn ngữ Anh", "English Linguistics");
         seedSpecialization(nn, "NN_NNHQ", "Ngôn ngữ Hàn Quốc", "Korean Linguistics");
         seedSpecialization(nn, "NN_NNTQ", "Ngôn ngữ Trung Quốc", "Chinese Linguistics");
+        seedSpecialization(nn, "NN_OTHER", "Chuyên ngành khác", "Other");
 
         // 4. LUAT
         AcademicProgram luat = seedProgram("LUAT", "Khối ngành Luật", "Law");
         seedSpecialization(luat, "LUAT_L", "Luật", "Law");
         seedSpecialization(luat, "LUAT_LKT", "Luật Kinh tế", "Economic Law");
+        seedSpecialization(luat, "LUAT_OTHER", "Chuyên ngành khác", "Other");
 
         // 5. QTKD
         AcademicProgram qtkd = seedProgram("QTKD", "Khối ngành Quản trị kinh doanh", "Business Administration");
@@ -95,6 +99,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(qtkd, "QTKD_LQLCCUGC", "Logistics và Quản lý chuỗi cung ứng toàn cầu", "Logistics and Global Supply Chain Management");
         seedSpecialization(qtkd, "QTKD_CNTC", "Công nghệ tài chính", "Financial Technology");
         seedSpecialization(qtkd, "QTKD_TCNH", "Tài chính ngân hàng", "Finance and Banking");
+        seedSpecialization(qtkd, "QTKD_OTHER", "Chuyên ngành khác", "Other");
     }
 
     private AcademicProgram seedProgram(String code, String nameVi, String nameEn) {

@@ -12,10 +12,12 @@ import com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +38,7 @@ public class IdentityService {
     private final GoogleAuthService googleAuthService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
@@ -134,6 +137,11 @@ public class IdentityService {
                 .map(ur -> ur.getId().getRole())
                 .toList();
 
+        // Publish event để hỏi module academic trạng thái hồ sơ (synchronous request-reply)
+        ProfileStatusQuery profileQuery = new ProfileStatusQuery(user.getId());
+        eventPublisher.publishEvent(profileQuery);
+        boolean hasProfile = profileQuery.isHasStudentProfile();
+
         return UserMeResponse.builder()
                 .publicId(user.getPublicId())
                 .email(user.getEmail())
@@ -141,6 +149,8 @@ public class IdentityService {
                 .avatarUrl(user.getAvatarUrl())
                 .status(user.getStatus())
                 .roles(roles)
+                .profileCompleted(hasProfile)
+                .hasStudentProfile(hasProfile)
                 .build();
     }
 

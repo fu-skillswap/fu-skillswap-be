@@ -18,4 +18,5 @@ public class SpecializationResponse {
     private String nameVi;
     private String nameEn;
     private boolean isExpected;
+    private boolean isOther;
 }
