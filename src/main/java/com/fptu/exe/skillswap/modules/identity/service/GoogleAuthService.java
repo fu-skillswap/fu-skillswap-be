@@ -35,12 +35,15 @@ public class GoogleAuthService {
             if (!StringUtils.hasText(expectedClientId)) {
                 throw new IllegalStateException("GOOGLE_CLIENT_ID is required for Google authentication");
             }
-
             if (!expectedClientId.equals(response.getAud())) {
                 log.error("Google Token Client ID mismatch. Expected: {}, Got: {}", expectedClientId, response.getAud());
                 throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Không khớp Client ID xác thực Google");
             }
-
+            String emailVerified = response.getEmail_verified();
+            if (!"true".equalsIgnoreCase(emailVerified) && !Boolean.TRUE.equals(Boolean.valueOf(emailVerified))) {
+                log.error("Google Token email is not verified for email: {}", response.getEmail());
+                throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Email liên kết với tài khoản Google chưa được xác thực");
+            }
             return response;
         } catch (Exception e) {
             log.error("Error verifying Google ID token: {}", e.getMessage(), e);

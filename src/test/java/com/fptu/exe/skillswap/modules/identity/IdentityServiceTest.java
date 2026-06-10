@@ -87,8 +87,8 @@ class IdentityServiceTest {
         GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
         
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        when(oauthAccountRepository.findByProviderAndProviderUserId("google", "google_123")).thenReturn(Optional.empty());
-        when(userRepository.findByEmail("test@gmail.com")).thenReturn(Optional.empty());
+        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIncludingDeleted("test@gmail.com")).thenReturn(Optional.empty());
         
         // Mock save user
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
@@ -125,13 +125,7 @@ class IdentityServiceTest {
         activeUser.setStatus(UserStatus.BANNED);
 
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        
-        OauthAccount account = OauthAccount.builder()
-                .user(activeUser)
-                .provider("google")
-                .providerUserId("google_123")
-                .build();
-        when(oauthAccountRepository.findByProviderAndProviderUserId("google", "google_123")).thenReturn(Optional.of(account));
+        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
 
         BaseException exception = assertThrows(BaseException.class, () -> identityService.loginWithGoogle(request));
         assertEquals(ErrorCode.USER_BANNED, exception.getErrorCode());
@@ -144,17 +138,43 @@ class IdentityServiceTest {
         activeUser.setStatus(UserStatus.INACTIVE);
 
         when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
-        
-        OauthAccount account = OauthAccount.builder()
-                .user(activeUser)
-                .provider("google")
-                .providerUserId("google_123")
-                .build();
-        when(oauthAccountRepository.findByProviderAndProviderUserId("google", "google_123")).thenReturn(Optional.of(account));
+        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
 
         BaseException exception = assertThrows(BaseException.class, () -> identityService.loginWithGoogle(request));
         assertEquals(ErrorCode.USER_INACTIVE, exception.getErrorCode());
         assertEquals("Tài khoản của bạn chưa hoạt động", exception.getMessage());
+    }
+
+    @Test
+    void loginWithGoogle_softDeletedUser_shouldReactivateAndLogin() {
+        GoogleLoginRequest request = new GoogleLoginRequest("valid_token");
+        activeUser.setDeletedAt(LocalDateTime.now().minusDays(1));
+        activeUser.setStatus(UserStatus.INACTIVE);
+
+        when(googleAuthService.verifyToken("valid_token")).thenReturn(googleUserInfo);
+        when(userRepository.findByOauthProviderAndProviderUserIdIncludingDeleted("google", "google_123")).thenReturn(Optional.of(activeUser));
+
+        // Mock save user
+        when(userRepository.save(any(User.class))).thenReturn(activeUser);
+
+        // Mock token generation settings
+        JwtProperties.Jwt jwtSetting = new JwtProperties.Jwt();
+        jwtSetting.getRefreshToken().setExpiration(604800000L);
+        when(jwtProperties.getJwt()).thenReturn(jwtSetting);
+
+        when(jwtTokenProvider.generateAccessToken(any(UUID.class), anyString(), anyList()))
+                .thenReturn("access_token");
+        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh_token");
+        when(jwtTokenProvider.hashToken("refresh_token")).thenReturn("refresh_token_hash");
+
+        TokenResponse tokenResponse = identityService.loginWithGoogle(request);
+
+        assertNotNull(tokenResponse);
+        assertNull(activeUser.getDeletedAt());
+        assertEquals(UserStatus.ACTIVE, activeUser.getStatus());
+        assertEquals("access_token", tokenResponse.getAccessToken());
+        
+        verify(userRepository, times(1)).save(activeUser);
     }
 
     @Test
@@ -173,6 +193,7 @@ class IdentityServiceTest {
                 .build();
         
         when(userSessionRepository.findByRefreshTokenHash(hashedToken)).thenReturn(Optional.of(session));
+        when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
 
         JwtProperties.Jwt jwtSetting = new JwtProperties.Jwt();
         jwtSetting.getRefreshToken().setExpiration(604800000L);
@@ -192,6 +213,29 @@ class IdentityServiceTest {
         assertTrue(session.isRevoked());
         verify(userSessionRepository, times(1)).save(session);
         verify(userSessionRepository, times(1)).save(argThat(UserSession::isRevoked));
+    }
+
+    @Test
+    void refreshToken_deletedUser_shouldThrowException() {
+        RefreshTokenRequest request = new RefreshTokenRequest("raw_refresh_token");
+        String hashedToken = "hashed_refresh_token";
+        
+        when(jwtTokenProvider.hashToken("raw_refresh_token")).thenReturn(hashedToken);
+        
+        UserSession session = UserSession.builder()
+                .id(UUID.randomUUID())
+                .user(activeUser)
+                .refreshTokenHash(hashedToken)
+                .isRevoked(false)
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+        
+        when(userSessionRepository.findByRefreshTokenHash(hashedToken)).thenReturn(Optional.of(session));
+        when(userRepository.findById(activeUserId)).thenReturn(Optional.empty());
+
+        BaseException exception = assertThrows(BaseException.class, () -> identityService.refreshToken(request));
+        assertEquals(ErrorCode.USER_NOT_FOUND, exception.getErrorCode());
+        assertEquals("Tài khoản liên kết đã bị xóa khỏi hệ thống", exception.getMessage());
     }
 
     @Test

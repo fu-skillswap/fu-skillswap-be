@@ -43,13 +43,25 @@ public class IdentityService {
         GoogleAuthService.GoogleUserInfo googleUser = googleAuthService.verifyToken(request.getIdToken());
 
         // 2. Find or auto-create account
-        User user = oauthAccountRepository
-                .findByProviderAndProviderUserId("google", googleUser.getSub())
-                .map(OauthAccount::getUser)
+        User user = userRepository
+                .findByOauthProviderAndProviderUserIdIncludingDeleted("google", googleUser.getSub())
+                .map(existingUser -> {
+                    if (existingUser.getDeletedAt() != null) {
+                        log.info("Reactivating soft-deleted user from Google OAuth login: {}", existingUser.getEmail());
+                        existingUser.setDeletedAt(null);
+                        existingUser.setStatus(UserStatus.ACTIVE);
+                    }
+                    return existingUser;
+                })
                 .orElseGet(() -> {
-                    // Check if user already exists with the same email
-                    return userRepository.findByEmail(googleUser.getEmail())
+                    // Check if user already exists with the same email (including soft-deleted ones)
+                    return userRepository.findByEmailIncludingDeleted(googleUser.getEmail())
                             .map(existingUser -> {
+                                if (existingUser.getDeletedAt() != null) {
+                                    log.info("Reactivating soft-deleted user by email link: {}", existingUser.getEmail());
+                                    existingUser.setDeletedAt(null);
+                                    existingUser.setStatus(UserStatus.ACTIVE);
+                                }
                                 // Link existing user to new OAuth account
                                 createOauthAccount(existingUser, googleUser.getSub(), googleUser.getEmail());
                                 return existingUser;
@@ -87,7 +99,9 @@ public class IdentityService {
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
         }
 
-        User user = session.getUser();
+        UUID userId = session.getUser().getId();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản liên kết đã bị xóa khỏi hệ thống"));
         checkUserStatus(user);
 
         // Revoke the old session
