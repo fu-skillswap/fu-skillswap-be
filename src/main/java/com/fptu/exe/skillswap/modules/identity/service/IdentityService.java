@@ -1,22 +1,22 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
-import com.fptu.exe.skillswap.modules.identity.domain.*;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
-import com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,62 +28,20 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class IdentityService {
 
     private final UserRepository userRepository;
-    private final OauthAccountRepository oauthAccountRepository;
     private final UserRoleRepository userRoleRepository;
     private final UserSessionRepository userSessionRepository;
     private final GoogleAuthService googleAuthService;
+    private final IdentityLoginTransactionService identityLoginTransactionService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final ApplicationEventPublisher eventPublisher;
 
-    @Transactional
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
-        // 1. Verify Google token info
         GoogleAuthService.GoogleUserInfo googleUser = googleAuthService.verifyToken(request.getIdToken());
-
-        // 2. Find or auto-create account
-        User user = userRepository
-                .findByOauthProviderAndProviderUserIdIncludingDeleted("google", googleUser.getSub())
-                .map(existingUser -> {
-                    if (existingUser.getDeletedAt() != null) {
-                        log.info("Reactivating soft-deleted user from Google OAuth login: {}", existingUser.getEmail());
-                        existingUser.setDeletedAt(null);
-                        existingUser.setStatus(UserStatus.ACTIVE);
-                    }
-                    return existingUser;
-                })
-                .orElseGet(() -> {
-                    // Check if user already exists with the same email (including soft-deleted ones)
-                    return userRepository.findByEmailIncludingDeleted(googleUser.getEmail())
-                            .map(existingUser -> {
-                                if (existingUser.getDeletedAt() != null) {
-                                    log.info("Reactivating soft-deleted user by email link: {}", existingUser.getEmail());
-                                    existingUser.setDeletedAt(null);
-                                    existingUser.setStatus(UserStatus.ACTIVE);
-                                }
-                                // Link existing user to new OAuth account
-                                createOauthAccount(existingUser, googleUser.getSub(), googleUser.getEmail());
-                                return existingUser;
-                            })
-                            .orElseGet(() -> {
-                                // Create brand new user
-                                return registerNewOauthUser(googleUser);
-                            });
-                });
-
-        // 3. Basic User Status Check (Block login if BANNED or INACTIVE)
-        checkUserStatus(user);
-
-        // 4. Update last login time
-        user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
-
-        // 5. Issue JWT (AccessToken & RefreshToken)
-        return generateTokensAndCreateSession(user);
+        return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
     }
 
     @Transactional
@@ -154,41 +112,6 @@ public class IdentityService {
                 .build();
     }
 
-    private User registerNewOauthUser(GoogleAuthService.GoogleUserInfo googleUser) {
-        User user = User.builder()
-                .email(googleUser.getEmail())
-                .fullName(googleUser.getName() != null ? googleUser.getName() : extractDefaultName(googleUser.getEmail()))
-                .avatarUrl(googleUser.getPicture())
-                .status(UserStatus.ACTIVE)
-                .build();
-
-        User savedUser = userRepository.save(user);
-
-        // Assign default role MENTEE
-        UserRoleId roleId = new UserRoleId(savedUser.getId(), RoleCode.MENTEE);
-        UserRole userRole = UserRole.builder()
-                .id(roleId)
-                .user(savedUser)
-                .assignedAt(LocalDateTime.now())
-                .build();
-        userRoleRepository.save(userRole);
-
-        // Create OAuth account linkage
-        createOauthAccount(savedUser, googleUser.getSub(), googleUser.getEmail());
-
-        return savedUser;
-    }
-
-    private void createOauthAccount(User user, String providerUserId, String providerEmail) {
-        OauthAccount oauthAccount = OauthAccount.builder()
-                .user(user)
-                .provider("google")
-                .providerUserId(providerUserId)
-                .providerEmail(providerEmail)
-                .build();
-        oauthAccountRepository.save(oauthAccount);
-    }
-
     private void checkUserStatus(User user) {
         if (user.getStatus() == UserStatus.BANNED) {
             throw new BaseException(ErrorCode.USER_BANNED, "Tài khoản của bạn đã bị khóa");
@@ -233,10 +156,4 @@ public class IdentityService {
                 .build();
     }
 
-    private String extractDefaultName(String email) {
-        if (email == null || !email.contains("@")) {
-            return "Người dùng";
-        }
-        return email.split("@")[0];
-    }
 }

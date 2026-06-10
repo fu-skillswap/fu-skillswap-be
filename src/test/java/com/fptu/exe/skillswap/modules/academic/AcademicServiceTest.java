@@ -153,7 +153,7 @@ class AcademicServiceTest {
     @Test
     void getStudentProfile_shouldThrowResourceNotFoundException_whenProfileDoesNotExist() {
         UUID userId = UUID.randomUUID();
-        when(studentProfileRepository.findById(userId)).thenReturn(Optional.empty());
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.empty());
 
         ResourceNotFoundException ex = assertThrows(ResourceNotFoundException.class, () -> academicService.getStudentProfile(userId));
         assertEquals(ErrorCode.NOT_FOUND, ex.getErrorCode());
@@ -187,7 +187,7 @@ class AcademicServiceTest {
                 .bio("My bio")
                 .build();
 
-        when(studentProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(profile));
 
         StudentProfileResponse response = academicService.getStudentProfile(userId);
 

@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,7 @@ public class AcademicService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
+    @Cacheable("academicCampuses")
     public List<CampusResponse> getAllCampuses() {
         return campusRepository.findByIsActiveTrue()
                 .stream()
@@ -48,6 +50,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable("academicPrograms")
     public List<AcademicProgramResponse> getAllAcademicPrograms() {
         return academicProgramRepository.findByIsActiveTrue()
                 .stream()
@@ -56,6 +59,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable("academicSpecializations")
     public List<SpecializationResponse> getAllSpecializations() {
         return specializationRepository.findByIsActiveTrue()
                 .stream()
@@ -64,6 +68,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(value = "academicSpecializationsByProgram", key = "#programId")
     public List<SpecializationResponse> getSpecializationsByProgram(UUID programId) {
         if (!academicProgramRepository.existsById(programId)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học liên kết");
@@ -106,7 +111,7 @@ public class AcademicService {
 
     @Transactional(readOnly = true)
     public StudentProfileResponse getStudentProfile(UUID userId) {
-        StudentProfile profile = studentProfileRepository.findById(userId)
+        StudentProfile profile = studentProfileRepository.findWithDetailsByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ học thuật chưa được tạo"));
         return mapToStudentProfileResponse(profile);
     }

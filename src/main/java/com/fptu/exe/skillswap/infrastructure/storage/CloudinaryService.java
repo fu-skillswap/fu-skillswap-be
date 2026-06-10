@@ -26,16 +26,19 @@ public class CloudinaryService {
         String folder = buildFolder(subFolder);
         String publicId = folder + "/" + UUID.randomUUID();
 
-        Map<?, ?> result = cloudinary.uploader().upload(
-                file.getBytes(),
-                ObjectUtils.asMap(
-                        "public_id", publicId,
-                        "overwrite", true,
-                        "resource_type", "image",
-                        "quality", "auto",
-                        "fetch_format", "auto"
-                )
-        );
+        Map<?, ?> result;
+        try (var inputStream = file.getInputStream()) {
+            result = cloudinary.uploader().upload(
+                    inputStream,
+                    ObjectUtils.asMap(
+                            "public_id", publicId,
+                            "overwrite", true,
+                            "resource_type", "image",
+                            "quality", "auto",
+                            "fetch_format", "auto"
+                    )
+            );
+        }
 
         String secureUrl = (String) result.get("secure_url");
         String returnedId = (String) result.get("public_id");

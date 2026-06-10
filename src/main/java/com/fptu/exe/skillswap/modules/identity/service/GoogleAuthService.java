@@ -17,7 +17,7 @@ import org.springframework.web.client.RestTemplate;
 public class GoogleAuthService {
 
     private final JwtProperties jwtProperties;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     public GoogleUserInfo verifyToken(String idToken) {
         if (!StringUtils.hasText(idToken)) {
