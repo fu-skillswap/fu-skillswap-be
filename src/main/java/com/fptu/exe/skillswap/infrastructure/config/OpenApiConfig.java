@@ -28,27 +28,42 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("SkillSwap API")
                         .description("""
-                            ## Tài liệu API – SkillSwap (EXE201)
+                            ## SkillSwap API Documentation - EXE101
                             
-                            Nền tảng **trao đổi kỹ năng** dành riêng cho sinh viên FPT University.
+                            SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
+                            Backend cung cấp REST API cho xác thực Google, hồ sơ học thuật, hồ sơ mentor,
+                            danh mục kỹ năng và các luồng mentoring sẽ được phát triển tiếp theo.
                             
-                            ### Luồng xác thực
-                            1. Client gọi `POST /api/v1/auth/google` với Google ID Token
-                            2. Server trả về `accessToken` và `refreshToken`
-                            3. Thêm header `Authorization: Bearer {accessToken}` vào mọi request tiếp theo
-                            4. Khi `accessToken` hết hạn, gọi `POST /api/v1/auth/refresh` để lấy token mới
+                            ### Cách FE đăng nhập với Google
+                            1. FE tích hợp Google Identity Services hoặc thư viện Google Login tương đương.
+                            2. Sau khi người dùng đăng nhập Google thành công, FE lấy `idToken` từ Google.
+                            3. FE gửi `idToken` vào `POST /api/auth/google`.
+                            4. Backend xác thực `idToken` với Google, tự tạo hoặc liên kết tài khoản người dùng.
+                            5. Backend trả về `accessToken` và `refreshToken`.
+                            6. FE dùng `accessToken` cho các API cần xác thực bằng header:
+                               `Authorization: Bearer {accessToken}`.
+                            7. Khi `accessToken` hết hạn, FE gọi `POST /api/auth/refresh` bằng `refreshToken`.
+                            8. Khi đăng xuất, FE gọi `POST /api/auth/logout` để thu hồi `refreshToken`.
+                            
+                            ### Cách test API xác thực trên Swagger UI
+                            1. Gọi `POST /api/auth/google` với Google `idToken` hợp lệ.
+                            2. Copy giá trị `accessToken` trong response.
+                            3. Bấm nút **Authorize** ở góc trên bên phải Swagger UI.
+                            4. Dán `accessToken` vào ô `bearerAuth` (không cần nhập tiền tố `Bearer `).
+                            5. Bấm **Authorize**, sau đó có thể gọi các API như `GET /api/auth/me`
+                               hoặc `GET /api/me/student-profile`.
                             
                             ### Luồng đăng nhập lần đầu
-                            Sau khi nhận token, FE gọi `GET /api/v1/auth/me` và kiểm tra `profileCompleted`:
+                            Sau khi nhận token, FE gọi `GET /api/auth/me` và kiểm tra `profileCompleted`:
                             - `false` → Chuyển hướng đến trang **điền hồ sơ học thuật** (`PUT /api/me/student-profile`)
                             - `true` → Vào **dashboard** bình thường
                             """)
                         .version("v1.0.0")
                         .contact(new Contact()
-                                .name("SkillSwap Team – FPT University")
-                                .email("skillswap@fptu.edu.vn"))
+                                .name("Quang Tam")
+                                .email("quangtam2005.lttg@gmail.com"))
                         .license(new License()
-                                .name("Internal – EXE201 Project")))
+                                .name("Internal - EXE101 Project")))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
                 .components(new Components()
                         .addSecuritySchemes(securitySchemeName,
@@ -56,6 +71,7 @@ public class OpenApiConfig {
                                         .name(securitySchemeName)
                                         .type(SecurityScheme.Type.HTTP)
                                         .scheme("bearer")
+                                        .in(SecurityScheme.In.HEADER)
                                         .bearerFormat("JWT")
                                         .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`")))
                 .tags(List.of(

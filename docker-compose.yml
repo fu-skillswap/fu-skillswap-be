@@ -26,6 +26,10 @@ services:
       - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:-skillswapdb}
       - DATABASE_USERNAME=${POSTGRES_USER:-postgres}
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-123456}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+      - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - FLYWAY_ENABLED=false
     depends_on:
       - postgres-db

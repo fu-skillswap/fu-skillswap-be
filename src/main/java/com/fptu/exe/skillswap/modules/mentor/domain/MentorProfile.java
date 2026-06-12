@@ -12,7 +12,9 @@ import java.util.UUID;
 @Table(name = "mentor_profiles", indexes = {
     @Index(name = "idx_mentor_profiles_status", columnList = "status"),
     @Index(name = "idx_mentor_profiles_avg_rating", columnList = "average_rating"),
-    @Index(name = "idx_mentor_profiles_available", columnList = "is_available")
+    @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
+    @Index(name = "idx_mentor_profiles_industry", columnList = "industry"),
+    @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode")
 })
 @Getter
 @Setter
@@ -38,16 +40,37 @@ public class MentorProfile {
     private String headline;
 
     @Column(columnDefinition = "TEXT")
-    private String description;
+    private String bio;
+
+    @Column(name = "expertise_summary", columnDefinition = "TEXT")
+    private String expertiseSummary;
+
+    @Column(name = "current_position", length = 150)
+    private String currentPosition;
+
+    @Column(name = "current_company", length = 150)
+    private String currentCompany;
+
+    @Column(name = "industry", length = 120)
+    private String industry;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "teaching_mode", length = 20)
+    private TeachingMode teachingMode;
+
+    @Column(name = "session_duration", nullable = false)
+    @Builder.Default
+    private Integer sessionDuration = 60;
+
+    @Column(name = "hourly_rate", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal hourlyRate = BigDecimal.ZERO;
 
     @Column(name = "mentoring_style", columnDefinition = "TEXT")
     private String mentoringStyle;
 
     @Column(name = "target_mentees", columnDefinition = "TEXT")
     private String targetMentees;
-
-    @Column(name = "achievement_summary", columnDefinition = "TEXT")
-    private String achievementSummary;
 
     @Column(name = "portfolio_url", columnDefinition = "TEXT")
     private String portfolioUrl;
@@ -58,17 +81,8 @@ public class MentorProfile {
     @Column(name = "github_url", columnDefinition = "TEXT")
     private String githubUrl;
 
-    @Column(name = "website_url", columnDefinition = "TEXT")
-    private String websiteUrl;
-
     @Column(name = "years_of_experience", precision = 4, scale = 1)
     private BigDecimal yearsOfExperience;
-
-    @Column(name = "current_company", length = 150)
-    private String currentCompany;
-
-    @Column(name = "current_position", length = 150)
-    private String currentPosition;
 
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @Builder.Default
@@ -90,12 +104,12 @@ public class MentorProfile {
     @Builder.Default
     private boolean isAvailable = true;
 
-    @Column(name = "approved_at")
-    private LocalDateTime approvedAt;
+    @Column(name = "verified_at")
+    private LocalDateTime verifiedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approved_by", foreignKey = @ForeignKey(name = "fk_mentor_profiles_approver"))
-    private User approvedBy;
+    @JoinColumn(name = "verified_by", foreignKey = @ForeignKey(name = "fk_mentor_profiles_verifier"))
+    private User verifiedBy;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
