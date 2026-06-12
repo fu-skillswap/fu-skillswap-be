@@ -215,7 +215,7 @@ public class MentorVerificationService {
                     .sizeBytes(file.getSize())
                     .build());
         } catch (IOException ex) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tải tài liệu xác thực thất bại: " + ex.getMessage());
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Tải tài liệu xác thực thất bại do hệ thống lưu trữ tạm thời không khả dụng", ex);
         }
     }
 

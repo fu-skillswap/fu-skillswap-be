@@ -10,6 +10,11 @@ public enum ErrorCode {
     UNCATEGORIZED_EXCEPTION(500, "SYS_9999", "error.sys.unknown", "Lỗi hệ thống không xác định"),
     INVALID_KEY(400, "SYS_0001", "error.sys.invalid_key", "Khóa không hợp lệ"),
     BAD_REQUEST(400, "SYS_0002", "error.sys.bad_request", "Yêu cầu không hợp lệ"),
+    CONFIGURATION_ERROR(500, "SYS_0004", "error.sys.configuration", "Cấu hình hệ thống chưa hợp lệ"),
+    STORAGE_ERROR(500, "SYS_0005", "error.sys.storage", "Hệ thống lưu trữ hiện không khả dụng"),
+    DATABASE_ERROR(500, "SYS_0006", "error.sys.database", "Hệ thống dữ liệu gặp sự cố"),
+    RESOURCE_CONFLICT(409, "SYS_0007", "error.sys.conflict", "Dữ liệu xung đột với trạng thái hiện tại"),
+    PAYLOAD_TOO_LARGE(413, "SYS_0008", "error.sys.payload_too_large", "Dữ liệu tải lên vượt quá giới hạn cho phép"),
 
     // Auth
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),

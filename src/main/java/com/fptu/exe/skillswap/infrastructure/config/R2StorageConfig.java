@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -37,8 +39,9 @@ public class R2StorageConfig {
                 || !StringUtils.hasText(properties.getAccessKeyId())
                 || !StringUtils.hasText(properties.getSecretAccessKey())
                 || !StringUtils.hasText(properties.getBucket())) {
-            throw new IllegalStateException(
-                    "R2 is enabled but R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, or R2_BUCKET is missing"
+            throw new BaseException(
+                    ErrorCode.CONFIGURATION_ERROR,
+                    "R2 được bật nhưng thiếu R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY hoặc R2_BUCKET"
             );
         }
     }

@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.infrastructure.security;
 
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -28,7 +30,7 @@ public class JwtTokenProvider {
     private Key getSigningKey() {
         String secret = jwtProperties.getJwt().getSecretKey();
         if (secret == null || secret.isBlank()) {
-            throw new IllegalStateException("JWT Secret Key is not configured in application properties!");
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình JWT_SECRET_KEY");
         }
         try {
             byte[] keyBytes = Decoders.BASE64.decode(secret);
@@ -79,7 +81,7 @@ public class JwtTokenProvider {
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
             log.error("SHA-256 algorithm not found", e);
-            throw new RuntimeException("SHA-256 algorithm not found", e);
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thuật toán băm SHA-256 không khả dụng", e);
         }
     }
 

@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.cloudinary.Cloudinary;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -34,8 +36,9 @@ public class CloudinaryConfig {
         if (!StringUtils.hasText(cloudinaryProperties.getCloudName())
                 || !StringUtils.hasText(cloudinaryProperties.getApiKey())
                 || !StringUtils.hasText(cloudinaryProperties.getApiSecret())) {
-            throw new IllegalStateException(
-                    "Cloudinary is enabled but CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, or CLOUDINARY_API_SECRET is missing"
+            throw new BaseException(
+                    ErrorCode.CONFIGURATION_ERROR,
+                    "Cloudinary được bật nhưng thiếu CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY hoặc CLOUDINARY_API_SECRET"
             );
         }
     }
