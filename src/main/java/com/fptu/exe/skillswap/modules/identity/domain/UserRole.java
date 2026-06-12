@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "user_roles", indexes = {
+    @Index(name = "idx_user_roles_user_id", columnList = "user_id"),
     @Index(name = "idx_user_roles_role", columnList = "role")
 })
 @Getter

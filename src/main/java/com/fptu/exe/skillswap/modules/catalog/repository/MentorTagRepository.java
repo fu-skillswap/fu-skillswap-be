@@ -19,5 +19,5 @@ public interface MentorTagRepository extends JpaRepository<MentorTag, MentorTagI
     List<MentorTag> findByIdMentorUserIdAndIdTagTypeIn(UUID mentorUserId, Collection<MentorTagType> tagTypes);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
-    void deleteByIdMentorUserIdAndIdTagType(UUID mentorUserId, MentorTagType tagType);
+    void deleteByIdMentorUserId(UUID mentorUserId);
 }

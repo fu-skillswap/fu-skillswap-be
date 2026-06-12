@@ -9,6 +9,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "specializations", uniqueConstraints = {
     @UniqueConstraint(name = "uq_specializations_code", columnNames = {"code"})
+}, indexes = {
+    @Index(name = "idx_specializations_program_active", columnList = "program_id, is_active")
 })
 @Getter
 @Setter
