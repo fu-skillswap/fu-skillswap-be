@@ -8,5 +8,7 @@ public enum TagType {
     LANGUAGE,
     CAREER,
     SOFT_SKILL,
-    TOOL
+    TOOL,
+    INDUSTRY,
+    HELP_TOPIC
 }
