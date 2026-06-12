@@ -88,9 +88,8 @@ public class MentorProfileService {
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
-        replaceMentorTags(savedProfile, expertiseTags, MentorTagType.EXPERTISE);
-        replaceMentorTags(savedProfile, helpTopics, MentorTagType.HELP_TOPIC);
-        return mapToResponse(savedProfile);
+        replaceMentorTags(savedProfile, expertiseTags, helpTopics);
+        return mapToResponse(savedProfile, expertiseTags, helpTopics);
     }
 
     private MentorProfile getOrCreateProfile(UUID userId) {
@@ -129,20 +128,36 @@ public class MentorProfileService {
         return tags;
     }
 
-    private void replaceMentorTags(MentorProfile profile, List<Tag> tags, MentorTagType mentorTagType) {
-        mentorTagRepository.deleteByIdMentorUserIdAndIdTagType(profile.getUserId(), mentorTagType);
-        List<MentorTag> mentorTags = tags.stream()
+    private void replaceMentorTags(MentorProfile profile, List<Tag> expertiseTags, List<Tag> helpTopics) {
+        mentorTagRepository.deleteByIdMentorUserId(profile.getUserId());
+
+        List<MentorTag> mentorTags = new java.util.ArrayList<>(expertiseTags.size() + helpTopics.size());
+        mentorTags.addAll(toMentorTags(profile, expertiseTags, MentorTagType.EXPERTISE));
+        mentorTags.addAll(toMentorTags(profile, helpTopics, MentorTagType.HELP_TOPIC));
+        mentorTagRepository.saveAll(mentorTags);
+    }
+
+    private List<MentorTag> toMentorTags(MentorProfile profile, List<Tag> tags, MentorTagType mentorTagType) {
+        return tags.stream()
                 .map(tag -> MentorTag.builder()
                         .id(new MentorTagId(profile.getUserId(), tag.getId(), mentorTagType))
                         .mentorProfile(profile)
                         .tag(tag)
                         .build())
                 .toList();
-        mentorTagRepository.saveAll(mentorTags);
     }
 
     private MentorProfileResponse mapToResponse(MentorProfile profile) {
-        Map<MentorTagType, List<MentorTagResponse>> tagsByType = mentorTagRepository
+        return mapToResponse(profile, null, null);
+    }
+
+    private MentorProfileResponse mapToResponse(MentorProfile profile, List<Tag> expertiseTagsOverride, List<Tag> helpTopicsOverride) {
+        Map<MentorTagType, List<MentorTagResponse>> tagsByType = expertiseTagsOverride != null && helpTopicsOverride != null
+                ? Map.of(
+                        MentorTagType.EXPERTISE, expertiseTagsOverride.stream().map(this::mapToTagResponseFromTag).sorted(Comparator.comparing(MentorTagResponse::nameVi)).toList(),
+                        MentorTagType.HELP_TOPIC, helpTopicsOverride.stream().map(this::mapToTagResponseFromTag).sorted(Comparator.comparing(MentorTagResponse::nameVi)).toList()
+                )
+                : mentorTagRepository
                 .findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.EXPERTISE, MentorTagType.HELP_TOPIC))
                 .stream()
                 .sorted(Comparator.comparing(mentorTag -> mentorTag.getTag().getNameVi()))
@@ -186,6 +201,17 @@ public class MentorProfileService {
                 .completedSessions(profile.getTotalCompletedSessions())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
+                .build();
+    }
+
+    private MentorTagResponse mapToTagResponseFromTag(Tag tag) {
+        return MentorTagResponse.builder()
+                .id(tag.getId())
+                .code(tag.getCode())
+                .nameVi(tag.getNameVi())
+                .nameEn(tag.getNameEn())
+                .type(tag.getType())
+                .primary(false)
                 .build();
     }
 
