@@ -1,6 +1,6 @@
 # skillswap-be
 
-Backend service for SkillSwap, a Spring Boot modular monolith for mentor matching, booking, identity, catalog, feedback, file storage, notification, and admin workflows.
+Backend service for FU SkillSwap, a Spring Boot modular monolith for mentoring between FPT University students and alumni. The project provides identity, academic onboarding, mentor profile onboarding, catalog, booking, feedback, file storage, notification, and admin foundations.
 
 ## Tech Stack
 
@@ -35,8 +35,8 @@ You do not need to install Maven globally. Use the included Maven wrapper:
 Clone the repository:
 
 ```powershell
-git clone https://github.com/QuangTam2005/skillswap-be.git
-cd skillswap-be
+git clone -b dev git@github.com:fu-skillswap/fu-skillswap-be.git
+cd fu-skillswap-be
 ```
 
 Create local environment file:
@@ -75,11 +75,13 @@ Swagger UI:
 http://localhost:8080/swagger-ui.html
 ```
 
-Health endpoint:
+Public smoke-test endpoint:
 
 ```text
-http://localhost:8080/actuator/health
+http://localhost:8080/api/campuses
 ```
+
+Note: `/actuator/health` is currently protected by Spring Security. Use a public catalog endpoint for simple unauthenticated smoke tests unless the security config is changed later.
 
 ## Environment Variables
 
@@ -104,11 +106,44 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
+R2_ENABLED=false
+R2_ENDPOINT=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_REGION=auto
+R2_DOCUMENTS_PREFIX=skillswap/verification-documents
+
 FLYWAY_ENABLED=false
 HIBERNATE_DDL_AUTO=update
 ```
 
-For local development, `application-dev.yml` provides safe defaults for PostgreSQL and JWT so the project can run quickly after cloning.
+For Docker Compose, these variables must not be blank:
+
+```text
+JWT_SECRET_KEY
+JWT_EXPIRATION
+JWT_REFRESH_EXPIRATION
+GOOGLE_CLIENT_ID
+CORS_ALLOWED_ORIGIN_PATTERNS
+```
+
+If mentor verification uploads are enabled in a deployed environment:
+
+```text
+CLOUDINARY_ENABLED=true
+CLOUDINARY_CLOUD_NAME
+CLOUDINARY_API_KEY
+CLOUDINARY_API_SECRET
+
+R2_ENABLED=true
+R2_ENDPOINT
+R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
+R2_BUCKET
+```
+
+If a variable is defined as an empty string in `.env`, it overrides the default in `application.yaml`. For example, `JWT_EXPIRATION=` will break startup because Spring cannot bind an empty string to `long`.
 
 ## Profiles
 
@@ -194,14 +229,49 @@ Run this test to verify module boundaries:
 
 Current auth flow:
 
-- `POST /api/v1/auth/google`
-- `POST /api/v1/auth/refresh`
-- `POST /api/v1/auth/logout`
-- `GET /api/v1/auth/me`
+- `POST /api/auth/google`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 
 Access tokens are JWTs. Refresh tokens are randomly generated, hashed with SHA-256, and stored in `user_sessions`.
 
-Google login requires `GOOGLE_CLIENT_ID` outside local dev/test overrides. The service verifies the Google token audience before issuing local tokens.
+The frontend obtains a Google `idToken` via Google Identity Services, sends it to `POST /api/auth/google`, receives `accessToken` and `refreshToken`, then calls authenticated APIs with:
+
+```text
+Authorization: Bearer <accessToken>
+```
+
+Google login requires `GOOGLE_CLIENT_ID`. The service verifies the Google token audience before issuing local tokens.
+
+## Current APIs
+
+### Academic Catalog
+
+- `GET /api/campuses`
+- `GET /api/academic-programs`
+- `GET /api/specializations`
+- `GET /api/academic-programs/{programId}/specializations`
+
+### Student Profile
+
+- `GET /api/me/student-profile`
+- `PUT /api/me/student-profile`
+
+### Mentor Profile Onboarding
+
+- `GET /api/me/mentor-profile`
+- `PUT /api/me/mentor-profile/basic`
+- `PUT /api/me/mentor-profile/expertise`
+
+Mentor profile onboarding is split for frontend UX:
+
+- Step 1: Basic Profile
+- Step 2: Expertise
+- Step 3: Pricing & Availability, planned
+- Step 4: Services, planned and skippable
+
+`GET /api/me/mentor-profile` returns `exists=false` when a user has not created a mentor profile yet, so the frontend can start onboarding without treating it as an error.
 
 ## ID Convention
 
@@ -265,7 +335,7 @@ docker compose up -d postgres-db
 Start backend with Docker Compose:
 
 ```powershell
-docker compose up --build spring-backend
+docker compose up -d --build
 ```
 
 Stop services:
@@ -278,21 +348,75 @@ Reset local database volume:
 
 ```powershell
 docker compose down -v
-docker compose up -d postgres-db
+docker compose up -d --build
+```
+
+Smoke test:
+
+```powershell
+curl http://localhost:8080/api/campuses
 ```
 
 ## Git Workflow
 
-Recommended branch flow:
+Branch flow:
 
 - `main`: stable base
 - `dev`: active integration branch
-- feature branches: `feature/<short-name>`
+- `feat/<short-name>`: new feature
+- `fix/<short-name>`: bug fix for dev or staging
+- `hotfix/<short-name>`: urgent production fix
+- `refactor/<short-name>`: code restructuring without behavior change
+- `docs/<short-name>`: documentation only
+- `chore/<short-name>`: build, config, dependency, or maintenance work
+
+Commit message format:
+
+```text
+<type>(<scope>): <description>
+```
+
+Examples:
+
+```text
+feat(mentor): add mentor profile onboarding APIs
+chore(config): update docker compose environment
+```
+
+Rules:
+
+- Use lowercase description.
+- Use present-tense verb phrase.
+- Do not end with a period.
+- Keep `type` aligned with the branch prefix.
 
 Before opening a pull request:
 
 ```powershell
 .\mvnw.cmd test
+```
+
+## Test Deployment On VPS
+
+The current test deployment branch is `dev`.
+
+```bash
+cd /opt/fu-skillswap/backend
+git fetch origin
+git checkout dev
+git pull origin dev
+docker compose config
+docker compose down -v
+docker compose up -d --build
+docker logs -f skillswap-backend
+```
+
+`docker compose down -v` deletes the PostgreSQL volume and all database data. Use it only for test environments where a clean schema is expected.
+
+After startup, smoke test:
+
+```bash
+curl http://localhost:8080/api/campuses
 ```
 
 ## Do Not Commit

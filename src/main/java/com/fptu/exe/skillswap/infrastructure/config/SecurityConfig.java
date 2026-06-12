@@ -38,9 +38,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Public endpoints
                         .requestMatchers(
-                                "/api/v1/auth/google",
-                                "/api/v1/auth/refresh",
-                                "/api/v1/auth/logout"
+                                "/api/auth/google",
+                                "/api/auth/refresh",
+                                "/api/auth/logout",
+                                "/api/campuses",
+                                "/api/academic-programs",
+                                "/api/specializations",
+                                "/api/academic-programs/**"
                         ).permitAll()
                         // Swagger UI and API Docs
                         .requestMatchers(

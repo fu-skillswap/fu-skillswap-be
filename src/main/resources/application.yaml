@@ -6,8 +6,9 @@ spring:
 
   datasource:
     hikari:
-      maximum-pool-size: 5
-      minimum-idle: 2
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:3000}
       idle-timeout: 30000
       max-lifetime: 600000
 
@@ -24,8 +25,13 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      max-file-size: ${MAX_FILE_SIZE:1MB}
+      max-request-size: ${MAX_REQUEST_SIZE:1MB}
+
+server:
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:80}
 
 application:
   upload:
@@ -46,6 +52,14 @@ application:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
     folder: skillswap # thư mục gốc trên Cloudinary
+  r2:
+    enabled: ${R2_ENABLED:false}
+    endpoint: ${R2_ENDPOINT:}
+    access-key-id: ${R2_ACCESS_KEY_ID:}
+    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+    bucket: ${R2_BUCKET:}
+    region: ${R2_REGION:auto}
+    documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
 
 logging:
   pattern:

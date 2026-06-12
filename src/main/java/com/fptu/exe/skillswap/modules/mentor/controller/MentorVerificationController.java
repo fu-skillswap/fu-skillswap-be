@@ -1,0 +1,103 @@
+package com.fptu.exe.skillswap.modules.mentor.controller;
+
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
+import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping("/api/me/mentor-verification")
+@RequiredArgsConstructor
+@Validated
+@Tag(name = "Xác thực mentor", description = "Luồng tạo hồ sơ xác thực mentor, tải minh chứng và nộp hồ sơ duyệt")
+@SecurityRequirement(name = "bearerAuth")
+public class MentorVerificationController {
+
+    private final MentorVerificationService mentorVerificationService;
+
+    @Operation(summary = "Khởi tạo hoặc lấy hồ sơ xác thực mentor đang hoạt động")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy hồ sơ xác thực mentor thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
+    @PostMapping("/request")
+    public ApiResponse<MentorVerificationRequestResponse> requestToBecomeMentor(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.requestToBecomeMentor(principal.getPublicId()));
+    }
+
+    @Operation(summary = "Xem hồ sơ xác thực mentor hiện tại")
+    @GetMapping
+    public ApiResponse<MentorVerificationRequestResponse> getMyRequest(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
+    }
+
+    @Operation(
+            summary = "Tải minh chứng xác thực mentor",
+            description = "Chấp nhận JPG, PNG hoặc PDF. Ảnh sẽ lưu qua Cloudinary, PDF sẽ lưu qua R2."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Tải tài liệu thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
+    @PostMapping(path = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<MentorVerificationRequestResponse> uploadDocument(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestPart("documentType") VerificationDocumentType documentType,
+            @RequestPart(value = "isPrimary", required = false) Boolean isPrimary,
+            @RequestPart("file") MultipartFile file
+    ) {
+        ensureAuthenticated(principal);
+        MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
+                principal.getPublicId(),
+                documentType,
+                Boolean.TRUE.equals(isPrimary),
+                file
+        );
+        return ApiResponse.created(response);
+    }
+
+    @Operation(summary = "Nộp hồ sơ xác thực mentor để admin duyệt")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Nộp hồ sơ thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Hồ sơ chưa đủ điều kiện để nộp"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
+    @PostMapping("/submit")
+    public ApiResponse<MentorVerificationRequestResponse> submit(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody MentorVerificationSubmitRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.submit(principal.getPublicId(), request));
+    }
+
+    private void ensureAuthenticated(UserPrincipal principal) {
+        if (principal == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+    }
+}

@@ -2,9 +2,15 @@ package com.fptu.exe.skillswap.shared.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.jpa.JpaSystemException;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -35,6 +41,46 @@ public class GlobalExceptionHandler {
                 .orElse("Validation error");
 
         return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String msg = String.format("Giá trị không hợp lệ cho tham số '%s': %s",
+                ex.getName(), ex.getValue());
+        return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMissingRequestPart(MissingServletRequestPartException ex) {
+        return buildResponse(ErrorCode.INVALID_INPUT, "Thiếu dữ liệu bắt buộc: " + ex.getRequestPartName());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        return buildResponse(ErrorCode.PAYLOAD_TOO_LARGE, "Tệp tải lên vượt quá giới hạn dung lượng cho phép");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.error("Data integrity violation", ex);
+        return buildResponse(ErrorCode.RESOURCE_CONFLICT, "Dữ liệu không hợp lệ hoặc đang xung đột với trạng thái hiện tại");
+    }
+
+    @ExceptionHandler({DataAccessException.class, JpaSystemException.class})
+    public ResponseEntity<ApiResponse<Object>> handleDataAccess(Exception ex) {
+        log.error("Database access error", ex);
+        return buildResponse(ErrorCode.DATABASE_ERROR, "Không thể xử lý dữ liệu do lỗi hệ thống lưu trữ");
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        return buildResponse(ErrorCode.INVALID_INPUT, ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIllegalState(IllegalStateException ex) {
+        log.error("Illegal state", ex);
+        return buildResponse(ErrorCode.CONFIGURATION_ERROR, ex.getMessage());
     }
 
     private ResponseEntity<ApiResponse<Object>> buildResponse(ErrorCode errorCode, String message) {

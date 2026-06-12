@@ -8,7 +8,8 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "mentor_tags", indexes = {
-    @Index(name = "idx_mentor_tags_tag_primary", columnList = "tag_id, is_primary")
+    @Index(name = "idx_mentor_tags_tag_primary", columnList = "tag_id, is_primary"),
+    @Index(name = "idx_mentor_tags_mentor_type", columnList = "mentor_user_id, tag_type")
 })
 @Getter
 @Setter
@@ -39,4 +40,8 @@ public class MentorTag {
     @Column(name = "is_primary", nullable = false)
     @Builder.Default
     private boolean isPrimary = false;
+
+    public MentorTagType getTagType() {
+        return id != null ? id.getTagType() : null;
+    }
 }

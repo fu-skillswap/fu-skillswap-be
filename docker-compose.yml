@@ -1,35 +1,66 @@
-version: '3.8'
-
 services:
   postgres-db:
     image: postgres:17-alpine
     container_name: skillswap-postgres
+
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-skillswapdb}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456}
+
     ports:
       - "5444:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     mem_limit: 512m
+
     networks:
       - skillswap-network
 
   spring-backend:
-    build: . # Trỏ tới Dockerfile vừa tạo
+    build: .
     container_name: skillswap-backend
+
     ports:
       - "8080:8080"
+
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+
       - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:-skillswapdb}
       - DATABASE_USERNAME=${POSTGRES_USER:-postgres}
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-123456}
+
       - FLYWAY_ENABLED=false
+
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+      - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION}
+
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+
+      - CLOUDINARY_ENABLED=${CLOUDINARY_ENABLED:-false}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+
+      - R2_ENABLED=${R2_ENABLED:-false}
+      - R2_ENDPOINT=${R2_ENDPOINT}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET=${R2_BUCKET}
+      - R2_REGION=${R2_REGION:-auto}
+      - R2_DOCUMENTS_PREFIX=${R2_DOCUMENTS_PREFIX:-skillswap/verification-documents}
+
+      - CORS_ALLOWED_ORIGIN_PATTERNS=${CORS_ALLOWED_ORIGIN_PATTERNS}
+
     depends_on:
       - postgres-db
+
     mem_limit: 768m
+
     networks:
       - skillswap-network
 
