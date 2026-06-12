@@ -2,8 +2,9 @@ package com.fptu.exe.skillswap.modules.mentor.domain;
 
 public enum VerificationStatus {
     DRAFT,
-    PENDING,
+    PENDING_REVIEW,
+    NEEDS_REVISION,
     APPROVED,
     REJECTED,
-    EXPIRED
+    WITHDRAWN
 }
