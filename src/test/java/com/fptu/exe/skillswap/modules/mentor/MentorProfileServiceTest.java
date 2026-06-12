@@ -96,8 +96,14 @@ class MentorProfileServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.empty());
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(mentorProfileRepository.save(any(MentorProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(eq(userId), anyCollection())).thenReturn(List.of());
+        when(mentorProfileRepository.save(any(MentorProfile.class))).thenAnswer(invocation -> {
+            MentorProfile profile = invocation.getArgument(0);
+            if (profile.getUserId() == null && profile.getUser() != null) {
+                profile.setUserId(profile.getUser().getId());
+            }
+            return profile;
+        });
+        when(mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(any(), anyCollection())).thenReturn(List.of());
 
         MentorProfileResponse response = mentorProfileService.upsertBasic(userId, request);
 
@@ -109,6 +115,7 @@ class MentorProfileServiceTest {
         assertThat(savedProfile.getCurrentCompany()).isEqualTo("FPT Software");
         assertThat(savedProfile.getBio()).isEqualTo("Bio");
         assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
+        assertThat(savedProfile.getUser()).isSameAs(user);
         assertThat(response.exists()).isTrue();
     }
 
