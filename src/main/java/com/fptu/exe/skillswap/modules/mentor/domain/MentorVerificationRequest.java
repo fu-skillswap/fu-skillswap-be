@@ -1,12 +1,9 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
-
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -14,7 +11,8 @@ import java.util.UUID;
 @Table(name = "mentor_verification_requests", indexes = {
     @Index(name = "idx_mentor_verification_mentor_id", columnList = "mentor_user_id"),
     @Index(name = "idx_mentor_verification_status", columnList = "status"),
-    @Index(name = "idx_mentor_verification_method", columnList = "method")
+    @Index(name = "idx_mentor_verification_method", columnList = "method"),
+    @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at")
 })
 @Getter
 @Setter
@@ -39,27 +37,20 @@ public class MentorVerificationRequest {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
-    private VerificationStatus status = VerificationStatus.PENDING;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "document_file_id", foreignKey = @ForeignKey(name = "fk_mentor_verification_file"))
-    private StoredFile document;
+    private VerificationStatus status = VerificationStatus.DRAFT;
 
     @Column(name = "submitted_note", columnDefinition = "TEXT")
     private String submittedNote;
 
-    @Column(name = "ocr_raw_result", columnDefinition = "jsonb")
-    private String ocrRawResult;
+    @Column(name = "review_note", columnDefinition = "TEXT")
+    private String reviewNote;
 
-    @Column(name = "ocr_confidence", precision = 5, scale = 2)
-    private BigDecimal ocrConfidence;
+    @Column(name = "revision_count", nullable = false)
+    @Builder.Default
+    private Integer revisionCount = 0;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ocr_reviewed_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_ocr_reviewer"))
-    private User ocrReviewedBy;
-
-    @Column(name = "ocr_reviewed_at")
-    private LocalDateTime ocrReviewedAt;
+    @Column(name = "submitted_at")
+    private LocalDateTime submittedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_reviewer"))
@@ -68,8 +59,18 @@ public class MentorVerificationRequest {
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
 
+    @Column(name = "withdrawn_at")
+    private LocalDateTime withdrawnAt;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "previous_request_id", foreignKey = @ForeignKey(name = "fk_mentor_verification_previous"))
+    private MentorVerificationRequest previousRequest;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

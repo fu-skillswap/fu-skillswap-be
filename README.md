@@ -106,6 +106,14 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
+R2_ENABLED=false
+R2_ENDPOINT=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_REGION=auto
+R2_DOCUMENTS_PREFIX=skillswap/verification-documents
+
 FLYWAY_ENABLED=false
 HIBERNATE_DDL_AUTO=update
 ```
@@ -118,6 +126,21 @@ JWT_EXPIRATION
 JWT_REFRESH_EXPIRATION
 GOOGLE_CLIENT_ID
 CORS_ALLOWED_ORIGIN_PATTERNS
+```
+
+If mentor verification uploads are enabled in a deployed environment:
+
+```text
+CLOUDINARY_ENABLED=true
+CLOUDINARY_CLOUD_NAME
+CLOUDINARY_API_KEY
+CLOUDINARY_API_SECRET
+
+R2_ENABLED=true
+R2_ENDPOINT
+R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
+R2_BUCKET
 ```
 
 If a variable is defined as an empty string in `.env`, it overrides the default in `application.yaml`. For example, `JWT_EXPIRATION=` will break startup because Spring cannot bind an empty string to `long`.

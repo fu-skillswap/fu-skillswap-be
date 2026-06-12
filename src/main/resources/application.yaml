@@ -52,6 +52,14 @@ application:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
     folder: skillswap # thư mục gốc trên Cloudinary
+  r2:
+    enabled: ${R2_ENABLED:false}
+    endpoint: ${R2_ENDPOINT:}
+    access-key-id: ${R2_ACCESS_KEY_ID:}
+    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
+    bucket: ${R2_BUCKET:}
+    region: ${R2_REGION:auto}
+    documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
 
 logging:
   pattern:
