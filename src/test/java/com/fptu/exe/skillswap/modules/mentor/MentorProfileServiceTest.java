@@ -181,21 +181,10 @@ class MentorProfileServiceTest {
                     return List.of(helpTopic);
                 });
         when(mentorProfileRepository.save(profile)).thenReturn(profile);
-        when(mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(eq(userId), anyCollection()))
-                .thenReturn(List.of(
-                        MentorTag.builder().mentorProfile(profile).tag(expertiseTag)
-                                .id(new com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId(userId, expertiseTagId, MentorTagType.EXPERTISE))
-                                .build(),
-                        MentorTag.builder().mentorProfile(profile).tag(helpTopic)
-                                .id(new com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId(userId, helpTopicId, MentorTagType.HELP_TOPIC))
-                                .build()
-                ));
-
         MentorProfileResponse response = mentorProfileService.upsertExpertise(userId, request);
 
-        verify(mentorTagRepository).deleteByIdMentorUserIdAndIdTagType(userId, MentorTagType.EXPERTISE);
-        verify(mentorTagRepository).deleteByIdMentorUserIdAndIdTagType(userId, MentorTagType.HELP_TOPIC);
-        verify(mentorTagRepository, times(2)).saveAll(anyCollection());
+        verify(mentorTagRepository).deleteByIdMentorUserId(userId);
+        verify(mentorTagRepository, times(1)).saveAll(anyCollection());
         assertThat(response.expertiseTags()).hasSize(1);
         assertThat(response.helpTopics()).hasSize(1);
         assertThat(response.industry()).isEqualTo("Software Engineering");
