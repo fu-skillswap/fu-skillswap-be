@@ -39,7 +39,7 @@ public class GoogleAuthService {
 
             String expectedClientId = jwtProperties.getGoogle().getClientId();
             if (!StringUtils.hasText(expectedClientId)) {
-                throw new IllegalStateException("GOOGLE_CLIENT_ID is required for Google authentication");
+                throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
             }
             GoogleIdToken.Payload payload = googleIdToken.getPayload();
             if (!expectedClientId.equals(payload.getAudience())) {
@@ -67,7 +67,7 @@ public class GoogleAuthService {
                 if (current == null) {
                     String clientId = jwtProperties.getGoogle().getClientId();
                     if (!StringUtils.hasText(clientId)) {
-                        throw new IllegalStateException("GOOGLE_CLIENT_ID is required for Google authentication");
+                        throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
                     }
                     current = new GoogleIdTokenVerifier.Builder(
                             GoogleNetHttpTransport.newTrustedTransport(),
