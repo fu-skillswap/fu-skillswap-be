@@ -7,8 +7,11 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.MethodArgumentConversionNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
@@ -48,6 +51,17 @@ public class GlobalExceptionHandler {
         String msg = String.format("Giá trị không hợp lệ cho tham số '%s': %s",
                 ex.getName(), ex.getValue());
         return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler(MethodArgumentConversionNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleConversionNotSupported(MethodArgumentConversionNotSupportedException ex) {
+        String msg = String.format("Giá trị không hợp lệ cho tham số '%s'", ex.getName());
+        return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler({HttpMediaTypeNotSupportedException.class, HttpMessageNotReadableException.class})
+    public ResponseEntity<ApiResponse<Object>> handleUnreadableRequest(Exception ex) {
+        return buildResponse(ErrorCode.INVALID_INPUT, "Dữ liệu gửi lên không đúng định dạng mà API hỗ trợ");
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

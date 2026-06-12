@@ -55,6 +55,7 @@ public class MentorProfileService {
 
     @Transactional(readOnly = true)
     public MentorProfileResponse getMyProfile(UUID userId) {
+        requireUserId(userId);
         return mentorProfileRepository.findWithUserByUserId(userId)
                 .map(this::mapToResponse)
                 .orElseGet(() -> MentorProfileResponse.empty(userId));
@@ -62,6 +63,8 @@ public class MentorProfileService {
 
     @Transactional
     public MentorProfileResponse upsertBasic(UUID userId, MentorProfileBasicRequest request) {
+        requireUserId(userId);
+        requireBasicRequest(request);
         MentorProfile profile = getOrCreateProfile(userId);
         profile.setHeadline(clean(request.headline()));
         profile.setCurrentPosition(clean(request.currentPosition()));
@@ -76,6 +79,8 @@ public class MentorProfileService {
 
     @Transactional
     public MentorProfileResponse upsertExpertise(UUID userId, MentorProfileExpertiseRequest request) {
+        requireUserId(userId);
+        requireExpertiseRequest(request);
         MentorProfile profile = getOrCreateProfile(userId);
         List<Tag> expertiseTags = loadAndValidateTags(request.expertiseTagIds(), EXPERTISE_TAG_TYPES, "tag chuyên môn");
         List<Tag> helpTopics = loadAndValidateTags(request.helpTopicIds(), Set.of(TagType.HELP_TOPIC), "chủ đề hỗ trợ");
@@ -93,18 +98,21 @@ public class MentorProfileService {
     }
 
     private MentorProfile getOrCreateProfile(UUID userId) {
+        requireUserId(userId);
         return mentorProfileRepository.findWithUserByUserId(userId)
                 .orElseGet(() -> {
                     User user = userRepository.findById(userId)
                             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
                     MentorProfile profile = new MentorProfile();
-                    profile.setUserId(userId);
                     profile.setUser(user);
                     return profile;
                 });
     }
 
     private List<Tag> loadAndValidateTags(List<UUID> tagIds, Set<TagType> allowedTypes, String label) {
+        if (tagIds == null || tagIds.isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách " + label + " không được để trống");
+        }
         Set<UUID> uniqueIds = new LinkedHashSet<>(tagIds);
         if (uniqueIds.size() != tagIds.size()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách " + label + " không được trùng lặp");
@@ -247,6 +255,9 @@ public class MentorProfileService {
     }
 
     private String clean(String value) {
+        if (!hasText(value)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu văn bản bắt buộc không được để trống");
+        }
         return value.trim();
     }
 
@@ -259,5 +270,23 @@ public class MentorProfileService {
 
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private void requireUserId(UUID userId) {
+        if (userId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+    }
+
+    private void requireBasicRequest(MentorProfileBasicRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ mentor không được để trống");
+        }
+    }
+
+    private void requireExpertiseRequest(MentorProfileExpertiseRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu chuyên môn mentor không được để trống");
+        }
     }
 }

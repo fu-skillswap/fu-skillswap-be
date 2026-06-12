@@ -40,12 +40,18 @@ public class IdentityService {
     private final ApplicationEventPublisher eventPublisher;
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
+        if (request == null || request.getIdToken() == null || request.getIdToken().trim().isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Google ID token không được để trống");
+        }
         GoogleAuthService.GoogleUserInfo googleUser = googleAuthService.verifyToken(request.getIdToken());
         return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
     }
 
     @Transactional
     public TokenResponse refreshToken(RefreshTokenRequest request) {
+        if (request == null || request.getRefreshToken() == null || request.getRefreshToken().trim().isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Refresh token không được để trống");
+        }
         String rawToken = request.getRefreshToken();
         String hash = jwtTokenProvider.hashToken(rawToken);
 
@@ -87,6 +93,9 @@ public class IdentityService {
 
     @Transactional(readOnly = true)
     public UserMeResponse getCurrentUser(UUID publicId) {
+        if (publicId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
         User user = userRepository.findById(publicId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
 

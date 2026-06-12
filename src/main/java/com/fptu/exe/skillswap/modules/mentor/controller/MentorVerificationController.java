@@ -16,7 +16,9 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -64,10 +66,10 @@ public class MentorVerificationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
     @PostMapping(path = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<MentorVerificationRequestResponse> uploadDocument(
+    public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestPart("documentType") VerificationDocumentType documentType,
-            @RequestPart(value = "isPrimary", required = false) Boolean isPrimary,
+            @RequestParam("documentType") VerificationDocumentType documentType,
+            @RequestParam(value = "isPrimary", required = false) Boolean isPrimary,
             @RequestPart("file") MultipartFile file
     ) {
         ensureAuthenticated(principal);
@@ -77,7 +79,7 @@ public class MentorVerificationController {
                 Boolean.TRUE.equals(isPrimary),
                 file
         );
-        return ApiResponse.created(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
 
     @Operation(summary = "Nộp hồ sơ xác thực mentor để admin duyệt")

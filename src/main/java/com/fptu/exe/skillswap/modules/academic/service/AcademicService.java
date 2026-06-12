@@ -70,6 +70,7 @@ public class AcademicService {
     @Transactional(readOnly = true)
     @Cacheable(value = "academicSpecializationsByProgram", key = "#programId")
     public List<SpecializationResponse> getSpecializationsByProgram(UUID programId) {
+        requireId(programId, "Ngành học");
         if (!academicProgramRepository.existsById(programId)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học liên kết");
         }
@@ -111,6 +112,7 @@ public class AcademicService {
 
     @Transactional(readOnly = true)
     public StudentProfileResponse getStudentProfile(UUID userId) {
+        requireId(userId, "Người dùng");
         StudentProfile profile = studentProfileRepository.findWithDetailsByUserId(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Hồ sơ học thuật chưa được tạo"));
         return mapToStudentProfileResponse(profile);
@@ -118,6 +120,8 @@ public class AcademicService {
 
     @Transactional
     public StudentProfileResponse updateStudentProfile(UUID userId, StudentProfileRequest request) {
+        requireId(userId, "Người dùng");
+        requireStudentProfileRequest(request);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
@@ -154,7 +158,6 @@ public class AcademicService {
         StudentProfile profile = studentProfileRepository.findById(userId)
                 .orElseGet(() -> {
                     StudentProfile studentProfile = new StudentProfile();
-                    studentProfile.setUserId(userId);
                     studentProfile.setUser(user);
                     return studentProfile;
                 });
@@ -202,5 +205,17 @@ public class AcademicService {
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
                 .build();
+    }
+
+    private void requireId(UUID id, String label) {
+        if (id == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, label + " không được để trống");
+        }
+    }
+
+    private void requireStudentProfileRequest(StudentProfileRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ học thuật không được để trống");
+        }
     }
 }
