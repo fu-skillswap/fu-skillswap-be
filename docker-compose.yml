@@ -1,39 +1,53 @@
-version: '3.8'
-
 services:
   postgres-db:
     image: postgres:17-alpine
     container_name: skillswap-postgres
+
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-skillswapdb}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456}
+
     ports:
       - "5444:5432"
+
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
     mem_limit: 512m
+
     networks:
       - skillswap-network
 
   spring-backend:
-    build: . # Trỏ tới Dockerfile vừa tạo
+    build: .
     container_name: skillswap-backend
+
     ports:
       - "8080:8080"
+
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+
       - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:-skillswapdb}
       - DATABASE_USERNAME=${POSTGRES_USER:-postgres}
       - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-123456}
+
+      - FLYWAY_ENABLED=false
+
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_EXPIRATION=${JWT_EXPIRATION}
       - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION}
+
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - FLYWAY_ENABLED=false
+
+      - CORS_ALLOWED_ORIGIN_PATTERNS=${CORS_ALLOWED_ORIGIN_PATTERNS}
+
     depends_on:
       - postgres-db
+
     mem_limit: 768m
+
     networks:
       - skillswap-network
 
