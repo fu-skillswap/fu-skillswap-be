@@ -152,10 +152,12 @@ public class AcademicService {
 
         // Update or create StudentProfile
         StudentProfile profile = studentProfileRepository.findById(userId)
-                .orElseGet(() -> StudentProfile.builder()
-                        .userId(userId)
-                        .user(user)
-                        .build());
+                .orElseGet(() -> {
+                    StudentProfile studentProfile = new StudentProfile();
+                    studentProfile.setUserId(userId);
+                    studentProfile.setUser(user);
+                    return studentProfile;
+                });
 
         profile.setStudentCode(normalizedStudentCode);
         profile.setCampus(campus);

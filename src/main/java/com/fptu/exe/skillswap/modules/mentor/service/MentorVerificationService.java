@@ -252,13 +252,15 @@ public class MentorVerificationService {
 
     private MentorProfile ensureMentorProfileExists(User user) {
         return mentorProfileRepository.findWithUserByUserId(user.getId())
-                .orElseGet(() -> mentorProfileRepository.save(MentorProfile.builder()
-                        .userId(user.getId())
-                        .user(user)
-                        .status(MentorStatus.DRAFT)
-                        .hourlyRate(BigDecimal.ZERO)
-                        .sessionDuration(60)
-                        .build()));
+                .orElseGet(() -> {
+                    MentorProfile mentorProfile = new MentorProfile();
+                    mentorProfile.setUserId(user.getId());
+                    mentorProfile.setUser(user);
+                    mentorProfile.setStatus(MentorStatus.DRAFT);
+                    mentorProfile.setHourlyRate(BigDecimal.ZERO);
+                    mentorProfile.setSessionDuration(60);
+                    return mentorProfileRepository.saveAndFlush(mentorProfile);
+                });
     }
 
     private User getRequiredUser(UUID userId) {

@@ -97,10 +97,10 @@ public class MentorProfileService {
                 .orElseGet(() -> {
                     User user = userRepository.findById(userId)
                             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
-                    return MentorProfile.builder()
-                            .userId(userId)
-                            .user(user)
-                            .build();
+                    MentorProfile profile = new MentorProfile();
+                    profile.setUserId(userId);
+                    profile.setUser(user);
+                    return profile;
                 });
     }
 
