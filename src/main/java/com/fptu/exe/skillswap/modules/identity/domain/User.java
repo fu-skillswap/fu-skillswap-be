@@ -13,7 +13,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "users", indexes = {
     @Index(name = "idx_users_email", columnList = "email", unique = true),
-    @Index(name = "idx_users_status", columnList = "status")
+    @Index(name = "idx_users_status", columnList = "status"),
+    @Index(name = "idx_users_full_name", columnList = "full_name")
 })
 @SQLDelete(sql = "UPDATE users SET deleted_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")

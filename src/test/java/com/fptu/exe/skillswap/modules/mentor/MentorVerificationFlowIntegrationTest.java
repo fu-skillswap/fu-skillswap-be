@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.mentor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.academic.domain.Campus;
@@ -17,7 +18,10 @@ import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserRole;
+import com.fptu.exe.skillswap.modules.identity.domain.UserRoleId;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleAuthService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -28,6 +32,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -52,6 +57,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -76,6 +82,9 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserRoleRepository userRoleRepository;
 
     @Autowired
     private StudentProfileRepository studentProfileRepository;
@@ -105,12 +114,14 @@ class MentorVerificationFlowIntegrationTest {
     private R2DocumentStorageService r2DocumentStorageService;
 
     @Test
-    void bigBangFlow_loginToMentorVerificationSubmit_shouldSucceed() throws Exception {
+    void bigBangFlow_loginToRevisionResubmitApprove_shouldSucceed() throws Exception {
         String nonce = UUID.randomUUID().toString().substring(0, 8);
         String email = "mentor-flow-" + nonce + "@fpt.edu.vn";
         String googleSub = "google-sub-" + nonce;
         mockGoogleLogin(email, googleSub);
         mockStorageProviders();
+        User adminUser = createAdminUser(nonce);
+        UserPrincipal adminPrincipal = UserPrincipal.create(adminUser.getId(), adminUser.getEmail(), List.of(RoleCode.ADMIN));
 
         ensureTagExists("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
         ensureTagExists("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
@@ -211,19 +222,87 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.allowedActions.canSubmit").value(false))
                 .andExpect(jsonPath("$.data.allowedActions.canUploadDocuments").value(false));
 
+        MvcResult adminDetailResult = mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
+                        .with(user(adminPrincipal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").value(adminUser.getEmail()))
+                .andExpect(jsonPath("$.data.canReview").value(true))
+                .andReturn();
+
+        JsonNode adminDetailNode = objectMapper.readTree(adminDetailResult.getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertThat(adminDetailNode.path("data").path("lockExpiresAt").asText()).isNotBlank();
+
+        mockMvc.perform(get("/api/admin/mentor-verification/requests")
+                        .with(user(adminPrincipal))
+                        .param("status", VerificationStatus.PENDING_REVIEW.name())
+                        .param("keyword", "mentor-flow-" + nonce))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content.length()").value(1))
+                .andExpect(jsonPath("$.data.content[0].mentorEmail").value(email));
+
+        mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/request-revision", requestId)
+                        .with(user(adminPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "note": "Vui lòng bổ sung ghi chú chuyên môn rõ ràng hơn"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("NEEDS_REVISION"))
+                .andExpect(jsonPath("$.data.reviewNote").value("Vui lòng bổ sung ghi chú chuyên môn rõ ràng hơn"))
+                .andExpect(jsonPath("$.data.canReview").value(false));
+
+        mockMvc.perform(post("/api/me/mentor-verification/submit")
+                        .header("Authorization", bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "submitNote": "Resubmitted after revision"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$.data.revisionCount").value(1));
+
+        mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
+                        .with(user(adminPrincipal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").value(adminUser.getEmail()))
+                .andExpect(jsonPath("$.data.canReview").value(true));
+
+        mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/approve", requestId)
+                        .with(user(adminPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "note": "Hồ sơ hợp lệ"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.reviewNote").value("Hồ sơ hợp lệ"))
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").doesNotExist());
+
         User savedUser = userRepository.findByEmail(email).orElseThrow();
         assertThat(studentProfileRepository.findById(savedUser.getId())).isPresent();
 
         MentorProfile mentorProfile = mentorProfileRepository.findById(savedUser.getId()).orElseThrow();
-        assertThat(mentorProfile.getStatus()).isEqualTo(MentorStatus.PENDING_VERIFICATION);
+        assertThat(mentorProfile.getStatus()).isEqualTo(MentorStatus.ACTIVE);
         assertThat(mentorProfile.getHourlyRate()).isEqualByComparingTo(BigDecimal.ZERO);
 
         MentorVerificationRequest verificationRequest = mentorVerificationRequestRepository.findAll().stream()
                 .filter(request -> request.getMentor().getId().equals(savedUser.getId()))
                 .findFirst()
                 .orElseThrow();
-        assertThat(verificationRequest.getStatus()).isEqualTo(VerificationStatus.PENDING_REVIEW);
-        assertThat(verificationRequest.getSubmittedNote()).isEqualTo("Ready for review");
+        assertThat(verificationRequest.getStatus()).isEqualTo(VerificationStatus.APPROVED);
+        assertThat(verificationRequest.getSubmittedNote()).isEqualTo("Resubmitted after revision");
+        assertThat(verificationRequest.getRevisionCount()).isEqualTo(1);
+        assertThat(verificationRequest.getReviewNote()).isEqualTo("Hồ sơ hợp lệ");
+        assertThat(verificationRequest.getReviewedBy()).isNotNull();
+        assertThat(verificationRequest.getLockedBy()).isNull();
 
         List<MentorVerificationDocument> documents = mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(verificationRequest.getId());
         assertThat(documents).hasSize(2);
@@ -231,6 +310,46 @@ class MentorVerificationFlowIntegrationTest {
                 .extracting(MentorVerificationDocument::getDocumentType)
                 .containsExactlyInAnyOrder(VerificationDocumentType.FPTU_AFFILIATION_PROOF, VerificationDocumentType.EXPERTISE_PROOF);
         assertThat(storedFileRepository.findAll()).hasSizeGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void bigBangFlow_secondAdminCannotApproveWhenSoftLocked_shouldReturn409() throws Exception {
+        String nonce = UUID.randomUUID().toString().substring(0, 8);
+        String email = "mentor-lock-" + nonce + "@fpt.edu.vn";
+        String googleSub = "google-lock-" + nonce;
+        mockGoogleLogin(email, googleSub);
+        mockStorageProviders();
+        User adminA = createAdminUser("a-" + nonce);
+        User adminB = createAdminUser("b-" + nonce);
+        UserPrincipal adminPrincipalA = UserPrincipal.create(adminA.getId(), adminA.getEmail(), List.of(RoleCode.ADMIN));
+        UserPrincipal adminPrincipalB = UserPrincipal.create(adminB.getId(), adminB.getEmail(), List.of(RoleCode.ADMIN));
+
+        String accessToken = loginAndExtractAccessToken();
+        completeStudentProfile(accessToken);
+        String requestId = createAndSubmitVerificationRequest(accessToken);
+
+        mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
+                        .with(user(adminPrincipalA)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").value(adminA.getEmail()))
+                .andExpect(jsonPath("$.data.canReview").value(true));
+
+        mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
+                        .with(user(adminPrincipalB)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").value(adminA.getEmail()))
+                .andExpect(jsonPath("$.data.canReview").value(false));
+
+        mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/approve", requestId)
+                        .with(user(adminPrincipalB))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "note": "Trying to approve"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").exists());
     }
 
     private void mockGoogleLogin(String email, String googleSub) {
@@ -285,5 +404,108 @@ class MentorVerificationFlowIntegrationTest {
 
     private String bearer(String accessToken) {
         return "Bearer " + accessToken;
+    }
+
+    private User createAdminUser(String nonce) {
+        User admin = userRepository.save(User.builder()
+                .email("admin-" + nonce + "@skillswap.local")
+                .fullName("Admin " + nonce)
+                .avatarUrl("https://example.com/admin-" + nonce + ".jpg")
+                .build());
+        userRoleRepository.save(UserRole.builder()
+                .id(new UserRoleId(admin.getId(), RoleCode.ADMIN))
+                .user(admin)
+                .assignedBy(admin)
+                .build());
+        return admin;
+    }
+
+    private void completeStudentProfile(String accessToken) throws Exception {
+        Campus campus = campusRepository.findByIsActiveTrue().stream()
+                .min(Comparator.comparing(Campus::getName))
+                .orElseThrow();
+        AcademicProgram program = academicProgramRepository.findByIsActiveTrue().stream()
+                .min(Comparator.comparing(AcademicProgram::getCode))
+                .orElseThrow();
+        Specialization specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).stream()
+                .findFirst()
+                .orElseThrow();
+
+        String studentProfileJson = """
+                {
+                  "studentCode": "%s",
+                  "displayName": "Mentor Flow User",
+                  "avatarUrl": "https://example.com/avatar-flow.jpg",
+                  "campusId": "%s",
+                  "programId": "%s",
+                  "specializationId": "%s",
+                  "semester": 6,
+                  "intakeYear": 2021,
+                  "isAlumni": false,
+                  "bio": "Integration test profile"
+                }
+                """.formatted(generateStudentCode(), campus.getId(), program.getId(), specialization.getId());
+
+        mockMvc.perform(put("/api/me/student-profile")
+                        .header("Authorization", bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(studentProfileJson))
+                .andExpect(status().isOk());
+    }
+
+    private String generateStudentCode() {
+        int intake = Math.abs(UUID.randomUUID().hashCode()) % 22 + 1;
+        int suffix = Math.abs((UUID.randomUUID().toString() + intake).hashCode()) % 9000 + 1000;
+        return "SE" + String.format("%02d%04d", intake, suffix);
+    }
+
+    private String createAndSubmitVerificationRequest(String accessToken) throws Exception {
+        MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andReturn();
+
+        String requestId = objectMapper.readTree(requestResult.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("data").path("requestId").asText();
+
+        MockMultipartFile affiliationFile = new MockMultipartFile(
+                "file",
+                "fpt-card.jpg",
+                MediaType.IMAGE_JPEG_VALUE,
+                "fake-image".getBytes(StandardCharsets.UTF_8)
+        );
+        mockMvc.perform(multipart("/api/me/mentor-verification/documents")
+                        .file(affiliationFile)
+                        .param("documentType", VerificationDocumentType.FPTU_AFFILIATION_PROOF.name())
+                        .param("isPrimary", "true")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isCreated());
+
+        MockMultipartFile expertiseFile = new MockMultipartFile(
+                "file",
+                "portfolio.pdf",
+                MediaType.APPLICATION_PDF_VALUE,
+                "fake-pdf".getBytes(StandardCharsets.UTF_8)
+        );
+        mockMvc.perform(multipart("/api/me/mentor-verification/documents")
+                        .file(expertiseFile)
+                        .param("documentType", VerificationDocumentType.EXPERTISE_PROOF.name())
+                        .param("isPrimary", "true")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/me/mentor-verification/submit")
+                        .header("Authorization", bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "submitNote": "Ready for review"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
+
+        return requestId;
     }
 }
