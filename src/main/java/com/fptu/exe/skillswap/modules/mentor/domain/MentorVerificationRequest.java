@@ -12,7 +12,9 @@ import java.util.UUID;
     @Index(name = "idx_mentor_verification_mentor_id", columnList = "mentor_user_id"),
     @Index(name = "idx_mentor_verification_status", columnList = "status"),
     @Index(name = "idx_mentor_verification_method", columnList = "method"),
-    @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at")
+    @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at"),
+    @Index(name = "idx_mentor_verification_status_submitted_at_id", columnList = "status, submitted_at, id"),
+    @Index(name = "idx_mentor_verification_mentor_status", columnList = "mentor_user_id, status")
 })
 @Getter
 @Setter
@@ -67,6 +69,16 @@ public class MentorVerificationRequest {
 
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "locked_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_locked_by"))
+    private User lockedBy;
+
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
+    @Column(name = "lock_expires_at")
+    private LocalDateTime lockExpiresAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "previous_request_id", foreignKey = @ForeignKey(name = "fk_mentor_verification_previous"))
