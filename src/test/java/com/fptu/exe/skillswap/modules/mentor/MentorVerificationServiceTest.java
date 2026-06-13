@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
+import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -8,7 +10,10 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -34,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -226,5 +232,80 @@ class MentorVerificationServiceTest {
                 .isInstanceOf(BaseException.class)
                 .satisfies(ex -> assertThat(((BaseException) ex).getErrorCode()).isEqualTo(ErrorCode.RESOURCE_CONFLICT))
                 .hasMessage("Bạn đang có một hồ sơ chờ admin duyệt");
+    }
+
+    @Test
+    void deleteDocument_editableRequest_shouldSoftDeleteDocument() {
+        UUID documentId = UUID.randomUUID();
+        MentorVerificationRequest draftRequest = MentorVerificationRequest.builder()
+                .id(UUID.randomUUID())
+                .mentor(user)
+                .status(VerificationStatus.DRAFT)
+                .build();
+        MentorVerificationDocument document = MentorVerificationDocument.builder()
+                .id(documentId)
+                .request(draftRequest)
+                .documentType(VerificationDocumentType.FPTU_AFFILIATION_PROOF)
+                .status(VerificationDocumentStatus.UPLOADED)
+                .storedFile(StoredFile.builder()
+                        .id(UUID.randomUUID())
+                        .owner(user)
+                        .purpose(FilePurpose.VERIFICATION_DOCUMENT)
+                        .originalName("fpt-card.jpg")
+                        .storageProvider("CLOUDINARY")
+                        .storageKey("cloudinary/key")
+                        .publicUrl("https://example.com/fpt-card.jpg")
+                        .mimeType("image/jpeg")
+                        .sizeBytes(10L)
+                        .build())
+                .isPrimary(true)
+                .isActive(true)
+                .build();
+
+        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
+                .thenReturn(Optional.of(draftRequest));
+        when(mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, draftRequest.getId()))
+                .thenReturn(Optional.of(document));
+        when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(draftRequest.getId()))
+                .thenReturn(List.of(document));
+        when(studentProfileRepository.existsById(userId)).thenReturn(true);
+
+        MentorVerificationRequestResponse response = mentorVerificationService.deleteDocument(userId, documentId);
+
+        assertThat(document.isActive()).isFalse();
+        assertThat(document.isPrimary()).isFalse();
+        assertThat(document.getStatus()).isEqualTo(VerificationDocumentStatus.REMOVED);
+        verify(mentorVerificationDocumentRepository, times(1)).save(document);
+        assertThat(response.documents()).hasSize(1);
+    }
+
+    @Test
+    void withdraw_pendingReviewRequest_shouldMarkWithdrawnAndResetProfileStatus() {
+        MentorVerificationRequest pendingRequest = MentorVerificationRequest.builder()
+                .id(UUID.randomUUID())
+                .mentor(user)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .build();
+        MentorProfile mentorProfile = MentorProfile.builder()
+                .userId(userId)
+                .user(user)
+                .status(MentorStatus.PENDING_VERIFICATION)
+                .build();
+
+        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
+                .thenReturn(Optional.of(pendingRequest));
+        when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(pendingRequest.getId()))
+                .thenReturn(List.of());
+        when(studentProfileRepository.existsById(userId)).thenReturn(true);
+
+        MentorVerificationRequestResponse response = mentorVerificationService.withdraw(userId);
+
+        assertThat(pendingRequest.getStatus()).isEqualTo(VerificationStatus.WITHDRAWN);
+        assertThat(pendingRequest.getWithdrawnAt()).isNotNull();
+        assertThat(mentorProfile.getStatus()).isEqualTo(MentorStatus.DRAFT);
+        verify(mentorVerificationRequestRepository).save(pendingRequest);
+        verify(mentorProfileRepository).save(mentorProfile);
+        assertThat(response.status()).isEqualTo(VerificationStatus.WITHDRAWN);
     }
 }

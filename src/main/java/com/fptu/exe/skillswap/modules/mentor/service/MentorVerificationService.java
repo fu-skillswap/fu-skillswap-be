@@ -141,6 +141,56 @@ public class MentorVerificationService {
         return buildResponse(request);
     }
 
+    @Transactional
+    public MentorVerificationRequestResponse deleteDocument(UUID userId, UUID documentId) {
+        requireUserId(userId);
+        if (documentId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã tài liệu không được để trống");
+        }
+
+        MentorVerificationRequest request = findEditableRequest(userId);
+        MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
+
+        if (!document.isActive() || document.getStatus() == VerificationDocumentStatus.REMOVED) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Tài liệu này đã bị xóa hoặc không còn khả dụng");
+        }
+
+        document.setActive(false);
+        document.setPrimary(false);
+        document.setStatus(VerificationDocumentStatus.REMOVED);
+        mentorVerificationDocumentRepository.save(document);
+
+        return buildResponse(request);
+    }
+
+    @Transactional
+    public MentorVerificationRequestResponse withdraw(UUID userId) {
+        requireUserId(userId);
+        MentorVerificationRequest request = findActiveRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+
+        if (request.getStatus() != VerificationStatus.DRAFT
+                && request.getStatus() != VerificationStatus.NEEDS_REVISION
+                && request.getStatus() != VerificationStatus.PENDING_REVIEW) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Hồ sơ hiện tại không cho phép rút");
+        }
+
+        request.setStatus(VerificationStatus.WITHDRAWN);
+        request.setWithdrawnAt(LocalDateTime.now());
+        mentorVerificationRequestRepository.save(request);
+
+        mentorProfileRepository.findWithUserByUserId(userId)
+                .ifPresent(profile -> {
+                    if (profile.getStatus() == MentorStatus.PENDING_VERIFICATION) {
+                        profile.setStatus(MentorStatus.DRAFT);
+                        mentorProfileRepository.save(profile);
+                    }
+                });
+
+        return buildResponse(request);
+    }
+
     private MentorVerificationRequest createDraftRequest(User user) {
         MentorVerificationRequest request = MentorVerificationRequest.builder()
                 .mentor(user)
