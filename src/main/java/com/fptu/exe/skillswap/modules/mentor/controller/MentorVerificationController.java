@@ -97,6 +97,37 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.submit(principal.getPublicId(), request));
     }
 
+    @Operation(summary = "Xóa mềm một tài liệu xác thực mentor")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Xóa tài liệu thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Hồ sơ hiện tại không cho phép xóa tài liệu"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy tài liệu")
+    })
+    @DeleteMapping("/documents/{documentId}")
+    public ApiResponse<MentorVerificationRequestResponse> deleteDocument(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable("documentId") java.util.UUID documentId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.deleteDocument(principal.getPublicId(), documentId));
+    }
+
+    @Operation(summary = "Rút hồ sơ xác thực mentor hiện tại")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Rút hồ sơ thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Trạng thái hồ sơ hiện tại không cho phép rút"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy hồ sơ đang hoạt động")
+    })
+    @PostMapping("/withdraw")
+    public ApiResponse<MentorVerificationRequestResponse> withdraw(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.withdraw(principal.getPublicId()));
+    }
+
     private void ensureAuthenticated(UserPrincipal principal) {
         if (principal == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
