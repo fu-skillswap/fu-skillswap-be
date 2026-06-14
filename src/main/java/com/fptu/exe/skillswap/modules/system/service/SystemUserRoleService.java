@@ -99,7 +99,7 @@ public class SystemUserRoleService {
         BasePageRequest safeRequest = request == null ? new BasePageRequest() : request;
         int page = Math.max(safeRequest.getPage(), 0);
         int size = Math.min(Math.max(safeRequest.getSize(), 1), 100);
-        Sort.Direction direction = safeRequest.getDirection() == null ? Sort.Direction.DESC : safeRequest.getDirection();
+        Sort.Direction direction = safeRequest.resolveDirection();
         String sortBy = switch (safeRequest.getSortBy() == null ? "" : safeRequest.getSortBy()) {
             case "email" -> "user.email";
             case "fullName" -> "user.fullName";
@@ -113,7 +113,7 @@ public class SystemUserRoleService {
         BasePageRequest safeRequest = request == null ? new BasePageRequest() : request;
         int page = Math.max(safeRequest.getPage(), 0);
         int size = Math.min(Math.max(safeRequest.getSize(), 1), 100);
-        Sort.Direction direction = safeRequest.getDirection() == null ? Sort.Direction.DESC : safeRequest.getDirection();
+        Sort.Direction direction = safeRequest.resolveDirection();
         String sortBy = switch (safeRequest.getSortBy() == null ? "" : safeRequest.getSortBy()) {
             case "email" -> "email";
             case "fullName" -> "fullName";

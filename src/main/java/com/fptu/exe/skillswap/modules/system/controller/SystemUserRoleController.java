@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -54,13 +55,13 @@ public class SystemUserRoleController {
 
     @Operation(summary = "Xem danh sách user đang có quyền ADMIN")
     @GetMapping("/admins")
-    public ApiResponse<PageResponse<AdminUserResponse>> getAdminUsers(@ModelAttribute BasePageRequest pageRequest) {
+    public ApiResponse<PageResponse<AdminUserResponse>> getAdminUsers(@ParameterObject @ModelAttribute BasePageRequest pageRequest) {
         return ApiResponse.success(systemUserRoleService.getAdminUsers(pageRequest));
     }
 
     @Operation(summary = "Lấy danh sách toàn bộ user trong hệ thống")
     @GetMapping
-    public ApiResponse<PageResponse<SystemUserResponse>> getAllUsers(@ModelAttribute BasePageRequest pageRequest) {
+    public ApiResponse<PageResponse<SystemUserResponse>> getAllUsers(@ParameterObject @ModelAttribute BasePageRequest pageRequest) {
         return ApiResponse.success(systemUserRoleService.getAllUsers(pageRequest));
     }
 }
