@@ -392,6 +392,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     ) {
         StudentProfile profile = studentProfileRepository.findById(user.getId()).orElseGet(() -> StudentProfile.builder()
                 .user(user)
+                .userId(user.getId())
                 .build());
         profile.setStudentCode(studentCode);
         profile.setCampus(campus);
@@ -408,6 +409,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     private MentorProfile ensureMentorProfile(User user, MentorProfileSeedSpec spec) {
         MentorProfile profile = mentorProfileRepository.findById(user.getId()).orElseGet(() -> MentorProfile.builder()
                 .user(user)
+                .userId(user.getId())
                 .build());
         profile.setStatus(spec.status());
         profile.setHeadline(spec.headline());
