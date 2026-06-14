@@ -34,8 +34,6 @@ server:
       max: ${TOMCAT_MAX_THREADS:80}
 
 application:
-  demo-seed:
-    enabled: ${APP_DEMO_SEED_ENABLED:false}
   upload:
     dir: ./uploads/files
   security:

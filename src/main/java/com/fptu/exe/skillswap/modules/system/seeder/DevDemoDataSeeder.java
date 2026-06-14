@@ -45,8 +45,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,7 +62,7 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 @Component
-@ConditionalOnProperty(prefix = "application.demo-seed", name = "enabled", havingValue = "true")
+@Profile("dev")
 @Order(200)
 @RequiredArgsConstructor
 @Slf4j
