@@ -44,9 +44,11 @@ public class MentorDiscoveryController {
     @Operation(summary = "Tìm kiếm và lọc danh sách mentor để browse trên trang discovery")
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
+            @AuthenticationPrincipal UserPrincipal principal,
             @ModelAttribute MentorDiscoverySearchRequest request
     ) {
-        return ApiResponse.success(mentorDiscoveryService.searchMentors(request));
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorDiscoveryService.searchMentors(principal.getPublicId(), request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

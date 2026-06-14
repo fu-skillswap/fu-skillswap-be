@@ -94,7 +94,7 @@ class MentorDiscoveryControllerTest {
                 .expertiseTags(List.of())
                 .build();
 
-        when(mentorDiscoveryService.searchMentors(any()))
+        when(mentorDiscoveryService.searchMentors(eq(userId), any()))
                 .thenReturn(PageResponse.<MentorDiscoveryCardResponse>builder()
                         .content(List.of(mentor))
                         .page(0)
