@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -33,7 +34,7 @@ public class AdminMentorVerificationController {
     @Operation(summary = "Xem danh sách hồ sơ mentor với filter/search tối ưu cho admin queue")
     @GetMapping
     public ApiResponse<PageResponse<AdminMentorVerificationQueueItemResponse>> getQueue(
-            @ModelAttribute AdminMentorVerificationQueueFilterRequest filterRequest
+            @ParameterObject @ModelAttribute AdminMentorVerificationQueueFilterRequest filterRequest
     ) {
         return ApiResponse.success(adminMentorVerificationService.getQueue(filterRequest));
     }
