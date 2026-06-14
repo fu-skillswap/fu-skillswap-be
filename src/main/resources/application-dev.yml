@@ -12,6 +12,8 @@ spring:
     show-sql: true
 
 application:
+  demo-seed:
+    enabled: ${APP_DEMO_SEED_ENABLED:true}
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY:c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0}
