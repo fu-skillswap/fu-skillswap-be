@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.system.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.system.dto.AdminRoleChangeRequest;
 import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -55,5 +56,11 @@ public class SystemUserRoleController {
     @GetMapping("/admins")
     public ApiResponse<PageResponse<AdminUserResponse>> getAdminUsers(@ModelAttribute BasePageRequest pageRequest) {
         return ApiResponse.success(systemUserRoleService.getAdminUsers(pageRequest));
+    }
+
+    @Operation(summary = "Lấy danh sách toàn bộ user trong hệ thống")
+    @GetMapping
+    public ApiResponse<PageResponse<SystemUserResponse>> getAllUsers(@ModelAttribute BasePageRequest pageRequest) {
+        return ApiResponse.success(systemUserRoleService.getAllUsers(pageRequest));
     }
 }

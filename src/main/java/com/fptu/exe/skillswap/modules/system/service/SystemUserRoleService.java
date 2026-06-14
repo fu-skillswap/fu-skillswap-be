@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserRoleId;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -19,8 +20,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
+import java.util.List;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -74,6 +78,23 @@ public class SystemUserRoleService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<SystemUserResponse> getAllUsers(BasePageRequest pageRequest) {
+        Page<User> page = userRepository.findAll(systemUserPageable(pageRequest));
+        Map<UUID, List<RoleCode>> rolesByUserId = loadRolesByUserId(page.getContent());
+
+        return PageResponse.<SystemUserResponse>builder()
+                .content(page.getContent().stream()
+                        .map(user -> toSystemUserResponse(user, rolesByUserId.getOrDefault(user.getId(), List.of())))
+                        .toList())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+
     private Pageable adminRolePageable(BasePageRequest request) {
         BasePageRequest safeRequest = request == null ? new BasePageRequest() : request;
         int page = Math.max(safeRequest.getPage(), 0);
@@ -84,6 +105,20 @@ public class SystemUserRoleService {
             case "fullName" -> "user.fullName";
             case "assignedAt" -> "assignedAt";
             default -> "assignedAt";
+        };
+        return PageRequest.of(page, size, Sort.by(direction, sortBy));
+    }
+
+    private Pageable systemUserPageable(BasePageRequest request) {
+        BasePageRequest safeRequest = request == null ? new BasePageRequest() : request;
+        int page = Math.max(safeRequest.getPage(), 0);
+        int size = Math.min(Math.max(safeRequest.getSize(), 1), 100);
+        Sort.Direction direction = safeRequest.getDirection() == null ? Sort.Direction.DESC : safeRequest.getDirection();
+        String sortBy = switch (safeRequest.getSortBy() == null ? "" : safeRequest.getSortBy()) {
+            case "email" -> "email";
+            case "fullName" -> "fullName";
+            case "lastLoginAt" -> "lastLoginAt";
+            default -> "createdAt";
         };
         return PageRequest.of(page, size, Sort.by(direction, sortBy));
     }
@@ -116,6 +151,31 @@ public class SystemUserRoleService {
                 .status(user.getStatus())
                 .assignedBy(assignedBy == null ? null : assignedBy.getId())
                 .assignedAt(role.getAssignedAt())
+                .build();
+    }
+
+    private Map<UUID, List<RoleCode>> loadRolesByUserId(List<User> users) {
+        if (users == null || users.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, List<RoleCode>> rolesByUserId = new HashMap<>();
+        userRoleRepository.findByIdUserIdIn(users.stream().map(User::getId).toList())
+                .forEach(userRole -> rolesByUserId.computeIfAbsent(userRole.getId().getUserId(), ignored -> new java.util.ArrayList<>())
+                        .add(userRole.getId().getRole()));
+        return rolesByUserId;
+    }
+
+    private SystemUserResponse toSystemUserResponse(User user, List<RoleCode> roles) {
+        return SystemUserResponse.builder()
+                .userId(user.getId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
+                .status(user.getStatus())
+                .roles(roles)
+                .lastLoginAt(user.getLastLoginAt())
+                .createdAt(user.getCreatedAt())
                 .build();
     }
 

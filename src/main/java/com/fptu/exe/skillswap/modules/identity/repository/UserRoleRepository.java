@@ -21,6 +21,8 @@ public interface UserRoleRepository extends JpaRepository<UserRole, UserRoleId> 
     @Query("select ur.id.role from UserRole ur where ur.id.userId = :userId")
     List<RoleCode> findRoleCodesByUserId(@Param("userId") UUID userId);
 
+    List<UserRole> findByIdUserIdIn(List<UUID> userIds);
+
     @EntityGraph(attributePaths = "user")
     Page<UserRole> findByIdRole(RoleCode role, Pageable pageable);
 }

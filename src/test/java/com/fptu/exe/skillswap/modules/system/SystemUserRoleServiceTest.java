@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
@@ -114,6 +115,27 @@ class SystemUserRoleServiceTest {
 
         assertEquals(1, response.getTotalElements());
         assertEquals("admin@fpt.edu.vn", response.getContent().get(0).email());
+    }
+
+    @Test
+    void getAllUsers_shouldReturnPagedUsersWithRoles() {
+        User user = user(UUID.randomUUID(), "mentee@fpt.edu.vn");
+        BasePageRequest request = new BasePageRequest();
+        UserRole menteeRole = UserRole.builder()
+                .id(new UserRoleId(user.getId(), RoleCode.MENTEE))
+                .user(user)
+                .build();
+
+        when(userRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(user), request.getPageable(), 1));
+        when(userRoleRepository.findByIdUserIdIn(List.of(user.getId())))
+                .thenReturn(List.of(menteeRole));
+
+        PageResponse<SystemUserResponse> response = service.getAllUsers(request);
+
+        assertEquals(1, response.getTotalElements());
+        assertEquals("mentee@fpt.edu.vn", response.getContent().get(0).email());
+        assertEquals(List.of(RoleCode.MENTEE), response.getContent().get(0).roles());
     }
 
     private User user(UUID id, String email) {

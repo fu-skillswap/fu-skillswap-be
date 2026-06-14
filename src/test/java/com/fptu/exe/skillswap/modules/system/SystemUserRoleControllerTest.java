@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.system;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -108,6 +109,52 @@ class SystemUserRoleControllerTest {
                         .with(user(principal)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].email").value("admin@fpt.edu.vn"));
+    }
+
+    @Test
+    void getAdminUsers_blankDirectionFromSwagger_shouldReturn200() throws Exception {
+        UserPrincipal principal = UserPrincipal.create(UUID.randomUUID(), "root@fpt.edu.vn", List.of(RoleCode.SYSTEM_ADMIN));
+        when(systemUserRoleService.getAdminUsers(any()))
+                .thenReturn(PageResponse.<AdminUserResponse>builder()
+                        .content(List.of(response(UUID.randomUUID(), "admin@fpt.edu.vn")))
+                        .page(0)
+                        .size(10)
+                        .totalElements(1)
+                        .totalPages(1)
+                        .last(true)
+                        .build());
+
+        mockMvc.perform(get("/api/system/users/admins")
+                        .with(user(principal))
+                        .param("direction", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].email").value("admin@fpt.edu.vn"));
+    }
+
+    @Test
+    void getAllUsers_systemAdminRole_shouldReturn200() throws Exception {
+        UserPrincipal principal = UserPrincipal.create(UUID.randomUUID(), "root@fpt.edu.vn", List.of(RoleCode.SYSTEM_ADMIN));
+        when(systemUserRoleService.getAllUsers(any()))
+                .thenReturn(PageResponse.<SystemUserResponse>builder()
+                        .content(List.of(SystemUserResponse.builder()
+                                .userId(UUID.randomUUID())
+                                .email("user@fpt.edu.vn")
+                                .fullName("User A")
+                                .status(UserStatus.ACTIVE)
+                                .roles(List.of(RoleCode.MENTEE))
+                                .build()))
+                        .page(0)
+                        .size(10)
+                        .totalElements(1)
+                        .totalPages(1)
+                        .last(true)
+                        .build());
+
+        mockMvc.perform(get("/api/system/users")
+                        .with(user(principal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].email").value("user@fpt.edu.vn"))
+                .andExpect(jsonPath("$.data.content[0].roles[0]").value("MENTEE"));
     }
 
     private AdminUserResponse response(UUID userId, String email) {
