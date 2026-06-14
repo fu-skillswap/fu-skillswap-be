@@ -24,13 +24,16 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleAuthService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationEventType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.Test;
@@ -97,6 +100,9 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+
+    @Autowired
+    private MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
 
     @Autowired
     private StoredFileRepository storedFileRepository;
@@ -168,9 +174,11 @@ class MentorVerificationFlowIntegrationTest {
 
         MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
                         .header("Authorization", bearer(accessToken)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.status").value("DRAFT"))
                 .andExpect(jsonPath("$.data.checklist.academicProfileCompleted").value(true))
+                .andExpect(jsonPath("$.data.timeline.length()").value(1))
+                .andExpect(jsonPath("$.data.timeline[0].eventType").value("REQUEST_CREATED"))
                 .andReturn();
 
         JsonNode requestNode = objectMapper.readTree(requestResult.getResponse().getContentAsString(StandardCharsets.UTF_8));
@@ -220,7 +228,9 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
                 .andExpect(jsonPath("$.data.allowedActions.canSubmit").value(false))
-                .andExpect(jsonPath("$.data.allowedActions.canUploadDocuments").value(false));
+                .andExpect(jsonPath("$.data.allowedActions.canUploadDocuments").value(false))
+                .andExpect(jsonPath("$.data.timeline.length()").value(2))
+                .andExpect(jsonPath("$.data.timeline[1].eventType").value("SUBMITTED"));
 
         MvcResult adminDetailResult = mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
                         .with(user(adminPrincipal)))
@@ -252,7 +262,9 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("NEEDS_REVISION"))
                 .andExpect(jsonPath("$.data.reviewNote").value("Vui lòng bổ sung ghi chú chuyên môn rõ ràng hơn"))
-                .andExpect(jsonPath("$.data.canReview").value(false));
+                .andExpect(jsonPath("$.data.canReview").value(false))
+                .andExpect(jsonPath("$.data.timeline.length()").value(3))
+                .andExpect(jsonPath("$.data.timeline[2].eventType").value("REVISION_REQUESTED"));
 
         mockMvc.perform(post("/api/me/mentor-verification/submit")
                         .header("Authorization", bearer(accessToken))
@@ -264,7 +276,9 @@ class MentorVerificationFlowIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
-                .andExpect(jsonPath("$.data.revisionCount").value(1));
+                .andExpect(jsonPath("$.data.revisionCount").value(1))
+                .andExpect(jsonPath("$.data.timeline.length()").value(4))
+                .andExpect(jsonPath("$.data.timeline[3].eventType").value("RESUBMITTED"));
 
         mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}", requestId)
                         .with(user(adminPrincipal)))
@@ -284,7 +298,9 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("APPROVED"))
                 .andExpect(jsonPath("$.data.reviewNote").value("Hồ sơ hợp lệ"))
-                .andExpect(jsonPath("$.data.lockedByAdminEmail").doesNotExist());
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").doesNotExist())
+                .andExpect(jsonPath("$.data.timeline.length()").value(5))
+                .andExpect(jsonPath("$.data.timeline[4].eventType").value("APPROVED"));
 
         User savedUser = userRepository.findByEmail(email).orElseThrow();
         assertThat(studentProfileRepository.findById(savedUser.getId())).isPresent();
@@ -309,6 +325,17 @@ class MentorVerificationFlowIntegrationTest {
         assertThat(documents)
                 .extracting(MentorVerificationDocument::getDocumentType)
                 .containsExactlyInAnyOrder(VerificationDocumentType.FPTU_AFFILIATION_PROOF, VerificationDocumentType.EXPERTISE_PROOF);
+        List<MentorVerificationRequestEvent> events = mentorVerificationRequestEventRepository
+                .findByRequestIdOrderByCreatedAtAsc(verificationRequest.getId());
+        assertThat(events)
+                .extracting(MentorVerificationRequestEvent::getEventType)
+                .containsExactly(
+                        MentorVerificationEventType.REQUEST_CREATED,
+                        MentorVerificationEventType.SUBMITTED,
+                        MentorVerificationEventType.REVISION_REQUESTED,
+                        MentorVerificationEventType.RESUBMITTED,
+                        MentorVerificationEventType.APPROVED
+                );
         assertThat(storedFileRepository.findAll()).hasSizeGreaterThanOrEqualTo(2);
     }
 
@@ -462,7 +489,7 @@ class MentorVerificationFlowIntegrationTest {
     private String createAndSubmitVerificationRequest(String accessToken) throws Exception {
         MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
                         .header("Authorization", bearer(accessToken)))
-                .andExpect(status().isOk())
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.status").value("DRAFT"))
                 .andReturn();
 

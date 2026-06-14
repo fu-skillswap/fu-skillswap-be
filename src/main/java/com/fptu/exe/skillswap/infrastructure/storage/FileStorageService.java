@@ -30,7 +30,7 @@ public class FileStorageService {
             Files.createDirectories(uploadPath);
             log.info("File storage initialized at {}", uploadPath);
         } catch (IOException e) {
-            throw new IllegalStateException("Could not initialize file storage directory: " + uploadPath, e);
+            throw new IllegalStateException("Không thể khởi tạo thư mục lưu tệp tại: " + uploadPath, e);
         }
     }
 
@@ -44,7 +44,7 @@ public class FileStorageService {
         Path targetLocation = uploadPath.resolve(storedFilename).normalize();
 
         if (!targetLocation.startsWith(uploadPath)) {
-            throw new IOException("Invalid file path");
+            throw new IOException("Đường dẫn tệp tải lên không hợp lệ");
         }
 
         try (InputStream inputStream = file.getInputStream()) {
@@ -61,11 +61,11 @@ public class FileStorageService {
         Path filePath = uploadPath.resolve(filename).normalize();
 
         if (!filePath.startsWith(uploadPath)) {
-            throw new IOException("Invalid file path");
+            throw new IOException("Đường dẫn tệp yêu cầu không hợp lệ");
         }
 
         if (!Files.exists(filePath)) {
-            throw new IOException("File does not exist on server: " + filename);
+            throw new IOException("Tệp không tồn tại trên máy chủ: " + filename);
         }
 
         return Files.newInputStream(filePath);

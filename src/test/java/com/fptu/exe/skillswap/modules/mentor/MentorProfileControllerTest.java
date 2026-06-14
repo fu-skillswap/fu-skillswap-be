@@ -87,7 +87,7 @@ class MentorProfileControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VAL_3001"))
-                .andExpect(jsonPath("$.message").value("headline: Headline không được để trống"));
+                .andExpect(jsonPath("$.message").value("headline: Tiêu đề hồ sơ mentor không được để trống"));
     }
 
     @Test

@@ -68,7 +68,7 @@ class AuthControllerValidationTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("idToken: idToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("idToken: Mã định danh Google không được để trống"));
         }
 
         @Test
@@ -82,7 +82,7 @@ class AuthControllerValidationTest {
                             .content(body))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("idToken: idToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("idToken: Mã định danh Google không được để trống"));
         }
 
         @Test
@@ -124,7 +124,7 @@ class AuthControllerValidationTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("refreshToken: refreshToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("refreshToken: Mã làm mới phiên đăng nhập không được để trống"));
         }
 
         @Test
@@ -137,7 +137,7 @@ class AuthControllerValidationTest {
                             .content(body))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("refreshToken: refreshToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("refreshToken: Mã làm mới phiên đăng nhập không được để trống"));
         }
 
         @Test
@@ -179,7 +179,7 @@ class AuthControllerValidationTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("refreshToken: refreshToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("refreshToken: Mã làm mới phiên đăng nhập không được để trống"));
         }
 
         @Test
@@ -192,7 +192,7 @@ class AuthControllerValidationTest {
                             .content(body))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("VAL_3001"))
-                    .andExpect(jsonPath("$.message").value("refreshToken: refreshToken không được để trống"));
+                    .andExpect(jsonPath("$.message").value("refreshToken: Mã làm mới phiên đăng nhập không được để trống"));
         }
 
         @Test

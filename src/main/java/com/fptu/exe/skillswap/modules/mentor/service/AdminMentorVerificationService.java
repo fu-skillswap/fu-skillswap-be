@@ -6,8 +6,10 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationEventType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
@@ -15,9 +17,11 @@ import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueIte
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationChecklistResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationDocumentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -40,6 +44,7 @@ public class AdminMentorVerificationService {
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+    private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
@@ -85,6 +90,7 @@ public class AdminMentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung yêu cầu chỉnh sửa không được để trống");
         }
 
+        VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.NEEDS_REVISION);
         request.setReviewNote(normalizedNote);
         request.setRejectionReason(null);
@@ -93,6 +99,14 @@ public class AdminMentorVerificationService {
         request.setApprovedAt(null);
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                MentorVerificationEventType.REVISION_REQUESTED,
+                reviewer,
+                previousStatus,
+                VerificationStatus.NEEDS_REVISION,
+                normalizedNote
+        );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
         return mapDetail(request, adminUserId);
@@ -104,6 +118,7 @@ public class AdminMentorVerificationService {
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
 
+        VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.APPROVED);
         request.setReviewNote(trimToNull(reviewNote));
         request.setRejectionReason(null);
@@ -112,6 +127,14 @@ public class AdminMentorVerificationService {
         request.setApprovedAt(LocalDateTime.now());
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                MentorVerificationEventType.APPROVED,
+                reviewer,
+                previousStatus,
+                VerificationStatus.APPROVED,
+                request.getReviewNote()
+        );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE);
         return mapDetail(request, adminUserId);
@@ -127,6 +150,7 @@ public class AdminMentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Lý do từ chối không được để trống");
         }
 
+        VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.REJECTED);
         request.setReviewNote(null);
         request.setRejectionReason(normalizedReason);
@@ -135,6 +159,14 @@ public class AdminMentorVerificationService {
         request.setApprovedAt(null);
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                MentorVerificationEventType.REJECTED,
+                reviewer,
+                previousStatus,
+                VerificationStatus.REJECTED,
+                normalizedReason
+        );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
         return mapDetail(request, adminUserId);
@@ -192,6 +224,11 @@ public class AdminMentorVerificationService {
                 .stream()
                 .map(this::mapDocumentResponse)
                 .toList();
+        List<MentorVerificationTimelineEventResponse> timeline = mentorVerificationRequestEventRepository
+                .findByRequestIdOrderByCreatedAtAsc(request.getId())
+                .stream()
+                .map(this::mapTimelineEventResponse)
+                .toList();
 
         User mentor = request.getMentor();
         User reviewer = request.getReviewedBy();
@@ -220,8 +257,42 @@ public class AdminMentorVerificationService {
                 .createdAt(request.getCreatedAt())
                 .updatedAt(request.getUpdatedAt())
                 .documents(documents)
+                .timeline(timeline)
                 .checklist(buildChecklist(mentor.getId(), documents))
                 .build();
+    }
+
+    private MentorVerificationTimelineEventResponse mapTimelineEventResponse(MentorVerificationRequestEvent event) {
+        User actor = event.getActorUser();
+        return MentorVerificationTimelineEventResponse.builder()
+                .id(event.getId())
+                .eventType(event.getEventType())
+                .fromStatus(event.getFromStatus())
+                .toStatus(event.getToStatus())
+                .actorUserId(actor == null ? null : actor.getId())
+                .actorEmail(actor == null ? null : actor.getEmail())
+                .actorFullName(actor == null ? null : actor.getFullName())
+                .note(event.getNote())
+                .createdAt(event.getCreatedAt())
+                .build();
+    }
+
+    private void appendEvent(
+            MentorVerificationRequest request,
+            MentorVerificationEventType eventType,
+            User actorUser,
+            VerificationStatus fromStatus,
+            VerificationStatus toStatus,
+            String note
+    ) {
+        mentorVerificationRequestEventRepository.save(MentorVerificationRequestEvent.builder()
+                .request(request)
+                .eventType(eventType)
+                .actorUser(actorUser)
+                .fromStatus(fromStatus)
+                .toStatus(toStatus)
+                .note(trimToNull(note))
+                .build());
     }
 
     private void claimLockIfAvailable(MentorVerificationRequest request, User admin) {

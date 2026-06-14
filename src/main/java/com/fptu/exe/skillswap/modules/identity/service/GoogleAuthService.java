@@ -55,7 +55,10 @@ public class GoogleAuthService {
             throw e;
         } catch (GeneralSecurityException | IOException e) {
             log.error("Error verifying Google ID token: {}", e.getMessage(), e);
-            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Lỗi kết nối hệ thống Google: " + e.getMessage());
+            throw new BaseException(
+                    ErrorCode.OAUTH_VERIFICATION_FAILED,
+                    "Không thể xác thực đăng nhập Google do kết nối tới hệ thống Google tạm thời không ổn định"
+            );
         }
     }
 

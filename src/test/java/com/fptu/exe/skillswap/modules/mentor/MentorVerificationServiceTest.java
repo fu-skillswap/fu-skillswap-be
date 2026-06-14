@@ -15,9 +15,11 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -53,6 +55,9 @@ class MentorVerificationServiceTest {
     private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
 
     @Mock
+    private MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
+
+    @Mock
     private MentorProfileRepository mentorProfileRepository;
 
     @Mock
@@ -76,6 +81,7 @@ class MentorVerificationServiceTest {
         mentorVerificationService = new MentorVerificationService(
                 mentorVerificationRequestRepository,
                 mentorVerificationDocumentRepository,
+                mentorVerificationRequestEventRepository,
                 mentorProfileRepository,
                 studentProfileRepository,
                 userRepository,
@@ -114,9 +120,11 @@ class MentorVerificationServiceTest {
         });
         when(mentorVerificationRequestRepository.save(any(MentorVerificationRequest.class))).thenReturn(draftRequest);
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(draftRequest.getId())).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(draftRequest.getId())).thenReturn(List.of());
         when(studentProfileRepository.existsById(userId)).thenReturn(false);
 
-        MentorVerificationRequestResponse response = mentorVerificationService.requestToBecomeMentor(userId);
+        MentorVerificationRequestActionResult<MentorVerificationRequestResponse> result = mentorVerificationService.requestToBecomeMentor(userId);
+        MentorVerificationRequestResponse response = result.data();
 
         ArgumentCaptor<MentorProfile> profileCaptor = ArgumentCaptor.forClass(MentorProfile.class);
         verify(mentorProfileRepository).save(profileCaptor.capture());
@@ -124,6 +132,7 @@ class MentorVerificationServiceTest {
         assertThat(savedProfile.getUser()).isSameAs(user);
         assertThat(savedProfile.getStatus()).isEqualTo(MentorStatus.DRAFT);
         assertThat(response.requestId()).isEqualTo(draftRequest.getId());
+        assertThat(result.created()).isTrue();
         assertThat(response.checklist().academicProfileCompleted()).isFalse();
     }
 
@@ -139,12 +148,15 @@ class MentorVerificationServiceTest {
         when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
                 .thenReturn(Optional.of(draftRequest));
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(draftRequest.getId())).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(draftRequest.getId())).thenReturn(List.of());
         when(studentProfileRepository.existsById(userId)).thenReturn(true);
 
-        MentorVerificationRequestResponse response = mentorVerificationService.requestToBecomeMentor(userId);
+        MentorVerificationRequestActionResult<MentorVerificationRequestResponse> result = mentorVerificationService.requestToBecomeMentor(userId);
+        MentorVerificationRequestResponse response = result.data();
 
         verify(mentorProfileRepository, never()).save(any(MentorProfile.class));
         assertThat(response.requestId()).isEqualTo(draftRequest.getId());
+        assertThat(result.created()).isFalse();
     }
 
     @Test
@@ -268,6 +280,7 @@ class MentorVerificationServiceTest {
                 .thenReturn(Optional.of(document));
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(draftRequest.getId()))
                 .thenReturn(List.of(document));
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(draftRequest.getId())).thenReturn(List.of());
         when(studentProfileRepository.existsById(userId)).thenReturn(true);
 
         MentorVerificationRequestResponse response = mentorVerificationService.deleteDocument(userId, documentId);
@@ -297,6 +310,7 @@ class MentorVerificationServiceTest {
         when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.of(mentorProfile));
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(pendingRequest.getId()))
                 .thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(pendingRequest.getId())).thenReturn(List.of());
         when(studentProfileRepository.existsById(userId)).thenReturn(true);
 
         MentorVerificationRequestResponse response = mentorVerificationService.withdraw(userId);

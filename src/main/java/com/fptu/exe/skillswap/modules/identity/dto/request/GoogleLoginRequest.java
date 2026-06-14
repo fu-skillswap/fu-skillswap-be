@@ -19,6 +19,6 @@ public class GoogleLoginRequest {
         example = "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij...",
         requiredMode = Schema.RequiredMode.REQUIRED
     )
-    @NotBlank(message = "idToken không được để trống")
+    @NotBlank(message = "Mã định danh Google không được để trống")
     private String idToken;
 }

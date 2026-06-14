@@ -70,7 +70,7 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            throw new UsernameNotFoundException("Username/password authentication is disabled");
+            throw new UsernameNotFoundException("Hệ thống hiện không hỗ trợ đăng nhập bằng tài khoản và mật khẩu");
         };
     }
 }
