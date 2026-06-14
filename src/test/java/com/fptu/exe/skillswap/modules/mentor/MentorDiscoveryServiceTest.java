@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
@@ -31,6 +32,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -119,10 +121,11 @@ class MentorDiscoveryServiceTest {
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
                 .thenReturn(List.of(expertiseTag(mentorId, "JAVA_BACKEND", "Java Backend")));
 
-        PageResponse<?> response = mentorDiscoveryService.searchMentors(request);
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(menteeId, request);
 
         assertThat(response.getTotalElements()).isEqualTo(1);
         assertThat(response.getContent()).hasSize(1);
+        org.mockito.Mockito.verify(studentProfileRepository).findWithDetailsByUserId(menteeId);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         org.mockito.Mockito.verify(mentorProfileRepository).searchDiscoverableMentors(
@@ -167,6 +170,68 @@ class MentorDiscoveryServiceTest {
         assertThat(response).hasSize(1);
         assertThat(response.get(0).matchScore()).isGreaterThan(new BigDecimal("80"));
         assertThat(response.get(0).matchReasons()).contains("Cùng chuyên ngành với mentee");
+    }
+
+    @Test
+    void searchMentors_shouldRerankQueriedListBySmartMatching() {
+        UUID otherMentorId = UUID.randomUUID();
+        StudentProfile menteeProfile = StudentProfile.builder()
+                .userId(menteeId)
+                .campus(Campus.builder().id(campusId).code(CampusCode.HCM).name("HCM").build())
+                .program(AcademicProgram.builder().id(programId).code("CNTT").nameVi("CNTT").build())
+                .specialization(Specialization.builder().id(specializationId).code("KTPM").nameVi("KTPM").build())
+                .semester(5)
+                .build();
+
+        MentorDiscoveryQueryRow lowerMatchMentor = new MentorDiscoveryQueryRow(
+                otherMentorId,
+                "Mentor Two",
+                "https://example.com/avatar-2.jpg",
+                "General Mentor",
+                "Engineer",
+                "Company B",
+                true,
+                new BigDecimal("5.00"),
+                20,
+                40,
+                new BigDecimal("100000"),
+                TeachingMode.ONLINE,
+                LocalDateTime.now().minusDays(1),
+                UUID.randomUUID(),
+                "DN",
+                UUID.randomUUID(),
+                "Biz",
+                UUID.randomUUID(),
+                "Marketing",
+                3,
+                false
+        );
+
+        when(studentProfileRepository.findWithDetailsByUserId(menteeId)).thenReturn(Optional.of(menteeProfile));
+        when(mentorProfileRepository.searchDiscoverableMentors(
+                eq(MentorStatus.ACTIVE),
+                eq(MentorTagType.EXPERTISE),
+                eq(MentorTagType.HELP_TOPIC),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(false),
+                any(List.class),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(lowerMatchMentor, mentorRow)));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(Collection.class), any(Collection.class)))
+                .thenReturn(List.of(
+                        expertiseTag(mentorId, "JAVA_BACKEND", "Java Backend"),
+                        expertiseTag(otherMentorId, "CAREER", "Career")
+                ));
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(menteeId, new MentorDiscoverySearchRequest());
+
+        assertThat(response.getContent()).hasSize(2);
+        assertThat(response.getContent().get(0).displayName()).isEqualTo("Mentor One");
+        assertThat(response.getContent().get(1).displayName()).isEqualTo("Mentor Two");
     }
 
     private MentorTag expertiseTag(UUID mentorUserId, String code, String nameVi) {

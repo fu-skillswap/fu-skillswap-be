@@ -258,7 +258,6 @@ Google login cần `GOOGLE_CLIENT_ID`. Nếu email nằm trong `SYSTEM_ADMIN_EMA
 ```text
 MENTEE
 MENTOR
-STAFF
 ADMIN
 SYSTEM_ADMIN
 ```

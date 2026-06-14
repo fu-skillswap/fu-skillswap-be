@@ -53,14 +53,18 @@ public class MentorDiscoveryService {
     private static final BigDecimal NEWLY_ACTIVE_SCORE = decimal(10);
     private static final BigDecimal TENURE_STEP_SCORE = decimal("0.2");
     private static final BigDecimal COMPLETED_SESSION_SCORE = decimal("0.1");
-    private static final BigDecimal RATING_MULTIPLIER = decimal(2);
+    private static final BigDecimal MAX_RATING = decimal(5);
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
     private final StudentProfileRepository studentProfileRepository;
 
     @Transactional(readOnly = true)
-    public PageResponse<MentorDiscoveryCardResponse> searchMentors(MentorDiscoverySearchRequest request) {
+    public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
 
@@ -78,15 +82,29 @@ public class MentorDiscoveryService {
                 searchPageable(safeRequest)
         );
 
+        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
         Map<UUID, List<MentorTagResponse>> expertiseTagsByMentor = loadTagsByMentor(
                 page.getContent().stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
                 Set.of(MentorTagType.EXPERTISE)
         );
 
+        List<MentorDiscoveryCardResponse> rankedContent = page.getContent().stream()
+                .map(row -> new RankedMentorCard(
+                        toCardResponse(row, expertiseTagsByMentor.getOrDefault(row.mentorUserId(), List.of())),
+                        calculateMatchScore(row, menteeProfile, new ArrayList<>())
+                ))
+                .sorted(Comparator
+                        .comparing(RankedMentorCard::matchScore, Comparator.reverseOrder())
+                        .thenComparing(ranked -> {
+                            Integer completed = ranked.card().completedSessions();
+                            return completed == null ? 0 : completed;
+                        }, Comparator.reverseOrder())
+                        .thenComparing(ranked -> defaultDecimal(ranked.card().ratingAverage()), Comparator.reverseOrder()))
+                .map(RankedMentorCard::card)
+                .toList();
+
         return PageResponse.<MentorDiscoveryCardResponse>builder()
-                .content(page.getContent().stream()
-                        .map(row -> toCardResponse(row, expertiseTagsByMentor.getOrDefault(row.mentorUserId(), List.of())))
-                        .toList())
+                .content(rankedContent)
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -142,39 +160,8 @@ public class MentorDiscoveryService {
             List<MentorTagResponse> expertiseTags,
             StudentProfile menteeProfile
     ) {
-        BigDecimal score = ZERO;
         List<String> reasons = new ArrayList<>();
-
-        if (candidate.isAvailable() != null && candidate.isAvailable()) {
-            score = score.add(AVAILABILITY_SCORE);
-            reasons.add("Mentor đang mở nhận mentee");
-        }
-
-        if (menteeProfile != null) {
-            if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
-                score = score.add(SAME_SPECIALIZATION_SCORE);
-                reasons.add("Cùng chuyên ngành với mentee");
-            }
-            if (sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId())) {
-                score = score.add(SAME_PROGRAM_SCORE);
-                reasons.add("Cùng chương trình học");
-            }
-            if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
-                score = score.add(SAME_CAMPUS_SCORE);
-                reasons.add("Cùng campus");
-            }
-            BigDecimal studentProfileScore = calculateStudentProfileScore(menteeProfile, candidate, reasons);
-            score = score.add(studentProfileScore);
-        }
-
-        BigDecimal activityScore = calculateActivityScore(candidate, reasons);
-        score = score.add(activityScore);
-
-        BigDecimal ratingScore = calculateRatingScore(candidate.ratingAverage(), candidate.reviewCount(), reasons);
-        score = score.add(ratingScore);
-
-        BigDecimal contributionScore = calculateContributionScore(candidate.completedSessions(), reasons);
-        score = score.add(contributionScore);
+        BigDecimal score = calculateMatchScore(candidate, menteeProfile, reasons);
 
         if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có nhiều phiên mentoring hoàn thành"::equals)) {
             reasons.add("Đã có phiên mentoring hoàn thành");
@@ -189,6 +176,37 @@ public class MentorDiscoveryService {
                 .matchScore(score.setScale(2, RoundingMode.HALF_UP))
                 .matchReasons(reasons.stream().limit(3).toList())
                 .build();
+    }
+
+    private BigDecimal calculateMatchScore(MentorDiscoveryQueryRow candidate, StudentProfile menteeProfile, List<String> reasons) {
+        BigDecimal baseScore = ZERO;
+
+        if (candidate.isAvailable() != null && candidate.isAvailable()) {
+            baseScore = baseScore.add(AVAILABILITY_SCORE);
+            reasons.add("Mentor đang mở nhận mentee");
+        }
+
+        if (menteeProfile != null) {
+            if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
+                baseScore = baseScore.add(SAME_SPECIALIZATION_SCORE);
+                reasons.add("Cùng chuyên ngành với mentee");
+            }
+            if (sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId())) {
+                baseScore = baseScore.add(SAME_PROGRAM_SCORE);
+                reasons.add("Cùng chương trình học");
+            }
+            if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
+                baseScore = baseScore.add(SAME_CAMPUS_SCORE);
+                reasons.add("Cùng campus");
+            }
+            baseScore = baseScore.add(calculateStudentProfileScore(menteeProfile, candidate, reasons));
+        }
+
+        baseScore = baseScore.add(calculateActivityScore(candidate, reasons));
+        baseScore = baseScore.add(calculateContributionScore(candidate.completedSessions(), reasons));
+
+        BigDecimal ratingFactor = calculateRatingFactor(candidate.ratingAverage(), candidate.reviewCount(), reasons);
+        return baseScore.multiply(ratingFactor).setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculateStudentProfileScore(StudentProfile menteeProfile, MentorDiscoveryQueryRow candidate, List<String> reasons) {
@@ -232,19 +250,17 @@ public class MentorDiscoveryService {
         return tenureScore;
     }
 
-    private BigDecimal calculateRatingScore(BigDecimal ratingAverage, Integer reviewCount, List<String> reasons) {
+    private BigDecimal calculateRatingFactor(BigDecimal ratingAverage, Integer reviewCount, List<String> reasons) {
         BigDecimal normalizedRating = defaultDecimal(ratingAverage);
         int normalizedReviewCount = defaultInteger(reviewCount);
         if (normalizedRating.compareTo(BigDecimal.ZERO) <= 0 || normalizedReviewCount <= 0) {
             return ZERO;
         }
 
-        BigDecimal reviewFactor = BigDecimal.valueOf(Math.log1p(normalizedReviewCount));
-        BigDecimal ratingScore = normalizedRating.multiply(reviewFactor).multiply(RATING_MULTIPLIER);
         if (normalizedRating.compareTo(BigDecimal.valueOf(4.0)) >= 0 && normalizedReviewCount >= 3) {
             reasons.add("Được đánh giá tốt và có độ tin cậy từ review");
         }
-        return ratingScore;
+        return normalizedRating.divide(MAX_RATING, 4, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculateContributionScore(Integer completedSessions, List<String> reasons) {
@@ -385,5 +401,11 @@ public class MentorDiscoveryService {
 
     private static BigDecimal decimal(String value) {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private record RankedMentorCard(
+            MentorDiscoveryCardResponse card,
+            BigDecimal matchScore
+    ) {
     }
 }

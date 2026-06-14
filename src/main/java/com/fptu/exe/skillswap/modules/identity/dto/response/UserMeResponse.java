@@ -33,7 +33,7 @@ public class UserMeResponse {
     @Schema(description = "Trạng thái tài khoản: ACTIVE, INACTIVE, BANNED, DELETED", example = "ACTIVE")
     private UserStatus status;
 
-    @Schema(description = "Danh sách vai trò của người dùng (MENTEE, MENTOR, STAFF, ADMIN, SYSTEM_ADMIN)", example = "[\"MENTEE\"]")
+    @Schema(description = "Danh sách vai trò của người dùng (MENTEE, MENTOR, ADMIN, SYSTEM_ADMIN)", example = "[\"MENTEE\"]")
     private List<RoleCode> roles;
 
     @Schema(
