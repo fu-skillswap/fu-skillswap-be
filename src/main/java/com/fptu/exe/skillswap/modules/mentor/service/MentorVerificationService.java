@@ -76,6 +76,32 @@ public class MentorVerificationService {
         return buildResponse(request);
     }
 
+    @Transactional(readOnly = true)
+    public List<MentorVerificationTimelineEventResponse> getTimeline(UUID userId) {
+        requireUserId(userId);
+        MentorVerificationRequest request = findActiveRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        return mentorVerificationRequestEventRepository
+                .findByRequestIdOrderByCreatedAtAsc(request.getId())
+                .stream()
+                .map(this::mapTimelineEventResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MentorVerificationDocumentResponse getDocument(UUID userId, UUID documentId) {
+        requireUserId(userId);
+        if (documentId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã tài liệu không được để trống");
+        }
+
+        MentorVerificationRequest request = findActiveRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
+        return mapDocumentResponse(document);
+    }
+
     @Transactional
     public MentorVerificationRequestResponse uploadDocument(
             UUID userId,

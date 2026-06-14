@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.SystemAdminProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.modules.identity.domain.OauthAccount;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -36,6 +38,7 @@ public class IdentityLoginTransactionService {
     private final UserSessionRepository userSessionRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final SystemAdminProperties systemAdminProperties;
 
     @Transactional
     public TokenResponse loginWithVerifiedGoogleUser(GoogleAuthService.GoogleUserInfo googleUser) {
@@ -45,6 +48,7 @@ public class IdentityLoginTransactionService {
                 .orElseGet(() -> findByEmailOrRegister(googleUser));
 
         checkUserStatus(user);
+        assignSystemAdminRoleIfWhitelisted(user);
 
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
@@ -92,6 +96,34 @@ public class IdentityLoginTransactionService {
         return savedUser;
     }
 
+    private void assignSystemAdminRoleIfWhitelisted(User user) {
+        if (user == null || user.getId() == null || user.getEmail() == null || !isSystemAdminEmail(user.getEmail())) {
+            return;
+        }
+
+        UserRoleId roleId = new UserRoleId(user.getId(), RoleCode.SYSTEM_ADMIN);
+        if (userRoleRepository.existsById(roleId)) {
+            return;
+        }
+
+        userRoleRepository.save(UserRole.builder()
+                .id(roleId)
+                .user(user)
+                .assignedAt(LocalDateTime.now())
+                .build());
+    }
+
+    private boolean isSystemAdminEmail(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (systemAdminProperties.getEmails() == null) {
+            return false;
+        }
+        return systemAdminProperties.getEmails()
+                .stream()
+                .map(this::normalizeEmail)
+                .anyMatch(normalizedEmail::equals);
+    }
+
     private void createOauthAccount(User user, String providerUserId, String providerEmail) {
         OauthAccount oauthAccount = OauthAccount.builder()
                 .user(user)
@@ -115,9 +147,9 @@ public class IdentityLoginTransactionService {
     }
 
     private TokenResponse generateTokensAndCreateSession(User user) {
-        List<String> roleNames = userRoleRepository.findByUserId(user.getId())
+        List<String> roleNames = userRoleRepository.findRoleCodesByUserId(user.getId())
                 .stream()
-                .map(ur -> ur.getId().getRole().name())
+                .map(RoleCode::name)
                 .toList();
 
         if (roleNames.isEmpty()) {
@@ -150,5 +182,9 @@ public class IdentityLoginTransactionService {
             return "Người dùng";
         }
         return email.split("@")[0];
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 }

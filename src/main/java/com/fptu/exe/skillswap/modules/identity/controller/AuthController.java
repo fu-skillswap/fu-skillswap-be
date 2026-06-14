@@ -28,6 +28,7 @@ public class AuthController {
 
     @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực người dùng thông qua Google ID Token. " +
             "Nếu tài khoản chưa tồn tại, hệ thống sẽ tự động tạo mới với vai trò MENTEE. " +
+            "Nếu email nằm trong cấu hình SYSTEM_ADMIN_EMAILS, access token trả về sẽ có thêm vai trò SYSTEM_ADMIN. " +
             "Trả về cặp access token và refresh token.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng nhập thành công, trả về token"),

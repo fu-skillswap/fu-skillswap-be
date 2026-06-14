@@ -13,4 +13,5 @@ import java.util.UUID;
 public interface CampusRepository extends JpaRepository<Campus, UUID> {
     Optional<Campus> findByCode(CampusCode code);
     List<Campus> findByIsActiveTrue();
+    Optional<Campus> findByIdAndIsActiveTrue(UUID id);
 }

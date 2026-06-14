@@ -13,4 +13,5 @@ public interface SpecializationRepository extends JpaRepository<Specialization, 
     Optional<Specialization> findByCode(String code);
     List<Specialization> findByIsActiveTrue();
     List<Specialization> findByProgramIdAndIsActiveTrue(UUID programId);
+    Optional<Specialization> findByIdAndIsActiveTrue(UUID id);
 }

@@ -60,6 +60,8 @@ application:
     bucket: ${R2_BUCKET:}
     region: ${R2_REGION:auto}
     documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
+  system-admin:
+    emails: ${SYSTEM_ADMIN_EMAILS:}
 
 logging:
   pattern:

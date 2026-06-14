@@ -99,10 +99,7 @@ public class IdentityService {
         User user = userRepository.findById(publicId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
 
-        List<RoleCode> roles = userRoleRepository.findByUserId(user.getId())
-                .stream()
-                .map(ur -> ur.getId().getRole())
-                .toList();
+        List<RoleCode> roles = userRoleRepository.findRoleCodesByUserId(user.getId());
 
         // Publish event để hỏi module academic trạng thái hồ sơ (synchronous request-reply)
         ProfileStatusQuery profileQuery = new ProfileStatusQuery(user.getId());
@@ -134,9 +131,9 @@ public class IdentityService {
     }
 
     private TokenResponse generateTokensAndCreateSession(User user) {
-        List<String> roleNames = userRoleRepository.findByUserId(user.getId())
+        List<String> roleNames = userRoleRepository.findRoleCodesByUserId(user.getId())
                 .stream()
-                .map(ur -> ur.getId().getRole().name())
+                .map(RoleCode::name)
                 .toList();
 
         if (roleNames.isEmpty()) {

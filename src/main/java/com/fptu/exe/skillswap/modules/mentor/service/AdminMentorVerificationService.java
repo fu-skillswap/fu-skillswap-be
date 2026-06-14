@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
@@ -32,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -78,6 +80,28 @@ public class AdminMentorVerificationService {
         MentorVerificationRequest request = getRequiredRequest(requestId);
         claimLockIfAvailable(request, admin);
         return mapDetail(request, adminUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminMentorVerificationLockResponse getLockStatus(UUID adminUserId, UUID requestId) {
+        getRequiredUser(adminUserId);
+        MentorVerificationRequest request = getRequiredRequest(requestId);
+        return mapLockStatus(request, adminUserId);
+    }
+
+    @Transactional
+    public AdminMentorVerificationLockResponse refreshLock(UUID adminUserId, UUID requestId) {
+        User admin = getRequiredUser(adminUserId);
+        MentorVerificationRequest request = getPendingRequest(requestId);
+        assertReviewLockOwnership(request, adminUserId);
+
+        LocalDateTime now = LocalDateTime.now();
+        request.setLockedBy(admin);
+        request.setLockedAt(now);
+        request.setLockExpiresAt(now.plusMinutes(LOCK_TTL_MINUTES));
+        mentorVerificationRequestRepository.save(request);
+
+        return mapLockStatus(request, adminUserId);
     }
 
     @Transactional
@@ -324,6 +348,27 @@ public class AdminMentorVerificationService {
             return false;
         }
         return hasActiveLock(request) && isLockedBy(request, adminUserId);
+    }
+
+    private AdminMentorVerificationLockResponse mapLockStatus(MentorVerificationRequest request, UUID adminUserId) {
+        boolean activeLock = request.getStatus() == VerificationStatus.PENDING_REVIEW && hasActiveLock(request);
+        User lockedBy = activeLock ? request.getLockedBy() : null;
+        LocalDateTime lockExpiresAt = activeLock ? request.getLockExpiresAt() : null;
+        long secondsRemaining = lockExpiresAt == null
+                ? 0L
+                : Math.max(0L, Duration.between(LocalDateTime.now(), lockExpiresAt).toSeconds());
+
+        return AdminMentorVerificationLockResponse.builder()
+                .requestId(request.getId())
+                .locked(activeLock)
+                .canReview(activeLock && isLockedBy(request, adminUserId))
+                .lockedByAdminId(lockedBy == null ? null : lockedBy.getId())
+                .lockedByAdminEmail(lockedBy == null ? null : lockedBy.getEmail())
+                .lockedByAdminFullName(lockedBy == null ? null : lockedBy.getFullName())
+                .lockedAt(activeLock ? request.getLockedAt() : null)
+                .lockExpiresAt(lockExpiresAt)
+                .secondsRemaining(secondsRemaining)
+                .build();
     }
 
     private boolean hasActiveLock(MentorVerificationRequest request) {

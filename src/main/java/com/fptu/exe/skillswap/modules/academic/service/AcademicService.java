@@ -26,6 +26,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Year;
 import java.util.List;
 import java.util.UUID;
 
@@ -122,6 +123,7 @@ public class AcademicService {
     public StudentProfileResponse updateStudentProfile(UUID userId, StudentProfileRequest request) {
         requireId(userId, "Người dùng");
         requireStudentProfileRequest(request);
+        validateAcademicTimeline(request);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
@@ -182,8 +184,10 @@ public class AcademicService {
      */
     @EventListener
     public void onProfileStatusQuery(ProfileStatusQuery query) {
-        boolean exists = studentProfileRepository.existsById(query.getUserId());
-        query.setHasStudentProfile(exists);
+        boolean completed = studentProfileRepository.findWithDetailsByUserId(query.getUserId())
+                .map(this::isProfileCompleted)
+                .orElse(false);
+        query.setHasStudentProfile(completed);
     }
 
     private StudentProfileResponse mapToStudentProfileResponse(StudentProfile profile) {
@@ -194,9 +198,9 @@ public class AcademicService {
                 .studentCode(profile.getStudentCode())
                 .displayName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
-                .campus(mapToCampusResponse(profile.getCampus()))
-                .program(mapToAcademicProgramResponse(profile.getProgram()))
-                .specialization(mapToSpecializationResponse(profile.getSpecialization()))
+                .campus(profile.getCampus() == null ? null : mapToCampusResponse(profile.getCampus()))
+                .program(profile.getProgram() == null ? null : mapToAcademicProgramResponse(profile.getProgram()))
+                .specialization(profile.getSpecialization() == null ? null : mapToSpecializationResponse(profile.getSpecialization()))
                 .semester(profile.getSemester())
                 .intakeYear(profile.getIntakeYear())
                 .isAlumni(profile.isAlumni())
@@ -216,6 +220,48 @@ public class AcademicService {
     private void requireStudentProfileRequest(StudentProfileRequest request) {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ học thuật không được để trống");
+        }
+    }
+
+    private boolean isProfileCompleted(StudentProfile profile) {
+        if (profile == null) {
+            return false;
+        }
+        if (profile.getCampus() == null
+                || profile.getProgram() == null
+                || profile.getSpecialization() == null
+                || profile.getSemester() == null
+                || profile.getIntakeYear() == null
+                || profile.getStudentCode() == null
+                || profile.getStudentCode().isBlank()) {
+            return false;
+        }
+        return !profile.isAlumni() || profile.getGraduationYear() != null;
+    }
+
+    private void validateAcademicTimeline(StudentProfileRequest request) {
+        int currentYear = Year.now().getValue() + 1;
+
+        if (request.getSemester() != null && request.getSemester() < 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được nhỏ hơn 0");
+        }
+
+        if (request.getIntakeYear() != null
+                && (request.getIntakeYear() < 2000 || request.getIntakeYear() > currentYear)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Năm nhập học không hợp lệ");
+        }
+
+        if (Boolean.TRUE.equals(request.getIsAlumni()) && request.getGraduationYear() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cựu sinh viên bắt buộc phải có năm tốt nghiệp");
+        }
+
+        if (request.getGraduationYear() != null) {
+            if (request.getGraduationYear() < 2000 || request.getGraduationYear() > currentYear) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không hợp lệ");
+            }
+            if (request.getIntakeYear() != null && request.getGraduationYear() < request.getIntakeYear()) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không thể nhỏ hơn năm nhập học");
+            }
         }
     }
 }
