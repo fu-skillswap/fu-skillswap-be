@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
@@ -64,6 +65,50 @@ class AdminMentorVerificationControllerTest {
     }
 
     @Test
+    void getLockStatus_adminRole_shouldReturn200() throws Exception {
+        UserPrincipal adminPrincipal = UserPrincipal.create(adminId, "admin@fpt.edu.vn", List.of(RoleCode.ADMIN));
+        when(adminMentorVerificationService.getLockStatus(adminId, requestId))
+                .thenReturn(AdminMentorVerificationLockResponse.builder()
+                        .requestId(requestId)
+                        .locked(true)
+                        .canReview(true)
+                        .lockedByAdminId(adminId)
+                        .lockedByAdminEmail("admin@fpt.edu.vn")
+                        .lockedByAdminFullName("Admin")
+                        .secondsRemaining(299)
+                        .build());
+
+        mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}/lock", requestId)
+                        .with(user(adminPrincipal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.locked").value(true))
+                .andExpect(jsonPath("$.data.canReview").value(true))
+                .andExpect(jsonPath("$.data.lockedByAdminEmail").value("admin@fpt.edu.vn"));
+    }
+
+    @Test
+    void refreshLock_adminRole_shouldReturn200() throws Exception {
+        UserPrincipal adminPrincipal = UserPrincipal.create(adminId, "admin@fpt.edu.vn", List.of(RoleCode.ADMIN));
+        when(adminMentorVerificationService.refreshLock(adminId, requestId))
+                .thenReturn(AdminMentorVerificationLockResponse.builder()
+                        .requestId(requestId)
+                        .locked(true)
+                        .canReview(true)
+                        .lockedByAdminId(adminId)
+                        .lockedByAdminEmail("admin@fpt.edu.vn")
+                        .lockedByAdminFullName("Admin")
+                        .secondsRemaining(299)
+                        .build());
+
+        mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/lock/refresh", requestId)
+                        .with(user(adminPrincipal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.locked").value(true))
+                .andExpect(jsonPath("$.data.canReview").value(true))
+                .andExpect(jsonPath("$.data.secondsRemaining").value(299));
+    }
+
+    @Test
     void approve_adminRole_shouldReturn200() throws Exception {
         UserPrincipal adminPrincipal = UserPrincipal.create(adminId, "admin@fpt.edu.vn", List.of(RoleCode.ADMIN));
         when(adminMentorVerificationService.approve(adminId, requestId, "Hồ sơ hợp lệ")).thenReturn(response);
@@ -78,6 +123,21 @@ class AdminMentorVerificationControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("APPROVED"));
+    }
+
+    @Test
+    void approve_systemAdminRole_shouldReturn403() throws Exception {
+        UserPrincipal systemAdminPrincipal = UserPrincipal.create(adminId, "sysadmin@fpt.edu.vn", List.of(RoleCode.SYSTEM_ADMIN));
+
+        mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/approve", requestId)
+                        .with(user(systemAdminPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "note": "Hồ sơ hợp lệ"
+                                }
+                                """))
+                .andExpect(status().isForbidden());
     }
 
     @Test

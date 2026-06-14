@@ -14,6 +14,7 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import jakarta.validation.ConstraintViolationException;
 import java.io.IOException;
 
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -57,6 +58,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentConversionNotSupportedException.class)
     public ResponseEntity<ApiResponse<Object>> handleConversionNotSupported(MethodArgumentConversionNotSupportedException ex) {
         String msg = String.format("Giá trị không hợp lệ cho tham số '%s'", ex.getName());
+        return buildResponse(ErrorCode.INVALID_INPUT, msg);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleConstraintViolation(ConstraintViolationException ex) {
+        String msg = ex.getConstraintViolations()
+                .stream()
+                .map(violation -> violation.getMessage())
+                .findFirst()
+                .orElse("Dữ liệu gửi lên không hợp lệ");
         return buildResponse(ErrorCode.INVALID_INPUT, msg);
     }
 

@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
@@ -44,6 +45,24 @@ public class AdminMentorVerificationController {
             @PathVariable UUID requestId
     ) {
         return ApiResponse.success(adminMentorVerificationService.getRequestDetail(principal.getPublicId(), requestId));
+    }
+
+    @Operation(summary = "Xem trạng thái soft lock của hồ sơ xác thực mentor")
+    @GetMapping("/{requestId}/lock")
+    public ApiResponse<AdminMentorVerificationLockResponse> getLockStatus(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID requestId
+    ) {
+        return ApiResponse.success(adminMentorVerificationService.getLockStatus(principal.getPublicId(), requestId));
+    }
+
+    @Operation(summary = "Gia hạn soft lock hồ sơ xác thực mentor thêm 5 phút")
+    @PostMapping("/{requestId}/lock/refresh")
+    public ApiResponse<AdminMentorVerificationLockResponse> refreshLock(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID requestId
+    ) {
+        return ApiResponse.success(adminMentorVerificationService.refreshLock(principal.getPublicId(), requestId));
     }
 
     @Operation(summary = "Yêu cầu mentor chỉnh sửa hồ sơ hiện tại")

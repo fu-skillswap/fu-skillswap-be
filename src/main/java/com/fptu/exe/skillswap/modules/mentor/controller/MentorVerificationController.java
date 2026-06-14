@@ -2,9 +2,11 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationDocumentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -24,6 +26,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/me/mentor-verification")
@@ -60,6 +65,36 @@ public class MentorVerificationController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
+    }
+
+    @Operation(summary = "Xem timeline hồ sơ xác thực mentor hiện tại")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy timeline thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy hồ sơ đang hoạt động")
+    })
+    @GetMapping("/timeline")
+    public ApiResponse<List<MentorVerificationTimelineEventResponse>> getTimeline(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.getTimeline(principal.getPublicId()));
+    }
+
+    @Operation(summary = "Xem chi tiết một tài liệu xác thực mentor")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy tài liệu thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Mã tài liệu không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy tài liệu")
+    })
+    @GetMapping("/documents/{documentId}")
+    public ApiResponse<MentorVerificationDocumentResponse> getDocument(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable("documentId") UUID documentId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.getDocument(principal.getPublicId(), documentId));
     }
 
     @Operation(
@@ -113,7 +148,7 @@ public class MentorVerificationController {
     @DeleteMapping("/documents/{documentId}")
     public ApiResponse<MentorVerificationRequestResponse> deleteDocument(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable("documentId") java.util.UUID documentId
+            @PathVariable("documentId") UUID documentId
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorVerificationService.deleteDocument(principal.getPublicId(), documentId));

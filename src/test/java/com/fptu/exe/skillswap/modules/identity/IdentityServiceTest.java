@@ -243,7 +243,7 @@ class IdentityServiceTest {
     void getCurrentUser_userWithProfile_shouldReturnProfileCompletedTrue() {
         // Arrange
         when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
-        when(userRoleRepository.findByUserId(activeUserId)).thenReturn(List.of());
+        when(userRoleRepository.findRoleCodesByUserId(activeUserId)).thenReturn(List.of());
 
         // Giả lập academic module set hasStudentProfile = true khi xử lý event
         doAnswer(invocation -> {
@@ -267,7 +267,7 @@ class IdentityServiceTest {
     void getCurrentUser_userWithoutProfile_shouldReturnProfileCompletedFalse() {
         // Arrange
         when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
-        when(userRoleRepository.findByUserId(activeUserId)).thenReturn(List.of());
+        when(userRoleRepository.findRoleCodesByUserId(activeUserId)).thenReturn(List.of());
 
         // eventPublisher.publishEvent() không làm gì → query giữ giá trị mặc định false
         doNothing().when(eventPublisher).publishEvent(any(ProfileStatusQuery.class));

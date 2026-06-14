@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
@@ -232,6 +233,92 @@ class AdminMentorVerificationServiceTest {
         assertThat(request.getLockExpiresAt()).isNotNull();
         assertThat(response.lockedByAdminEmail()).isEqualTo("admin@fpt.edu.vn");
         assertThat(response.canReview()).isTrue();
+    }
+
+    @Test
+    void getLockStatus_activeLock_shouldReturnCurrentLockWithoutClaiming() {
+        UUID adminId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        UUID mentorId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        User admin = User.builder().id(adminId).email("admin@fpt.edu.vn").fullName("Admin").build();
+        User otherAdmin = User.builder().id(otherAdminId).email("other-admin@fpt.edu.vn").fullName("Other Admin").build();
+        User mentor = User.builder().id(mentorId).email("mentor@fpt.edu.vn").fullName("Mentor").build();
+        LocalDateTime lockedAt = LocalDateTime.now().minusMinutes(1);
+        LocalDateTime lockExpiresAt = LocalDateTime.now().plusMinutes(4);
+        MentorVerificationRequest request = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(mentor)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .lockedBy(otherAdmin)
+                .lockedAt(lockedAt)
+                .lockExpiresAt(lockExpiresAt)
+                .build();
+
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+
+        AdminMentorVerificationLockResponse response = adminMentorVerificationService.getLockStatus(adminId, requestId);
+
+        assertThat(response.locked()).isTrue();
+        assertThat(response.canReview()).isFalse();
+        assertThat(response.lockedByAdminEmail()).isEqualTo("other-admin@fpt.edu.vn");
+        assertThat(response.secondsRemaining()).isBetween(230L, 240L);
+    }
+
+    @Test
+    void refreshLock_ownedActiveLock_shouldExtendFiveMinutesFromNow() {
+        UUID adminId = UUID.randomUUID();
+        UUID mentorId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        User admin = User.builder().id(adminId).email("admin@fpt.edu.vn").fullName("Admin").build();
+        User mentor = User.builder().id(mentorId).email("mentor@fpt.edu.vn").fullName("Mentor").build();
+        MentorVerificationRequest request = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(mentor)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .lockedBy(admin)
+                .lockedAt(LocalDateTime.now().minusMinutes(4))
+                .lockExpiresAt(LocalDateTime.now().plusMinutes(1))
+                .build();
+
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+        when(mentorVerificationRequestRepository.save(any(MentorVerificationRequest.class))).thenReturn(request);
+
+        AdminMentorVerificationLockResponse response = adminMentorVerificationService.refreshLock(adminId, requestId);
+
+        assertThat(response.locked()).isTrue();
+        assertThat(response.canReview()).isTrue();
+        assertThat(response.lockedByAdminEmail()).isEqualTo("admin@fpt.edu.vn");
+        assertThat(response.secondsRemaining()).isBetween(290L, 300L);
+        assertThat(request.getLockExpiresAt()).isAfter(LocalDateTime.now().plusMinutes(4));
+    }
+
+    @Test
+    void refreshLock_lockedByOtherAdmin_shouldThrowConflict() {
+        UUID adminId = UUID.randomUUID();
+        UUID otherAdminId = UUID.randomUUID();
+        UUID mentorId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        User admin = User.builder().id(adminId).email("admin@fpt.edu.vn").fullName("Admin").build();
+        User otherAdmin = User.builder().id(otherAdminId).email("other-admin@fpt.edu.vn").fullName("Other Admin").build();
+        User mentor = User.builder().id(mentorId).email("mentor@fpt.edu.vn").fullName("Mentor").build();
+        MentorVerificationRequest request = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(mentor)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .lockedBy(otherAdmin)
+                .lockedAt(LocalDateTime.now().minusMinutes(1))
+                .lockExpiresAt(LocalDateTime.now().plusMinutes(4))
+                .build();
+
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> adminMentorVerificationService.refreshLock(adminId, requestId))
+                .isInstanceOf(BaseException.class)
+                .hasMessageContaining("đang được admin khác xử lý");
     }
 
     @Test

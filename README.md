@@ -1,6 +1,6 @@
 # skillswap-be
 
-Backend service for FU SkillSwap, a Spring Boot modular monolith for mentoring between FPT University students and alumni. The project provides identity, academic onboarding, mentor profile onboarding, catalog, booking, feedback, file storage, notification, and admin foundations.
+Backend service cho FU SkillSwap, một ứng dụng Spring Boot modular monolith phục vụ nền tảng mentoring giữa sinh viên và cựu sinh viên Đại học FPT. Project hiện tập trung cung cấp nền tảng chung: xác thực Google OAuth, JWT, hồ sơ học thuật, hồ sơ mentor, mentor verification, upload tài liệu, phân quyền admin, response format, exception handling, database config và kiến trúc module để phát triển tiếp.
 
 ## Tech Stack
 
@@ -11,59 +11,60 @@ Backend service for FU SkillSwap, a Spring Boot modular monolith for mentoring b
 - Spring Security
 - Spring Data JPA
 - PostgreSQL
-- H2 for tests
+- H2 cho test
 - JWT authentication
 - Google OAuth login
-- Cloudinary integration, optional
+- Cloudinary cho ảnh
+- Cloudflare R2 cho PDF/document
 - Maven Wrapper
 - Docker Compose
 
-## Requirements
+## Yêu Cầu Cài Đặt
 
 - JDK 21
 - Docker Desktop
 - Git
 
-You do not need to install Maven globally. Use the included Maven wrapper:
+Không cần cài Maven global. Dùng Maven Wrapper có sẵn:
 
 ```powershell
 .\mvnw.cmd
 ```
 
-## Quick Start
+## Chạy Nhanh Local
 
-Clone the repository:
+Clone repository:
 
 ```powershell
 git clone -b dev git@github.com:fu-skillswap/fu-skillswap-be.git
 cd fu-skillswap-be
 ```
 
-Create local environment file:
+Tạo file môi trường local:
 
 ```powershell
 copy .env.example .env
 ```
 
-Start PostgreSQL:
+Chạy PostgreSQL:
 
 ```powershell
 docker compose up -d postgres-db
 ```
 
-Run tests:
+Chạy test:
 
 ```powershell
 .\mvnw.cmd test
 ```
 
-Run the application:
+Chạy backend:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-The API runs on:
+API chạy tại:
 
 ```text
 http://localhost:8080
@@ -75,19 +76,19 @@ Swagger UI:
 http://localhost:8080/swagger-ui.html
 ```
 
-Public smoke-test endpoint:
+Endpoint smoke test public:
 
 ```text
 http://localhost:8080/api/campuses
 ```
 
-Note: `/actuator/health` is currently protected by Spring Security. Use a public catalog endpoint for simple unauthenticated smoke tests unless the security config is changed later.
+Lưu ý: `/actuator/health` hiện đang được bảo vệ bởi Spring Security. Khi cần smoke test không cần token, dùng catalog endpoint như `/api/campuses`.
 
 ## Environment Variables
 
-Use `.env.example` as the template. Never commit `.env`.
+Dùng `.env.example` làm template. Không commit `.env`.
 
-Important variables:
+Các biến quan trọng:
 
 ```text
 DATABASE_URL=jdbc:postgresql://localhost:5444/skillswapdb
@@ -99,6 +100,7 @@ JWT_EXPIRATION=3600000
 JWT_REFRESH_EXPIRATION=604800000
 
 GOOGLE_CLIENT_ID=
+SYSTEM_ADMIN_EMAILS=
 CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:3000,http://localhost:5173,http://localhost:8080
 
 CLOUDINARY_ENABLED=false
@@ -118,7 +120,7 @@ FLYWAY_ENABLED=false
 HIBERNATE_DDL_AUTO=update
 ```
 
-For Docker Compose, these variables must not be blank:
+Khi chạy bằng Docker Compose, các biến này không nên để trống:
 
 ```text
 JWT_SECRET_KEY
@@ -128,39 +130,47 @@ GOOGLE_CLIENT_ID
 CORS_ALLOWED_ORIGIN_PATTERNS
 ```
 
-If mentor verification uploads are enabled in a deployed environment:
+Nếu bật mentor verification upload trên VPS:
 
 ```text
 CLOUDINARY_ENABLED=true
-CLOUDINARY_CLOUD_NAME
-CLOUDINARY_API_KEY
-CLOUDINARY_API_SECRET
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
 
 R2_ENABLED=true
-R2_ENDPOINT
-R2_ACCESS_KEY_ID
-R2_SECRET_ACCESS_KEY
-R2_BUCKET
+R2_ENDPOINT=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_REGION=auto
+R2_DOCUMENTS_PREFIX=skillswap/verification-documents
 ```
 
-If a variable is defined as an empty string in `.env`, it overrides the default in `application.yaml`. For example, `JWT_EXPIRATION=` will break startup because Spring cannot bind an empty string to `long`.
+`SYSTEM_ADMIN_EMAILS` là danh sách email được cấp role `SYSTEM_ADMIN` khi login Google:
+
+```text
+SYSTEM_ADMIN_EMAILS=quangtam2005.lttg@gmail.com,another-admin@fpt.edu.vn
+```
+
+Nếu một biến được khai báo rỗng trong `.env`, nó sẽ override default trong `application.yaml`. Ví dụ `JWT_EXPIRATION=` có thể làm app lỗi startup vì Spring không bind được empty string sang `long`.
 
 ## Profiles
 
 ### dev
 
-Default local profile.
+Profile mặc định khi chạy local.
 
-- PostgreSQL on port `5444`
+- PostgreSQL port `5444`
 - `ddl-auto: create`
-- SQL logging enabled
-- Intended for clean development schema generation
+- Bật SQL logging
+- Phù hợp để tạo schema sạch trong giai đoạn phát triển
 
-Because the project uses UUID v7 primary keys, the dev schema should be recreated from a clean database after major entity changes.
+Vì project dùng UUID v7 cho primary key, sau các thay đổi entity lớn nên reset database volume ở môi trường dev/test.
 
 ### test
 
-Used by Maven tests.
+Dùng cho Maven tests.
 
 - H2 in-memory database
 - `ddl-auto: create-drop`
@@ -168,20 +178,20 @@ Used by Maven tests.
 
 ### prod
 
-Production profile.
+Dùng cho môi trường deploy.
 
-- Reads database settings from environment variables
-- Uses `HIBERNATE_DDL_AUTO`, default `update` for current MVP stage
-- Flyway disabled by default until full DDL migrations are added
+- Đọc database config từ environment variables
+- `HIBERNATE_DDL_AUTO` default hiện tại là `update` trong giai đoạn MVP
+- Flyway mặc định disabled cho tới khi có migration đầy đủ
 
-When production migrations are introduced, set:
+Khi chuyển sang production ổn định:
 
 ```text
 HIBERNATE_DDL_AUTO=validate
 FLYWAY_ENABLED=true
 ```
 
-## Project Structure
+## Cấu Trúc Project
 
 ```text
 src/main/java/com/fptu/exe/skillswap
@@ -193,15 +203,9 @@ src/main/java/com/fptu/exe/skillswap
 │   └── storage
 ├── modules
 │   ├── academic
-│   ├── admin
-│   ├── booking
-│   ├── catalog
-│   ├── feedback
-│   ├── filestorage
 │   ├── identity
-│   ├── matching
 │   ├── mentor
-│   └── notification
+│   └── system
 └── shared
     ├── constant
     ├── controller
@@ -212,39 +216,62 @@ src/main/java/com/fptu/exe/skillswap
     └── util
 ```
 
-## Architecture Notes
+Project đi theo hướng Spring Modulith. Mỗi package trong `modules` đại diện cho một business module. Code dùng chung nằm ở:
 
-The project uses Spring Modulith. Each package under `modules` represents a business module. Shared infrastructure and cross-cutting code live under:
+- `shared`: response model, exception, base entity, UUID v7, utility
+- `infrastructure`: security, config, filter, storage integration
 
-- `shared`: response model, exceptions, base entity, UUID v7, utilities
-- `infrastructure`: security, config, filters, storage integration
+## Authentication Và Authorization
 
-Run this test to verify module boundaries:
-
-```powershell
-.\mvnw.cmd -Dtest=ModulithTest test
-```
-
-## Authentication
-
-Current auth flow:
+Luồng đăng nhập hiện tại:
 
 - `POST /api/auth/google`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 
-Access tokens are JWTs. Refresh tokens are randomly generated, hashed with SHA-256, and stored in `user_sessions`.
+FE lấy Google `idToken` qua Google Identity Services, gửi về:
 
-The frontend obtains a Google `idToken` via Google Identity Services, sends it to `POST /api/auth/google`, receives `accessToken` and `refreshToken`, then calls authenticated APIs with:
+```text
+POST /api/auth/google
+```
+
+BE verify `idToken`, tạo hoặc liên kết tài khoản, sau đó trả:
+
+```json
+{
+  "accessToken": "...",
+  "refreshToken": "..."
+}
+```
+
+Khi gọi API cần xác thực:
 
 ```text
 Authorization: Bearer <accessToken>
 ```
 
-Google login requires `GOOGLE_CLIENT_ID`. The service verifies the Google token audience before issuing local tokens.
+Google login cần `GOOGLE_CLIENT_ID`. Nếu email nằm trong `SYSTEM_ADMIN_EMAILS`, access token trả về sẽ có thêm role `SYSTEM_ADMIN`.
 
-## Current APIs
+## Role Hiện Có
+
+```text
+MENTEE
+MENTOR
+STAFF
+ADMIN
+SYSTEM_ADMIN
+```
+
+Quy tắc hiện tại:
+
+- `MENTEE`: user mặc định sau khi login Google.
+- `MENTOR`: user đã được duyệt mentor.
+- `ADMIN`: xử lý nghiệp vụ vận hành, hiện dùng cho mentor verification.
+- `SYSTEM_ADMIN`: quản trị hệ thống, cấp hoặc thu hồi quyền `ADMIN`.
+- `SYSTEM_ADMIN` không kế thừa quyền `ADMIN`.
+
+## API Chính
 
 ### Academic Catalog
 
@@ -258,41 +285,131 @@ Google login requires `GOOGLE_CLIENT_ID`. The service verifies the Google token 
 - `GET /api/me/student-profile`
 - `PUT /api/me/student-profile`
 
-### Mentor Profile Onboarding
+FE dùng `GET /api/auth/me` để đọc `profileCompleted` và `hasStudentProfile`, từ đó quyết định cho user vào dashboard hay chuyển sang form hoàn thiện hồ sơ học thuật.
+
+### Mentor Profile
 
 - `GET /api/me/mentor-profile`
 - `PUT /api/me/mentor-profile/basic`
 - `PUT /api/me/mentor-profile/expertise`
 
-Mentor profile onboarding is split for frontend UX:
+`GET /api/me/mentor-profile` trả `exists=false` nếu user chưa có mentor profile, để FE bắt đầu onboarding mà không coi đây là lỗi.
 
-- Step 1: Basic Profile
-- Step 2: Expertise
-- Step 3: Pricing & Availability, planned
-- Step 4: Services, planned and skippable
+### Mentor Verification Cho User
 
-`GET /api/me/mentor-profile` returns `exists=false` when a user has not created a mentor profile yet, so the frontend can start onboarding without treating it as an error.
+- `POST /api/me/mentor-verification/request`
+- `GET /api/me/mentor-verification`
+- `POST /api/me/mentor-verification/documents`
+- `GET /api/me/mentor-verification/documents/{documentId}`
+- `DELETE /api/me/mentor-verification/documents/{documentId}`
+- `GET /api/me/mentor-verification/timeline`
+- `POST /api/me/mentor-verification/submit`
+- `POST /api/me/mentor-verification/withdraw`
 
-## ID Convention
+Upload document:
 
-All entity primary keys use UUID v7.
+- Ảnh `JPG`, `JPEG`, `PNG` lưu qua Cloudinary.
+- PDF lưu qua Cloudflare R2.
+- File upload qua BE tối đa `1MB`.
+- Mỗi `documentType` có thể có nhiều file.
+- Mỗi `documentType` chỉ nên có một file `isPrimary=true`.
 
-Rules:
-
-- Do not introduce `Long id` for entities.
-- Do not add a separate `publicId` unless there is a strong reason.
-- Public API identifiers should use the entity UUID.
-- Use `@GeneratedUuidV7` for generated UUID v7 primary keys.
-
-The generator lives in:
+Các `documentType` hiện định hướng:
 
 ```text
-shared/persistence
+STUDENT_OR_ALUMNI_PROOF
+IDENTITY_PROOF
+CERTIFICATE
+WORK_PROOF
+PORTFOLIO_SUPPORT
+```
+
+### Mentor Verification Cho Admin
+
+- `GET /api/admin/mentor-verification/requests`
+- `GET /api/admin/mentor-verification/requests/{requestId}`
+- `GET /api/admin/mentor-verification/requests/{requestId}/lock`
+- `POST /api/admin/mentor-verification/requests/{requestId}/lock/refresh`
+- `POST /api/admin/mentor-verification/requests/{requestId}/request-revision`
+- `POST /api/admin/mentor-verification/requests/{requestId}/approve`
+- `POST /api/admin/mentor-verification/requests/{requestId}/reject`
+
+Admin queue hỗ trợ filter/search theo hướng tối ưu cho vận hành:
+
+- filter theo `status`
+- search theo email hoặc tên
+- pagination
+- sort theo các field an toàn
+
+Soft lock:
+
+- Khi admin mở detail request, hệ thống có thể ghi lock.
+- Admin khác vẫn xem được request.
+- Admin khác không được approve/reject/request-revision nếu lock còn hiệu lực.
+- `POST /lock/refresh` gia hạn lock thêm 5 phút.
+
+### System Admin
+
+- `POST /api/system/users/admin-role/grant`
+- `POST /api/system/users/admin-role/revoke`
+- `GET /api/system/users/admins`
+
+Các API này yêu cầu role `SYSTEM_ADMIN`.
+
+Request cấp hoặc thu hồi quyền admin:
+
+```json
+{
+  "email": "admin@fpt.edu.vn"
+}
+```
+
+Rule:
+
+- Email phải thuộc user đã tồn tại trong hệ thống.
+- User đã có `ADMIN` mà grant lại sẽ trả `409 Conflict`.
+- User chưa có `ADMIN` mà revoke sẽ trả `409 Conflict`.
+- `ADMIN` không gọi được API thuộc `/api/system/**`.
+
+## Mentor Verification State
+
+Trạng thái request:
+
+```text
+DRAFT
+READY_FOR_SUBMISSION
+PENDING_REVIEW
+NEEDS_REVISION
+APPROVED
+REJECTED
+WITHDRAWN
+```
+
+Quy tắc nghiệp vụ:
+
+- `DRAFT`: user mới tạo request, chưa nộp.
+- `READY_FOR_SUBMISSION`: request đủ điều kiện nộp.
+- `PENDING_REVIEW`: đã nộp, chờ admin duyệt.
+- `NEEDS_REVISION`: admin yêu cầu chỉnh sửa, user sửa trên request cũ.
+- `APPROVED`: request khóa, flow hoàn tất, user được kích hoạt mentor theo rule backend.
+- `REJECTED`: request khóa, muốn nộp lại phải tạo request mới.
+- `WITHDRAWN`: request khóa, muốn làm lại phải tạo request mới.
+
+Timeline dùng để FE hiển thị lịch sử:
+
+```text
+created
+submitted
+revision requested
+resubmitted
+approved
+rejected
+withdrawn
 ```
 
 ## API Response Format
 
-Successful responses use:
+Success response:
 
 ```json
 {
@@ -304,14 +421,91 @@ Successful responses use:
 }
 ```
 
-Errors are handled by `GlobalExceptionHandler` and returned with the same response shape.
+Created response dùng `201`:
 
-## Useful Commands
+```json
+{
+  "timestamp": "2026-06-09 20:00:00",
+  "status": 201,
+  "code": "CREATED_0201",
+  "message": "Created successfully",
+  "data": {}
+}
+```
 
-Run tests:
+Error response cũng dùng cùng shape và được xử lý tập trung bởi `GlobalExceptionHandler`. Message trả về ưu tiên tiếng Việt UTF-8, không expose raw exception cho client.
+
+## ID Convention
+
+Toàn bộ primary key entity dùng UUID v7.
+
+Rule:
+
+- Không thêm `Long id` cho entity mới.
+- Không trộn `Long` và `UUID`.
+- Không thêm `publicId` riêng nếu không có lý do mạnh.
+- Public API identifier dùng UUID của entity.
+- Entity mới cần generated id thì dùng `@GeneratedUuidV7`.
+
+Generator nằm tại:
+
+```text
+shared/persistence
+```
+
+## Docker Compose
+
+Chạy backend và database:
+
+```powershell
+docker compose up -d --build
+```
+
+Chạy riêng PostgreSQL:
+
+```powershell
+docker compose up -d postgres-db
+```
+
+Kiểm tra config:
+
+```powershell
+docker compose config
+```
+
+Dừng service:
+
+```powershell
+docker compose down
+```
+
+Reset database volume local/test:
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+```
+
+`docker compose down -v` sẽ xóa toàn bộ dữ liệu PostgreSQL trong volume. Chỉ dùng cho môi trường dev/test khi cần schema sạch.
+
+## Test
+
+Chạy toàn bộ test:
 
 ```powershell
 .\mvnw.cmd test
+```
+
+Chạy targeted test cho mentor verification:
+
+```powershell
+.\mvnw.cmd "-Dtest=MentorVerificationFlowIntegrationTest,MentorVerificationServiceTest,MentorVerificationControllerTest,AdminMentorVerificationServiceTest,AdminMentorVerificationControllerTest" test
+```
+
+Chạy targeted test cho system role:
+
+```powershell
+.\mvnw.cmd "-Dtest=IdentityLoginTransactionServiceTest,SystemUserRoleServiceTest,SystemUserRoleControllerTest" test
 ```
 
 Build jar:
@@ -320,85 +514,15 @@ Build jar:
 .\mvnw.cmd package
 ```
 
-Build without tests:
+Build không chạy test:
 
 ```powershell
 .\mvnw.cmd package -DskipTests
 ```
 
-Start database:
+## Deploy Test Trên VPS
 
-```powershell
-docker compose up -d postgres-db
-```
-
-Start backend with Docker Compose:
-
-```powershell
-docker compose up -d --build
-```
-
-Stop services:
-
-```powershell
-docker compose down
-```
-
-Reset local database volume:
-
-```powershell
-docker compose down -v
-docker compose up -d --build
-```
-
-Smoke test:
-
-```powershell
-curl http://localhost:8080/api/campuses
-```
-
-## Git Workflow
-
-Branch flow:
-
-- `main`: stable base
-- `dev`: active integration branch
-- `feat/<short-name>`: new feature
-- `fix/<short-name>`: bug fix for dev or staging
-- `hotfix/<short-name>`: urgent production fix
-- `refactor/<short-name>`: code restructuring without behavior change
-- `docs/<short-name>`: documentation only
-- `chore/<short-name>`: build, config, dependency, or maintenance work
-
-Commit message format:
-
-```text
-<type>(<scope>): <description>
-```
-
-Examples:
-
-```text
-feat(mentor): add mentor profile onboarding APIs
-chore(config): update docker compose environment
-```
-
-Rules:
-
-- Use lowercase description.
-- Use present-tense verb phrase.
-- Do not end with a period.
-- Keep `type` aligned with the branch prefix.
-
-Before opening a pull request:
-
-```powershell
-.\mvnw.cmd test
-```
-
-## Test Deployment On VPS
-
-The current test deployment branch is `dev`.
+Branch deploy test hiện tại là `dev`.
 
 ```bash
 cd /opt/fu-skillswap/backend
@@ -411,17 +535,61 @@ docker compose up -d --build
 docker logs -f skillswap-backend
 ```
 
-`docker compose down -v` deletes the PostgreSQL volume and all database data. Use it only for test environments where a clean schema is expected.
-
-After startup, smoke test:
+Smoke test sau startup:
 
 ```bash
 curl http://localhost:8080/api/campuses
 ```
 
-## Do Not Commit
+Nếu không muốn xóa dữ liệu test, bỏ dòng:
 
-These are ignored and should not be committed:
+```bash
+docker compose down -v
+```
+
+## Git Workflow
+
+Branch flow:
+
+- `main`: base ổn định
+- `dev`: nhánh tích hợp active
+- `feat/<short-name>`: phát triển feature mới
+- `fix/<short-name>`: sửa lỗi ở dev hoặc staging
+- `hotfix/<short-name>`: sửa lỗi production khẩn cấp
+- `refactor/<short-name>`: tái cấu trúc không đổi behavior
+- `docs/<short-name>`: chỉ sửa tài liệu
+- `chore/<short-name>`: build, config, dependency hoặc maintenance
+
+Commit message format:
+
+```text
+<type>(<scope>): <description>
+```
+
+Ví dụ:
+
+```text
+feat(mentor): add mentor verification APIs
+chore(config): update docker compose environment
+docs(readme): update backend handover guide
+```
+
+Rule:
+
+- Description viết thường chữ đầu.
+- Dùng động từ ở thì hiện tại.
+- Không kết thúc bằng dấu chấm.
+- `type` phải khớp với prefix của branch.
+
+Trước khi mở pull request:
+
+```powershell
+.\mvnw.cmd test
+```
+
+## Không Commit
+
+Không commit các file/thư mục sau:
 
 - `.env`
 - `target/`
@@ -431,45 +599,73 @@ These are ignored and should not be committed:
 
 ## Troubleshooting
 
-### App cannot connect to PostgreSQL
+### App không kết nối được PostgreSQL
 
-Check Docker:
+Kiểm tra Docker:
 
 ```powershell
 docker compose ps
 ```
 
-Restart DB:
+Restart database:
 
 ```powershell
 docker compose up -d postgres-db
 ```
 
-### Schema mismatch after entity changes
+### Schema mismatch sau khi đổi entity
 
-For local dev, reset the database volume:
+Với local dev, reset database volume:
 
 ```powershell
 docker compose down -v
 docker compose up -d postgres-db
 ```
 
-Then run the app again.
+Sau đó chạy lại app.
 
-### Google login fails
+### Google login lỗi
 
-Check:
+Kiểm tra:
 
 - `GOOGLE_CLIENT_ID`
-- The frontend is sending a valid Google ID token
-- The token audience matches `GOOGLE_CLIENT_ID`
+- FE gửi đúng Google `idToken`
+- Token audience khớp `GOOGLE_CLIENT_ID`
 
-### Cloudinary fails on startup
+### User không có role SYSTEM_ADMIN sau khi thêm env
 
-If `CLOUDINARY_ENABLED=true`, all of these must be set:
+Kiểm tra:
+
+- Email có nằm trong `SYSTEM_ADMIN_EMAILS`
+- Không có khoảng trắng sai hoặc typo
+- User đã login Google lại sau khi cập nhật env
+- Access token mới có chứa role `SYSTEM_ADMIN`
+
+### Cloudinary lỗi khi startup
+
+Nếu `CLOUDINARY_ENABLED=true`, cần đủ:
 
 ```text
 CLOUDINARY_CLOUD_NAME
 CLOUDINARY_API_KEY
 CLOUDINARY_API_SECRET
+```
+
+### R2 lỗi khi upload PDF
+
+Nếu `R2_ENABLED=true`, cần đủ:
+
+```text
+R2_ENDPOINT
+R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
+R2_BUCKET
+R2_REGION
+R2_DOCUMENTS_PREFIX
+```
+
+`R2_ENDPOINT` không để nguyên placeholder. Cần thay bằng endpoint thật trong Cloudflare Dashboard, dạng:
+
+```text
+https://<account-id>.r2.cloudflarestorage.com
 ```

@@ -22,15 +22,13 @@ public class LoggingFilter extends OncePerRequestFilter {
 
     private static final String REQUEST_ID_HEADER = "X-Request-Id";
     private static final String MDC_KEY = "requestId";
+    private static final int MAX_REQUEST_ID_LENGTH = 64;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        String requestId = request.getHeader(REQUEST_ID_HEADER);
-        if (requestId == null || requestId.isEmpty()) {
-            requestId = UUID.randomUUID().toString().substring(0, 8);
-        }
+        String requestId = resolveRequestId(request.getHeader(REQUEST_ID_HEADER));
 
         MDC.put(MDC_KEY, requestId);
         response.setHeader(REQUEST_ID_HEADER, requestId);
@@ -49,6 +47,25 @@ public class LoggingFilter extends OncePerRequestFilter {
                     request.getMethod(), request.getRequestURI(), response.getStatus(), duration);
             MDC.remove(MDC_KEY);
         }
+    }
+
+    private String resolveRequestId(String requestIdHeader) {
+        if (requestIdHeader == null || requestIdHeader.isBlank()) {
+            return UUID.randomUUID().toString().substring(0, 8);
+        }
+
+        String sanitized = requestIdHeader
+                .trim()
+                .replaceAll("[^a-zA-Z0-9\\-_.]", "");
+
+        if (sanitized.isEmpty()) {
+            return UUID.randomUUID().toString().substring(0, 8);
+        }
+
+        if (sanitized.length() > MAX_REQUEST_ID_LENGTH) {
+            return sanitized.substring(0, MAX_REQUEST_ID_LENGTH);
+        }
+        return sanitized;
     }
 }
 

@@ -14,6 +14,9 @@ import java.util.UUID;
 public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
 
+    @Query("select u from User u where lower(u.email) = lower(:email)")
+    Optional<User> findActiveByEmailIgnoreCase(@Param("email") String email);
+
     @Query(value = "SELECT u.* FROM users u JOIN oauth_accounts oa ON u.id = oa.user_id WHERE oa.provider = :provider AND oa.provider_user_id = :providerUserId", nativeQuery = true)
     Optional<User> findByOauthProviderAndProviderUserIdIncludingDeleted(@Param("provider") String provider, @Param("providerUserId") String providerUserId);
 

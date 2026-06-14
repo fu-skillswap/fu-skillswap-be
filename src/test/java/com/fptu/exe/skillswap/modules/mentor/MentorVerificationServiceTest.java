@@ -8,15 +8,20 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationEventType;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStorageKind;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationDocumentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
@@ -218,6 +223,101 @@ class MentorVerificationServiceTest {
         assertThatThrownBy(() -> mentorVerificationService.getMyRequest(null))
                 .isInstanceOf(BaseException.class)
                 .satisfies(ex -> assertThat(((BaseException) ex).getErrorCode()).isEqualTo(ErrorCode.UNAUTHENTICATED));
+    }
+
+    @Test
+    void getTimeline_activeRequest_shouldReturnEventsOnly() {
+        UUID requestId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        MentorVerificationRequest draftRequest = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(user)
+                .status(VerificationStatus.DRAFT)
+                .build();
+        MentorVerificationRequestEvent event = MentorVerificationRequestEvent.builder()
+                .id(eventId)
+                .request(draftRequest)
+                .eventType(MentorVerificationEventType.REQUEST_CREATED)
+                .actorUser(user)
+                .toStatus(VerificationStatus.DRAFT)
+                .build();
+
+        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
+                .thenReturn(Optional.of(draftRequest));
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(requestId))
+                .thenReturn(List.of(event));
+
+        List<MentorVerificationTimelineEventResponse> response = mentorVerificationService.getTimeline(userId);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).id()).isEqualTo(eventId);
+        assertThat(response.get(0).eventType()).isEqualTo(MentorVerificationEventType.REQUEST_CREATED);
+        verify(mentorVerificationDocumentRepository, never()).findByRequestIdOrderByUploadedAtAsc(any());
+    }
+
+    @Test
+    void getDocument_activeRequest_shouldReturnScopedDocumentMetadata() {
+        UUID requestId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        MentorVerificationRequest draftRequest = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(user)
+                .status(VerificationStatus.DRAFT)
+                .build();
+        MentorVerificationDocument document = MentorVerificationDocument.builder()
+                .id(documentId)
+                .request(draftRequest)
+                .documentType(VerificationDocumentType.FPTU_AFFILIATION_PROOF)
+                .status(VerificationDocumentStatus.UPLOADED)
+                .storageKind(VerificationStorageKind.IMAGE)
+                .storedFile(StoredFile.builder()
+                        .id(UUID.randomUUID())
+                        .owner(user)
+                        .purpose(FilePurpose.VERIFICATION_DOCUMENT)
+                        .originalName("fpt-card.jpg")
+                        .storageProvider("CLOUDINARY")
+                        .storageKey("cloudinary/key")
+                        .publicUrl("https://example.com/fpt-card.jpg")
+                        .mimeType("image/jpeg")
+                        .sizeBytes(10L)
+                        .build())
+                .isPrimary(true)
+                .isActive(true)
+                .version(1)
+                .build();
+
+        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
+                .thenReturn(Optional.of(draftRequest));
+        when(mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, requestId))
+                .thenReturn(Optional.of(document));
+
+        MentorVerificationDocumentResponse response = mentorVerificationService.getDocument(userId, documentId);
+
+        assertThat(response.id()).isEqualTo(documentId);
+        assertThat(response.originalFilename()).isEqualTo("fpt-card.jpg");
+        assertThat(response.fileUrl()).isEqualTo("https://example.com/fpt-card.jpg");
+        verify(mentorVerificationDocumentRepository).findByIdAndRequestId(documentId, requestId);
+    }
+
+    @Test
+    void getDocument_documentOutsideActiveRequest_shouldReturnNotFound() {
+        UUID requestId = UUID.randomUUID();
+        UUID documentId = UUID.randomUUID();
+        MentorVerificationRequest draftRequest = MentorVerificationRequest.builder()
+                .id(requestId)
+                .mentor(user)
+                .status(VerificationStatus.DRAFT)
+                .build();
+
+        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), any()))
+                .thenReturn(Optional.of(draftRequest));
+        when(mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, requestId))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> mentorVerificationService.getDocument(userId, documentId))
+                .isInstanceOf(BaseException.class)
+                .satisfies(ex -> assertThat(((BaseException) ex).getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND))
+                .hasMessage("Không tìm thấy tài liệu xác thực");
     }
 
     @Test
