@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationAllowedActionsResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationChecklistResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -69,6 +70,32 @@ class MentorVerificationControllerTest {
                         .canWithdraw(true)
                         .build())
                 .build();
+    }
+
+    @Test
+    void requestToBecomeMentor_newDraft_shouldReturn201() throws Exception {
+        when(mentorVerificationService.requestToBecomeMentor(userId))
+                .thenReturn(new MentorVerificationRequestActionResult<>(response, true));
+
+        mockMvc.perform(post("/api/me/mentor-verification/request")
+                        .with(user(userPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.code").value("CREATED_0201"))
+                .andExpect(jsonPath("$.data.requestId").value(requestId.toString()));
+    }
+
+    @Test
+    void requestToBecomeMentor_existingDraft_shouldReturn200() throws Exception {
+        when(mentorVerificationService.requestToBecomeMentor(userId))
+                .thenReturn(new MentorVerificationRequestActionResult<>(response, false));
+
+        mockMvc.perform(post("/api/me/mentor-verification/request")
+                        .with(user(userPrincipal))
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("SUCCESS_0200"))
+                .andExpect(jsonPath("$.data.requestId").value(requestId.toString()));
     }
 
     @Test

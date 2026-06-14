@@ -31,6 +31,7 @@ public record AdminMentorVerificationRequestResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         List<MentorVerificationDocumentResponse> documents,
+        List<MentorVerificationTimelineEventResponse> timeline,
         MentorVerificationChecklistResponse checklist
 ) {
 }

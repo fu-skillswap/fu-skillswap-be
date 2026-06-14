@@ -11,6 +11,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class RefreshTokenRequest {
-    @NotBlank(message = "refreshToken không được để trống")
+    @NotBlank(message = "Mã làm mới phiên đăng nhập không được để trống")
     private String refreshToken;
 }

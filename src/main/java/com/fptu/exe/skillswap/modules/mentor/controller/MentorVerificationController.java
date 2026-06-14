@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
@@ -37,14 +38,19 @@ public class MentorVerificationController {
     @Operation(summary = "Khởi tạo hoặc lấy hồ sơ xác thực mentor đang hoạt động")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy hồ sơ xác thực mentor thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Tạo hồ sơ xác thực mentor thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
     @PostMapping("/request")
-    public ApiResponse<MentorVerificationRequestResponse> requestToBecomeMentor(
+    public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> requestToBecomeMentor(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorVerificationService.requestToBecomeMentor(principal.getPublicId()));
+        MentorVerificationRequestActionResult<MentorVerificationRequestResponse> result =
+                mentorVerificationService.requestToBecomeMentor(principal.getPublicId());
+        return result.created()
+                ? ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(result.data()))
+                : ResponseEntity.ok(ApiResponse.success(result.data()));
     }
 
     @Operation(summary = "Xem hồ sơ xác thực mentor hiện tại")

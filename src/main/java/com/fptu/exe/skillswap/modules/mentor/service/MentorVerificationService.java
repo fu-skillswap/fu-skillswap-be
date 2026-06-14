@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.*;
 import com.fptu.exe.skillswap.modules.mentor.dto.*;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -45,6 +46,7 @@ public class MentorVerificationService {
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+    private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
@@ -53,17 +55,17 @@ public class MentorVerificationService {
     private final Optional<R2DocumentStorageService> r2DocumentStorageService;
 
     @Transactional
-    public MentorVerificationRequestResponse requestToBecomeMentor(UUID userId) {
+    public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
         requireUserId(userId);
         User user = getRequiredUser(userId);
         Optional<MentorVerificationRequest> activeRequest = findActiveRequest(userId);
         if (activeRequest.isPresent()) {
-            return buildResponse(activeRequest.get());
+            return new MentorVerificationRequestActionResult<>(buildResponse(activeRequest.get()), false);
         }
         MentorProfile mentorProfile = ensureMentorProfileExists(user);
         ensureMentorCanOpenVerificationRequest(mentorProfile);
         MentorVerificationRequest request = createDraftRequest(user);
-        return buildResponse(request);
+        return new MentorVerificationRequestActionResult<>(buildResponse(request), true);
     }
 
     @Transactional(readOnly = true)
@@ -124,6 +126,7 @@ public class MentorVerificationService {
         }
         MentorVerificationRequest request = findEditableRequest(userId);
         boolean wasNeedsRevision = request.getStatus() == VerificationStatus.NEEDS_REVISION;
+        VerificationStatus previousStatus = request.getStatus();
         ensureSubmissionEligible(userId, request);
 
         request.setSubmittedNote(trimToNull(submitRequest.submitNote()));
@@ -133,6 +136,14 @@ public class MentorVerificationService {
             request.setRevisionCount(request.getRevisionCount() + 1);
         }
         mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                wasNeedsRevision ? MentorVerificationEventType.RESUBMITTED : MentorVerificationEventType.SUBMITTED,
+                request.getMentor(),
+                previousStatus,
+                VerificationStatus.PENDING_REVIEW,
+                request.getSubmittedNote()
+        );
 
         MentorProfile mentorProfile = ensureMentorProfileExists(request.getMentor());
         mentorProfile.setStatus(MentorStatus.PENDING_VERIFICATION);
@@ -176,9 +187,18 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Hồ sơ hiện tại không cho phép rút");
         }
 
+        VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.WITHDRAWN);
         request.setWithdrawnAt(LocalDateTime.now());
         mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                MentorVerificationEventType.WITHDRAWN,
+                request.getMentor(),
+                previousStatus,
+                VerificationStatus.WITHDRAWN,
+                null
+        );
 
         mentorProfileRepository.findWithUserByUserId(userId)
                 .ifPresent(profile -> {
@@ -197,7 +217,9 @@ public class MentorVerificationService {
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.DRAFT)
                 .build();
-        return mentorVerificationRequestRepository.save(request);
+        MentorVerificationRequest savedRequest = mentorVerificationRequestRepository.save(request);
+        appendEvent(savedRequest, MentorVerificationEventType.REQUEST_CREATED, user, null, VerificationStatus.DRAFT, null);
+        return savedRequest;
     }
 
     private Optional<MentorVerificationRequest> findActiveRequest(UUID userId) {
@@ -361,6 +383,11 @@ public class MentorVerificationService {
 
         MentorVerificationChecklistResponse checklist = buildChecklist(request.getMentor().getId(), documents);
         MentorVerificationAllowedActionsResponse allowedActions = buildAllowedActions(request.getStatus(), checklist.canSubmit());
+        List<MentorVerificationTimelineEventResponse> timeline = mentorVerificationRequestEventRepository
+                .findByRequestIdOrderByCreatedAtAsc(request.getId())
+                .stream()
+                .map(this::mapTimelineEventResponse)
+                .toList();
 
         return MentorVerificationRequestResponse.builder()
                 .requestId(request.getId())
@@ -375,9 +402,43 @@ public class MentorVerificationService {
                 .createdAt(request.getCreatedAt())
                 .updatedAt(request.getUpdatedAt())
                 .documents(documents)
+                .timeline(timeline)
                 .checklist(checklist)
                 .allowedActions(allowedActions)
                 .build();
+    }
+
+    private MentorVerificationTimelineEventResponse mapTimelineEventResponse(MentorVerificationRequestEvent event) {
+        User actor = event.getActorUser();
+        return MentorVerificationTimelineEventResponse.builder()
+                .id(event.getId())
+                .eventType(event.getEventType())
+                .fromStatus(event.getFromStatus())
+                .toStatus(event.getToStatus())
+                .actorUserId(actor == null ? null : actor.getId())
+                .actorEmail(actor == null ? null : actor.getEmail())
+                .actorFullName(actor == null ? null : actor.getFullName())
+                .note(event.getNote())
+                .createdAt(event.getCreatedAt())
+                .build();
+    }
+
+    private void appendEvent(
+            MentorVerificationRequest request,
+            MentorVerificationEventType eventType,
+            User actorUser,
+            VerificationStatus fromStatus,
+            VerificationStatus toStatus,
+            String note
+    ) {
+        mentorVerificationRequestEventRepository.save(MentorVerificationRequestEvent.builder()
+                .request(request)
+                .eventType(eventType)
+                .actorUser(actorUser)
+                .fromStatus(fromStatus)
+                .toStatus(toStatus)
+                .note(trimToNull(note))
+                .build());
     }
 
     private MentorVerificationChecklistResponse buildChecklist(UUID userId, List<MentorVerificationDocumentResponse> documents) {

@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestR
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -37,6 +38,7 @@ class AdminMentorVerificationServiceTest {
 
     private MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+    private MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private MentorProfileRepository mentorProfileRepository;
     private UserRepository userRepository;
     private StudentProfileRepository studentProfileRepository;
@@ -46,6 +48,7 @@ class AdminMentorVerificationServiceTest {
     void setUp() {
         mentorVerificationRequestRepository = mock(MentorVerificationRequestRepository.class);
         mentorVerificationDocumentRepository = mock(MentorVerificationDocumentRepository.class);
+        mentorVerificationRequestEventRepository = mock(MentorVerificationRequestEventRepository.class);
         mentorProfileRepository = mock(MentorProfileRepository.class);
         userRepository = mock(UserRepository.class);
         studentProfileRepository = mock(StudentProfileRepository.class);
@@ -53,6 +56,7 @@ class AdminMentorVerificationServiceTest {
         adminMentorVerificationService = new AdminMentorVerificationService(
                 mentorVerificationRequestRepository,
                 mentorVerificationDocumentRepository,
+                mentorVerificationRequestEventRepository,
                 mentorProfileRepository,
                 userRepository,
                 studentProfileRepository
@@ -128,6 +132,7 @@ class AdminMentorVerificationServiceTest {
         when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(mentorProfileRepository.save(any(MentorProfile.class))).thenReturn(mentorProfile);
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(requestId)).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(requestId)).thenReturn(List.of());
         when(studentProfileRepository.existsById(mentorId)).thenReturn(true);
 
         AdminMentorVerificationRequestResponse response = adminMentorVerificationService.requestRevision(
@@ -168,6 +173,7 @@ class AdminMentorVerificationServiceTest {
         when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(mentorProfileRepository.save(any(MentorProfile.class))).thenReturn(mentorProfile);
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(requestId)).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(requestId)).thenReturn(List.of());
         when(studentProfileRepository.existsById(mentorId)).thenReturn(true);
 
         AdminMentorVerificationRequestResponse response = adminMentorVerificationService.approve(adminId, requestId, "Hồ sơ hợp lệ");
@@ -217,6 +223,7 @@ class AdminMentorVerificationServiceTest {
         when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
         when(mentorVerificationRequestRepository.save(any(MentorVerificationRequest.class))).thenReturn(request);
         when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(requestId)).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(requestId)).thenReturn(List.of());
         when(studentProfileRepository.existsById(mentorId)).thenReturn(true);
 
         AdminMentorVerificationRequestResponse response = adminMentorVerificationService.getRequestDetail(adminId, requestId);

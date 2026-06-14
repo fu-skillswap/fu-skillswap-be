@@ -14,6 +14,7 @@ import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import java.io.IOException;
 
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -31,7 +32,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Object>> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
-        return buildResponse(ErrorCode.UNAUTHORIZED, ex.getMessage());
+        return buildResponse(ErrorCode.UNAUTHORIZED, ErrorCode.UNAUTHORIZED.getMessage());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -41,7 +42,7 @@ public class GlobalExceptionHandler {
                 .stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .findFirst()
-                .orElse("Validation error");
+                .orElse("Dữ liệu gửi lên không hợp lệ");
 
         return buildResponse(ErrorCode.INVALID_INPUT, msg);
     }
@@ -94,7 +95,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalState(IllegalStateException ex) {
         log.error("Illegal state", ex);
-        return buildResponse(ErrorCode.CONFIGURATION_ERROR, ex.getMessage());
+        return buildResponse(
+                ErrorCode.CONFIGURATION_ERROR,
+                ex.getMessage() != null ? ex.getMessage() : "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu"
+        );
+    }
+
+    @ExceptionHandler(IOException.class)
+    public ResponseEntity<ApiResponse<Object>> handleIOException(IOException ex) {
+        log.error("I/O error", ex);
+        return buildResponse(ErrorCode.STORAGE_ERROR, ex.getMessage() != null ? ex.getMessage() : ErrorCode.STORAGE_ERROR.getMessage());
     }
 
     private ResponseEntity<ApiResponse<Object>> buildResponse(ErrorCode errorCode, String message) {
@@ -111,7 +121,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleAllExceptions(Exception ex) {
         log.error("Unhandled Exception: ", ex);
-        return buildResponse(ErrorCode.UNCATEGORIZED_EXCEPTION, "An unexpected error occurred");
+        return buildResponse(ErrorCode.UNCATEGORIZED_EXCEPTION, ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage());
     }
 }
 

@@ -21,6 +21,7 @@ public record MentorVerificationRequestResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         List<MentorVerificationDocumentResponse> documents,
+        List<MentorVerificationTimelineEventResponse> timeline,
         MentorVerificationChecklistResponse checklist,
         MentorVerificationAllowedActionsResponse allowedActions
 ) {

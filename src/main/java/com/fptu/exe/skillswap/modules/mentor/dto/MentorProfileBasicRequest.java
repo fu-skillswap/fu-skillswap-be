@@ -8,8 +8,8 @@ import jakarta.validation.constraints.Size;
 @Schema(description = "Step 1 - Thông tin nền tảng của mentor profile")
 public record MentorProfileBasicRequest(
         @Schema(example = "Backend Developer | Spring Boot Mentor", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank(message = "Headline không được để trống")
-        @Size(max = 200, message = "Headline không được quá 200 ký tự")
+        @NotBlank(message = "Tiêu đề hồ sơ mentor không được để trống")
+        @Size(max = 200, message = "Tiêu đề hồ sơ mentor không được quá 200 ký tự")
         String headline,
 
         @Schema(example = "Software Engineer", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -27,8 +27,8 @@ public record MentorProfileBasicRequest(
         String avatarUrl,
 
         @Schema(example = "Mình hỗ trợ sinh viên định hướng backend và chuẩn bị phỏng vấn.", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotBlank(message = "Bio không được để trống")
-        @Size(max = 3000, message = "Bio không được quá 3000 ký tự")
+        @NotBlank(message = "Phần giới thiệu bản thân không được để trống")
+        @Size(max = 3000, message = "Phần giới thiệu bản thân không được quá 3000 ký tự")
         String bio,
 
         @Schema(example = "true", requiredMode = Schema.RequiredMode.REQUIRED)
