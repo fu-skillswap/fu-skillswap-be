@@ -7,6 +7,10 @@ import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
+import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
+import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -24,6 +28,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
     private final CampusRepository campusRepository;
     private final AcademicProgramRepository academicProgramRepository;
     private final SpecializationRepository specializationRepository;
+    private final TagRepository tagRepository;
 
     @Override
     @Transactional
@@ -32,6 +37,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
         seedCampuses();
         seedAcademicProgramsAndSpecializations();
+        seedMentorSelectionTags();
 
         log.info("FPTU Academic Data Seeding completed successfully!");
     }
@@ -147,5 +153,84 @@ public class AcademicDataSeeder implements CommandLineRunner {
                 log.info("Updated Specialization: {} (Vi: {}, En: {})", code, nameVi, nameEn);
             }
         }
+    }
+
+    private void seedMentorSelectionTags() {
+        seedTag("TECH_JAVA", "Java", "Java", TagType.TECH_SKILL, 100);
+        seedTag("TECH_SPRING_BOOT", "Spring Boot", "Spring Boot", TagType.TECH_SKILL, 98);
+        seedTag("TECH_BACKEND", "Backend Development", "Backend Development", TagType.TECH_SKILL, 97);
+        seedTag("TECH_DATABASE", "Database Design", "Database Design", TagType.TECH_SKILL, 92);
+        seedTag("TECH_API_DESIGN", "API Design", "API Design", TagType.TECH_SKILL, 90);
+        seedTag("TECH_SYSTEM_DESIGN", "System Design", "System Design", TagType.TECH_SKILL, 89);
+        seedTag("TECH_DSA", "Data Structures and Algorithms", "Data Structures and Algorithms", TagType.TECH_SKILL, 91);
+        seedTag("TECH_WEB_DEV", "Web Development", "Web Development", TagType.TECH_SKILL, 88);
+        seedTag("TECH_MOBILE_DEV", "Mobile Development", "Mobile Development", TagType.TECH_SKILL, 84);
+        seedTag("TECH_CLOUD", "Cloud Computing", "Cloud Computing", TagType.TECH_SKILL, 86);
+        seedTag("TECH_DEVOPS", "DevOps", "DevOps", TagType.TECH_SKILL, 85);
+        seedTag("TECH_UI_UX", "UI/UX", "UI/UX", TagType.TECH_SKILL, 80);
+        seedTag("TECH_PRODUCT_MANAGEMENT", "Product Management", "Product Management", TagType.TECH_SKILL, 79);
+        seedTag("TECH_AI", "Artificial Intelligence", "Artificial Intelligence", TagType.TECH_SKILL, 87);
+        seedTag("TECH_DATA_ANALYTICS", "Data Analytics", "Data Analytics", TagType.TECH_SKILL, 83);
+
+        seedTag("HELP_CV_REVIEW", "Đánh giá CV", "CV Review", TagType.HELP_TOPIC, 100);
+        seedTag("HELP_INTERVIEW", "Luyện phỏng vấn", "Mock Interview", TagType.HELP_TOPIC, 98);
+        seedTag("HELP_CAREER_PATH", "Định hướng nghề nghiệp", "Career Guidance", TagType.HELP_TOPIC, 96);
+        seedTag("HELP_BACKEND_PATH", "Lộ trình Backend", "Backend Roadmap", TagType.HELP_TOPIC, 95);
+        seedTag("HELP_PORTFOLIO", "Đánh giá Portfolio", "Portfolio Review", TagType.HELP_TOPIC, 94);
+        seedTag("HELP_INTERNSHIP", "Hỗ trợ thực tập", "Internship Guidance", TagType.HELP_TOPIC, 93);
+        seedTag("HELP_PROJECT_REVIEW", "Đánh giá dự án", "Project Review", TagType.HELP_TOPIC, 92);
+        seedTag("HELP_GRADUATION_THESIS", "Hỗ trợ đồ án tốt nghiệp", "Graduation Thesis Support", TagType.HELP_TOPIC, 90);
+        seedTag("HELP_PRODUCT_FEEDBACK", "Góp ý sản phẩm", "Product Feedback", TagType.HELP_TOPIC, 88);
+        seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 89);
+        seedTag("HELP_STUDY_PLAN", "Lập kế hoạch học tập", "Study Planning", TagType.HELP_TOPIC, 87);
+    }
+
+    private void seedTag(String code, String nameVi, String nameEn, TagType type, int weight) {
+        Optional<Tag> existing = tagRepository.findByCode(code);
+        if (existing.isPresent()) {
+            Tag tag = existing.get();
+            boolean changed = false;
+            if (!nameVi.equals(tag.getNameVi())) {
+                tag.setNameVi(nameVi);
+                changed = true;
+            }
+            if (nameEn != null && !nameEn.equals(tag.getNameEn())) {
+                tag.setNameEn(nameEn);
+                changed = true;
+            }
+            if (tag.getType() != type) {
+                tag.setType(type);
+                changed = true;
+            }
+            if (tag.getWeight() == null || tag.getWeight() != weight) {
+                tag.setWeight(weight);
+                changed = true;
+            }
+            if (!tag.isFixed()) {
+                tag.setFixed(true);
+                changed = true;
+            }
+            if (tag.getStatus() != TagStatus.ACTIVE) {
+                tag.setStatus(TagStatus.ACTIVE);
+                changed = true;
+            }
+            if (changed) {
+                tagRepository.save(tag);
+                log.info("Updated Tag: {} ({})", code, type);
+            }
+            return;
+        }
+
+        Tag tag = Tag.builder()
+                .code(code)
+                .nameVi(nameVi)
+                .nameEn(nameEn)
+                .type(type)
+                .status(TagStatus.ACTIVE)
+                .weight(weight)
+                .isFixed(true)
+                .build();
+        tagRepository.save(tag);
+        log.info("Seeded Tag: {} ({})", code, type);
     }
 }

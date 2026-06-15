@@ -46,7 +46,6 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.List;
@@ -129,9 +128,6 @@ class MentorVerificationFlowIntegrationTest {
         User adminUser = createAdminUser(nonce);
         UserPrincipal adminPrincipal = UserPrincipal.create(adminUser.getId(), adminUser.getEmail(), List.of(RoleCode.ADMIN));
 
-        ensureTagExists("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
-        ensureTagExists("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
-
         String accessToken = loginAndExtractAccessToken();
 
         mockMvc.perform(get("/api/auth/me")
@@ -172,6 +168,8 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.studentCode").value("SE192621"));
 
+        completeMentorProfile(accessToken);
+
         MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated())
@@ -194,7 +192,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(affiliationFile)
                         .param("documentType", VerificationDocumentType.FPTU_AFFILIATION_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.documents.length()").value(1))
@@ -210,7 +207,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(expertiseFile)
                         .param("documentType", VerificationDocumentType.EXPERTISE_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.documents.length()").value(2))
@@ -222,11 +218,14 @@ class MentorVerificationFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "submitNote": "Ready for review"
+                                  "submitNote": "Ready for review",
+                                  "termsAccepted": true
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"))
+                .andExpect(jsonPath("$.data.termsAcceptedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.termsVersion").value("SKILLSWAP_MENTOR_TERMS_V1"))
                 .andExpect(jsonPath("$.data.allowedActions.canSubmit").value(false))
                 .andExpect(jsonPath("$.data.allowedActions.canUploadDocuments").value(false))
                 .andExpect(jsonPath("$.data.timeline.length()").value(2))
@@ -307,7 +306,7 @@ class MentorVerificationFlowIntegrationTest {
 
         MentorProfile mentorProfile = mentorProfileRepository.findById(savedUser.getId()).orElseThrow();
         assertThat(mentorProfile.getStatus()).isEqualTo(MentorStatus.ACTIVE);
-        assertThat(mentorProfile.getHourlyRate()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(mentorProfile.getSessionDuration()).isEqualTo(60);
 
         MentorVerificationRequest verificationRequest = mentorVerificationRequestRepository.findAll().stream()
                 .filter(request -> request.getMentor().getId().equals(savedUser.getId()))
@@ -480,6 +479,32 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    private void completeMentorProfile(String accessToken) throws Exception {
+        String nonce = UUID.randomUUID().toString().substring(0, 8);
+        Tag expertiseTag = ensureTagExists("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
+        Tag helpTopicTag = ensureTagExists("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
+
+        mockMvc.perform(put("/api/me/mentor-profile")
+                        .header("Authorization", bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "headline": "Java Backend Mentor",
+                                  "expertiseDescription": "Có kinh nghiệm Spring Boot và PostgreSQL",
+                                  "supportingSubjects": "Cơ sở dữ liệu, Lập trình Java",
+                                  "isAvailable": true,
+                                  "helpTopicIds": ["%s"],
+                                  "teachingMode": "ONLINE",
+                                  "sessionDuration": 60,
+                                  "linkedinUrl": "https://linkedin.com/in/mentor-flow",
+                                  "githubUrl": "https://github.com/mentor-flow",
+                                  "portfolioUrl": "https://portfolio.example.com/mentor-flow"
+                                }
+                                """.formatted(helpTopicTag.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.requiredFieldsCompleted").value(true));
+    }
+
     private String generateStudentCode() {
         int intake = Math.abs(UUID.randomUUID().hashCode()) % 22 + 1;
         int suffix = Math.abs((UUID.randomUUID().toString() + intake).hashCode()) % 9000 + 1000;
@@ -487,6 +512,8 @@ class MentorVerificationFlowIntegrationTest {
     }
 
     private String createAndSubmitVerificationRequest(String accessToken) throws Exception {
+        completeMentorProfile(accessToken);
+
         MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated())
@@ -505,7 +532,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(affiliationFile)
                         .param("documentType", VerificationDocumentType.FPTU_AFFILIATION_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated());
 
@@ -518,7 +544,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(expertiseFile)
                         .param("documentType", VerificationDocumentType.EXPERTISE_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated());
 
@@ -527,7 +552,8 @@ class MentorVerificationFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "submitNote": "Ready for review"
+                                  "submitNote": "Ready for review",
+                                  "termsAccepted": true
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -555,7 +581,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(affiliationFile)
                         .param("documentType", VerificationDocumentType.FPTU_AFFILIATION_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated());
 
@@ -568,7 +593,6 @@ class MentorVerificationFlowIntegrationTest {
         mockMvc.perform(multipart("/api/me/mentor-verification/documents")
                         .file(expertiseFile)
                         .param("documentType", VerificationDocumentType.EXPERTISE_PROOF.name())
-                        .param("isPrimary", "true")
                         .header("Authorization", bearer(accessToken)))
                 .andExpect(status().isCreated());
 
@@ -583,11 +607,9 @@ class MentorVerificationFlowIntegrationTest {
         mockGoogleLogin(email, googleSub);
         mockStorageProviders();
 
-        ensureTagExists("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
-        ensureTagExists("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
-
         String accessToken = loginAndExtractAccessToken();
         completeStudentProfile(accessToken);
+        completeMentorProfile(accessToken);
 
         String requestId = createDraftRequestWithDocuments(accessToken);
 
@@ -611,7 +633,8 @@ class MentorVerificationFlowIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "submitNote": "Rollback test submission"
+                                  "submitNote": "Rollback test submission",
+                                  "termsAccepted": true
                                 }
                                 """))
                 .andExpect(status().isInternalServerError())

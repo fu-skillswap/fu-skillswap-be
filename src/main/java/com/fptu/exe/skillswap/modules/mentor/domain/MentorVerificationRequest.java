@@ -54,6 +54,12 @@ public class MentorVerificationRequest {
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
 
+    @Column(name = "terms_accepted_at")
+    private LocalDateTime termsAcceptedAt;
+
+    @Column(name = "terms_version", length = 80)
+    private String termsVersion;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_reviewer"))
     private User reviewedBy;

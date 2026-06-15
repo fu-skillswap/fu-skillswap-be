@@ -15,7 +15,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleAuthService;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityLoginTransactionService;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
-import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,7 +24,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -59,13 +58,13 @@ class IdentityServiceTest {
     private IdentityLoginTransactionService identityLoginTransactionService;
 
     @Mock
+    private AcademicService academicService;
+
+    @Mock
     private JwtTokenProvider jwtTokenProvider;
 
     @Mock
     private JwtProperties jwtProperties;
-
-    @Mock
-    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private IdentityService identityService;
@@ -244,13 +243,7 @@ class IdentityServiceTest {
         // Arrange
         when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
         when(userRoleRepository.findRoleCodesByUserId(activeUserId)).thenReturn(List.of());
-
-        // Giả lập academic module set hasStudentProfile = true khi xử lý event
-        doAnswer(invocation -> {
-            ProfileStatusQuery query = invocation.getArgument(0);
-            query.setHasStudentProfile(true);
-            return null;
-        }).when(eventPublisher).publishEvent(any(ProfileStatusQuery.class));
+        when(academicService.hasCompletedStudentProfile(activeUserId)).thenReturn(true);
 
         // Act
         UserMeResponse response = identityService.getCurrentUser(activeUserId);
@@ -260,7 +253,7 @@ class IdentityServiceTest {
         assertTrue(response.isProfileCompleted(), "profileCompleted phải là true khi đã có StudentProfile");
         assertTrue(response.isHasStudentProfile(), "hasStudentProfile phải là true");
         assertEquals(activeUser.getEmail(), response.getEmail());
-        verify(eventPublisher, times(1)).publishEvent(any(ProfileStatusQuery.class));
+        verify(academicService, times(1)).hasCompletedStudentProfile(activeUserId);
     }
 
     @Test
@@ -268,9 +261,7 @@ class IdentityServiceTest {
         // Arrange
         when(userRepository.findById(activeUserId)).thenReturn(Optional.of(activeUser));
         when(userRoleRepository.findRoleCodesByUserId(activeUserId)).thenReturn(List.of());
-
-        // eventPublisher.publishEvent() không làm gì → query giữ giá trị mặc định false
-        doNothing().when(eventPublisher).publishEvent(any(ProfileStatusQuery.class));
+        when(academicService.hasCompletedStudentProfile(activeUserId)).thenReturn(false);
 
         // Act
         UserMeResponse response = identityService.getCurrentUser(activeUserId);
@@ -279,7 +270,7 @@ class IdentityServiceTest {
         assertNotNull(response);
         assertFalse(response.isProfileCompleted(), "profileCompleted phải là false khi chưa có StudentProfile");
         assertFalse(response.isHasStudentProfile(), "hasStudentProfile phải là false");
-        verify(eventPublisher, times(1)).publishEvent(any(ProfileStatusQuery.class));
+        verify(academicService, times(1)).hasCompletedStudentProfile(activeUserId);
     }
 
     @Test

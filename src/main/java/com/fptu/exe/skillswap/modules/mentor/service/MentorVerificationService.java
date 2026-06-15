@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
 import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
@@ -17,13 +17,13 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -42,13 +42,24 @@ public class MentorVerificationService {
     );
     private static final Set<String> SUPPORTED_IMAGE_CONTENT_TYPES = Set.of("image/jpeg", "image/png");
     private static final String PDF_CONTENT_TYPE = "application/pdf";
-    private static final long MAX_FILES_PER_DOCUMENT_TYPE = 5;
+    private static final long MAX_AFFILIATION_PROOF_FILES = 1;
+    private static final long MAX_EXPERTISE_PROOF_FILES = 3;
+
+    @Value("${skillswap.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
+    private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
+
+    @Value("${skillswap.mentor-verification.submit-requirements.student-profile-completed:true}")
+    private boolean requireCompletedStudentProfile = true;
+
+    @Value("${skillswap.mentor-verification.submit-requirements.mentor-profile-completed:true}")
+    private boolean requireCompletedMentorProfile = true;
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
     private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final AcademicService academicService;
+    private final MentorProfileService mentorProfileService;
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final Optional<CloudinaryService> cloudinaryService;
@@ -106,7 +117,6 @@ public class MentorVerificationService {
     public MentorVerificationRequestResponse uploadDocument(
             UUID userId,
             VerificationDocumentType documentType,
-            boolean isPrimary,
             MultipartFile file
     ) {
         requireUserId(userId);
@@ -116,10 +126,6 @@ public class MentorVerificationService {
 
         User user = getRequiredUser(userId);
         StoredFile storedFile = storeVerificationFile(user, file, documentType);
-
-        if (isPrimary) {
-            deactivateCurrentPrimary(request.getId(), documentType);
-        }
 
         int nextVersion = mentorVerificationDocumentRepository
                 .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(request.getId(), documentType)
@@ -134,7 +140,6 @@ public class MentorVerificationService {
                 .status(VerificationDocumentStatus.UPLOADED)
                 .storageKind(resolveStorageKind(file))
                 .storedFile(storedFile)
-                .isPrimary(isPrimary)
                 .isActive(true)
                 .version(nextVersion)
                 .uploadedBy(user)
@@ -154,10 +159,15 @@ public class MentorVerificationService {
         boolean wasNeedsRevision = request.getStatus() == VerificationStatus.NEEDS_REVISION;
         VerificationStatus previousStatus = request.getStatus();
         ensureSubmissionEligible(userId, request);
+        ensureTermsAccepted(submitRequest, request);
 
         request.setSubmittedNote(trimToNull(submitRequest.submitNote()));
         request.setStatus(VerificationStatus.PENDING_REVIEW);
         request.setSubmittedAt(LocalDateTime.now());
+        if (!hasAcceptedCurrentTerms(request)) {
+            request.setTermsAcceptedAt(LocalDateTime.now());
+            request.setTermsVersion(mentorTermsVersion);
+        }
         if (wasNeedsRevision) {
             request.setRevisionCount(request.getRevisionCount() + 1);
         }
@@ -194,7 +204,6 @@ public class MentorVerificationService {
         }
 
         document.setActive(false);
-        document.setPrimary(false);
         document.setStatus(VerificationDocumentStatus.REMOVED);
         mentorVerificationDocumentRepository.save(document);
 
@@ -269,8 +278,11 @@ public class MentorVerificationService {
         if (request == null || request.getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Hồ sơ xác thực mentor không hợp lệ");
         }
-        if (!studentProfileRepository.existsById(userId)) {
+        if (requireCompletedStudentProfile && !academicService.hasCompletedStudentProfile(userId)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Cần hoàn tất hồ sơ học thuật trước khi nộp xác thực mentor");
+        }
+        if (requireCompletedMentorProfile && !mentorProfileService.hasCompletedMentorProfile(userId)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cần hoàn tất hồ sơ mentor trước khi nộp xác thực mentor");
         }
         long affiliationProofCount = mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
                 request.getId(),
@@ -360,23 +372,20 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể kiểm tra số lượng tài liệu do dữ liệu đầu vào không hợp lệ");
         }
         long count = mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(requestId, documentType);
-        if (count >= MAX_FILES_PER_DOCUMENT_TYPE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mỗi loại tài liệu chỉ được tối đa " + MAX_FILES_PER_DOCUMENT_TYPE + " file");
+        long limit = maxFilesFor(documentType);
+        if (count >= limit) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu " + documentType + " chỉ được tối đa " + limit + " file đang hoạt động");
         }
     }
 
-    private void deactivateCurrentPrimary(UUID requestId, VerificationDocumentType documentType) {
-        if (requestId == null || documentType == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể cập nhật tài liệu chính do dữ liệu đầu vào không hợp lệ");
+    private long maxFilesFor(VerificationDocumentType documentType) {
+        if (documentType == VerificationDocumentType.FPTU_AFFILIATION_PROOF) {
+            return MAX_AFFILIATION_PROOF_FILES;
         }
-        mentorVerificationDocumentRepository
-                .findFirstByRequestIdAndDocumentTypeAndIsPrimaryTrueAndIsActiveTrue(requestId, documentType)
-                .ifPresent(existing -> {
-                    existing.setPrimary(false);
-                    existing.setActive(false);
-                    existing.setStatus(VerificationDocumentStatus.REMOVED);
-                    mentorVerificationDocumentRepository.save(existing);
-                });
+        if (documentType == VerificationDocumentType.EXPERTISE_PROOF) {
+            return MAX_EXPERTISE_PROOF_FILES;
+        }
+        throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực không được hỗ trợ");
     }
 
     private MentorProfile ensureMentorProfileExists(User user) {
@@ -388,7 +397,6 @@ public class MentorVerificationService {
                     MentorProfile mentorProfile = new MentorProfile();
                     mentorProfile.setUser(user);
                     mentorProfile.setStatus(MentorStatus.DRAFT);
-                    mentorProfile.setHourlyRate(BigDecimal.ZERO);
                     mentorProfile.setSessionDuration(60);
                     return mentorProfileRepository.save(mentorProfile);
                 });
@@ -424,6 +432,8 @@ public class MentorVerificationService {
                 .rejectionReason(request.getRejectionReason())
                 .revisionCount(request.getRevisionCount())
                 .submittedAt(request.getSubmittedAt())
+                .termsAcceptedAt(request.getTermsAcceptedAt())
+                .termsVersion(request.getTermsVersion())
                 .reviewedAt(request.getReviewedAt())
                 .createdAt(request.getCreatedAt())
                 .updatedAt(request.getUpdatedAt())
@@ -468,7 +478,10 @@ public class MentorVerificationService {
     }
 
     private MentorVerificationChecklistResponse buildChecklist(UUID userId, List<MentorVerificationDocumentResponse> documents) {
-        boolean hasAcademicProfile = studentProfileRepository.existsById(userId);
+        boolean hasAcademicProfile = academicService.hasCompletedStudentProfile(userId);
+        boolean hasMentorProfile = mentorProfileService.hasCompletedMentorProfile(userId);
+        boolean studentProfileEligible = !requireCompletedStudentProfile || hasAcademicProfile;
+        boolean mentorProfileEligible = !requireCompletedMentorProfile || hasMentorProfile;
         boolean hasAffiliationProof = documents.stream()
                 .anyMatch(document -> document.isActive()
                         && document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF);
@@ -477,10 +490,27 @@ public class MentorVerificationService {
                         && document.documentType() == VerificationDocumentType.EXPERTISE_PROOF);
         return MentorVerificationChecklistResponse.builder()
                 .academicProfileCompleted(hasAcademicProfile)
+                .mentorProfileCompleted(hasMentorProfile)
                 .hasAffiliationProof(hasAffiliationProof)
                 .hasExpertiseProof(hasExpertiseProof)
-                .canSubmit(hasAcademicProfile && hasAffiliationProof && hasExpertiseProof)
+                .canSubmit(studentProfileEligible && mentorProfileEligible && hasAffiliationProof && hasExpertiseProof)
                 .build();
+    }
+
+    private void ensureTermsAccepted(MentorVerificationSubmitRequest submitRequest, MentorVerificationRequest request) {
+        if (hasAcceptedCurrentTerms(request)) {
+            return;
+        }
+        if (!Boolean.TRUE.equals(submitRequest.termsAccepted())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cần xác nhận đã đọc và đồng ý điều khoản mentor của SkillSwap trước khi nộp hồ sơ");
+        }
+    }
+
+    private boolean hasAcceptedCurrentTerms(MentorVerificationRequest request) {
+        return request != null
+                && request.getTermsAcceptedAt() != null
+                && StringUtils.hasText(request.getTermsVersion())
+                && request.getTermsVersion().equals(mentorTermsVersion);
     }
 
     private MentorVerificationAllowedActionsResponse buildAllowedActions(VerificationStatus status, boolean canSubmit) {
@@ -504,7 +534,6 @@ public class MentorVerificationService {
                 .contentType(storedFile.getMimeType())
                 .sizeBytes(storedFile.getSizeBytes())
                 .fileUrl(storedFile.getPublicUrl())
-                .isPrimary(document.isPrimary())
                 .isActive(document.isActive())
                 .version(document.getVersion())
                 .reviewNote(document.getReviewNote())

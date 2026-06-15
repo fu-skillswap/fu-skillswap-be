@@ -65,10 +65,10 @@ class MentorDiscoveryControllerTest {
                 .ratingAverage(new BigDecimal("4.80"))
                 .reviewCount(12)
                 .completedSessions(30)
-                .expertiseTags(List.of(MentorTagResponse.builder()
+                .helpTopicTags(List.of(MentorTagResponse.builder()
                         .id(UUID.randomUUID())
-                        .code("JAVA")
-                        .nameVi("Java")
+                        .code("HELP_QA")
+                        .nameVi("Giải đáp thắc mắc")
                         .build()))
                 .build();
 
@@ -95,7 +95,7 @@ class MentorDiscoveryControllerTest {
                 .ratingAverage(new BigDecimal("4.60"))
                 .reviewCount(8)
                 .completedSessions(16)
-                .expertiseTags(List.of())
+                .helpTopicTags(List.of())
                 .build();
 
         when(mentorDiscoveryService.searchMentors(eq(userId), any()))
@@ -126,7 +126,6 @@ class MentorDiscoveryControllerTest {
                         .displayName("Mentor Detail")
                         .headline("Java Mentor")
                         .services(List.of())
-                        .expertiseTags(List.of())
                         .helpTopicTags(List.of())
                         .build());
 

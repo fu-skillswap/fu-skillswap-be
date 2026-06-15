@@ -25,6 +25,8 @@ public record AdminMentorVerificationRequestResponse(
         LocalDateTime lockExpiresAt,
         boolean canReview,
         LocalDateTime submittedAt,
+        LocalDateTime termsAcceptedAt,
+        String termsVersion,
         LocalDateTime reviewedAt,
         LocalDateTime approvedAt,
         LocalDateTime withdrawnAt,

@@ -2,9 +2,9 @@ package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileBasicRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileExpertiseRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,7 +16,6 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -71,17 +70,10 @@ class MentorProfileControllerTest {
     }
 
     @Test
-    void upsertBasic_invalidRequest_shouldReturn400() throws Exception {
-        MentorProfileBasicRequest request = new MentorProfileBasicRequest(
-                "",
-                "Software Engineer",
-                "FPT Software",
-                "https://example.com/avatar.jpg",
-                "Bio",
-                true
-        );
+    void upsertProfile_invalidRequest_shouldReturn400() throws Exception {
+        MentorProfileUpsertRequest request = validRequest("");
 
-        mockMvc.perform(put("/api/me/mentor-profile/basic")
+        mockMvc.perform(put("/api/me/mentor-profile")
                         .with(user(userPrincipal))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -91,81 +83,40 @@ class MentorProfileControllerTest {
     }
 
     @Test
-    void upsertBasic_validRequest_shouldReturn200() throws Exception {
-        MentorProfileBasicRequest request = new MentorProfileBasicRequest(
-                "Backend Developer",
-                "Software Engineer",
-                "FPT Software",
-                "https://example.com/avatar.jpg",
-                "Bio",
-                true
-        );
+    void upsertProfile_validRequest_shouldReturn200() throws Exception {
+        MentorProfileUpsertRequest request = validRequest("Backend Developer");
 
-        when(mentorProfileService.upsertBasic(eq(userId), any(MentorProfileBasicRequest.class)))
+        when(mentorProfileService.upsertProfile(eq(userId), any(MentorProfileUpsertRequest.class)))
                 .thenReturn(MentorProfileResponse.builder()
                         .exists(true)
                         .userId(userId)
                         .headline("Backend Developer")
+                        .expertiseDescription("Có kinh nghiệm Spring Boot và PostgreSQL")
+                        .teachingMode(TeachingMode.ONLINE)
                         .build());
 
-        mockMvc.perform(put("/api/me/mentor-profile/basic")
+        mockMvc.perform(put("/api/me/mentor-profile")
                         .with(user(userPrincipal))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.exists").value(true))
-                .andExpect(jsonPath("$.data.headline").value("Backend Developer"));
+                .andExpect(jsonPath("$.data.headline").value("Backend Developer"))
+                .andExpect(jsonPath("$.data.expertiseDescription").value("Có kinh nghiệm Spring Boot và PostgreSQL"));
     }
 
-    @Test
-    void upsertExpertise_emptyTags_shouldReturn400() throws Exception {
-        MentorProfileExpertiseRequest request = new MentorProfileExpertiseRequest(
-                List.of(),
+    private MentorProfileUpsertRequest validRequest(String headline) {
+        return new MentorProfileUpsertRequest(
+                headline,
+                "Có kinh nghiệm Spring Boot và PostgreSQL",
+                "Cơ sở dữ liệu, Lập trình Java, Kiến trúc API",
+                true,
                 List.of(UUID.randomUUID()),
-                BigDecimal.ONE,
-                "Software Engineering",
-                null,
-                null,
-                null,
-                null
-        );
-
-        mockMvc.perform(put("/api/me/mentor-profile/expertise")
-                        .with(user(userPrincipal))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("VAL_3001"))
-                .andExpect(jsonPath("$.message").value("expertiseTagIds: Danh sách chuyên môn không được để trống"));
-    }
-
-    @Test
-    void upsertExpertise_validRequest_shouldReturn200() throws Exception {
-        MentorProfileExpertiseRequest request = new MentorProfileExpertiseRequest(
-                List.of(UUID.randomUUID()),
-                List.of(UUID.randomUUID()),
-                new BigDecimal("2.5"),
-                "Software Engineering",
-                "Backend APIs",
+                TeachingMode.ONLINE,
+                60,
                 "https://www.linkedin.com/in/example",
                 "https://github.com/example",
                 "https://example.dev"
         );
-
-        when(mentorProfileService.upsertExpertise(eq(userId), any(MentorProfileExpertiseRequest.class)))
-                .thenReturn(MentorProfileResponse.builder()
-                        .exists(true)
-                        .userId(userId)
-                        .industry("Software Engineering")
-                        .yearsOfExperience(new BigDecimal("2.5"))
-                        .build());
-
-        mockMvc.perform(put("/api/me/mentor-profile/expertise")
-                        .with(user(userPrincipal))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.industry").value("Software Engineering"))
-                .andExpect(jsonPath("$.data.yearsOfExperience").value(2.5));
     }
 }

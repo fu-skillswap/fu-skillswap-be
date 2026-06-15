@@ -19,24 +19,16 @@ public record MentorProfileResponse(
         String avatarUrl,
         MentorStatus mentorStatus,
         String headline,
-        String currentPosition,
-        String currentCompany,
+        String expertiseDescription,
+        String supportingSubjects,
         Boolean isAvailable,
         LocalDateTime verifiedAt,
-        String bio,
-        String expertiseSummary,
-        List<MentorTagResponse> expertiseTags,
         List<MentorTagResponse> helpTopics,
-        BigDecimal yearsOfExperience,
-        String industry,
         String linkedinUrl,
         String githubUrl,
         String portfolioUrl,
         TeachingMode teachingMode,
         Integer sessionDuration,
-        BigDecimal hourlyRate,
-        String mentoringStyle,
-        String targetMentees,
         BigDecimal ratingAverage,
         Integer reviewCount,
         Integer completedSessions,
@@ -49,7 +41,7 @@ public record MentorProfileResponse(
                 .exists(false)
                 .requiredFieldsCompleted(false)
                 .userId(userId)
-                .expertiseTags(List.of())
+                .isAvailable(true)
                 .helpTopics(List.of())
                 .build();
     }

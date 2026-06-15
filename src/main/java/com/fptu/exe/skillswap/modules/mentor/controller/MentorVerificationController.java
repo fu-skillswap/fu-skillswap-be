@@ -110,20 +110,23 @@ public class MentorVerificationController {
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam("documentType") VerificationDocumentType documentType,
-            @RequestParam(value = "isPrimary", required = false) Boolean isPrimary,
             @RequestPart("file") MultipartFile file
     ) {
         ensureAuthenticated(principal);
         MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
                 principal.getPublicId(),
                 documentType,
-                Boolean.TRUE.equals(isPrimary),
                 file
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
 
-    @Operation(summary = "Nộp hồ sơ xác thực mentor để admin duyệt")
+    @Operation(
+            summary = "Nộp hồ sơ xác thực mentor để admin duyệt",
+            description = "Chỉ cho phép nộp khi người dùng đã hoàn tất hồ sơ học thuật và hồ sơ mentor, "
+                    + "đồng thời đã hoàn tất mentor profile, tải đủ minh chứng FPTU và minh chứng năng lực mentoring, "
+                    + "và đã đồng ý điều khoản mentor của SkillSwap."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Nộp hồ sơ thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Hồ sơ chưa đủ điều kiện để nộp"),

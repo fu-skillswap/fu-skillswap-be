@@ -5,6 +5,7 @@ import lombok.Builder;
 @Builder
 public record MentorVerificationChecklistResponse(
         boolean academicProfileCompleted,
+        boolean mentorProfileCompleted,
         boolean hasAffiliationProof,
         boolean hasExpertiseProof,
         boolean canSubmit

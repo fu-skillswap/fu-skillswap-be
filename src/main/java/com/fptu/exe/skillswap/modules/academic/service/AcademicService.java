@@ -119,6 +119,14 @@ public class AcademicService {
         return mapToStudentProfileResponse(profile);
     }
 
+    @Transactional(readOnly = true)
+    public boolean hasCompletedStudentProfile(UUID userId) {
+        requireId(userId, "Người dùng");
+        return studentProfileRepository.findWithDetailsByUserId(userId)
+                .map(this::isProfileCompleted)
+                .orElse(false);
+    }
+
     @Transactional
     public StudentProfileResponse updateStudentProfile(UUID userId, StudentProfileRequest request) {
         requireId(userId, "Người dùng");
@@ -184,10 +192,7 @@ public class AcademicService {
      */
     @EventListener
     public void onProfileStatusQuery(ProfileStatusQuery query) {
-        boolean completed = studentProfileRepository.findWithDetailsByUserId(query.getUserId())
-                .map(this::isProfileCompleted)
-                .orElse(false);
-        query.setHasStudentProfile(completed);
+        query.setHasStudentProfile(hasCompletedStudentProfile(query.getUserId()));
     }
 
     private StudentProfileResponse mapToStudentProfileResponse(StudentProfile profile) {

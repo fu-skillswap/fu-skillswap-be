@@ -43,6 +43,7 @@ public class SecurityConfig {
                                 "/api/auth/logout",
                                 "/api/campuses",
                                 "/api/academic-programs",
+                                "/api/catalog/help-topics",
                                 "/api/specializations",
                                 "/api/academic-programs/**"
                         ).permitAll()

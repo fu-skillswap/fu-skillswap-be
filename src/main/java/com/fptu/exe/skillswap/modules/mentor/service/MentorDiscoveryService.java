@@ -58,7 +58,6 @@ public class MentorDiscoveryService {
 
     private static final UUID EMPTY_TAG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal AVAILABILITY_SCORE = decimal(12);
     private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(40);
     private static final BigDecimal SAME_PROGRAM_SCORE = decimal(18);
     private static final BigDecimal SAME_CAMPUS_SCORE = decimal(10);
@@ -94,11 +93,10 @@ public class MentorDiscoveryService {
         LocalDateTime now = LocalDateTime.now();
 
         Page<MentorDiscoveryQueryRow> page;
-        if ("relevance".equalsIgnoreCase(safeRequest.getSortBy())) {
-            Pageable pageable = PageRequest.of(safeRequest.getPage(), Math.min(Math.max(safeRequest.getSize(), 1), 30));
+        if (isRelevanceSort(safeRequest.getSortBy())) {
+            Pageable pageable = PageRequest.of(Math.max(safeRequest.getPage(), 0), Math.min(Math.max(safeRequest.getSize(), 1), 30));
             page = mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
                     MentorStatus.ACTIVE,
-                    MentorTagType.EXPERTISE,
                     MentorTagType.HELP_TOPIC,
                     normalizeKeyword(safeRequest.getKeyword()),
                     safeRequest.getCampusId(),
@@ -117,7 +115,6 @@ public class MentorDiscoveryService {
         } else {
             page = mentorProfileRepository.searchDiscoverableMentors(
                     MentorStatus.ACTIVE,
-                    MentorTagType.EXPERTISE,
                     MentorTagType.HELP_TOPIC,
                     normalizeKeyword(safeRequest.getKeyword()),
                     safeRequest.getCampusId(),
@@ -135,13 +132,13 @@ public class MentorDiscoveryService {
             );
         }
 
-        Map<UUID, List<MentorTagResponse>> expertiseTagsByMentor = loadTagsByMentor(
+        Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
                 page.getContent().stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
-                Set.of(MentorTagType.EXPERTISE)
+                Set.of(MentorTagType.HELP_TOPIC)
         );
 
         List<MentorDiscoveryCardResponse> content = page.getContent().stream()
-                .map(row -> toCardResponse(row, expertiseTagsByMentor.getOrDefault(row.mentorUserId(), List.of())))
+                .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
                 .toList();
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
@@ -170,7 +167,6 @@ public class MentorDiscoveryService {
 
         List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
-                MentorTagType.EXPERTISE,
                 MentorTagType.HELP_TOPIC,
                 currentUserId,
                 menteeCampusId,
@@ -185,13 +181,13 @@ public class MentorDiscoveryService {
             return List.of();
         }
 
-        Map<UUID, List<MentorTagResponse>> expertiseTagsByMentor = loadTagsByMentor(
+        Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
                 candidates.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
-                Set.of(MentorTagType.EXPERTISE)
+                Set.of(MentorTagType.HELP_TOPIC)
         );
 
         return candidates.stream()
-                .map(candidate -> toRecommendation(candidate, expertiseTagsByMentor.getOrDefault(candidate.mentorUserId(), List.of()), menteeProfile))
+                .map(candidate -> toRecommendation(candidate, helpTopicsByMentor.getOrDefault(candidate.mentorUserId(), List.of()), menteeProfile))
                 .toList();
     }
 
@@ -201,7 +197,7 @@ public class MentorDiscoveryService {
         StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
         Map<UUID, List<MentorTagResponse>> tagsByMentor = loadTagsByMentor(
                 List.of(mentorUserId),
-                EnumSet.of(MentorTagType.EXPERTISE, MentorTagType.HELP_TOPIC)
+                Set.of(MentorTagType.HELP_TOPIC)
         );
         List<MentorTagResponse> mentorTags = tagsByMentor.getOrDefault(mentorUserId, List.of());
         List<MentorPublicServiceResponse> services = mentorServiceRepository
@@ -223,17 +219,13 @@ public class MentorDiscoveryService {
                 .displayName(mentorProfile.getUser().getFullName())
                 .avatarUrl(mentorProfile.getUser().getAvatarUrl())
                 .headline(mentorProfile.getHeadline())
-                .bio(mentorProfile.getBio())
-                .expertiseSummary(mentorProfile.getExpertiseSummary())
-                .currentPosition(mentorProfile.getCurrentPosition())
-                .currentCompany(mentorProfile.getCurrentCompany())
-                .industry(mentorProfile.getIndustry())
+                .bio(studentProfile == null ? null : studentProfile.getBio())
+                .expertiseDescription(mentorProfile.getExpertiseDescription())
+                .supportingSubjects(mentorProfile.getSupportingSubjects())
                 .isAvailable(mentorProfile.isAvailable())
                 .ratingAverage(displayRating)
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
-                .hourlyRate(defaultDecimal(mentorProfile.getHourlyRate()))
-                .yearsOfExperience(mentorProfile.getYearsOfExperience())
                 .teachingMode(mentorProfile.getTeachingMode())
                 .defaultSessionDuration(mentorProfile.getSessionDuration())
                 .verifiedAt(mentorProfile.getVerifiedAt())
@@ -245,12 +237,9 @@ public class MentorDiscoveryService {
                 .specializationName(specialization == null ? null : specialization.getNameVi())
                 .semester(studentProfile == null ? null : studentProfile.getSemester())
                 .alumni(studentProfile != null && studentProfile.isAlumni())
-                .mentoringStyle(mentorProfile.getMentoringStyle())
-                .targetMentees(mentorProfile.getTargetMentees())
                 .portfolioUrl(mentorProfile.getPortfolioUrl())
                 .linkedinUrl(mentorProfile.getLinkedinUrl())
                 .githubUrl(mentorProfile.getGithubUrl())
-                .expertiseTags(filterTagsByType(mentorTags, MentorTagType.EXPERTISE))
                 .helpTopicTags(filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
                 .services(services)
                 .build();
@@ -292,7 +281,7 @@ public class MentorDiscoveryService {
 
     private MentorRecommendationResponse toRecommendation(
             MentorDiscoveryQueryRow candidate,
-            List<MentorTagResponse> expertiseTags,
+            List<MentorTagResponse> helpTopicTags,
             StudentProfile menteeProfile
     ) {
         List<String> reasons = new ArrayList<>();
@@ -309,7 +298,7 @@ public class MentorDiscoveryService {
         BigDecimal score = candidate.matchScore() == null ? ZERO : BigDecimal.valueOf(candidate.matchScore()).setScale(2, RoundingMode.HALF_UP);
 
         return MentorRecommendationResponse.builder()
-                .mentor(toCardResponse(candidate, expertiseTags))
+                .mentor(toCardResponse(candidate, helpTopicTags))
                 .matchScore(score)
                 .matchReasons(reasons.stream().limit(3).toList())
                 .build();
@@ -317,11 +306,6 @@ public class MentorDiscoveryService {
 
     private BigDecimal calculateMatchScore(MentorDiscoveryQueryRow candidate, StudentProfile menteeProfile, List<String> reasons) {
         BigDecimal baseScore = ZERO;
-
-        if (candidate.isAvailable() != null && candidate.isAvailable()) {
-            baseScore = baseScore.add(AVAILABILITY_SCORE);
-            reasons.add("Mentor đang mở nhận mentee");
-        }
 
         if (menteeProfile != null) {
             if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
@@ -431,7 +415,7 @@ public class MentorDiscoveryService {
         return result;
     }
 
-    private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> expertiseTags) {
+    private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
         BigDecimal rating = defaultDecimal(row.ratingAverage());
         int reviews = defaultInteger(row.reviewCount());
         BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
@@ -440,13 +424,12 @@ public class MentorDiscoveryService {
                 .displayName(row.displayName())
                 .avatarUrl(row.avatarUrl())
                 .headline(row.headline())
-                .currentPosition(row.currentPosition())
-                .currentCompany(row.currentCompany())
+                .expertiseDescription(row.expertiseDescription())
+                .supportingSubjects(row.supportingSubjects())
                 .isAvailable(row.isAvailable())
                 .ratingAverage(displayRating)
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(row.completedSessions()))
-                .hourlyRate(defaultDecimal(row.hourlyRate()))
                 .teachingMode(row.teachingMode())
                 .verifiedAt(row.verifiedAt())
                 .campusId(row.campusId())
@@ -455,7 +438,7 @@ public class MentorDiscoveryService {
                 .programName(row.programName())
                 .specializationId(row.specializationId())
                 .specializationName(row.specializationName())
-                .expertiseTags(expertiseTags.stream().limit(5).toList())
+                .helpTopicTags(helpTopicTags.stream().limit(5).toList())
                 .build();
     }
 
@@ -524,14 +507,10 @@ public class MentorDiscoveryService {
                 && mentorProfile.getStatus() == MentorStatus.ACTIVE
                 && mentorProfile.getVerifiedAt() != null
                 && hasText(mentorProfile.getHeadline())
-                && hasText(mentorProfile.getBio())
-                && hasText(mentorProfile.getCurrentPosition())
-                && hasText(mentorProfile.getCurrentCompany())
-                && hasText(mentorProfile.getIndustry())
+                && hasText(mentorProfile.getExpertiseDescription())
+                && mentorProfile.isAvailable()
                 && mentorProfile.getTeachingMode() != null
-                && mentorProfile.getSessionDuration() != null
-                && mentorProfile.getHourlyRate() != null
-                && mentorProfile.getYearsOfExperience() != null;
+                && mentorProfile.getSessionDuration() != null;
     }
 
     private List<MentorTagResponse> filterTagsByType(List<MentorTagResponse> tags, MentorTagType tagType) {
@@ -539,15 +518,7 @@ public class MentorDiscoveryService {
             return List.of();
         }
         Set<com.fptu.exe.skillswap.modules.catalog.domain.TagType> acceptedTypes = switch (tagType) {
-            case EXPERTISE -> EnumSet.of(
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.TECH_SKILL,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.BUSINESS_SKILL,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.LANGUAGE,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.CAREER,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.SOFT_SKILL,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.TOOL,
-                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.INDUSTRY
-            );
+            case EXPERTISE -> EnumSet.noneOf(com.fptu.exe.skillswap.modules.catalog.domain.TagType.class);
             case HELP_TOPIC -> EnumSet.of(com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC);
         };
         return tags.stream()
@@ -573,10 +544,6 @@ public class MentorDiscoveryService {
             );
             case "completedSessions" -> List.of(
                     new Sort.Order(direction, "totalCompletedSessions"),
-                    new Sort.Order(Sort.Direction.DESC, "averageRating")
-            );
-            case "hourlyRate" -> List.of(
-                    new Sort.Order(direction, "hourlyRate"),
                     new Sort.Order(Sort.Direction.DESC, "averageRating")
             );
             case "updatedAt" -> List.of(
@@ -628,6 +595,10 @@ public class MentorDiscoveryService {
             return null;
         }
         return keyword.trim();
+    }
+
+    private boolean isRelevanceSort(String sortBy) {
+        return sortBy == null || sortBy.isBlank() || "relevance".equalsIgnoreCase(sortBy.trim());
     }
 
     private boolean sameUuid(UUID left, UUID right) {

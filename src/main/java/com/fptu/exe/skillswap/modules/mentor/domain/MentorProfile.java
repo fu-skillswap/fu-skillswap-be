@@ -13,7 +13,6 @@ import java.util.UUID;
     @Index(name = "idx_mentor_profiles_status", columnList = "status"),
     @Index(name = "idx_mentor_profiles_avg_rating", columnList = "average_rating"),
     @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
-    @Index(name = "idx_mentor_profiles_industry", columnList = "industry"),
     @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode")
 })
 @Getter
@@ -40,20 +39,11 @@ public class MentorProfile {
     @Column(length = 200)
     private String headline;
 
-    @Column(columnDefinition = "TEXT")
-    private String bio;
+    @Column(name = "expertise_description", columnDefinition = "TEXT")
+    private String expertiseDescription;
 
-    @Column(name = "expertise_summary", columnDefinition = "TEXT")
-    private String expertiseSummary;
-
-    @Column(name = "current_position", length = 150)
-    private String currentPosition;
-
-    @Column(name = "current_company", length = 150)
-    private String currentCompany;
-
-    @Column(name = "industry", length = 120)
-    private String industry;
+    @Column(name = "supporting_subjects", columnDefinition = "TEXT")
+    private String supportingSubjects;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "teaching_mode", length = 20)
@@ -63,16 +53,6 @@ public class MentorProfile {
     @Builder.Default
     private Integer sessionDuration = 60;
 
-    @Column(name = "hourly_rate", nullable = false, precision = 12, scale = 2)
-    @Builder.Default
-    private BigDecimal hourlyRate = BigDecimal.ZERO;
-
-    @Column(name = "mentoring_style", columnDefinition = "TEXT")
-    private String mentoringStyle;
-
-    @Column(name = "target_mentees", columnDefinition = "TEXT")
-    private String targetMentees;
-
     @Column(name = "portfolio_url", columnDefinition = "TEXT")
     private String portfolioUrl;
 
@@ -81,9 +61,6 @@ public class MentorProfile {
 
     @Column(name = "github_url", columnDefinition = "TEXT")
     private String githubUrl;
-
-    @Column(name = "years_of_experience", precision = 4, scale = 1)
-    private BigDecimal yearsOfExperience;
 
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @Builder.Default
@@ -100,6 +77,10 @@ public class MentorProfile {
     @Column(name = "total_completed_sessions", nullable = false)
     @Builder.Default
     private Integer totalCompletedSessions = 0;
+
+    @Column(name = "total_rejected_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalRejectedBookings = 0;
 
     @Column(name = "is_available", nullable = false)
     @Builder.Default

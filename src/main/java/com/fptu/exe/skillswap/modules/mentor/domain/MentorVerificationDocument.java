@@ -47,10 +47,6 @@ public class MentorVerificationDocument {
     @JoinColumn(name = "stored_file_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_verification_documents_file"))
     private StoredFile storedFile;
 
-    @Column(name = "is_primary", nullable = false)
-    @Builder.Default
-    private boolean isPrimary = false;
-
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
