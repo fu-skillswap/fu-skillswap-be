@@ -83,7 +83,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
-        return buildResponse(ErrorCode.PAYLOAD_TOO_LARGE, "Tệp tải lên vượt quá giới hạn dung lượng cho phép");
+        return buildResponse(ErrorCode.PAYLOAD_TOO_LARGE, "Tệp tải lên vượt quá giới hạn dung lượng cho phép (max_1.5MB)");
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)

@@ -92,7 +92,7 @@ class MentorVerificationFlowIntegrationTest {
     @Autowired
     private StudentProfileRepository studentProfileRepository;
 
-    @Autowired
+    @org.springframework.boot.test.mock.mockito.SpyBean
     private MentorProfileRepository mentorProfileRepository;
 
     @Autowired
@@ -534,5 +534,99 @@ class MentorVerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.data.status").value("PENDING_REVIEW"));
 
         return requestId;
+    }
+
+    private String createDraftRequestWithDocuments(String accessToken) throws Exception {
+        MvcResult requestResult = mockMvc.perform(post("/api/me/mentor-verification/request")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.status").value("DRAFT"))
+                .andReturn();
+
+        String requestId = objectMapper.readTree(requestResult.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .path("data").path("requestId").asText();
+
+        MockMultipartFile affiliationFile = new MockMultipartFile(
+                "file",
+                "fpt-card.jpg",
+                MediaType.IMAGE_JPEG_VALUE,
+                "fake-image".getBytes(StandardCharsets.UTF_8)
+        );
+        mockMvc.perform(multipart("/api/me/mentor-verification/documents")
+                        .file(affiliationFile)
+                        .param("documentType", VerificationDocumentType.FPTU_AFFILIATION_PROOF.name())
+                        .param("isPrimary", "true")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isCreated());
+
+        MockMultipartFile expertiseFile = new MockMultipartFile(
+                "file",
+                "portfolio.pdf",
+                MediaType.APPLICATION_PDF_VALUE,
+                "fake-pdf".getBytes(StandardCharsets.UTF_8)
+                );
+        mockMvc.perform(multipart("/api/me/mentor-verification/documents")
+                        .file(expertiseFile)
+                        .param("documentType", VerificationDocumentType.EXPERTISE_PROOF.name())
+                        .param("isPrimary", "true")
+                        .header("Authorization", bearer(accessToken)))
+                .andExpect(status().isCreated());
+
+        return requestId;
+    }
+
+    @Test
+    void submit_whenDbErrorDuringSubmit_shouldRollbackAllChanges() throws Exception {
+        String nonce = UUID.randomUUID().toString().substring(0, 8);
+        String email = "mentor-rollback-" + nonce + "@fpt.edu.vn";
+        String googleSub = "google-rollback-" + nonce;
+        mockGoogleLogin(email, googleSub);
+        mockStorageProviders();
+
+        ensureTagExists("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
+        ensureTagExists("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
+
+        String accessToken = loginAndExtractAccessToken();
+        completeStudentProfile(accessToken);
+
+        String requestId = createDraftRequestWithDocuments(accessToken);
+
+        MentorVerificationRequest requestBefore = mentorVerificationRequestRepository.findById(UUID.fromString(requestId)).orElseThrow();
+        assertThat(requestBefore.getStatus()).isEqualTo(VerificationStatus.DRAFT);
+
+        User savedUser = userRepository.findByEmail(email).orElseThrow();
+        MentorProfile profileBefore = mentorProfileRepository.findById(savedUser.getId()).orElseThrow();
+        assertThat(profileBefore.getStatus()).isEqualTo(MentorStatus.DRAFT);
+
+        long eventCountBefore = mentorVerificationRequestEventRepository.count();
+
+        org.mockito.Mockito.doThrow(new RuntimeException("Simulated database failure during profile update"))
+                .when(mentorProfileRepository)
+                .save(org.mockito.ArgumentMatchers.argThat(profile -> 
+                        profile != null && profile.getStatus() == MentorStatus.PENDING_VERIFICATION
+                ));
+
+        mockMvc.perform(post("/api/me/mentor-verification/submit")
+                        .header("Authorization", bearer(accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "submitNote": "Rollback test submission"
+                                }
+                                """))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("SYS_9999"));
+
+        MentorVerificationRequest requestAfter = mentorVerificationRequestRepository.findById(UUID.fromString(requestId)).orElseThrow();
+        assertThat(requestAfter.getStatus()).isEqualTo(VerificationStatus.DRAFT);
+        assertThat(requestAfter.getSubmittedAt()).isNull();
+
+        MentorProfile profileAfter = mentorProfileRepository.findById(savedUser.getId()).orElseThrow();
+        assertThat(profileAfter.getStatus()).isEqualTo(MentorStatus.DRAFT);
+
+        long eventCountAfter = mentorVerificationRequestEventRepository.count();
+        assertThat(eventCountAfter).isEqualTo(eventCountBefore);
+
+        org.mockito.Mockito.reset(mentorProfileRepository);
     }
 }

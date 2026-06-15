@@ -6,20 +6,32 @@ import com.fptu.exe.skillswap.modules.academic.domain.CampusCode;
 import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
+import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
+import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
+import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +66,15 @@ class MentorDiscoveryServiceTest {
 
     @Mock
     private StudentProfileRepository studentProfileRepository;
+
+    @Mock
+    private MentorServiceRepository mentorServiceRepository;
+
+    @Mock
+    private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+
+    @Mock
+    private SessionFeedbackRepository sessionFeedbackRepository;
 
     @InjectMocks
     private MentorDiscoveryService mentorDiscoveryService;
@@ -234,6 +255,153 @@ class MentorDiscoveryServiceTest {
         assertThat(response.getContent().get(1).displayName()).isEqualTo("Mentor Two");
     }
 
+    @Test
+    void getMentorDetail_discoverableMentor_shouldReturnFullDetail() {
+        MentorProfile mentorProfile = MentorProfile.builder()
+                .userId(mentorId)
+                .user(User.builder()
+                        .id(mentorId)
+                        .fullName("Mentor One")
+                        .avatarUrl("https://example.com/avatar.jpg")
+                        .build())
+                .status(MentorStatus.ACTIVE)
+                .headline("Java Mentor")
+                .bio("Mentor bio")
+                .expertiseSummary("Expertise summary")
+                .currentPosition("Backend Engineer")
+                .currentCompany("FPT Software")
+                .industry("Information Technology")
+                .teachingMode(TeachingMode.ONLINE)
+                .sessionDuration(60)
+                .hourlyRate(new BigDecimal("150000"))
+                .yearsOfExperience(new BigDecimal("3.5"))
+                .isAvailable(true)
+                .verifiedAt(LocalDateTime.now().minusDays(5))
+                .averageRating(new BigDecimal("4.70"))
+                .totalReviews(10)
+                .totalCompletedSessions(18)
+                .mentoringStyle("Practical")
+                .targetMentees("Students")
+                .portfolioUrl("https://portfolio.example.com")
+                .linkedinUrl("https://linkedin.com/in/mentor")
+                .githubUrl("https://github.com/mentor")
+                .build();
+        StudentProfile mentorStudentProfile = StudentProfile.builder()
+                .userId(mentorId)
+                .campus(Campus.builder().id(campusId).code(CampusCode.HCM).name("HCM").build())
+                .program(AcademicProgram.builder().id(programId).code("CNTT").nameVi("CNTT").build())
+                .specialization(Specialization.builder().id(specializationId).code("KTPM").nameVi("KTPM").build())
+                .semester(7)
+                .isAlumni(false)
+                .build();
+        MentorService mentorService = MentorService.builder()
+                .id(UUID.randomUUID())
+                .title("CV Review")
+                .description("Review CV and mock interview")
+                .durationMinutes(60)
+                .isFree(false)
+                .priceAmount(new BigDecimal("120000"))
+                .currency("VND")
+                .isActive(true)
+                .build();
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(studentProfileRepository.findWithDetailsByUserId(mentorId)).thenReturn(Optional.of(mentorStudentProfile));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
+                .thenReturn(List.of(
+                        expertiseTag(mentorId, "JAVA_BACKEND", "Java Backend"),
+                        helpTopicTag(mentorId, "CV_REVIEW", "Review CV")
+                ));
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorId))
+                .thenReturn(List.of(mentorService));
+
+        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(mentorId);
+
+        assertThat(response.displayName()).isEqualTo("Mentor One");
+        assertThat(response.expertiseTags()).hasSize(1);
+        assertThat(response.helpTopicTags()).hasSize(1);
+        assertThat(response.services()).hasSize(1);
+        assertThat(response.services().get(0).title()).isEqualTo("CV Review");
+    }
+
+    @Test
+    void getMentorAvailability_discoverableMentor_shouldReturnFutureOpenSlots() {
+        MentorProfile mentorProfile = MentorProfile.builder()
+                .userId(mentorId)
+                .user(User.builder().id(mentorId).fullName("Mentor One").build())
+                .status(MentorStatus.ACTIVE)
+                .headline("Java Mentor")
+                .bio("Mentor bio")
+                .currentPosition("Backend Engineer")
+                .currentCompany("FPT Software")
+                .industry("Information Technology")
+                .teachingMode(TeachingMode.HYBRID)
+                .sessionDuration(60)
+                .hourlyRate(new BigDecimal("150000"))
+                .yearsOfExperience(new BigDecimal("3.5"))
+                .verifiedAt(LocalDateTime.now().minusDays(5))
+                .build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(UUID.randomUUID())
+                .mentorProfile(mentorProfile)
+                .startTime(LocalDateTime.now().plusDays(1).withHour(9).withMinute(0))
+                .endTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0))
+                .timezone("Asia/Ho_Chi_Minh")
+                .isBooked(false)
+                .isActive(true)
+                .recurrenceRule("FREQ=WEEKLY")
+                .build();
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilitySlotRepository
+                .findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(eq(mentorId), any(LocalDateTime.class)))
+                .thenReturn(List.of(slot));
+
+        List<MentorAvailabilitySlotResponse> response = mentorDiscoveryService.getMentorAvailability(mentorId);
+
+        assertThat(response).hasSize(1);
+        assertThat(response.get(0).teachingMode()).isEqualTo(TeachingMode.HYBRID);
+        assertThat(response.get(0).recurring()).isTrue();
+        assertThat(response.get(0).durationMinutes()).isEqualTo(60);
+    }
+
+    @Test
+    void getMentorReviews_discoverableMentor_shouldReturnPagedPublicReviews() {
+        MentorProfile mentorProfile = MentorProfile.builder()
+                .userId(mentorId)
+                .user(User.builder().id(mentorId).fullName("Mentor One").build())
+                .status(MentorStatus.ACTIVE)
+                .headline("Java Mentor")
+                .bio("Mentor bio")
+                .currentPosition("Backend Engineer")
+                .currentCompany("FPT Software")
+                .industry("Information Technology")
+                .teachingMode(TeachingMode.ONLINE)
+                .sessionDuration(60)
+                .hourlyRate(new BigDecimal("150000"))
+                .yearsOfExperience(new BigDecimal("3.5"))
+                .verifiedAt(LocalDateTime.now().minusDays(5))
+                .build();
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(sessionFeedbackRepository.findPublicMentorReviews(eq(mentorId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(new MentorReviewQueryRow(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "Mentee A",
+                        "https://example.com/mentee.jpg",
+                        5,
+                        "Mentor rất có tâm",
+                        LocalDateTime.now().minusDays(1)
+                ))));
+
+        PageResponse<MentorReviewResponse> response = mentorDiscoveryService.getMentorReviews(mentorId, new BasePageRequest());
+
+        assertThat(response.getContent()).hasSize(1);
+        assertThat(response.getContent().get(0).reviewerDisplayName()).isEqualTo("Mentee A");
+        assertThat(response.getContent().get(0).rating()).isEqualTo(5);
+    }
+
     private MentorTag expertiseTag(UUID mentorUserId, String code, String nameVi) {
         return MentorTag.builder()
                 .id(new MentorTagId(mentorUserId, UUID.randomUUID(), MentorTagType.EXPERTISE))
@@ -242,6 +410,19 @@ class MentorDiscoveryServiceTest {
                         .code(code)
                         .nameVi(nameVi)
                         .type(TagType.TECH_SKILL)
+                        .build())
+                .isPrimary(false)
+                .build();
+    }
+
+    private MentorTag helpTopicTag(UUID mentorUserId, String code, String nameVi) {
+        return MentorTag.builder()
+                .id(new MentorTagId(mentorUserId, UUID.randomUUID(), MentorTagType.HELP_TOPIC))
+                .tag(Tag.builder()
+                        .id(UUID.randomUUID())
+                        .code(code)
+                        .nameVi(nameVi)
+                        .type(TagType.HELP_TOPIC)
                         .build())
                 .isPrimary(false)
                 .build();

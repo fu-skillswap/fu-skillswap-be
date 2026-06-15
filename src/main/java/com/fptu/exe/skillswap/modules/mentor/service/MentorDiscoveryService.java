@@ -1,17 +1,32 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.academic.domain.Campus;
+import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
+import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
+import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorPublicServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -58,6 +73,9 @@ public class MentorDiscoveryService {
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final SessionFeedbackRepository sessionFeedbackRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
@@ -153,6 +171,97 @@ public class MentorDiscoveryService {
                         }, Comparator.reverseOrder()))
                 .limit(safeLimit)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId) {
+        MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
+        StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
+        Map<UUID, List<MentorTagResponse>> tagsByMentor = loadTagsByMentor(
+                List.of(mentorUserId),
+                EnumSet.of(MentorTagType.EXPERTISE, MentorTagType.HELP_TOPIC)
+        );
+        List<MentorTagResponse> mentorTags = tagsByMentor.getOrDefault(mentorUserId, List.of());
+        List<MentorPublicServiceResponse> services = mentorServiceRepository
+                .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId)
+                .stream()
+                .map(this::toPublicServiceResponse)
+                .toList();
+
+        Campus campus = studentProfile == null ? null : studentProfile.getCampus();
+        AcademicProgram program = studentProfile == null ? null : studentProfile.getProgram();
+        Specialization specialization = studentProfile == null ? null : studentProfile.getSpecialization();
+
+        return MentorDiscoveryDetailResponse.builder()
+                .mentorUserId(mentorProfile.getUserId())
+                .displayName(mentorProfile.getUser().getFullName())
+                .avatarUrl(mentorProfile.getUser().getAvatarUrl())
+                .headline(mentorProfile.getHeadline())
+                .bio(mentorProfile.getBio())
+                .expertiseSummary(mentorProfile.getExpertiseSummary())
+                .currentPosition(mentorProfile.getCurrentPosition())
+                .currentCompany(mentorProfile.getCurrentCompany())
+                .industry(mentorProfile.getIndustry())
+                .isAvailable(mentorProfile.isAvailable())
+                .ratingAverage(defaultDecimal(mentorProfile.getAverageRating()))
+                .reviewCount(defaultInteger(mentorProfile.getTotalReviews()))
+                .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
+                .hourlyRate(defaultDecimal(mentorProfile.getHourlyRate()))
+                .yearsOfExperience(mentorProfile.getYearsOfExperience())
+                .teachingMode(mentorProfile.getTeachingMode())
+                .defaultSessionDuration(mentorProfile.getSessionDuration())
+                .verifiedAt(mentorProfile.getVerifiedAt())
+                .campusId(campus == null ? null : campus.getId())
+                .campusName(campus == null ? null : campus.getName())
+                .programId(program == null ? null : program.getId())
+                .programName(program == null ? null : program.getNameVi())
+                .specializationId(specialization == null ? null : specialization.getId())
+                .specializationName(specialization == null ? null : specialization.getNameVi())
+                .semester(studentProfile == null ? null : studentProfile.getSemester())
+                .alumni(studentProfile != null && studentProfile.isAlumni())
+                .mentoringStyle(mentorProfile.getMentoringStyle())
+                .targetMentees(mentorProfile.getTargetMentees())
+                .portfolioUrl(mentorProfile.getPortfolioUrl())
+                .linkedinUrl(mentorProfile.getLinkedinUrl())
+                .githubUrl(mentorProfile.getGithubUrl())
+                .expertiseTags(filterTagsByType(mentorTags, MentorTagType.EXPERTISE))
+                .helpTopicTags(filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
+                .services(services)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorAvailabilitySlotResponse> getMentorAvailability(UUID mentorUserId) {
+        MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
+        return mentorAvailabilitySlotRepository
+                .findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(
+                        mentorUserId,
+                        LocalDateTime.now()
+                )
+                .stream()
+                .limit(60)
+                .map(slot -> toAvailabilityResponse(slot, mentorProfile))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<MentorReviewResponse> getMentorReviews(UUID mentorUserId, BasePageRequest pageRequest) {
+        getDiscoverableMentorProfile(mentorUserId);
+
+        BasePageRequest safeRequest = pageRequest == null ? new BasePageRequest() : pageRequest;
+        Page<MentorReviewQueryRow> page = sessionFeedbackRepository.findPublicMentorReviews(
+                mentorUserId,
+                reviewPageable(safeRequest)
+        );
+
+        return PageResponse.<MentorReviewResponse>builder()
+                .content(page.getContent().stream().map(this::toMentorReviewResponse).toList())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
     }
 
     private MentorRecommendationResponse toRecommendation(
@@ -327,6 +436,91 @@ public class MentorDiscoveryService {
                 .build();
     }
 
+    private MentorPublicServiceResponse toPublicServiceResponse(MentorService mentorService) {
+        return MentorPublicServiceResponse.builder()
+                .id(mentorService.getId())
+                .title(mentorService.getTitle())
+                .description(mentorService.getDescription())
+                .durationMinutes(mentorService.getDurationMinutes())
+                .free(mentorService.isFree())
+                .priceAmount(defaultDecimal(mentorService.getPriceAmount()))
+                .currency(mentorService.getCurrency())
+                .build();
+    }
+
+    private MentorAvailabilitySlotResponse toAvailabilityResponse(MentorAvailabilitySlot slot, MentorProfile mentorProfile) {
+        return MentorAvailabilitySlotResponse.builder()
+                .slotId(slot.getId())
+                .startTime(slot.getStartTime())
+                .endTime(slot.getEndTime())
+                .timezone(slot.getTimezone())
+                .durationMinutes((int) ChronoUnit.MINUTES.between(slot.getStartTime(), slot.getEndTime()))
+                .teachingMode(mentorProfile.getTeachingMode())
+                .recurring(slot.getRecurrenceRule() != null && !slot.getRecurrenceRule().isBlank())
+                .build();
+    }
+
+    private MentorReviewResponse toMentorReviewResponse(MentorReviewQueryRow row) {
+        return MentorReviewResponse.builder()
+                .reviewId(row.reviewId())
+                .reviewerUserId(row.reviewerUserId())
+                .reviewerDisplayName(row.reviewerDisplayName())
+                .reviewerAvatarUrl(row.reviewerAvatarUrl())
+                .rating(row.rating())
+                .comment(row.comment())
+                .createdAt(row.createdAt())
+                .build();
+    }
+
+    private MentorProfile getDiscoverableMentorProfile(UUID mentorUserId) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã mentor không hợp lệ");
+        }
+
+        MentorProfile mentorProfile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor"));
+        if (!isDiscoverableMentor(mentorProfile)) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Mentor hiện chưa sẵn sàng hiển thị trên discovery");
+        }
+        return mentorProfile;
+    }
+
+    private boolean isDiscoverableMentor(MentorProfile mentorProfile) {
+        return mentorProfile != null
+                && mentorProfile.getStatus() == MentorStatus.ACTIVE
+                && mentorProfile.getVerifiedAt() != null
+                && hasText(mentorProfile.getHeadline())
+                && hasText(mentorProfile.getBio())
+                && hasText(mentorProfile.getCurrentPosition())
+                && hasText(mentorProfile.getCurrentCompany())
+                && hasText(mentorProfile.getIndustry())
+                && mentorProfile.getTeachingMode() != null
+                && mentorProfile.getSessionDuration() != null
+                && mentorProfile.getHourlyRate() != null
+                && mentorProfile.getYearsOfExperience() != null;
+    }
+
+    private List<MentorTagResponse> filterTagsByType(List<MentorTagResponse> tags, MentorTagType tagType) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        Set<com.fptu.exe.skillswap.modules.catalog.domain.TagType> acceptedTypes = switch (tagType) {
+            case EXPERTISE -> EnumSet.of(
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.TECH_SKILL,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.BUSINESS_SKILL,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.LANGUAGE,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.CAREER,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.SOFT_SKILL,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.TOOL,
+                    com.fptu.exe.skillswap.modules.catalog.domain.TagType.INDUSTRY
+            );
+            case HELP_TOPIC -> EnumSet.of(com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC);
+        };
+        return tags.stream()
+                .filter(tag -> tag.type() != null && acceptedTypes.contains(tag.type()))
+                .toList();
+    }
+
     private Pageable searchPageable(MentorDiscoverySearchRequest request) {
         int page = Math.max(request.getPage(), 0);
         int size = Math.min(Math.max(request.getSize(), 1), 30);
@@ -365,6 +559,25 @@ public class MentorDiscoveryService {
         return PageRequest.of(page, size, Sort.by(orders));
     }
 
+    private Pageable reviewPageable(BasePageRequest request) {
+        int page = Math.max(request.getPage(), 0);
+        int size = Math.min(Math.max(request.getSize(), 1), 20);
+        Sort.Direction direction = request.resolveDirection();
+        String sortBy = request.getSortBy() == null ? "createdAt" : request.getSortBy().trim();
+
+        List<Sort.Order> orders = switch (sortBy) {
+            case "rating" -> List.of(
+                    new Sort.Order(direction, "rating"),
+                    new Sort.Order(Sort.Direction.DESC, "createdAt")
+            );
+            default -> List.of(
+                    new Sort.Order(direction, "createdAt"),
+                    new Sort.Order(Sort.Direction.DESC, "rating")
+            );
+        };
+        return PageRequest.of(page, size, Sort.by(orders));
+    }
+
     private List<UUID> normalizedTagIds(List<UUID> tagIds) {
         if (!hasTagFilter(tagIds)) {
             return List.of(EMPTY_TAG_ID);
@@ -385,6 +598,10 @@ public class MentorDiscoveryService {
 
     private boolean sameUuid(UUID left, UUID right) {
         return left != null && left.equals(right);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private BigDecimal defaultDecimal(BigDecimal value) {

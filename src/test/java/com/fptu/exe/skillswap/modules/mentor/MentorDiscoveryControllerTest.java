@@ -1,7 +1,10 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
@@ -16,6 +19,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -111,5 +115,70 @@ class MentorDiscoveryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content[0].displayName").value("Mentor B"))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
+    }
+
+    @Test
+    void getMentorDetail_authenticated_shouldReturn200() throws Exception {
+        UUID mentorUserId = UUID.randomUUID();
+        when(mentorDiscoveryService.getMentorDetail(mentorUserId))
+                .thenReturn(MentorDiscoveryDetailResponse.builder()
+                        .mentorUserId(mentorUserId)
+                        .displayName("Mentor Detail")
+                        .headline("Java Mentor")
+                        .services(List.of())
+                        .expertiseTags(List.of())
+                        .helpTopicTags(List.of())
+                        .build());
+
+        mockMvc.perform(get("/api/mentors/{mentorUserId}", mentorUserId)
+                        .with(user(principal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.displayName").value("Mentor Detail"));
+    }
+
+    @Test
+    void getMentorAvailability_authenticated_shouldReturn200() throws Exception {
+        UUID mentorUserId = UUID.randomUUID();
+        when(mentorDiscoveryService.getMentorAvailability(mentorUserId))
+                .thenReturn(List.of(MentorAvailabilitySlotResponse.builder()
+                        .slotId(UUID.randomUUID())
+                        .startTime(LocalDateTime.of(2026, 6, 20, 9, 0))
+                        .endTime(LocalDateTime.of(2026, 6, 20, 10, 0))
+                        .timezone("Asia/Ho_Chi_Minh")
+                        .durationMinutes(60)
+                        .recurring(false)
+                        .build()));
+
+        mockMvc.perform(get("/api/mentors/{mentorUserId}/availability", mentorUserId)
+                        .with(user(principal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].durationMinutes").value(60));
+    }
+
+    @Test
+    void getMentorReviews_authenticated_shouldReturn200() throws Exception {
+        UUID mentorUserId = UUID.randomUUID();
+        when(mentorDiscoveryService.getMentorReviews(eq(mentorUserId), any()))
+                .thenReturn(PageResponse.<MentorReviewResponse>builder()
+                        .content(List.of(MentorReviewResponse.builder()
+                                .reviewId(UUID.randomUUID())
+                                .reviewerUserId(UUID.randomUUID())
+                                .reviewerDisplayName("Mentee A")
+                                .rating(5)
+                                .comment("Mentor hỗ trợ rất rõ ràng")
+                                .createdAt(LocalDateTime.of(2026, 6, 20, 10, 0))
+                                .build()))
+                        .page(0)
+                        .size(10)
+                        .totalElements(1)
+                        .totalPages(1)
+                        .last(true)
+                        .build());
+
+        mockMvc.perform(get("/api/mentors/{mentorUserId}/reviews", mentorUserId)
+                        .with(user(principal)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content[0].reviewerDisplayName").value("Mentee A"))
+                .andExpect(jsonPath("$.data.content[0].rating").value(5));
     }
 }
