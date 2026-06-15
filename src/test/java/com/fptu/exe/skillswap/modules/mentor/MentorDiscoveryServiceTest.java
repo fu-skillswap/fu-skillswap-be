@@ -125,7 +125,7 @@ class MentorDiscoveryServiceTest {
         request.setKeyword("java");
         request.setTagIds(List.of(UUID.randomUUID()));
 
-        when(mentorProfileRepository.searchDiscoverableMentors(
+        when(mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.EXPERTISE),
                 eq(MentorTagType.HELP_TOPIC),
@@ -136,6 +136,11 @@ class MentorDiscoveryServiceTest {
                 eq(null),
                 eq(true),
                 eq(request.getTagIds()),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                any(LocalDateTime.class),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(mentorRow)));
 
@@ -149,7 +154,7 @@ class MentorDiscoveryServiceTest {
         org.mockito.Mockito.verify(studentProfileRepository).findWithDetailsByUserId(menteeId);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        org.mockito.Mockito.verify(mentorProfileRepository).searchDiscoverableMentors(
+        org.mockito.Mockito.verify(mentorProfileRepository).searchDiscoverableMentorsSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.EXPERTISE),
                 eq(MentorTagType.HELP_TOPIC),
@@ -160,6 +165,11 @@ class MentorDiscoveryServiceTest {
                 eq(null),
                 eq(true),
                 eq(request.getTagIds()),
+                eq(null),
+                eq(null),
+                eq(null),
+                eq(null),
+                any(LocalDateTime.class),
                 pageableCaptor.capture()
         );
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(12);
@@ -175,14 +185,44 @@ class MentorDiscoveryServiceTest {
                 .semester(5)
                 .build();
 
+        MentorDiscoveryQueryRow mentorRowWithScore = new MentorDiscoveryQueryRow(
+                mentorId,
+                "Mentor One",
+                "https://example.com/avatar.jpg",
+                "Java Mentor",
+                "Backend Engineer",
+                "FPT Software",
+                true,
+                new BigDecimal("4.70"),
+                10,
+                18,
+                new BigDecimal("150000"),
+                TeachingMode.ONLINE,
+                java.time.LocalDateTime.now().minusDays(10),
+                campusId,
+                "HCM",
+                programId,
+                "CNTT",
+                specializationId,
+                "KTPM",
+                7,
+                false,
+                85.0
+        );
+
         when(studentProfileRepository.findWithDetailsByUserId(menteeId)).thenReturn(Optional.of(menteeProfile));
-        when(mentorProfileRepository.findRecommendationCandidates(
+        when(mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.EXPERTISE),
                 eq(MentorTagType.HELP_TOPIC),
                 eq(menteeId),
+                eq(campusId),
+                eq(programId),
+                eq(specializationId),
+                eq(5),
+                any(LocalDateTime.class),
                 any(Pageable.class)
-        )).thenReturn(List.of(mentorRow));
+        )).thenReturn(List.of(mentorRowWithScore));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
                 .thenReturn(List.of(expertiseTag(mentorId, "JAVA_BACKEND", "Java Backend")));
 
@@ -225,11 +265,37 @@ class MentorDiscoveryServiceTest {
                 UUID.randomUUID(),
                 "Marketing",
                 3,
-                false
+                false,
+                40.0
+        );
+
+        MentorDiscoveryQueryRow mentorRowWithScore = new MentorDiscoveryQueryRow(
+                mentorId,
+                "Mentor One",
+                "https://example.com/avatar.jpg",
+                "Java Mentor",
+                "Backend Engineer",
+                "FPT Software",
+                true,
+                new BigDecimal("4.70"),
+                10,
+                18,
+                new BigDecimal("150000"),
+                TeachingMode.ONLINE,
+                java.time.LocalDateTime.now().minusDays(10),
+                campusId,
+                "HCM",
+                programId,
+                "CNTT",
+                specializationId,
+                "KTPM",
+                7,
+                false,
+                85.0
         );
 
         when(studentProfileRepository.findWithDetailsByUserId(menteeId)).thenReturn(Optional.of(menteeProfile));
-        when(mentorProfileRepository.searchDiscoverableMentors(
+        when(mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.EXPERTISE),
                 eq(MentorTagType.HELP_TOPIC),
@@ -240,8 +306,13 @@ class MentorDiscoveryServiceTest {
                 eq(null),
                 eq(false),
                 any(List.class),
+                eq(campusId),
+                eq(programId),
+                eq(specializationId),
+                eq(5),
+                any(LocalDateTime.class),
                 any(Pageable.class)
-        )).thenReturn(new PageImpl<>(List.of(lowerMatchMentor, mentorRow)));
+        )).thenReturn(new PageImpl<>(List.of(mentorRowWithScore, lowerMatchMentor)));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(Collection.class), any(Collection.class)))
                 .thenReturn(List.of(
                         expertiseTag(mentorId, "JAVA_BACKEND", "Java Backend"),

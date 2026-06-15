@@ -86,43 +86,66 @@ public class MentorDiscoveryService {
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
 
-        Page<MentorDiscoveryQueryRow> page = mentorProfileRepository.searchDiscoverableMentors(
-                MentorStatus.ACTIVE,
-                MentorTagType.EXPERTISE,
-                MentorTagType.HELP_TOPIC,
-                normalizeKeyword(safeRequest.getKeyword()),
-                safeRequest.getCampusId(),
-                safeRequest.getSpecializationId(),
-                safeRequest.getTeachingMode(),
-                safeRequest.getIsAvailable(),
-                hasTagFilter(safeRequest.getTagIds()),
-                tagIds,
-                searchPageable(safeRequest)
-        );
-
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
+        UUID menteeCampusId = menteeProfile != null && menteeProfile.getCampus() != null ? menteeProfile.getCampus().getId() : null;
+        UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
+        UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
+        Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
+        LocalDateTime now = LocalDateTime.now();
+
+        Page<MentorDiscoveryQueryRow> page;
+        if ("relevance".equalsIgnoreCase(safeRequest.getSortBy())) {
+            Pageable pageable = PageRequest.of(safeRequest.getPage(), Math.min(Math.max(safeRequest.getSize(), 1), 30));
+            page = mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
+                    MentorStatus.ACTIVE,
+                    MentorTagType.EXPERTISE,
+                    MentorTagType.HELP_TOPIC,
+                    normalizeKeyword(safeRequest.getKeyword()),
+                    safeRequest.getCampusId(),
+                    safeRequest.getSpecializationId(),
+                    safeRequest.getTeachingMode(),
+                    safeRequest.getIsAvailable(),
+                    hasTagFilter(safeRequest.getTagIds()),
+                    tagIds,
+                    menteeCampusId,
+                    menteeProgramId,
+                    menteeSpecializationId,
+                    menteeSemester,
+                    now,
+                    pageable
+            );
+        } else {
+            page = mentorProfileRepository.searchDiscoverableMentors(
+                    MentorStatus.ACTIVE,
+                    MentorTagType.EXPERTISE,
+                    MentorTagType.HELP_TOPIC,
+                    normalizeKeyword(safeRequest.getKeyword()),
+                    safeRequest.getCampusId(),
+                    safeRequest.getSpecializationId(),
+                    safeRequest.getTeachingMode(),
+                    safeRequest.getIsAvailable(),
+                    hasTagFilter(safeRequest.getTagIds()),
+                    tagIds,
+                    menteeCampusId,
+                    menteeProgramId,
+                    menteeSpecializationId,
+                    menteeSemester,
+                    now,
+                    searchPageable(safeRequest)
+            );
+        }
+
         Map<UUID, List<MentorTagResponse>> expertiseTagsByMentor = loadTagsByMentor(
                 page.getContent().stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
                 Set.of(MentorTagType.EXPERTISE)
         );
 
-        List<MentorDiscoveryCardResponse> rankedContent = page.getContent().stream()
-                .map(row -> new RankedMentorCard(
-                        toCardResponse(row, expertiseTagsByMentor.getOrDefault(row.mentorUserId(), List.of())),
-                        calculateMatchScore(row, menteeProfile, new ArrayList<>())
-                ))
-                .sorted(Comparator
-                        .comparing(RankedMentorCard::matchScore, Comparator.reverseOrder())
-                        .thenComparing(ranked -> {
-                            Integer completed = ranked.card().completedSessions();
-                            return completed == null ? 0 : completed;
-                        }, Comparator.reverseOrder())
-                        .thenComparing(ranked -> defaultDecimal(ranked.card().ratingAverage()), Comparator.reverseOrder()))
-                .map(RankedMentorCard::card)
+        List<MentorDiscoveryCardResponse> content = page.getContent().stream()
+                .map(row -> toCardResponse(row, expertiseTagsByMentor.getOrDefault(row.mentorUserId(), List.of())))
                 .toList();
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
-                .content(rankedContent)
+                .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -138,24 +161,30 @@ public class MentorDiscoveryService {
         }
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
-        List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidates(
+        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
+        UUID menteeCampusId = menteeProfile != null && menteeProfile.getCampus() != null ? menteeProfile.getCampus().getId() : null;
+        UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
+        UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
+        Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
+        LocalDateTime now = LocalDateTime.now();
+
+        List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
                 MentorTagType.EXPERTISE,
                 MentorTagType.HELP_TOPIC,
                 currentUserId,
-                PageRequest.of(0, Math.max(24, safeLimit * 6), Sort.by(
-                        Sort.Order.desc("isAvailable"),
-                        Sort.Order.desc("averageRating"),
-                        Sort.Order.desc("totalCompletedSessions"),
-                        Sort.Order.desc("verifiedAt")
-                ))
+                menteeCampusId,
+                menteeProgramId,
+                menteeSpecializationId,
+                menteeSemester,
+                now,
+                PageRequest.of(0, safeLimit)
         );
 
         if (candidates.isEmpty()) {
             return List.of();
         }
 
-        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
         Map<UUID, List<MentorTagResponse>> expertiseTagsByMentor = loadTagsByMentor(
                 candidates.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
                 Set.of(MentorTagType.EXPERTISE)
@@ -163,13 +192,6 @@ public class MentorDiscoveryService {
 
         return candidates.stream()
                 .map(candidate -> toRecommendation(candidate, expertiseTagsByMentor.getOrDefault(candidate.mentorUserId(), List.of()), menteeProfile))
-                .sorted(Comparator
-                        .comparing(MentorRecommendationResponse::matchScore, Comparator.reverseOrder())
-                        .thenComparing(response -> {
-                            Integer completed = response.mentor().completedSessions();
-                            return completed == null ? 0 : completed;
-                        }, Comparator.reverseOrder()))
-                .limit(safeLimit)
                 .toList();
     }
 
@@ -192,6 +214,10 @@ public class MentorDiscoveryService {
         AcademicProgram program = studentProfile == null ? null : studentProfile.getProgram();
         Specialization specialization = studentProfile == null ? null : studentProfile.getSpecialization();
 
+        BigDecimal rating = defaultDecimal(mentorProfile.getAverageRating());
+        int reviews = defaultInteger(mentorProfile.getTotalReviews());
+        BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
+
         return MentorDiscoveryDetailResponse.builder()
                 .mentorUserId(mentorProfile.getUserId())
                 .displayName(mentorProfile.getUser().getFullName())
@@ -203,8 +229,8 @@ public class MentorDiscoveryService {
                 .currentCompany(mentorProfile.getCurrentCompany())
                 .industry(mentorProfile.getIndustry())
                 .isAvailable(mentorProfile.isAvailable())
-                .ratingAverage(defaultDecimal(mentorProfile.getAverageRating()))
-                .reviewCount(defaultInteger(mentorProfile.getTotalReviews()))
+                .ratingAverage(displayRating)
+                .reviewCount(reviews)
                 .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
                 .hourlyRate(defaultDecimal(mentorProfile.getHourlyRate()))
                 .yearsOfExperience(mentorProfile.getYearsOfExperience())
@@ -270,7 +296,7 @@ public class MentorDiscoveryService {
             StudentProfile menteeProfile
     ) {
         List<String> reasons = new ArrayList<>();
-        BigDecimal score = calculateMatchScore(candidate, menteeProfile, reasons);
+        calculateMatchScore(candidate, menteeProfile, reasons);
 
         if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có nhiều phiên mentoring hoàn thành"::equals)) {
             reasons.add("Đã có phiên mentoring hoàn thành");
@@ -280,9 +306,11 @@ public class MentorDiscoveryService {
             reasons.add("Phù hợp với các tiêu chí discovery hiện tại");
         }
 
+        BigDecimal score = candidate.matchScore() == null ? ZERO : BigDecimal.valueOf(candidate.matchScore()).setScale(2, RoundingMode.HALF_UP);
+
         return MentorRecommendationResponse.builder()
                 .mentor(toCardResponse(candidate, expertiseTags))
-                .matchScore(score.setScale(2, RoundingMode.HALF_UP))
+                .matchScore(score)
                 .matchReasons(reasons.stream().limit(3).toList())
                 .build();
     }
@@ -362,7 +390,10 @@ public class MentorDiscoveryService {
     private BigDecimal calculateRatingFactor(BigDecimal ratingAverage, Integer reviewCount, List<String> reasons) {
         BigDecimal normalizedRating = defaultDecimal(ratingAverage);
         int normalizedReviewCount = defaultInteger(reviewCount);
-        if (normalizedRating.compareTo(BigDecimal.ZERO) <= 0 || normalizedReviewCount <= 0) {
+        if (normalizedReviewCount <= 0) {
+            return BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP);
+        }
+        if (normalizedRating.compareTo(BigDecimal.ZERO) <= 0) {
             return ZERO;
         }
 
@@ -401,6 +432,9 @@ public class MentorDiscoveryService {
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> expertiseTags) {
+        BigDecimal rating = defaultDecimal(row.ratingAverage());
+        int reviews = defaultInteger(row.reviewCount());
+        BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
         return MentorDiscoveryCardResponse.builder()
                 .mentorUserId(row.mentorUserId())
                 .displayName(row.displayName())
@@ -409,8 +443,8 @@ public class MentorDiscoveryService {
                 .currentPosition(row.currentPosition())
                 .currentCompany(row.currentCompany())
                 .isAvailable(row.isAvailable())
-                .ratingAverage(defaultDecimal(row.ratingAverage()))
-                .reviewCount(defaultInteger(row.reviewCount()))
+                .ratingAverage(displayRating)
+                .reviewCount(reviews)
                 .completedSessions(defaultInteger(row.completedSessions()))
                 .hourlyRate(defaultDecimal(row.hourlyRate()))
                 .teachingMode(row.teachingMode())

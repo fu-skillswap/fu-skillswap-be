@@ -72,7 +72,7 @@ class MentorDiscoveryControllerTest {
                         .build()))
                 .build();
 
-        when(mentorDiscoveryService.getRecommendations(userId, 8))
+        when(mentorDiscoveryService.getRecommendations(userId, 12))
                 .thenReturn(List.of(MentorRecommendationResponse.builder()
                         .mentor(mentor)
                         .matchScore(new BigDecimal("82.40"))

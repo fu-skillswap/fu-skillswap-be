@@ -27,6 +27,35 @@ public record MentorDiscoveryQueryRow(
         UUID specializationId,
         String specializationName,
         Integer semester,
-        Boolean alumni
+        Boolean alumni,
+        Double matchScore
 ) {
+    public MentorDiscoveryQueryRow(
+            UUID mentorUserId,
+            String displayName,
+            String avatarUrl,
+            String headline,
+            String currentPosition,
+            String currentCompany,
+            Boolean isAvailable,
+            BigDecimal ratingAverage,
+            Integer reviewCount,
+            Integer completedSessions,
+            BigDecimal hourlyRate,
+            TeachingMode teachingMode,
+            LocalDateTime verifiedAt,
+            UUID campusId,
+            String campusName,
+            UUID programId,
+            String programName,
+            UUID specializationId,
+            String specializationName,
+            Integer semester,
+            Boolean alumni
+    ) {
+        this(mentorUserId, displayName, avatarUrl, headline, currentPosition, currentCompany, isAvailable,
+                ratingAverage, reviewCount, completedSessions, hourlyRate, teachingMode, verifiedAt,
+                campusId, campusName, programId, programName, specializationId, specializationName,
+                semester, alumni, 0.0);
+    }
 }
