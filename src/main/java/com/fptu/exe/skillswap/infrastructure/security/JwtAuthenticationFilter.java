@@ -25,6 +25,7 @@ import java.util.UUID;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserBanStatusPort userBanStatusPort;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -36,6 +37,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Claims claims = jwtTokenProvider.getClaimsFromToken(jwt);
                 
                 UUID userId = UUID.fromString(claims.get("userId", String.class));
+                
+                // Block BANNED users immediately at the security filter layer
+                if (userBanStatusPort.isBanned(userId)) {
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write("{\"code\":\"AUTH_1004\",\"message\":\"Tài khoản của bạn đã bị khóa\"}");
+                    return;
+                }
+                
                 String email = claims.get("email", String.class);
                 
                 List<?> rolesRaw = claims.get("roles", List.class);

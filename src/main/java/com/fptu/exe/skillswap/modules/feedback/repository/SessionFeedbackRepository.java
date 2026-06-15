@@ -36,4 +36,12 @@ public interface SessionFeedbackRepository extends JpaRepository<SessionFeedback
               and sf.isPublic = true
             """)
     Page<MentorReviewQueryRow> findPublicMentorReviews(@Param("mentorUserId") UUID mentorUserId, Pageable pageable);
+
+    boolean existsBySessionIdAndReviewerId(UUID sessionId, UUID reviewerId);
+
+    @Query("select count(sf.id) from SessionFeedback sf where sf.reviewee.id = :mentorUserId")
+    long countFeedbacksByRevieweeId(@Param("mentorUserId") UUID mentorUserId);
+
+    @Query("select avg(sf.rating) from SessionFeedback sf where sf.reviewee.id = :mentorUserId")
+    Double getAverageRatingByRevieweeId(@Param("mentorUserId") UUID mentorUserId);
 }
