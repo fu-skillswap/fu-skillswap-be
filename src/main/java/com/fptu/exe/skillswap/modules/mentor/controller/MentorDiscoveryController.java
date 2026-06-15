@@ -38,7 +38,7 @@ public class MentorDiscoveryController {
 
     private final MentorDiscoveryService mentorDiscoveryService;
 
-    @Operation(summary = "Lấy danh sách gợi ý nhanh 12 mentor phù hợp nhất để hiển thị trên Dashboard (Trang chủ)")
+    @Operation(summary = "Lấy danh sách gợi ý nhanh 12 mentor phù hợp nhất để hiển thị trên Dashboard")
     @GetMapping("/recommendations")
     public ApiResponse<List<MentorRecommendationResponse>> getRecommendations(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -48,7 +48,7 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getRecommendations(principal.getPublicId(), limit));
     }
 
-    @Operation(summary = "Tìm kiếm, lọc và phân trang vô hạn danh sách mentor trên trang Khám phá (Discovery), hỗ trợ sắp xếp theo relevance (độ phù hợp Match Score)")
+    @Operation(summary = "Tìm kiếm, lọc và xếp hạng mentor trên trang Khám phá theo relevance rồi smart matching")
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
             @AuthenticationPrincipal UserPrincipal principal,

@@ -14,13 +14,12 @@ public record MentorDiscoveryCardResponse(
         String displayName,
         String avatarUrl,
         String headline,
-        String currentPosition,
-        String currentCompany,
+        String expertiseDescription,
+        String supportingSubjects,
         Boolean isAvailable,
         BigDecimal ratingAverage,
         Integer reviewCount,
         Integer completedSessions,
-        BigDecimal hourlyRate,
         TeachingMode teachingMode,
         LocalDateTime verifiedAt,
         UUID campusId,
@@ -29,6 +28,6 @@ public record MentorDiscoveryCardResponse(
         String programName,
         UUID specializationId,
         String specializationName,
-        List<MentorTagResponse> expertiseTags
+        List<MentorTagResponse> helpTopicTags
 ) {
 }

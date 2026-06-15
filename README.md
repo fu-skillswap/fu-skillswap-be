@@ -289,10 +289,24 @@ FE dùng `GET /api/auth/me` để đọc `profileCompleted` và `hasStudentProfi
 ### Mentor Profile
 
 - `GET /api/me/mentor-profile`
-- `PUT /api/me/mentor-profile/basic`
-- `PUT /api/me/mentor-profile/expertise`
+- `PUT /api/me/mentor-profile`
 
 `GET /api/me/mentor-profile` trả `exists=false` nếu user chưa có mentor profile, để FE bắt đầu onboarding mà không coi đây là lỗi.
+
+`PUT /api/me/mentor-profile` lưu toàn bộ hồ sơ mentor trong một request. Các trường chính:
+
+- `headline`: bắt buộc, là câu định vị ngắn cho mentor, ví dụ `Backend Developer | Spring Boot Mentor`.
+- `expertiseDescription`: bắt buộc, text tự do tối đa `1000` ký tự để mentor mô tả năng lực, kinh nghiệm, điểm mạnh và phạm vi có thể hỗ trợ.
+- `supportingSubjects`: tùy chọn, text tự do tối đa `1000` ký tự để mô tả các môn học có thể hỗ trợ.
+- `isAvailable`: tùy chọn khi cập nhật; nếu user tạo profile mới và không truyền field này thì backend mặc định `true`. Mentor có thể tự tắt/bật sau.
+- `helpTopicIds`: bắt buộc, danh sách chủ đề có thể hỗ trợ.
+- `teachingMode`: bắt buộc, một trong `ONLINE`, `OFFLINE`, `HYBRID`.
+- `sessionDuration`: bắt buộc, là thời lượng tối đa mentor nhận cho một buổi mentoring; chỉ nhận một trong `15`, `30`, `60`, `90`.
+- `linkedinUrl`, `githubUrl`, `portfolioUrl`: tùy chọn.
+
+`bio` chỉ còn nằm ở `StudentProfile` và được tái sử dụng làm phần giới thiệu chung trong mentor detail/discovery. `MentorProfile` hiện chỉ giữ `headline`, `expertiseDescription`, `supportingSubjects`, `helpTopicIds`, `teachingMode`, `sessionDuration`, `isAvailable` và các link cá nhân; các field cũ như `currentPosition`, `currentCompany`, `industry`, `yearsOfExperience` và `hourlyRate` đã bị loại khỏi contract và schema.
+
+Avatar không cập nhật qua API này. Backend lấy avatar từ tài khoản người dùng, ví dụ Google login hoặc hồ sơ học thuật.
 
 ### Mentor Verification Cho User
 
@@ -305,22 +319,37 @@ FE dùng `GET /api/auth/me` để đọc `profileCompleted` và `hasStudentProfi
 - `POST /api/me/mentor-verification/submit`
 - `POST /api/me/mentor-verification/withdraw`
 
+Khi gọi `POST /api/me/mentor-verification/submit`, request cần gửi thêm:
+
+- `termsAccepted=true` ở lần nộp đầu tiên cho version điều khoản hiện tại.
+
+Backend chỉ cho phép submit khi các điều kiện sau đều đạt:
+
+- Hoàn tất `Student Profile` nếu `MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED=true`.
+- Hoàn tất `Mentor Profile` nếu `MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED=true`.
+- Có ít nhất một `FPTU_AFFILIATION_PROOF`.
+- Có ít nhất một `EXPERTISE_PROOF`.
+
+Các cấu hình liên quan:
+
+- `MENTOR_TERMS_VERSION`
+- `MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED`
+- `MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED`
+
 Upload document:
 
 - Ảnh `JPG`, `JPEG`, `PNG` lưu qua Cloudinary.
 - PDF lưu qua Cloudflare R2.
 - File upload qua BE tối đa `1MB`.
-- Mỗi `documentType` có thể có nhiều file.
-- Mỗi `documentType` chỉ nên có một file `isPrimary=true`.
+- `FPTU_AFFILIATION_PROOF`: minh chứng là sinh viên/cựu sinh viên FPTU, tối đa `1` file đang hoạt động.
+- `EXPERTISE_PROOF`: minh chứng năng lực mentor, tối đa `3` file đang hoạt động.
+- API upload không dùng `isPrimary`; FE chỉ cần gửi `documentType` và `file`.
 
-Các `documentType` hiện định hướng:
+Các `documentType` hiện dùng:
 
 ```text
-STUDENT_OR_ALUMNI_PROOF
-IDENTITY_PROOF
-CERTIFICATE
-WORK_PROOF
-PORTFOLIO_SUPPORT
+FPTU_AFFILIATION_PROOF
+EXPERTISE_PROOF
 ```
 
 ### Mentor Verification Cho Admin

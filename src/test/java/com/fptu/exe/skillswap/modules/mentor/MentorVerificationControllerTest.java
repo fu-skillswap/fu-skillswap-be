@@ -67,6 +67,7 @@ class MentorVerificationControllerTest {
                 .documents(List.of())
                 .checklist(MentorVerificationChecklistResponse.builder()
                         .academicProfileCompleted(true)
+                        .mentorProfileCompleted(true)
                         .hasAffiliationProof(false)
                         .hasExpertiseProof(false)
                         .canSubmit(false)
@@ -113,7 +114,6 @@ class MentorVerificationControllerTest {
                         .contentType("image/jpeg")
                         .sizeBytes(10L)
                         .fileUrl("https://example.com/fpt-card.jpg")
-                        .isPrimary(true)
                         .isActive(true)
                         .version(1)
                         .build());

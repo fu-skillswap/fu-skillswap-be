@@ -223,6 +223,10 @@ public class BookingService {
         if (slot != null) {
             slot.setBooked(false);
         }
+        MentorProfile mentorProfile = booking.getMentorProfile();
+        if (mentorProfile != null) {
+            mentorProfile.setTotalRejectedBookings(defaultInteger(mentorProfile.getTotalRejectedBookings()) + 1);
+        }
 
         return toBookingResponse(booking, null);
     }
@@ -330,5 +334,9 @@ public class BookingService {
     private String trimToNull(String value) {
         String trimmed = trim(value);
         return trimmed == null || trimmed.isBlank() ? null : trimmed;
+    }
+
+    private int defaultInteger(Integer value) {
+        return value == null ? 0 : value;
     }
 }

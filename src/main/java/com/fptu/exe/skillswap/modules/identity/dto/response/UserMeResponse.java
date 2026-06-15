@@ -37,14 +37,14 @@ public class UserMeResponse {
     private List<RoleCode> roles;
 
     @Schema(
-        description = "true nếu người dùng đã hoàn thành hồ sơ học thuật (đã điền StudentProfile). " +
+        description = "true nếu người dùng đã hoàn thành hồ sơ học thuật theo rule backend. " +
             "FE dùng field này để quyết định chuyển hướng vào dashboard hay trang điền hồ sơ.",
         example = "true"
     )
     private boolean profileCompleted;
 
     @Schema(
-        description = "Alias của profileCompleted – true nếu đã tồn tại StudentProfile cho tài khoản này.",
+        description = "Alias của profileCompleted – true nếu hồ sơ học thuật đã hoàn chỉnh.",
         example = "true"
     )
     private boolean hasStudentProfile;

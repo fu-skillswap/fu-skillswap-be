@@ -62,6 +62,11 @@ application:
     documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
   system-admin:
     emails: ${SYSTEM_ADMIN_EMAILS:}
+  mentor-verification:
+    terms-version: ${MENTOR_TERMS_VERSION:SKILLSWAP_MENTOR_TERMS_V1}
+    submit-requirements:
+      student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
+      mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
 
 logging:
   pattern:

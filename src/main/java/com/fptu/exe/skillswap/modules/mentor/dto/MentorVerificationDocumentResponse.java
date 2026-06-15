@@ -18,7 +18,6 @@ public record MentorVerificationDocumentResponse(
         String contentType,
         Long sizeBytes,
         String fileUrl,
-        boolean isPrimary,
         boolean isActive,
         Integer version,
         String reviewNote,

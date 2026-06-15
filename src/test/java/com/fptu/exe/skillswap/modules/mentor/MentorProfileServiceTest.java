@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
@@ -10,9 +9,9 @@ import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileBasicRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileExpertiseRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -24,7 +23,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -35,8 +33,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -79,23 +77,23 @@ class MentorProfileServiceTest {
 
         assertThat(response.exists()).isFalse();
         assertThat(response.userId()).isEqualTo(userId);
-        assertThat(response.expertiseTags()).isEmpty();
         assertThat(response.helpTopics()).isEmpty();
     }
 
     @Test
-    void upsertBasic_newProfile_shouldCreateAndUpdateAvatar() {
-        MentorProfileBasicRequest request = new MentorProfileBasicRequest(
-                " Backend Developer ",
-                " Software Engineer ",
-                " FPT Software ",
-                " https://example.com/avatar.jpg ",
-                " Bio ",
-                true
-        );
+    void upsertProfile_newProfile_shouldSaveProfileWithoutUpdatingAvatar() {
+        UUID helpTopicId = UUID.randomUUID();
+        Tag helpTopic = activeTag(helpTopicId, "CV_REVIEW", TagType.HELP_TOPIC);
+        MentorProfileUpsertRequest request = validRequest(List.of(helpTopicId));
 
         when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.empty());
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(tagRepository.findByIdInAndStatus(anyCollection(), eq(TagStatus.ACTIVE)))
+                .thenAnswer(invocation -> {
+                    @SuppressWarnings("unchecked")
+                    Collection<UUID> ids = invocation.getArgument(0);
+                    return List.of(helpTopic);
+                });
         when(mentorProfileRepository.save(any(MentorProfile.class))).thenAnswer(invocation -> {
             MentorProfile profile = invocation.getArgument(0);
             if (profile.getUserId() == null && profile.getUser() != null) {
@@ -103,97 +101,85 @@ class MentorProfileServiceTest {
             }
             return profile;
         });
-        when(mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(any(), anyCollection())).thenReturn(List.of());
 
-        MentorProfileResponse response = mentorProfileService.upsertBasic(userId, request);
+        MentorProfileResponse response = mentorProfileService.upsertProfile(userId, request);
 
         ArgumentCaptor<MentorProfile> profileCaptor = ArgumentCaptor.forClass(MentorProfile.class);
         verify(mentorProfileRepository).save(profileCaptor.capture());
         MentorProfile savedProfile = profileCaptor.getValue();
         assertThat(savedProfile.getHeadline()).isEqualTo("Backend Developer");
-        assertThat(savedProfile.getCurrentPosition()).isEqualTo("Software Engineer");
-        assertThat(savedProfile.getCurrentCompany()).isEqualTo("FPT Software");
-        assertThat(savedProfile.getBio()).isEqualTo("Bio");
-        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
-        assertThat(savedProfile.getUser()).isSameAs(user);
+        assertThat(savedProfile.getExpertiseDescription()).isEqualTo("Có kinh nghiệm Spring Boot và PostgreSQL");
+        assertThat(savedProfile.getTeachingMode()).isEqualTo(TeachingMode.ONLINE);
+        assertThat(savedProfile.getSessionDuration()).isEqualTo(60);
+        assertThat(user.getAvatarUrl()).isEqualTo("https://example.com/old-avatar.jpg");
         assertThat(response.exists()).isTrue();
     }
 
     @Test
-    void upsertExpertise_duplicateTags_shouldRejectBeforeWriting() {
+    void upsertProfile_duplicateHelpTopics_shouldRejectBeforeWriting() {
         UUID tagId = UUID.randomUUID();
         MentorProfile profile = MentorProfile.builder()
                 .userId(userId)
                 .user(user)
                 .build();
-        MentorProfileExpertiseRequest request = new MentorProfileExpertiseRequest(
-                List.of(tagId, tagId),
-                List.of(UUID.randomUUID()),
-                BigDecimal.ONE,
-                "Software Engineering",
-                null,
-                null,
-                null,
-                null
-        );
+        MentorProfileUpsertRequest request = validRequest(List.of(tagId, tagId));
 
         when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.of(profile));
 
-        assertThatThrownBy(() -> mentorProfileService.upsertExpertise(userId, request))
+        assertThatThrownBy(() -> mentorProfileService.upsertProfile(userId, request))
                 .isInstanceOf(BaseException.class)
-                .hasMessage("Danh sách tag chuyên môn không được trùng lặp");
+                .hasMessage("Danh sách chủ đề hỗ trợ không được trùng lặp");
     }
 
     @Test
-    void upsertExpertise_validTags_shouldReplaceBothTagGroupsInBatch() {
-        UUID expertiseTagId = UUID.randomUUID();
+    void upsertProfile_validHelpTopics_shouldReplaceTagGroupInBatch() {
         UUID helpTopicId = UUID.randomUUID();
-        Tag expertiseTag = Tag.builder()
-                .id(expertiseTagId)
-                .code("SPRING_BOOT")
-                .nameVi("Spring Boot")
-                .type(TagType.TECH_SKILL)
-                .status(TagStatus.ACTIVE)
-                .build();
-        Tag helpTopic = Tag.builder()
-                .id(helpTopicId)
-                .code("CV_REVIEW")
-                .nameVi("CV Review")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
-                .build();
+        Tag helpTopic = activeTag(helpTopicId, "CV_REVIEW", TagType.HELP_TOPIC);
         MentorProfile profile = MentorProfile.builder()
                 .userId(userId)
                 .user(user)
                 .build();
-        MentorProfileExpertiseRequest request = new MentorProfileExpertiseRequest(
-                List.of(expertiseTagId),
-                List.of(helpTopicId),
-                new BigDecimal("2.5"),
-                "Software Engineering",
-                "Backend APIs",
-                null,
-                null,
-                null
-        );
+        MentorProfileUpsertRequest request = validRequest(List.of(helpTopicId));
 
         when(mentorProfileRepository.findWithUserByUserId(userId)).thenReturn(Optional.of(profile));
         when(tagRepository.findByIdInAndStatus(anyCollection(), eq(TagStatus.ACTIVE)))
                 .thenAnswer(invocation -> {
                     @SuppressWarnings("unchecked")
                     Collection<UUID> ids = invocation.getArgument(0);
-                    if (ids.contains(expertiseTagId)) {
-                        return List.of(expertiseTag);
-                    }
                     return List.of(helpTopic);
                 });
         when(mentorProfileRepository.save(profile)).thenReturn(profile);
-        MentorProfileResponse response = mentorProfileService.upsertExpertise(userId, request);
+
+        MentorProfileResponse response = mentorProfileService.upsertProfile(userId, request);
 
         verify(mentorTagRepository).deleteByIdMentorUserId(userId);
         verify(mentorTagRepository, times(1)).saveAll(anyCollection());
-        assertThat(response.expertiseTags()).hasSize(1);
         assertThat(response.helpTopics()).hasSize(1);
-        assertThat(response.industry()).isEqualTo("Software Engineering");
+        assertThat(response.teachingMode()).isEqualTo(TeachingMode.ONLINE);
+    }
+
+    private MentorProfileUpsertRequest validRequest(List<UUID> helpTopicIds) {
+        return new MentorProfileUpsertRequest(
+                " Backend Developer ",
+                " Có kinh nghiệm Spring Boot và PostgreSQL ",
+                "Cơ sở dữ liệu, Lập trình Java, Kiến trúc API",
+                true,
+                helpTopicIds,
+                TeachingMode.ONLINE,
+                60,
+                null,
+                null,
+                null
+        );
+    }
+
+    private Tag activeTag(UUID id, String code, TagType type) {
+        return Tag.builder()
+                .id(id)
+                .code(code)
+                .nameVi(code)
+                .type(type)
+                .status(TagStatus.ACTIVE)
+                .build();
     }
 }

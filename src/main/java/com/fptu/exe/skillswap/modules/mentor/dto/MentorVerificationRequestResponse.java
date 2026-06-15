@@ -17,6 +17,8 @@ public record MentorVerificationRequestResponse(
         String rejectionReason,
         Integer revisionCount,
         LocalDateTime submittedAt,
+        LocalDateTime termsAcceptedAt,
+        String termsVersion,
         LocalDateTime reviewedAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,

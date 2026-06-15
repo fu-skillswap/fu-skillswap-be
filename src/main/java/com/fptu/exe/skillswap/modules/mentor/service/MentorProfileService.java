@@ -11,9 +11,8 @@ import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileBasicRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileExpertiseRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -24,7 +23,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,16 +35,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MentorProfileService {
 
-    private static final Set<TagType> EXPERTISE_TAG_TYPES = EnumSet.of(
-            TagType.SPECIALIZATION,
-            TagType.TECH_SKILL,
-            TagType.BUSINESS_SKILL,
-            TagType.LANGUAGE,
-            TagType.CAREER,
-            TagType.SOFT_SKILL,
-            TagType.TOOL,
-            TagType.INDUSTRY
-    );
+    private static final Set<Integer> ALLOWED_SESSION_DURATIONS = Set.of(15, 30, 60, 90);
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -61,40 +50,34 @@ public class MentorProfileService {
                 .orElseGet(() -> MentorProfileResponse.empty(userId));
     }
 
-    @Transactional
-    public MentorProfileResponse upsertBasic(UUID userId, MentorProfileBasicRequest request) {
+    @Transactional(readOnly = true)
+    public boolean hasCompletedMentorProfile(UUID userId) {
         requireUserId(userId);
-        requireBasicRequest(request);
-        MentorProfile profile = getOrCreateProfile(userId);
-        profile.setHeadline(clean(request.headline()));
-        profile.setCurrentPosition(clean(request.currentPosition()));
-        profile.setCurrentCompany(clean(request.currentCompany()));
-        profile.setBio(clean(request.bio()));
-        profile.setAvailable(request.isAvailable());
-        profile.getUser().setAvatarUrl(clean(request.avatarUrl()));
-
-        MentorProfile savedProfile = mentorProfileRepository.save(profile);
-        return mapToResponse(savedProfile);
+        return getMyProfile(userId).requiredFieldsCompleted();
     }
 
     @Transactional
-    public MentorProfileResponse upsertExpertise(UUID userId, MentorProfileExpertiseRequest request) {
+    public MentorProfileResponse upsertProfile(UUID userId, MentorProfileUpsertRequest request) {
         requireUserId(userId);
-        requireExpertiseRequest(request);
+        requireProfileRequest(request);
         MentorProfile profile = getOrCreateProfile(userId);
-        List<Tag> expertiseTags = loadAndValidateTags(request.expertiseTagIds(), EXPERTISE_TAG_TYPES, "tag chuyên môn");
         List<Tag> helpTopics = loadAndValidateTags(request.helpTopicIds(), Set.of(TagType.HELP_TOPIC), "chủ đề hỗ trợ");
 
-        profile.setYearsOfExperience(request.yearsOfExperience());
-        profile.setIndustry(clean(request.industry()));
-        profile.setExpertiseSummary(cleanNullable(request.expertiseSummary()));
+        profile.setHeadline(clean(request.headline()));
+        profile.setExpertiseDescription(clean(request.expertiseDescription()));
+        profile.setSupportingSubjects(cleanNullable(request.supportingSubjects()));
+        if (request.isAvailable() != null) {
+            profile.setAvailable(request.isAvailable());
+        }
+        profile.setTeachingMode(request.teachingMode());
+        profile.setSessionDuration(validateSessionDuration(request.sessionDuration()));
         profile.setLinkedinUrl(cleanNullable(request.linkedinUrl()));
         profile.setGithubUrl(cleanNullable(request.githubUrl()));
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
-        replaceMentorTags(savedProfile, expertiseTags, helpTopics);
-        return mapToResponse(savedProfile, expertiseTags, helpTopics);
+        replaceHelpTopics(savedProfile, helpTopics);
+        return mapToResponseFromTags(savedProfile, helpTopics);
     }
 
     private MentorProfile getOrCreateProfile(UUID userId) {
@@ -105,6 +88,7 @@ public class MentorProfileService {
                             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
                     MentorProfile profile = new MentorProfile();
                     profile.setUser(user);
+                    profile.setAvailable(true);
                     return profile;
                 });
     }
@@ -136,74 +120,58 @@ public class MentorProfileService {
         return tags;
     }
 
-    private void replaceMentorTags(MentorProfile profile, List<Tag> expertiseTags, List<Tag> helpTopics) {
+    private void replaceHelpTopics(MentorProfile profile, List<Tag> helpTopics) {
         mentorTagRepository.deleteByIdMentorUserId(profile.getUserId());
 
-        List<MentorTag> mentorTags = new java.util.ArrayList<>(expertiseTags.size() + helpTopics.size());
-        mentorTags.addAll(toMentorTags(profile, expertiseTags, MentorTagType.EXPERTISE));
-        mentorTags.addAll(toMentorTags(profile, helpTopics, MentorTagType.HELP_TOPIC));
-        mentorTagRepository.saveAll(mentorTags);
-    }
-
-    private List<MentorTag> toMentorTags(MentorProfile profile, List<Tag> tags, MentorTagType mentorTagType) {
-        return tags.stream()
+        List<MentorTag> mentorTags = helpTopics.stream()
                 .map(tag -> MentorTag.builder()
-                        .id(new MentorTagId(profile.getUserId(), tag.getId(), mentorTagType))
+                        .id(new MentorTagId(profile.getUserId(), tag.getId(), MentorTagType.HELP_TOPIC))
                         .mentorProfile(profile)
                         .tag(tag)
                         .build())
                 .toList();
+        mentorTagRepository.saveAll(mentorTags);
     }
 
     private MentorProfileResponse mapToResponse(MentorProfile profile) {
-        return mapToResponse(profile, null, null);
-    }
-
-    private MentorProfileResponse mapToResponse(MentorProfile profile, List<Tag> expertiseTagsOverride, List<Tag> helpTopicsOverride) {
-        Map<MentorTagType, List<MentorTagResponse>> tagsByType = expertiseTagsOverride != null && helpTopicsOverride != null
-                ? Map.of(
-                        MentorTagType.EXPERTISE, expertiseTagsOverride.stream().map(this::mapToTagResponseFromTag).sorted(Comparator.comparing(MentorTagResponse::nameVi)).toList(),
-                        MentorTagType.HELP_TOPIC, helpTopicsOverride.stream().map(this::mapToTagResponseFromTag).sorted(Comparator.comparing(MentorTagResponse::nameVi)).toList()
-                )
-                : mentorTagRepository
-                .findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.EXPERTISE, MentorTagType.HELP_TOPIC))
+        List<MentorTagResponse> helpTopics = mentorTagRepository
+                .findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC))
                 .stream()
                 .sorted(Comparator.comparing(mentorTag -> mentorTag.getTag().getNameVi()))
-                .collect(Collectors.groupingBy(
-                        MentorTag::getTagType,
-                        Collectors.mapping(this::mapToTagResponse, Collectors.toList())
-                ));
+                .map(this::mapToTagResponse)
+                .toList();
+        return mapToResponse(profile, helpTopics);
+    }
 
+    private MentorProfileResponse mapToResponseFromTags(MentorProfile profile, List<Tag> helpTopicsOverride) {
+        List<MentorTagResponse> helpTopics = helpTopicsOverride.stream()
+                .map(this::mapToTagResponseFromTag)
+                .sorted(Comparator.comparing(MentorTagResponse::nameVi))
+                .toList();
+        return mapToResponse(profile, helpTopics);
+    }
+
+    private MentorProfileResponse mapToResponse(MentorProfile profile, List<MentorTagResponse> helpTopics) {
         User user = profile.getUser();
-        List<MentorTagResponse> expertiseTags = tagsByType.getOrDefault(MentorTagType.EXPERTISE, List.of());
-        List<MentorTagResponse> helpTopics = tagsByType.getOrDefault(MentorTagType.HELP_TOPIC, List.of());
         return MentorProfileResponse.builder()
                 .exists(true)
-                .requiredFieldsCompleted(isRequiredFieldsCompleted(profile, expertiseTags, helpTopics))
+                .requiredFieldsCompleted(isRequiredFieldsCompleted(profile, helpTopics))
                 .userId(profile.getUserId())
                 .email(user.getEmail())
                 .displayName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
                 .mentorStatus(profile.getStatus())
                 .headline(profile.getHeadline())
-                .currentPosition(profile.getCurrentPosition())
-                .currentCompany(profile.getCurrentCompany())
+                .expertiseDescription(profile.getExpertiseDescription())
+                .supportingSubjects(profile.getSupportingSubjects())
                 .isAvailable(profile.isAvailable())
                 .verifiedAt(profile.getVerifiedAt())
-                .bio(profile.getBio())
-                .expertiseSummary(profile.getExpertiseSummary())
-                .expertiseTags(expertiseTags)
                 .helpTopics(helpTopics)
-                .yearsOfExperience(profile.getYearsOfExperience())
-                .industry(profile.getIndustry())
                 .linkedinUrl(profile.getLinkedinUrl())
                 .githubUrl(profile.getGithubUrl())
                 .portfolioUrl(profile.getPortfolioUrl())
                 .teachingMode(profile.getTeachingMode())
                 .sessionDuration(profile.getSessionDuration())
-                .hourlyRate(profile.getHourlyRate())
-                .mentoringStyle(profile.getMentoringStyle())
-                .targetMentees(profile.getTargetMentees())
                 .ratingAverage(profile.getAverageRating())
                 .reviewCount(profile.getTotalReviews())
                 .completedSessions(profile.getTotalCompletedSessions())
@@ -235,23 +203,19 @@ public class MentorProfileService {
                 .build();
     }
 
-    private boolean isRequiredFieldsCompleted(
-            MentorProfile profile,
-            List<MentorTagResponse> expertiseTags,
-            List<MentorTagResponse> helpTopics
-    ) {
+    private boolean isRequiredFieldsCompleted(MentorProfile profile, List<MentorTagResponse> helpTopics) {
         return hasText(profile.getHeadline())
-                && hasText(profile.getCurrentPosition())
-                && hasText(profile.getCurrentCompany())
-                && hasText(profile.getUser().getAvatarUrl())
-                && hasText(profile.getBio())
-                && !expertiseTags.isEmpty()
+                && hasText(profile.getExpertiseDescription())
                 && !helpTopics.isEmpty()
-                && profile.getYearsOfExperience() != null
-                && hasText(profile.getIndustry())
                 && profile.getTeachingMode() != null
-                && profile.getSessionDuration() != null
-                && profile.getHourlyRate() != null;
+                && profile.getSessionDuration() != null;
+    }
+
+    private Integer validateSessionDuration(Integer sessionDuration) {
+        if (!ALLOWED_SESSION_DURATIONS.contains(sessionDuration)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng mentoring chỉ được chọn một trong các giá trị: 15, 30, 60 hoặc 90 phút");
+        }
+        return sessionDuration;
     }
 
     private String clean(String value) {
@@ -278,15 +242,9 @@ public class MentorProfileService {
         }
     }
 
-    private void requireBasicRequest(MentorProfileBasicRequest request) {
+    private void requireProfileRequest(MentorProfileUpsertRequest request) {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ mentor không được để trống");
-        }
-    }
-
-    private void requireExpertiseRequest(MentorProfileExpertiseRequest request) {
-        if (request == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu chuyên môn mentor không được để trống");
         }
     }
 }

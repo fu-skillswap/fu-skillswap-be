@@ -98,10 +98,10 @@ class BookingServiceTest {
                         .build())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now().minusDays(3))
+                .headline("Java Mentor")
+                .expertiseDescription("Có kinh nghiệm Spring Boot và PostgreSQL")
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
-                .hourlyRate(new BigDecimal("150000"))
-                .yearsOfExperience(new BigDecimal("3.5"))
                 .isAvailable(true)
                 .build();
 

@@ -159,17 +159,15 @@ class BookingFlowIntegrationTest {
         Tag expertiseTag = createTag("JAVA_BACKEND_" + nonce, "Java Backend", TagType.TECH_SKILL);
         Tag helpTopicTag = createTag("CV_REVIEW_" + nonce, "CV Review", TagType.HELP_TOPIC);
 
-        upsertMentorBasicProfile(initialMentorAccessToken);
-        upsertMentorExpertiseProfile(initialMentorAccessToken, expertiseTag.getId(), helpTopicTag.getId());
+        upsertMentorProfile(initialMentorAccessToken, expertiseTag.getId(), helpTopicTag.getId());
 
         MentorProfile mentorProfile = mentorProfileRepository.findById(mentorUser.getId()).orElseThrow();
         mentorProfile.setStatus(MentorStatus.ACTIVE);
         mentorProfile.setTeachingMode(TeachingMode.ONLINE);
         mentorProfile.setSessionDuration(60);
-        mentorProfile.setHourlyRate(new BigDecimal("150000"));
-        mentorProfile.setAverageRating(new BigDecimal("4.80"));
+        mentorProfile.setAverageRating(new BigDecimal("5.00"));
         mentorProfile.setTotalReviews(1);
-        mentorProfile.setTotalCompletedSessions(12);
+        mentorProfile.setTotalCompletedSessions(200);
         mentorProfile.setVerifiedAt(LocalDateTime.now().minusDays(10));
         mentorProfile.setAvailable(true);
         mentorProfile = mentorProfileRepository.save(mentorProfile);
@@ -387,39 +385,24 @@ class BookingFlowIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    private void upsertMentorBasicProfile(String accessToken) throws Exception {
-        mockMvc.perform(put("/api/me/mentor-profile/basic")
+    private void upsertMentorProfile(String accessToken, UUID expertiseTagId, UUID helpTopicTagId) throws Exception {
+        mockMvc.perform(put("/api/me/mentor-profile")
                         .header("Authorization", bearer(accessToken))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "headline": "Java Backend Mentor",
-                                  "currentPosition": "Backend Engineer",
-                                  "currentCompany": "FPT Software",
-                                  "avatarUrl": "https://example.com/mentor-booking-avatar.jpg",
-                                  "bio": "Hỗ trợ review CV, định hướng backend và mock interview",
-                                  "isAvailable": true
-                                }
-                                """))
-                .andExpect(status().isOk());
-    }
-
-    private void upsertMentorExpertiseProfile(String accessToken, UUID expertiseTagId, UUID helpTopicTagId) throws Exception {
-        mockMvc.perform(put("/api/me/mentor-profile/expertise")
-                        .header("Authorization", bearer(accessToken))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "expertiseTagIds": ["%s"],
+                                  "expertiseDescription": "Có kinh nghiệm Spring Boot và PostgreSQL",
+                                  "supportingSubjects": "Cơ sở dữ liệu, Lập trình Java",
+                                  "isAvailable": true,
                                   "helpTopicIds": ["%s"],
-                                  "yearsOfExperience": 3.5,
-                                  "industry": "Information Technology",
-                                  "expertiseSummary": "Tập trung Java, Spring Boot, backend architecture",
+                                  "teachingMode": "ONLINE",
+                                  "sessionDuration": 60,
                                   "linkedinUrl": "https://linkedin.com/in/mentor-demo",
                                   "githubUrl": "https://github.com/mentor-demo",
                                   "portfolioUrl": "https://portfolio.example.com/mentor-demo"
                                 }
-                                """.formatted(expertiseTagId, helpTopicTagId)))
+                                """.formatted(helpTopicTagId)))
                 .andExpect(status().isOk());
     }
 
@@ -565,12 +548,13 @@ class BookingFlowIntegrationTest {
                 .assignedBy(mentorUser)
                 .build());
 
-        upsertMentorBasicProfile(mentorToken);
+        Tag expertiseTag = createTag("JAVA_CONCURRENCY_" + nonce, "Java Backend", TagType.TECH_SKILL);
+        Tag helpTopicTag = createTag("BOOKING_CONCURRENCY_" + nonce, "Booking", TagType.HELP_TOPIC);
+        upsertMentorProfile(mentorToken, expertiseTag.getId(), helpTopicTag.getId());
         MentorProfile mentorProfile = mentorProfileRepository.findById(mentorUser.getId()).orElseThrow();
         mentorProfile.setStatus(MentorStatus.ACTIVE);
         mentorProfile.setTeachingMode(TeachingMode.ONLINE);
         mentorProfile.setSessionDuration(60);
-        mentorProfile.setHourlyRate(new BigDecimal("150000"));
         mentorProfile.setVerifiedAt(LocalDateTime.now().minusDays(10));
         mentorProfile.setAvailable(true);
         mentorProfile = mentorProfileRepository.save(mentorProfile);

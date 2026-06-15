@@ -1,9 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileBasicRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileExpertiseRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -43,34 +42,22 @@ public class MentorProfileController {
         return ApiResponse.success(mentorProfileService.getMyProfile(principal.getPublicId()));
     }
 
-    @Operation(summary = "Tạo hoặc cập nhật thông tin cơ bản của mentor", description = "Step 1: lưu headline, vị trí, công ty, avatar, bio và trạng thái sẵn sàng mentoring.")
+    @Operation(
+            summary = "Tạo hoặc cập nhật hồ sơ mentor",
+            description = "Lưu toàn bộ hồ sơ mentor trong một lần: headline, expertiseDescription, supportingSubjects, help topics, hình thức mentoring, thời lượng tối đa và trạng thái sẵn sàng. Bio tiếp tục dùng từ StudentProfile để tránh trùng dữ liệu."
+    )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu thông tin cơ bản thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ mentor thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
-    @PutMapping("/basic")
-    public ApiResponse<MentorProfileResponse> upsertBasic(
+    @PutMapping
+    public ApiResponse<MentorProfileResponse> upsertProfile(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody MentorProfileBasicRequest request
+            @Valid @RequestBody MentorProfileUpsertRequest request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorProfileService.upsertBasic(principal.getPublicId(), request));
-    }
-
-    @Operation(summary = "Tạo hoặc cập nhật chuyên môn của mentor", description = "Step 2: lưu tag chuyên môn, help topic, số năm kinh nghiệm, ngành nghề và các link nghề nghiệp.")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu chuyên môn thành công"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Tag không tồn tại, sai loại hoặc dữ liệu không hợp lệ"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
-    })
-    @PutMapping("/expertise")
-    public ApiResponse<MentorProfileResponse> upsertExpertise(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody MentorProfileExpertiseRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorProfileService.upsertExpertise(principal.getPublicId(), request));
+        return ApiResponse.success(mentorProfileService.upsertProfile(principal.getPublicId(), request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

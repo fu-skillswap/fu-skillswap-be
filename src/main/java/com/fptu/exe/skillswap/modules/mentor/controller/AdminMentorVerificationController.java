@@ -31,7 +31,7 @@ public class AdminMentorVerificationController {
 
     private final AdminMentorVerificationService adminMentorVerificationService;
 
-    @Operation(summary = "Xem danh sách hồ sơ mentor với filter/search tối ưu cho admin queue")
+    @Operation(summary = "Xem danh sách hồ sơ xác thực mentor với filter/search tối ưu cho admin queue")
     @GetMapping
     public ApiResponse<PageResponse<AdminMentorVerificationQueueItemResponse>> getQueue(
             @ParameterObject @ModelAttribute AdminMentorVerificationQueueFilterRequest filterRequest
@@ -39,7 +39,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(adminMentorVerificationService.getQueue(filterRequest));
     }
 
-    @Operation(summary = "Xem chi tiết một hồ sơ xác thực mentor")
+    @Operation(summary = "Xem chi tiết một hồ sơ xác thực mentor và tự động claim soft lock nếu đang ở trạng thái pending")
     @GetMapping("/{requestId}")
     public ApiResponse<AdminMentorVerificationRequestResponse> getRequestDetail(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -48,7 +48,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(adminMentorVerificationService.getRequestDetail(principal.getPublicId(), requestId));
     }
 
-    @Operation(summary = "Xem trạng thái soft lock của hồ sơ xác thực mentor")
+    @Operation(summary = "Xem trạng thái soft lock hiện tại của hồ sơ xác thực mentor")
     @GetMapping("/{requestId}/lock")
     public ApiResponse<AdminMentorVerificationLockResponse> getLockStatus(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -57,7 +57,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(adminMentorVerificationService.getLockStatus(principal.getPublicId(), requestId));
     }
 
-    @Operation(summary = "Gia hạn soft lock hồ sơ xác thực mentor thêm 5 phút")
+    @Operation(summary = "Gia hạn soft lock hồ sơ xác thực mentor thêm 5 phút cho admin đang xử lý")
     @PostMapping("/{requestId}/lock/refresh")
     public ApiResponse<AdminMentorVerificationLockResponse> refreshLock(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -66,7 +66,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(adminMentorVerificationService.refreshLock(principal.getPublicId(), requestId));
     }
 
-    @Operation(summary = "Yêu cầu mentor chỉnh sửa hồ sơ hiện tại")
+    @Operation(summary = "Yêu cầu mentor chỉnh sửa hồ sơ hiện tại trên request cũ")
     @PostMapping("/{requestId}/request-revision")
     public ApiResponse<AdminMentorVerificationRequestResponse> requestRevision(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -80,7 +80,7 @@ public class AdminMentorVerificationController {
         ));
     }
 
-    @Operation(summary = "Phê duyệt hồ sơ xác thực mentor")
+    @Operation(summary = "Phê duyệt hồ sơ xác thực mentor và mở khóa request")
     @PostMapping("/{requestId}/approve")
     public ApiResponse<AdminMentorVerificationRequestResponse> approve(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -94,7 +94,7 @@ public class AdminMentorVerificationController {
         ));
     }
 
-    @Operation(summary = "Từ chối hồ sơ xác thực mentor")
+    @Operation(summary = "Từ chối hồ sơ xác thực mentor và khóa request")
     @PostMapping("/{requestId}/reject")
     public ApiResponse<AdminMentorVerificationRequestResponse> reject(
             @AuthenticationPrincipal UserPrincipal principal,

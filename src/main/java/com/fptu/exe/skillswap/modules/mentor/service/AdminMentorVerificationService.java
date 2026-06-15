@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -49,7 +49,8 @@ public class AdminMentorVerificationService {
     private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final UserRepository userRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final AcademicService academicService;
+    private final MentorProfileService mentorProfileService;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorVerificationQueueItemResponse> getQueue(AdminMentorVerificationQueueFilterRequest filterRequest) {
@@ -275,6 +276,8 @@ public class AdminMentorVerificationService {
                 .lockExpiresAt(request.getLockExpiresAt())
                 .canReview(canReview(request, adminUserId))
                 .submittedAt(request.getSubmittedAt())
+                .termsAcceptedAt(request.getTermsAcceptedAt())
+                .termsVersion(request.getTermsVersion())
                 .reviewedAt(request.getReviewedAt())
                 .approvedAt(request.getApprovedAt())
                 .withdrawnAt(request.getWithdrawnAt())
@@ -390,7 +393,8 @@ public class AdminMentorVerificationService {
     }
 
     private MentorVerificationChecklistResponse buildChecklist(UUID userId, List<MentorVerificationDocumentResponse> documents) {
-        boolean hasAcademicProfile = studentProfileRepository.existsById(userId);
+        boolean hasAcademicProfile = academicService.hasCompletedStudentProfile(userId);
+        boolean hasMentorProfile = mentorProfileService.hasCompletedMentorProfile(userId);
         boolean hasAffiliationProof = documents.stream()
                 .anyMatch(document -> document.isActive()
                         && document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF);
@@ -399,9 +403,10 @@ public class AdminMentorVerificationService {
                         && document.documentType() == VerificationDocumentType.EXPERTISE_PROOF);
         return MentorVerificationChecklistResponse.builder()
                 .academicProfileCompleted(hasAcademicProfile)
+                .mentorProfileCompleted(hasMentorProfile)
                 .hasAffiliationProof(hasAffiliationProof)
                 .hasExpertiseProof(hasExpertiseProof)
-                .canSubmit(hasAcademicProfile && hasAffiliationProof && hasExpertiseProof)
+                .canSubmit(hasAcademicProfile && hasMentorProfile && hasAffiliationProof && hasExpertiseProof)
                 .build();
     }
 
@@ -416,7 +421,6 @@ public class AdminMentorVerificationService {
                 .contentType(storedFile.getMimeType())
                 .sizeBytes(storedFile.getSizeBytes())
                 .fileUrl(storedFile.getPublicUrl())
-                .isPrimary(document.isPrimary())
                 .isActive(document.isActive())
                 .version(document.getVersion())
                 .reviewNote(document.getReviewNote())

@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -13,11 +14,9 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
-import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,9 +34,9 @@ public class IdentityService {
     private final UserSessionRepository userSessionRepository;
     private final GoogleAuthService googleAuthService;
     private final IdentityLoginTransactionService identityLoginTransactionService;
+    private final AcademicService academicService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
-    private final ApplicationEventPublisher eventPublisher;
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
         if (request == null || request.getIdToken() == null || request.getIdToken().trim().isEmpty()) {
@@ -100,11 +99,7 @@ public class IdentityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
 
         List<RoleCode> roles = userRoleRepository.findRoleCodesByUserId(user.getId());
-
-        // Publish event để hỏi module academic trạng thái hồ sơ (synchronous request-reply)
-        ProfileStatusQuery profileQuery = new ProfileStatusQuery(user.getId());
-        eventPublisher.publishEvent(profileQuery);
-        boolean hasProfile = profileQuery.isHasStudentProfile();
+        boolean hasProfile = academicService.hasCompletedStudentProfile(user.getId());
 
         return UserMeResponse.builder()
                 .publicId(user.getPublicId())
