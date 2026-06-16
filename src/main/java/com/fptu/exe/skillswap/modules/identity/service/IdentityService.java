@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
@@ -11,7 +13,6 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -30,7 +31,6 @@ import java.util.UUID;
 public class IdentityService {
 
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
     private final UserSessionRepository userSessionRepository;
     private final GoogleAuthService googleAuthService;
     private final IdentityLoginTransactionService identityLoginTransactionService;
@@ -61,7 +61,7 @@ public class IdentityService {
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã bị thu hồi");
         }
 
-        if (session.getExpiresAt().isBefore(LocalDateTime.now())) {
+        if (session.getExpiresAt().isBefore(DateTimeUtil.now())) {
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
         }
 
@@ -98,7 +98,7 @@ public class IdentityService {
         User user = userRepository.findById(publicId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
 
-        List<RoleCode> roles = userRoleRepository.findRoleCodesByUserId(user.getId());
+        List<RoleCode> roles = new java.util.ArrayList<>(user.getRoles());
         boolean hasProfile = academicService.hasCompletedStudentProfile(user.getId());
 
         return UserMeResponse.builder()
@@ -126,7 +126,7 @@ public class IdentityService {
     }
 
     private TokenResponse generateTokensAndCreateSession(User user) {
-        List<String> roleNames = userRoleRepository.findRoleCodesByUserId(user.getId())
+        List<String> roleNames = user.getRoles()
                 .stream()
                 .map(RoleCode::name)
                 .toList();
@@ -141,7 +141,7 @@ public class IdentityService {
 
         // Save session
         long refreshExpirationMs = jwtProperties.getJwt().getRefreshToken().getExpiration();
-        LocalDateTime expiresAt = LocalDateTime.now().plusNanos(refreshExpirationMs * 1_000_000);
+        LocalDateTime expiresAt = DateTimeUtil.now().plusNanos(refreshExpirationMs * 1_000_000);
 
         UserSession session = UserSession.builder()
                 .user(user)
@@ -158,3 +158,7 @@ public class IdentityService {
     }
 
 }
+
+
+
+

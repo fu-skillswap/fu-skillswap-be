@@ -11,9 +11,9 @@ import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorTagResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -41,6 +41,8 @@ public class MentorProfileService {
     private final MentorTagRepository mentorTagRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    @org.springframework.context.annotation.Lazy
+    private final com.fptu.exe.skillswap.modules.booking.service.BookingService bookingService;
 
     @Transactional(readOnly = true)
     public MentorProfileResponse getMyProfile(UUID userId) {
@@ -67,7 +69,13 @@ public class MentorProfileService {
         profile.setExpertiseDescription(clean(request.expertiseDescription()));
         profile.setSupportingSubjects(cleanNullable(request.supportingSubjects()));
         if (request.isAvailable() != null) {
-            profile.setAvailable(request.isAvailable());
+            boolean wasAvailable = profile.isAvailable();
+            boolean nowAvailable = request.isAvailable();
+            profile.setAvailable(nowAvailable);
+            
+            if (wasAvailable && !nowAvailable) {
+                bookingService.rejectAllPendingBookingsForMentor(userId, "Mentor đã chuyển sang trạng thái không nhận lịch");
+            }
         }
         profile.setTeachingMode(request.teachingMode());
         profile.setSessionDuration(validateSessionDuration(request.sessionDuration()));

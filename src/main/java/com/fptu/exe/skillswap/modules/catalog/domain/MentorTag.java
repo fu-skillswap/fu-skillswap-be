@@ -31,11 +31,7 @@ public class MentorTag {
     @JoinColumn(name = "tag_id", foreignKey = @ForeignKey(name = "fk_mentor_tags_tag"))
     private Tag tag;
 
-    @Column(name = "proficiency_level")
-    private Integer proficiencyLevel;
 
-    @Column(name = "years_of_experience", precision = 4, scale = 1)
-    private BigDecimal yearsOfExperience;
 
     @Column(name = "is_primary", nullable = false)
     @Builder.Default

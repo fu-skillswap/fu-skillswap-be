@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public enum ErrorCode {
     // System & General
     UNCATEGORIZED_EXCEPTION(500, "SYS_9999", "error.sys.unknown", "Lỗi hệ thống không xác định"),
@@ -38,5 +37,12 @@ public enum ErrorCode {
     private final String code;
     private final String key;
     private final String message;
+
+    ErrorCode(int status, String code, String key, String message) {
+        this.status = status;
+        this.code = code;
+        this.key = key;
+        this.message = message;
+    }
 }
 

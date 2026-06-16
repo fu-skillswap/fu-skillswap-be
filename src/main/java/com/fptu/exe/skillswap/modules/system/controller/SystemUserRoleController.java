@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.system.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.system.dto.AdminRoleChangeRequest;
-import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
-import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.request.AdminRoleChangeRequest;
+import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;

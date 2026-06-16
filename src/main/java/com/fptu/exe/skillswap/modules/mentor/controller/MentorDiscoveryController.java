@@ -1,12 +1,13 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -72,10 +73,11 @@ public class MentorDiscoveryController {
     @GetMapping("/{mentorUserId}/availability")
     public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailability(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID mentorUserId
+            @PathVariable UUID mentorUserId,
+            @ParameterObject @ModelAttribute AvailabilityQueryRequest request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId));
+        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
     }
 
     @Operation(summary = "Xem các review công khai của mentor để hỗ trợ quyết định booking")

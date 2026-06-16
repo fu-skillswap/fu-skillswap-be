@@ -1,42 +1,35 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
-import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.academic.domain.Campus;
-import com.fptu.exe.skillswap.modules.academic.domain.CampusCode;
-import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -45,14 +38,21 @@ import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,16 +62,16 @@ class MentorDiscoveryServiceTest {
     private MentorProfileRepository mentorProfileRepository;
 
     @Mock
-    private MentorTagRepository mentorTagRepository;
+    private StudentProfileRepository studentProfileRepository;
 
     @Mock
-    private StudentProfileRepository studentProfileRepository;
+    private MentorTagRepository mentorTagRepository;
 
     @Mock
     private MentorServiceRepository mentorServiceRepository;
 
     @Mock
-    private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private MentorAvailabilityService mentorAvailabilityService;
 
     @Mock
     private SessionFeedbackRepository sessionFeedbackRepository;
@@ -79,392 +79,235 @@ class MentorDiscoveryServiceTest {
     @InjectMocks
     private MentorDiscoveryService mentorDiscoveryService;
 
-    private UUID mentorId;
-    private UUID menteeId;
-    private UUID campusId;
-    private UUID programId;
-    private UUID specializationId;
-    private MentorDiscoveryQueryRow mentorRow;
+    private UUID userId;
+    private UUID mentorUserId;
+    private StudentProfile studentProfile;
+    private MentorProfile mentorProfile;
+    private User mentorUser;
 
     @BeforeEach
     void setUp() {
-        mentorId = UUID.randomUUID();
-        menteeId = UUID.randomUUID();
-        campusId = UUID.randomUUID();
-        programId = UUID.randomUUID();
-        specializationId = UUID.randomUUID();
+        userId = UUID.randomUUID();
+        mentorUserId = UUID.randomUUID();
+        studentProfile = new StudentProfile();
+        studentProfile.setUserId(userId);
 
-        mentorRow = new MentorDiscoveryQueryRow(
-                mentorId,
-                "Mentor One",
-                "https://example.com/avatar.jpg",
-                "Java Mentor",
-                "Có kinh nghiệm Spring Boot và PostgreSQL",
-                "Cơ sở dữ liệu, Lập trình Java",
-                true,
-                new BigDecimal("4.70"),
-                10,
-                18,
-                TeachingMode.ONLINE,
-                java.time.LocalDateTime.now().minusDays(10),
-                campusId,
-                "HCM",
-                programId,
-                "CNTT",
-                specializationId,
-                "KTPM",
-                7,
-                false,
-                0.0
-        );
-    }
+        mentorUser = new User();
+        mentorUser.setId(mentorUserId);
+        mentorUser.setFullName("Mentor Full Name");
+        mentorUser.setAvatarUrl("avatar.png");
 
-    @Test
-    void searchMentors_shouldReturnPagedCardsWithExpertiseTags() {
-        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setKeyword("java");
-        request.setTagIds(List.of(UUID.randomUUID()));
-
-        when(mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
-                eq(MentorStatus.ACTIVE),
-                eq(MentorTagType.HELP_TOPIC),
-                eq("java"),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(true),
-                eq(request.getTagIds()),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                any(LocalDateTime.class),
-                any(Pageable.class)
-        )).thenReturn(new PageImpl<>(List.of(mentorRow)));
-
-        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
-                .thenReturn(List.of(helpTopicTag(mentorId, "HELP_QA", "Giải đáp thắc mắc")));
-
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(menteeId, request);
-
-        assertThat(response.getTotalElements()).isEqualTo(1);
-        assertThat(response.getContent()).hasSize(1);
-        org.mockito.Mockito.verify(studentProfileRepository).findWithDetailsByUserId(menteeId);
-
-        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        org.mockito.Mockito.verify(mentorProfileRepository).searchDiscoverableMentorsSortedByRelevance(
-                eq(MentorStatus.ACTIVE),
-                eq(MentorTagType.HELP_TOPIC),
-                eq("java"),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(true),
-                eq(request.getTagIds()),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                any(LocalDateTime.class),
-                pageableCaptor.capture()
-        );
-        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(12);
-    }
-
-    @Test
-    void getRecommendations_sameAcademicContext_shouldRankMentorHigher() {
-        StudentProfile menteeProfile = StudentProfile.builder()
-                .userId(menteeId)
-                .campus(Campus.builder().id(campusId).code(CampusCode.HCM).name("HCM").build())
-                .program(AcademicProgram.builder().id(programId).code("CNTT").nameVi("CNTT").build())
-                .specialization(Specialization.builder().id(specializationId).code("KTPM").nameVi("KTPM").build())
-                .semester(5)
+        mentorProfile = MentorProfile.builder()
+                .userId(mentorUserId)
+                .user(mentorUser)
+                .status(MentorStatus.ACTIVE)
+                .headline("headline")
+                .expertiseDescription("expertise")
+                .supportingSubjects("subjects")
+                .isAvailable(true)
+                .teachingMode(TeachingMode.ONLINE)
+                .sessionDuration(60)
+                .verifiedAt(LocalDateTime.now().minusDays(4))
+                .averageRating(BigDecimal.valueOf(4.5))
+                .totalReviews(4)
+                .totalCompletedSessions(5)
                 .build();
+    }
 
-        MentorDiscoveryQueryRow mentorRowWithScore = new MentorDiscoveryQueryRow(
-                mentorId,
-                "Mentor One",
-                "https://example.com/avatar.jpg",
-                "Java Mentor",
-                "Có kinh nghiệm Spring Boot và PostgreSQL",
-                "Cơ sở dữ liệu, Lập trình Java",
-                true,
-                new BigDecimal("4.70"),
-                10,
-                18,
-                TeachingMode.ONLINE,
-                java.time.LocalDateTime.now().minusDays(10),
-                campusId,
-                "HCM",
-                programId,
-                "CNTT",
-                specializationId,
-                "KTPM",
-                7,
-                false,
-                85.0
+    @Test
+    void searchMentors_unauthenticated_shouldThrow() {
+        BaseException exception = assertThrows(BaseException.class, () ->
+                mentorDiscoveryService.searchMentors(null, new MentorDiscoverySearchRequest())
         );
 
-        when(studentProfileRepository.findWithDetailsByUserId(menteeId)).thenReturn(Optional.of(menteeProfile));
+        assertEquals(ErrorCode.UNAUTHENTICATED, exception.getErrorCode());
+    }
+
+    @Test
+    void searchMentors_relevanceSort_shouldUseSortedQuery() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setKeyword("Java");
+        request.setSortBy("relevance");
+
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
+
+        PageImpl<UUID> mentorIdPage = new PageImpl<>(Collections.singletonList(mentorUserId));
+        when(mentorProfileRepository.searchDiscoverableMentorIdsSortedByRelevance(
+                eq(MentorStatus.ACTIVE),
+                eq(MentorTagType.HELP_TOPIC),
+                eq("Java"),
+                any(), any(), any(), any(), anyBoolean(), anyList(),
+                any(), any(), any(), any(), any(), any(Pageable.class)
+        )).thenReturn(mentorIdPage);
+
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
+                .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.ZERO, 0, 3.0)));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+
+        assertEquals(1, response.getContent().size());
+        assertEquals("Mentor Full Name", response.getContent().getFirst().displayName());
+        assertEquals(new BigDecimal("5.00"), response.getContent().getFirst().ratingAverage());
+    }
+
+    @Test
+    void searchMentors_nonRelevanceSort_shouldUseDefaultSearchQuery() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setSortBy("updatedAt");
+
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
+        when(mentorProfileRepository.searchDiscoverableMentorIds(
+                eq(MentorStatus.ACTIVE),
+                eq(MentorTagType.HELP_TOPIC),
+                eq(null),
+                any(), any(), any(), any(), anyBoolean(), anyList(),
+                any(), any(), any(), any(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(mentorUserId)));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
+                .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.2), 2, 25.0)));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
+                .thenReturn(Collections.emptyList());
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+
+        assertEquals(1, response.getContent().size());
+        assertEquals(0, response.getContent().getFirst().ratingAverage().compareTo(new BigDecimal("4.20")));
+    }
+
+    @Test
+    void getRecommendations_emptyCandidates_shouldReturnEmptyList() {
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
         when(mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                eq(menteeId),
-                eq(campusId),
-                eq(programId),
-                eq(specializationId),
-                eq(5),
-                any(LocalDateTime.class),
-                any(Pageable.class)
-        )).thenReturn(List.of(mentorRowWithScore));
-        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
-                .thenReturn(List.of(helpTopicTag(mentorId, "HELP_QA", "Giải đáp thắc mắc")));
+                eq(userId),
+                any(), any(), any(), any(), any(), any(Pageable.class)
+        )).thenReturn(List.of());
 
-        List<MentorRecommendationResponse> response = mentorDiscoveryService.getRecommendations(menteeId, 8);
+        List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).matchScore()).isGreaterThan(new BigDecimal("80"));
-        assertThat(response.get(0).matchReasons()).contains("Cùng chuyên ngành với mentee");
+        assertTrue(recommendations.isEmpty());
     }
 
     @Test
-    void searchMentors_shouldRerankQueriedListBySmartMatching() {
-        UUID otherMentorId = UUID.randomUUID();
-        StudentProfile menteeProfile = StudentProfile.builder()
-                .userId(menteeId)
-                .campus(Campus.builder().id(campusId).code(CampusCode.HCM).name("HCM").build())
-                .program(AcademicProgram.builder().id(programId).code("CNTT").nameVi("CNTT").build())
-                .specialization(Specialization.builder().id(specializationId).code("KTPM").nameVi("KTPM").build())
-                .semester(5)
-                .build();
-
-        MentorDiscoveryQueryRow lowerMatchMentor = new MentorDiscoveryQueryRow(
-                otherMentorId,
-                "Mentor Two",
-                "https://example.com/avatar-2.jpg",
-                "General Mentor",
-                "Có kinh nghiệm định hướng học tập",
-                "Kỹ năng mềm",
-                true,
-                new BigDecimal("5.00"),
-                20,
-                40,
-                TeachingMode.ONLINE,
-                LocalDateTime.now().minusDays(1),
-                UUID.randomUUID(),
-                "DN",
-                UUID.randomUUID(),
-                "Biz",
-                UUID.randomUUID(),
-                "Marketing",
-                3,
-                false,
-                40.0
-        );
-
-        MentorDiscoveryQueryRow mentorRowWithScore = new MentorDiscoveryQueryRow(
-                mentorId,
-                "Mentor One",
-                "https://example.com/avatar.jpg",
-                "Java Mentor",
-                "Có kinh nghiệm Spring Boot và PostgreSQL",
-                "Cơ sở dữ liệu, Lập trình Java",
-                true,
-                new BigDecimal("4.70"),
-                10,
-                18,
-                TeachingMode.ONLINE,
-                java.time.LocalDateTime.now().minusDays(10),
-                campusId,
-                "HCM",
-                programId,
-                "CNTT",
-                specializationId,
-                "KTPM",
-                7,
-                false,
-                85.0
-        );
-
-        when(studentProfileRepository.findWithDetailsByUserId(menteeId)).thenReturn(Optional.of(menteeProfile));
-        when(mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
+    void getRecommendations_shouldMapScoreAndReasons() {
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
+        when(mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(null),
-                eq(false),
-                any(List.class),
-                eq(campusId),
-                eq(programId),
-                eq(specializationId),
-                eq(5),
-                any(LocalDateTime.class),
-                any(Pageable.class)
-        )).thenReturn(new PageImpl<>(List.of(mentorRowWithScore, lowerMatchMentor)));
-        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(Collection.class), any(Collection.class)))
-                .thenReturn(List.of(
-                        helpTopicTag(mentorId, "HELP_QA", "Giải đáp thắc mắc"),
-                        helpTopicTag(otherMentorId, "HELP_CV_REVIEW", "Đánh giá CV")
-                ));
+                eq(userId),
+                any(), any(), any(), any(), any(), any(Pageable.class)
+        )).thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.8), 5, 88.25)));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
+                .thenReturn(Collections.emptyList());
 
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(menteeId, new MentorDiscoverySearchRequest());
+        List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
-        assertThat(response.getContent()).hasSize(2);
-        assertThat(response.getContent().get(0).displayName()).isEqualTo("Mentor One");
-        assertThat(response.getContent().get(1).displayName()).isEqualTo("Mentor Two");
+        assertEquals(1, recommendations.size());
+        assertEquals(new BigDecimal("88.25"), recommendations.getFirst().matchScore());
+        assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 
     @Test
-    void getMentorDetail_discoverableMentor_shouldReturnFullDetail() {
-        MentorProfile mentorProfile = MentorProfile.builder()
-                .userId(mentorId)
-                .user(User.builder()
-                        .id(mentorId)
-                        .fullName("Mentor One")
-                        .avatarUrl("https://example.com/avatar.jpg")
-                        .build())
-                .status(MentorStatus.ACTIVE)
-                .headline("Java Mentor")
-                .expertiseDescription("Có kinh nghiệm Spring Boot và PostgreSQL")
-                .supportingSubjects("Cơ sở dữ liệu, Lập trình Java")
-                .teachingMode(TeachingMode.ONLINE)
-                .sessionDuration(60)
-                .isAvailable(true)
-                .verifiedAt(LocalDateTime.now().minusDays(5))
-                .averageRating(new BigDecimal("4.70"))
-                .totalReviews(10)
-                .totalCompletedSessions(18)
-                .portfolioUrl("https://portfolio.example.com")
-                .linkedinUrl("https://linkedin.com/in/mentor")
-                .githubUrl("https://github.com/mentor")
-                .build();
-        StudentProfile mentorStudentProfile = StudentProfile.builder()
-                .userId(mentorId)
-                .campus(Campus.builder().id(campusId).code(CampusCode.HCM).name("HCM").build())
-                .program(AcademicProgram.builder().id(programId).code("CNTT").nameVi("CNTT").build())
-                .specialization(Specialization.builder().id(specializationId).code("KTPM").nameVi("KTPM").build())
-                .semester(7)
-                .isAlumni(false)
-                .bio("Mentor bio")
-                .build();
-        MentorService mentorService = MentorService.builder()
-                .id(UUID.randomUUID())
-                .title("CV Review")
-                .description("Review CV and mock interview")
-                .durationMinutes(60)
-                .isFree(false)
-                .priceAmount(new BigDecimal("120000"))
-                .currency("VND")
-                .isActive(true)
-                .build();
+    void getMentorDetail_nonDiscoverable_shouldThrowNotFound() {
+        mentorProfile.setHeadline(null);
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
 
-        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
-        when(studentProfileRepository.findWithDetailsByUserId(mentorId)).thenReturn(Optional.of(mentorStudentProfile));
-        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(eq(List.of(mentorId)), any(Collection.class)))
-                .thenReturn(List.of(
-                        helpTopicTag(mentorId, "HELP_QA", "Giải đáp thắc mắc"),
-                        helpTopicTag(mentorId, "CV_REVIEW", "Review CV")
-                ));
-        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorId))
-                .thenReturn(List.of(mentorService));
+        BaseException exception = assertThrows(BaseException.class, () -> mentorDiscoveryService.getMentorDetail(mentorUserId));
 
-        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(mentorId);
-
-        assertThat(response.displayName()).isEqualTo("Mentor One");
-        assertThat(response.helpTopicTags()).hasSize(2);
-        assertThat(response.helpTopicTags())
-                .extracting(tag -> tag.code())
-                .containsExactlyInAnyOrder("HELP_QA", "CV_REVIEW");
-        assertThat(response.services()).hasSize(1);
-        assertThat(response.services().get(0).title()).isEqualTo("CV Review");
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
     }
 
     @Test
-    void getMentorAvailability_discoverableMentor_shouldReturnFutureOpenSlots() {
-        MentorProfile mentorProfile = MentorProfile.builder()
-                .userId(mentorId)
-                .user(User.builder().id(mentorId).fullName("Mentor One").build())
-                .status(MentorStatus.ACTIVE)
-                .headline("Java Mentor")
-                .expertiseDescription("Có kinh nghiệm Spring Boot và PostgreSQL")
-                .supportingSubjects("Cơ sở dữ liệu, Lập trình Java")
-                .teachingMode(TeachingMode.HYBRID)
-                .sessionDuration(60)
-                .isAvailable(true)
-                .verifiedAt(LocalDateTime.now().minusDays(5))
-                .build();
-        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
-                .id(UUID.randomUUID())
-                .mentorProfile(mentorProfile)
-                .startTime(LocalDateTime.now().plusDays(1).withHour(9).withMinute(0))
-                .endTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0))
-                .timezone("Asia/Ho_Chi_Minh")
-                .isBooked(false)
-                .isActive(true)
-                .recurrenceRule("FREQ=WEEKLY")
-                .build();
-
-        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilitySlotRepository
-                .findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(eq(mentorId), any(LocalDateTime.class)))
-                .thenReturn(List.of(slot));
-
-        List<MentorAvailabilitySlotResponse> response = mentorDiscoveryService.getMentorAvailability(mentorId);
-
-        assertThat(response).hasSize(1);
-        assertThat(response.get(0).teachingMode()).isEqualTo(TeachingMode.HYBRID);
-        assertThat(response.get(0).recurring()).isTrue();
-        assertThat(response.get(0).durationMinutes()).isEqualTo(60);
-    }
-
-    @Test
-    void getMentorReviews_discoverableMentor_shouldReturnPagedPublicReviews() {
-        MentorProfile mentorProfile = MentorProfile.builder()
-                .userId(mentorId)
-                .user(User.builder().id(mentorId).fullName("Mentor One").build())
-                .status(MentorStatus.ACTIVE)
-                .headline("Java Mentor")
-                .expertiseDescription("Có kinh nghiệm Spring Boot và PostgreSQL")
-                .supportingSubjects("Cơ sở dữ liệu, Lập trình Java")
-                .teachingMode(TeachingMode.ONLINE)
-                .sessionDuration(60)
-                .isAvailable(true)
-                .verifiedAt(LocalDateTime.now().minusDays(5))
-                .build();
-
-        when(mentorProfileRepository.findWithUserByUserId(mentorId)).thenReturn(Optional.of(mentorProfile));
-        when(sessionFeedbackRepository.findPublicMentorReviews(eq(mentorId), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(new MentorReviewQueryRow(
-                        UUID.randomUUID(),
-                        UUID.randomUUID(),
-                        "Mentee A",
-                        "https://example.com/mentee.jpg",
-                        5,
-                        "Mentor rất có tâm",
-                        LocalDateTime.now().minusDays(1)
-                ))));
-
-        PageResponse<MentorReviewResponse> response = mentorDiscoveryService.getMentorReviews(mentorId, new BasePageRequest());
-
-        assertThat(response.getContent()).hasSize(1);
-        assertThat(response.getContent().get(0).reviewerDisplayName()).isEqualTo("Mentee A");
-        assertThat(response.getContent().get(0).rating()).isEqualTo(5);
-    }
-
-    private MentorTag helpTopicTag(UUID mentorUserId, String code, String nameVi) {
-        return MentorTag.builder()
-                .id(new MentorTagId(mentorUserId, UUID.randomUUID(), MentorTagType.HELP_TOPIC))
-                .tag(Tag.builder()
+    void getMentorDetail_shouldMapServicesAndDisplayRating() {
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+        when(studentProfileRepository.findWithDetailsByUserId(mentorUserId)).thenReturn(Optional.empty());
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any())).thenReturn(Collections.emptyList());
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId))
+                .thenReturn(List.of(MentorService.builder()
                         .id(UUID.randomUUID())
-                        .code(code)
-                        .nameVi(nameVi)
-                        .type(TagType.HELP_TOPIC)
-                        .build())
-                .build();
+                        .mentorProfile(mentorProfile)
+                        .title("CV Review")
+                        .description("Review CV")
+                        .durationMinutes(60)
+                        .isFree(true)
+                        .priceAmount(BigDecimal.ZERO)
+                        .build()));
+
+        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(mentorUserId);
+
+        assertEquals("Mentor Full Name", response.displayName());
+        assertEquals(1, response.services().size());
+        assertEquals(0, response.ratingAverage().compareTo(new BigDecimal("4.50")));
+    }
+
+    @Test
+    void getMentorAvailability_suspendedMentor_shouldReturnEmptyList() {
+        mentorProfile.setBookingSuspendedUntil(LocalDateTime.now().plusDays(1));
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+
+        List<MentorAvailabilitySlotResponse> response = mentorDiscoveryService.getMentorAvailability(
+                mentorUserId,
+                new AvailabilityQueryRequest()
+        );
+
+        assertTrue(response.isEmpty());
+    }
+
+    @Test
+    void getMentorAvailability_availableMentor_shouldDelegateService() {
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilityService.getAvailableSlots(eq(mentorProfile), any(), any()))
+                .thenReturn(List.of(MentorAvailabilitySlotResponse.builder().slotId(UUID.randomUUID()).durationMinutes(60).build()));
+
+        List<MentorAvailabilitySlotResponse> response = mentorDiscoveryService.getMentorAvailability(
+                mentorUserId,
+                new AvailabilityQueryRequest()
+        );
+
+        assertEquals(1, response.size());
+        verify(mentorAvailabilityService).getAvailableSlots(eq(mentorProfile), any(), any());
+    }
+
+    @Test
+    void getMentorReviews_shouldReturnPagedPublicReviews() {
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+        when(sessionFeedbackRepository.findPublicMentorReviews(eq(mentorUserId), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(
+                        new MentorReviewQueryRow(UUID.randomUUID(), UUID.randomUUID(), "Reviewer", "avatar", 5, "Great", LocalDateTime.now())
+                )));
+
+        PageResponse<MentorReviewResponse> response = mentorDiscoveryService.getMentorReviews(mentorUserId, new BasePageRequest());
+
+        assertEquals(1, response.getContent().size());
+        assertEquals("Reviewer", response.getContent().getFirst().reviewerDisplayName());
+    }
+
+    private MentorDiscoveryQueryRow discoveryRow(UUID id, BigDecimal rating, Integer reviewCount, Double matchScore) {
+        return new MentorDiscoveryQueryRow(
+                id,
+                "Mentor Full Name",
+                "avatar.png",
+                "headline",
+                "expertise",
+                "subjects",
+                true,
+                rating,
+                reviewCount,
+                5,
+                TeachingMode.ONLINE,
+                LocalDateTime.now().minusDays(10),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                8,
+                false,
+                matchScore
+        );
     }
 }

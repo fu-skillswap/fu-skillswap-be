@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
@@ -73,12 +75,16 @@ public class MentorVerificationDocument {
 
     @PrePersist
     protected void onCreate() {
-        uploadedAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        uploadedAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

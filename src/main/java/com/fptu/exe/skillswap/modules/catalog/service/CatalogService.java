@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.catalog.service;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.dto.HelpTopicResponse;
+import com.fptu.exe.skillswap.modules.catalog.dto.response.HelpTopicResponse;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.system.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.system.dto.BanUserRequest;
-import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
-import com.fptu.exe.skillswap.modules.system.dto.UnbanUserRequest;
+import com.fptu.exe.skillswap.modules.system.dto.request.BanUserRequest;
+import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.request.UnbanUserRequest;
 import com.fptu.exe.skillswap.modules.system.service.AdminUserService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;

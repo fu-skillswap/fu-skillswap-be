@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,8 +11,12 @@ import org.hibernate.annotations.SQLRestriction;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 
 @Entity
+@EntityListeners(UserEntityListener.class)
 @Table(name = "users", indexes = {
     @Index(name = "idx_users_email", columnList = "email", unique = true),
     @Index(name = "idx_users_status", columnList = "status"),
@@ -55,6 +61,16 @@ public class User {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(
+        name = "user_roles",
+        joinColumns = @JoinColumn(name = "user_id", foreignKey = @ForeignKey(name = "fk_user_roles_user"))
+    )
+    @Column(name = "role")
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    private Set<RoleCode> roles = new HashSet<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -66,16 +82,20 @@ public class User {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     public UUID getPublicId() {
         return id;
     }
 }
+
+
+
+
