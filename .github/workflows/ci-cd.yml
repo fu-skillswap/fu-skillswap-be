@@ -24,6 +24,8 @@ jobs:
       run: mvn clean package -DskipTests
 
     - name: Run Unit Tests
+      env:
+        SPRING_PROFILES_ACTIVE: test
       run: mvn test
 
   # Phân hệ Deploy (Sẽ kích hoạt nếu bạn có VPS/Server)
