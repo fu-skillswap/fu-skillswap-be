@@ -27,6 +27,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,7 +90,7 @@ class BookingServiceTest {
                 .userId(mentorId)
                 .user(mentorUser)
                 .status(MentorStatus.ACTIVE)
-                .verifiedAt(LocalDateTime.now().minusDays(3))
+                .verifiedAt(testNow().minusDays(3))
                 .isAvailable(true)
                 .sessionDuration(60)
                 .averageRating(BigDecimal.valueOf(4.8))
@@ -102,8 +103,8 @@ class BookingServiceTest {
         slot = new MentorAvailabilitySlot();
         slot.setId(UUID.randomUUID());
         slot.setMentorProfile(mentorProfile);
-        slot.setStartTime(LocalDateTime.now().plusDays(2));
-        slot.setEndTime(LocalDateTime.now().plusDays(2).plusHours(1));
+        slot.setStartTime(testNow().plusDays(2));
+        slot.setEndTime(testNow().plusDays(2).plusHours(1));
         slot.setActive(true);
         slot.setBooked(false);
     }
@@ -237,8 +238,8 @@ class BookingServiceTest {
     @Test
     void completeBooking_asMentor_shouldUpdateCompletionAndCounters() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(LocalDateTime.now().minusHours(1));
-        booking.setRequestedEndTime(LocalDateTime.now().plusMinutes(10));
+        booking.setRequestedStartTime(testNow().minusHours(1));
+        booking.setRequestedEndTime(testNow().plusMinutes(10));
         mentorProfile.setTotalCompletedSessions(4);
         mentorProfile.setTotalSessions(8);
 
@@ -261,8 +262,8 @@ class BookingServiceTest {
     @Test
     void completeBooking_beforeStart_shouldThrowConflict() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(LocalDateTime.now().plusHours(2));
-        booking.setRequestedEndTime(LocalDateTime.now().plusHours(3));
+        booking.setRequestedStartTime(testNow().plusHours(2));
+        booking.setRequestedEndTime(testNow().plusHours(3));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.completeBooking(
@@ -277,8 +278,8 @@ class BookingServiceTest {
     @Test
     void cancelBookingByMentor_withinTwelveHours_shouldApplyPenalty() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(LocalDateTime.now().plusHours(8));
-        booking.setRequestedEndTime(LocalDateTime.now().plusHours(9));
+        booking.setRequestedStartTime(testNow().plusHours(8));
+        booking.setRequestedEndTime(testNow().plusHours(9));
         mentorProfile.setLateCancellationPenaltyPoints(BigDecimal.ZERO);
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
@@ -298,8 +299,8 @@ class BookingServiceTest {
     @Test
     void cancelBookingByMentor_underSixHours_shouldSuspendMentor() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(LocalDateTime.now().plusHours(3));
-        booking.setRequestedEndTime(LocalDateTime.now().plusHours(4));
+        booking.setRequestedStartTime(testNow().plusHours(3));
+        booking.setRequestedEndTime(testNow().plusHours(4));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -328,7 +329,7 @@ class BookingServiceTest {
     @Test
     void cancelBookingByMentee_acceptedWithinTwelveHours_shouldThrowConflict() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(LocalDateTime.now().plusHours(6));
+        booking.setRequestedStartTime(testNow().plusHours(6));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.cancelBookingByMentee(
@@ -438,5 +439,9 @@ class BookingServiceTest {
         user.setStatus(status);
         user.setRoles(Set.of());
         return user;
+    }
+
+    private LocalDateTime testNow() {
+        return DateTimeUtil.now();
     }
 }
