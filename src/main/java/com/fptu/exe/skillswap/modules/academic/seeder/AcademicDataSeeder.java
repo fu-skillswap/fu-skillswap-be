@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import java.util.Optional;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Order(1)
 public class AcademicDataSeeder implements CommandLineRunner {
 
     private final CampusRepository campusRepository;
