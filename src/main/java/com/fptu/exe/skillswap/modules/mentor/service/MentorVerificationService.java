@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
 import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
@@ -9,7 +11,8 @@ import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepositor
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.*;
-import com.fptu.exe.skillswap.modules.mentor.dto.*;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.*;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.*;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
@@ -163,9 +166,9 @@ public class MentorVerificationService {
 
         request.setSubmittedNote(trimToNull(submitRequest.submitNote()));
         request.setStatus(VerificationStatus.PENDING_REVIEW);
-        request.setSubmittedAt(LocalDateTime.now());
+        request.setSubmittedAt(DateTimeUtil.now());
         if (!hasAcceptedCurrentTerms(request)) {
-            request.setTermsAcceptedAt(LocalDateTime.now());
+            request.setTermsAcceptedAt(DateTimeUtil.now());
             request.setTermsVersion(mentorTermsVersion);
         }
         if (wasNeedsRevision) {
@@ -224,7 +227,7 @@ public class MentorVerificationService {
 
         VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.WITHDRAWN);
-        request.setWithdrawnAt(LocalDateTime.now());
+        request.setWithdrawnAt(DateTimeUtil.now());
         mentorVerificationRequestRepository.save(request);
         appendEvent(
                 request,
@@ -582,3 +585,7 @@ public class MentorVerificationService {
         return value.trim();
     }
 }
+
+
+
+

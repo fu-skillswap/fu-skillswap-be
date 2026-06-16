@@ -37,7 +37,7 @@ public interface SessionFeedbackRepository extends JpaRepository<SessionFeedback
             """)
     Page<MentorReviewQueryRow> findPublicMentorReviews(@Param("mentorUserId") UUID mentorUserId, Pageable pageable);
 
-    boolean existsBySessionIdAndReviewerId(UUID sessionId, UUID reviewerId);
+    boolean existsByBookingIdAndReviewerId(UUID bookingId, UUID reviewerId);
 
     @Query("select count(sf.id) from SessionFeedback sf where sf.reviewee.id = :mentorUserId")
     long countFeedbacksByRevieweeId(@Param("mentorUserId") UUID mentorUserId);

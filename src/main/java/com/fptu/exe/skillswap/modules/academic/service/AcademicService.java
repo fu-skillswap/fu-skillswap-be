@@ -3,12 +3,12 @@ package com.fptu.exe.skillswap.modules.academic.service;
 import com.fptu.exe.skillswap.modules.academic.domain.Campus;
 import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
-import com.fptu.exe.skillswap.modules.academic.dto.CampusResponse;
-import com.fptu.exe.skillswap.modules.academic.dto.AcademicProgramResponse;
-import com.fptu.exe.skillswap.modules.academic.dto.SpecializationResponse;
+import com.fptu.exe.skillswap.modules.academic.dto.response.CampusResponse;
+import com.fptu.exe.skillswap.modules.academic.dto.response.AcademicProgramResponse;
+import com.fptu.exe.skillswap.modules.academic.dto.response.SpecializationResponse;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.academic.dto.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.academic.dto.StudentProfileResponse;
+import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
@@ -16,6 +16,7 @@ import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileReposito
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
+import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
@@ -267,6 +268,16 @@ public class AcademicService {
             if (request.getIntakeYear() != null && request.getGraduationYear() < request.getIntakeYear()) {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không thể nhỏ hơn năm nhập học");
             }
+        }
+    }
+
+    @EventListener
+    @Transactional
+    public void onUserDeleted(UserDeletedEvent event) {
+        log.info("Academic module: Handling UserDeletedEvent for user: {}", event.getUserId());
+        if (studentProfileRepository.existsById(event.getUserId())) {
+            studentProfileRepository.deleteById(event.getUserId());
+            log.info("Deleted StudentProfile for user: {}", event.getUserId());
         }
     }
 }

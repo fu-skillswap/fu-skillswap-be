@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -37,14 +39,7 @@ public class OauthAccount {
     @Column(name = "provider_email")
     private String providerEmail;
 
-    @Column(name = "access_token_hash", columnDefinition = "TEXT")
-    private String accessTokenHash;
 
-    @Column(name = "refresh_token_hash", columnDefinition = "TEXT")
-    private String refreshTokenHash;
-
-    @Column(name = "token_expires_at")
-    private LocalDateTime tokenExpiresAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -54,12 +49,16 @@ public class OauthAccount {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

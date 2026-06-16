@@ -7,15 +7,16 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
-import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.UUID;
@@ -25,9 +26,9 @@ import java.util.UUID;
 public class AdminUserService {
 
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
     private final UserSessionRepository userSessionRepository;
     private final AuditLogRepository auditLogRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public SystemUserResponse changeUserStatus(UUID adminId, UUID userId, boolean ban, String reason) {
@@ -45,7 +46,7 @@ public class AdminUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
 
-        List<RoleCode> roles = userRoleRepository.findRoleCodesByUserId(userId);
+        List<RoleCode> roles = userRepository.findRoleCodesByUserId(userId);
         UserStatus oldStatus = user.getStatus();
 
         if (ban) {
@@ -60,6 +61,7 @@ public class AdminUserService {
                 session.setRevoked(true);
             }
             userSessionRepository.saveAll(activeSessions);
+            eventPublisher.publishEvent(new UserBannedEvent(userId));
         } else {
             user.setStatus(UserStatus.ACTIVE);
         }

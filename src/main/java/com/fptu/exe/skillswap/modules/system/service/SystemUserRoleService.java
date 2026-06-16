@@ -1,12 +1,11 @@
 package com.fptu.exe.skillswap.modules.system.service;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRole;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRoleId;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
-import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
-import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -32,44 +31,63 @@ import java.util.UUID;
 public class SystemUserRoleService {
 
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
 
     @Transactional
     public AdminUserResponse grantAdminRole(UUID systemAdminId, String email) {
         User targetUser = findTargetUser(email);
-        UserRoleId roleId = new UserRoleId(targetUser.getId(), RoleCode.ADMIN);
-        if (userRoleRepository.existsById(roleId)) {
+        if (targetUser.getRoles().contains(RoleCode.ADMIN)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Người dùng này đã có quyền admin");
         }
 
         User systemAdmin = findActor(systemAdminId);
-        UserRole role = userRoleRepository.save(UserRole.builder()
-                .id(roleId)
-                .user(targetUser)
-                .assignedBy(systemAdmin)
-                .assignedAt(LocalDateTime.now())
-                .build());
+        targetUser.getRoles().add(RoleCode.ADMIN);
+        userRepository.save(targetUser);
 
-        return toResponse(role);
+        return AdminUserResponse.builder()
+                .userId(targetUser.getId())
+                .email(targetUser.getEmail())
+                .fullName(targetUser.getFullName())
+                .avatarUrl(targetUser.getAvatarUrl())
+                .status(targetUser.getStatus())
+                .assignedBy(systemAdmin.getId())
+                .assignedAt(DateTimeUtil.now())
+                .build();
     }
 
     @Transactional
     public AdminUserResponse revokeAdminRole(String email) {
         User targetUser = findTargetUser(email);
-        UserRoleId roleId = new UserRoleId(targetUser.getId(), RoleCode.ADMIN);
-        UserRole role = userRoleRepository.findById(roleId)
-                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Người dùng này hiện không có quyền admin"));
+        if (!targetUser.getRoles().contains(RoleCode.ADMIN)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Người dùng này hiện không có quyền admin");
+        }
 
-        AdminUserResponse response = toResponse(role);
-        userRoleRepository.delete(role);
-        return response;
+        targetUser.getRoles().remove(RoleCode.ADMIN);
+        userRepository.save(targetUser);
+
+        return AdminUserResponse.builder()
+                .userId(targetUser.getId())
+                .email(targetUser.getEmail())
+                .fullName(targetUser.getFullName())
+                .avatarUrl(targetUser.getAvatarUrl())
+                .status(targetUser.getStatus())
+                .assignedBy(null)
+                .assignedAt(null)
+                .build();
     }
 
     @Transactional(readOnly = true)
     public PageResponse<AdminUserResponse> getAdminUsers(BasePageRequest pageRequest) {
-        Page<UserRole> page = userRoleRepository.findByIdRole(RoleCode.ADMIN, adminRolePageable(pageRequest));
+        Page<User> page = userRepository.findUsersByRole(RoleCode.ADMIN, adminRolePageable(pageRequest));
         return PageResponse.<AdminUserResponse>builder()
-                .content(page.getContent().stream().map(this::toResponse).toList())
+                .content(page.getContent().stream().map(user -> AdminUserResponse.builder()
+                        .userId(user.getId())
+                        .email(user.getEmail())
+                        .fullName(user.getFullName())
+                        .avatarUrl(user.getAvatarUrl())
+                        .status(user.getStatus())
+                        .assignedBy(null)
+                        .assignedAt(null)
+                        .build()).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -101,10 +119,9 @@ public class SystemUserRoleService {
         int size = Math.min(Math.max(safeRequest.getSize(), 1), 100);
         Sort.Direction direction = safeRequest.resolveDirection();
         String sortBy = switch (safeRequest.getSortBy() == null ? "" : safeRequest.getSortBy()) {
-            case "email" -> "user.email";
-            case "fullName" -> "user.fullName";
-            case "assignedAt" -> "assignedAt";
-            default -> "assignedAt";
+            case "email" -> "email";
+            case "fullName" -> "fullName";
+            default -> "createdAt";
         };
         return PageRequest.of(page, size, Sort.by(direction, sortBy));
     }
@@ -140,29 +157,15 @@ public class SystemUserRoleService {
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy tài khoản system admin"));
     }
 
-    private AdminUserResponse toResponse(UserRole role) {
-        User user = role.getUser();
-        User assignedBy = role.getAssignedBy();
-        return AdminUserResponse.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .status(user.getStatus())
-                .assignedBy(assignedBy == null ? null : assignedBy.getId())
-                .assignedAt(role.getAssignedAt())
-                .build();
-    }
-
     private Map<UUID, List<RoleCode>> loadRolesByUserId(List<User> users) {
         if (users == null || users.isEmpty()) {
             return Map.of();
         }
 
         Map<UUID, List<RoleCode>> rolesByUserId = new HashMap<>();
-        userRoleRepository.findByIdUserIdIn(users.stream().map(User::getId).toList())
-                .forEach(userRole -> rolesByUserId.computeIfAbsent(userRole.getId().getUserId(), ignored -> new java.util.ArrayList<>())
-                        .add(userRole.getId().getRole()));
+        for (User user : users) {
+            rolesByUserId.put(user.getId(), new java.util.ArrayList<>(user.getRoles()));
+        }
         return rolesByUserId;
     }
 
@@ -183,3 +186,7 @@ public class SystemUserRoleService {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 }
+
+
+
+

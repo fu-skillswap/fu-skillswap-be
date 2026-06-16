@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
@@ -84,6 +86,28 @@ public class Booking {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "meeting_platform")
+    private MeetingPlatform meetingPlatform;
+
+    @Column(name = "meeting_link", columnDefinition = "TEXT")
+    private String meetingLink;
+
+    @Column(columnDefinition = "TEXT")
+    private String location;
+
+    @Column(name = "actual_start_time")
+    private LocalDateTime actualStartTime;
+
+    @Column(name = "actual_end_time")
+    private LocalDateTime actualEndTime;
+
+    @Column(name = "mentor_note", columnDefinition = "TEXT")
+    private String mentorNote;
+
+    @Column(name = "mentee_note", columnDefinition = "TEXT")
+    private String menteeNote;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -92,12 +116,16 @@ public class Booking {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

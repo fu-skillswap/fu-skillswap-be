@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -13,7 +15,8 @@ import java.util.UUID;
     @Index(name = "idx_mentor_profiles_status", columnList = "status"),
     @Index(name = "idx_mentor_profiles_avg_rating", columnList = "average_rating"),
     @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
-    @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode")
+    @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode"),
+    @Index(name = "idx_mentor_profiles_booking_suspended_until", columnList = "booking_suspended_until")
 })
 @Getter
 @Setter
@@ -82,9 +85,16 @@ public class MentorProfile {
     @Builder.Default
     private Integer totalRejectedBookings = 0;
 
+    @Column(name = "late_cancellation_penalty_points", nullable = false, precision = 6, scale = 2)
+    @Builder.Default
+    private BigDecimal lateCancellationPenaltyPoints = BigDecimal.ZERO;
+
     @Column(name = "is_available", nullable = false)
     @Builder.Default
     private boolean isAvailable = true;
+
+    @Column(name = "booking_suspended_until")
+    private LocalDateTime bookingSuspendedUntil;
 
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
@@ -101,12 +111,16 @@ public class MentorProfile {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

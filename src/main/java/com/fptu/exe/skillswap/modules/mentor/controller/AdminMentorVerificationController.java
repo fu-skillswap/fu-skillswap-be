@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueItemResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationReviewRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationLockResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationReviewRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;

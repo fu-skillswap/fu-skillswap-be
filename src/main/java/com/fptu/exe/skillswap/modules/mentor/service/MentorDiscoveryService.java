@@ -5,24 +5,24 @@ import com.fptu.exe.skillswap.modules.academic.domain.Campus;
 import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.feedback.dto.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorAvailabilitySlotResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryCardResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoveryDetailResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorDiscoverySearchRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorPublicServiceResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorRecommendationResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorTagResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -41,12 +41,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,6 +58,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MentorDiscoveryService {
 
+    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final UUID EMPTY_TAG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(40);
@@ -73,7 +76,7 @@ public class MentorDiscoveryService {
     private final MentorTagRepository mentorTagRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final MentorServiceRepository mentorServiceRepository;
-    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final MentorAvailabilityService mentorAvailabilityService;
     private final SessionFeedbackRepository sessionFeedbackRepository;
 
     @Transactional(readOnly = true)
@@ -90,15 +93,16 @@ public class MentorDiscoveryService {
         UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
         UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
         Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = currentTime();
 
-        Page<MentorDiscoveryQueryRow> page;
+        String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
+        Page<UUID> mentorIdPage;
         if (isRelevanceSort(safeRequest.getSortBy())) {
             Pageable pageable = PageRequest.of(Math.max(safeRequest.getPage(), 0), Math.min(Math.max(safeRequest.getSize(), 1), 30));
-            page = mentorProfileRepository.searchDiscoverableMentorsSortedByRelevance(
+            mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIdsSortedByRelevance(
                     MentorStatus.ACTIVE,
                     MentorTagType.HELP_TOPIC,
-                    normalizeKeyword(safeRequest.getKeyword()),
+                    normalizedKeyword,
                     safeRequest.getCampusId(),
                     safeRequest.getSpecializationId(),
                     safeRequest.getTeachingMode(),
@@ -113,10 +117,10 @@ public class MentorDiscoveryService {
                     pageable
             );
         } else {
-            page = mentorProfileRepository.searchDiscoverableMentors(
+            mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
                     MentorStatus.ACTIVE,
                     MentorTagType.HELP_TOPIC,
-                    normalizeKeyword(safeRequest.getKeyword()),
+                    normalizedKeyword,
                     safeRequest.getCampusId(),
                     safeRequest.getSpecializationId(),
                     safeRequest.getTeachingMode(),
@@ -132,22 +136,24 @@ public class MentorDiscoveryService {
             );
         }
 
+        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(mentorIdPage.getContent());
+
         Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
-                page.getContent().stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
+                rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
                 Set.of(MentorTagType.HELP_TOPIC)
         );
 
-        List<MentorDiscoveryCardResponse> content = page.getContent().stream()
+        List<MentorDiscoveryCardResponse> content = rows.stream()
                 .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
                 .toList();
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
                 .content(content)
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .last(page.isLast())
+                .page(mentorIdPage.getNumber())
+                .size(mentorIdPage.getSize())
+                .totalElements(mentorIdPage.getTotalElements())
+                .totalPages(mentorIdPage.getTotalPages())
+                .last(mentorIdPage.isLast())
                 .build();
     }
 
@@ -163,7 +169,7 @@ public class MentorDiscoveryService {
         UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
         UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
         Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = currentTime();
 
         List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
@@ -200,10 +206,10 @@ public class MentorDiscoveryService {
                 Set.of(MentorTagType.HELP_TOPIC)
         );
         List<MentorTagResponse> mentorTags = tagsByMentor.getOrDefault(mentorUserId, List.of());
-        List<MentorPublicServiceResponse> services = mentorServiceRepository
+        List<MentorServiceResponse> services = mentorServiceRepository
                 .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId)
                 .stream()
-                .map(this::toPublicServiceResponse)
+                .map(this::toServiceResponse)
                 .toList();
 
         Campus campus = studentProfile == null ? null : studentProfile.getCampus();
@@ -223,6 +229,7 @@ public class MentorDiscoveryService {
                 .expertiseDescription(mentorProfile.getExpertiseDescription())
                 .supportingSubjects(mentorProfile.getSupportingSubjects())
                 .isAvailable(mentorProfile.isAvailable())
+                .bookingSuspendedUntil(mentorProfile.getBookingSuspendedUntil())
                 .ratingAverage(displayRating)
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
@@ -245,18 +252,14 @@ public class MentorDiscoveryService {
                 .build();
     }
 
-    @Transactional(readOnly = true)
-    public List<MentorAvailabilitySlotResponse> getMentorAvailability(UUID mentorUserId) {
+    @Transactional
+    public List<MentorAvailabilitySlotResponse> getMentorAvailability(UUID mentorUserId, AvailabilityQueryRequest request) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
-        return mentorAvailabilitySlotRepository
-                .findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(
-                        mentorUserId,
-                        LocalDateTime.now()
-                )
-                .stream()
-                .limit(60)
-                .map(slot -> toAvailabilityResponse(slot, mentorProfile))
-                .toList();
+        if (isBookingSuspended(mentorProfile)) {
+            return List.of();
+        }
+        AvailabilityQueryRequest safeRequest = request == null ? new AvailabilityQueryRequest() : request;
+        return mentorAvailabilityService.getAvailableSlots(mentorProfile, safeRequest.getFromDate(), safeRequest.getToDate());
     }
 
     @Transactional(readOnly = true)
@@ -358,7 +361,7 @@ public class MentorDiscoveryService {
             return ZERO;
         }
 
-        long activeDays = Math.max(0, ChronoUnit.DAYS.between(verifiedAt, LocalDateTime.now()));
+        long activeDays = Math.max(0, ChronoUnit.DAYS.between(verifiedAt, currentTime()));
         if (activeDays < 3) {
             reasons.add("Mentor mới active gần đây");
             return NEWLY_ACTIVE_SCORE;
@@ -453,27 +456,32 @@ public class MentorDiscoveryService {
                 .build();
     }
 
-    private MentorPublicServiceResponse toPublicServiceResponse(MentorService mentorService) {
-        return MentorPublicServiceResponse.builder()
-                .id(mentorService.getId())
+    private MentorServiceResponse toServiceResponse(MentorService mentorService) {
+        List<MentorTagResponse> helpTopics = mentorService.getHelpTopics().stream()
+                .sorted(Comparator.comparing(tag -> tag.getNameVi() == null ? "" : tag.getNameVi()))
+                .map(tag -> MentorTagResponse.builder()
+                        .id(tag.getId())
+                        .code(tag.getCode())
+                        .nameVi(tag.getNameVi())
+                        .nameEn(tag.getNameEn())
+                        .type(tag.getType())
+                        .primary(false)
+                        .build())
+                .toList();
+
+        return MentorServiceResponse.builder()
+                .serviceId(mentorService.getId())
+                .mentorUserId(mentorService.getMentorProfile() == null ? null : mentorService.getMentorProfile().getUserId())
                 .title(mentorService.getTitle())
                 .description(mentorService.getDescription())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .free(mentorService.isFree())
                 .priceAmount(defaultDecimal(mentorService.getPriceAmount()))
                 .currency(mentorService.getCurrency())
-                .build();
-    }
-
-    private MentorAvailabilitySlotResponse toAvailabilityResponse(MentorAvailabilitySlot slot, MentorProfile mentorProfile) {
-        return MentorAvailabilitySlotResponse.builder()
-                .slotId(slot.getId())
-                .startTime(slot.getStartTime())
-                .endTime(slot.getEndTime())
-                .timezone(slot.getTimezone())
-                .durationMinutes((int) ChronoUnit.MINUTES.between(slot.getStartTime(), slot.getEndTime()))
-                .teachingMode(mentorProfile.getTeachingMode())
-                .recurring(slot.getRecurrenceRule() != null && !slot.getRecurrenceRule().isBlank())
+                .active(mentorService.isActive())
+                .helpTopics(helpTopics)
+                .createdAt(mentorService.getCreatedAt())
+                .updatedAt(mentorService.getUpdatedAt())
                 .build();
     }
 
@@ -513,6 +521,16 @@ public class MentorDiscoveryService {
                 && mentorProfile.getSessionDuration() != null;
     }
 
+    private boolean isBookingSuspended(MentorProfile mentorProfile) {
+        return mentorProfile != null
+                && mentorProfile.getBookingSuspendedUntil() != null
+                && mentorProfile.getBookingSuspendedUntil().isAfter(currentTime());
+    }
+
+    private LocalDateTime currentTime() {
+        return LocalDateTime.now(APP_ZONE);
+    }
+
     private List<MentorTagResponse> filterTagsByType(List<MentorTagResponse> tags, MentorTagType tagType) {
         if (tags == null || tags.isEmpty()) {
             return List.of();
@@ -523,6 +541,21 @@ public class MentorDiscoveryService {
         };
         return tags.stream()
                 .filter(tag -> tag.type() != null && acceptedTypes.contains(tag.type()))
+                .toList();
+    }
+
+    private List<MentorDiscoveryQueryRow> loadDiscoveryRowsInPageOrder(List<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return List.of();
+        }
+
+        Map<UUID, Integer> orderByMentorId = new LinkedHashMap<>();
+        for (int index = 0; index < mentorUserIds.size(); index++) {
+            orderByMentorId.putIfAbsent(mentorUserIds.get(index), index);
+        }
+
+        return mentorProfileRepository.findDiscoveryRowsByMentorUserIds(mentorUserIds).stream()
+                .sorted(Comparator.comparingInt(row -> orderByMentorId.getOrDefault(row.mentorUserId(), Integer.MAX_VALUE)))
                 .toList();
     }
 

@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.academic.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.academic.dto.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.academic.dto.StudentProfileResponse;
+import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;

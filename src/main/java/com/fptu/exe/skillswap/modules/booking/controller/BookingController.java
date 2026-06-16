@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.booking.dto.BookingResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.CreateBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -40,8 +40,7 @@ public class BookingController {
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody CreateBookingRequest request
-    ) {
+            @Valid @RequestBody CreateBookingRequest request) {
         ensureAuthenticated(principal);
         BookingResponse response = bookingService.createBooking(principal.getPublicId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));

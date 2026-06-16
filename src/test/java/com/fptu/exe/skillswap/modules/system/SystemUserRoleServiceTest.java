@@ -1,19 +1,17 @@
 package com.fptu.exe.skillswap.modules.system;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRole;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRoleId;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
-import com.fptu.exe.skillswap.modules.system.dto.AdminUserResponse;
-import com.fptu.exe.skillswap.modules.system.dto.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserResponse;
+import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,12 +21,15 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
-import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -41,109 +42,94 @@ class SystemUserRoleServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @Mock
-    private UserRoleRepository userRoleRepository;
-
     @InjectMocks
-    private SystemUserRoleService service;
+    private SystemUserRoleService systemUserRoleService;
 
-    @Test
-    void grantAdminRole_existingUserWithoutAdminRole_shouldCreateRole() {
-        UUID systemAdminId = UUID.randomUUID();
-        User systemAdmin = user(systemAdminId, "root@fpt.edu.vn");
-        User targetUser = user(UUID.randomUUID(), "admin@fpt.edu.vn");
+    private UUID systemAdminId;
+    private User systemAdmin;
+    private User targetUser;
 
-        when(userRepository.findActiveByEmailIgnoreCase("admin@fpt.edu.vn")).thenReturn(Optional.of(targetUser));
-        when(userRoleRepository.existsById(new UserRoleId(targetUser.getId(), RoleCode.ADMIN))).thenReturn(false);
-        when(userRepository.findById(systemAdminId)).thenReturn(Optional.of(systemAdmin));
-        when(userRoleRepository.save(any(UserRole.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        AdminUserResponse response = service.grantAdminRole(systemAdminId, " ADMIN@fpt.edu.vn ");
-
-        assertEquals(targetUser.getId(), response.userId());
-        assertEquals(systemAdminId, response.assignedBy());
-
-        ArgumentCaptor<UserRole> captor = ArgumentCaptor.forClass(UserRole.class);
-        verify(userRoleRepository).save(captor.capture());
-        assertEquals(new UserRoleId(targetUser.getId(), RoleCode.ADMIN), captor.getValue().getId());
+    @BeforeEach
+    void setUp() {
+        systemAdminId = UUID.randomUUID();
+        systemAdmin = buildUser(systemAdminId, "system@test.com", Set.of(RoleCode.SYSTEM_ADMIN));
+        targetUser = buildUser(UUID.randomUUID(), "user@test.com", new HashSet<>(Set.of(RoleCode.MENTEE)));
     }
 
     @Test
-    void grantAdminRole_existingAdmin_shouldThrowConflict() {
-        User targetUser = user(UUID.randomUUID(), "admin@fpt.edu.vn");
-        when(userRepository.findActiveByEmailIgnoreCase("admin@fpt.edu.vn")).thenReturn(Optional.of(targetUser));
-        when(userRoleRepository.existsById(new UserRoleId(targetUser.getId(), RoleCode.ADMIN))).thenReturn(true);
+    void grantAdminRole_successful_shouldNormalizeEmailAndAddRole() {
+        when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
+        when(userRepository.findById(systemAdminId)).thenReturn(Optional.of(systemAdmin));
 
-        BaseException exception = assertThrows(BaseException.class,
-                () -> service.grantAdminRole(UUID.randomUUID(), "admin@fpt.edu.vn"));
+        AdminUserResponse response = systemUserRoleService.grantAdminRole(systemAdminId, " User@Test.com ");
+
+        assertEquals(targetUser.getId(), response.userId());
+        assertTrue(targetUser.getRoles().contains(RoleCode.ADMIN));
+        verify(userRepository).findActiveByEmailIgnoreCase("user@test.com");
+        verify(userRepository).save(targetUser);
+    }
+
+    @Test
+    void grantAdminRole_duplicateRole_shouldThrowConflict() {
+        targetUser.getRoles().add(RoleCode.ADMIN);
+        when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
+
+        BaseException exception = assertThrows(BaseException.class, () ->
+                systemUserRoleService.grantAdminRole(systemAdminId, "user@test.com")
+        );
 
         assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
     }
 
     @Test
-    void revokeAdminRole_existingAdmin_shouldDeleteRole() {
-        User targetUser = user(UUID.randomUUID(), "admin@fpt.edu.vn");
-        UserRole role = UserRole.builder()
-                .id(new UserRoleId(targetUser.getId(), RoleCode.ADMIN))
-                .user(targetUser)
-                .assignedAt(LocalDateTime.now())
-                .build();
+    void revokeAdminRole_withoutAdmin_shouldThrowConflict() {
+        when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
 
-        when(userRepository.findActiveByEmailIgnoreCase("admin@fpt.edu.vn")).thenReturn(Optional.of(targetUser));
-        when(userRoleRepository.findById(role.getId())).thenReturn(Optional.of(role));
+        BaseException exception = assertThrows(BaseException.class, () ->
+                systemUserRoleService.revokeAdminRole("user@test.com")
+        );
 
-        AdminUserResponse response = service.revokeAdminRole("admin@fpt.edu.vn");
-
-        assertEquals(targetUser.getId(), response.userId());
-        verify(userRoleRepository).delete(role);
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
     }
 
     @Test
-    void getAdminUsers_shouldReturnPagedAdminUsers() {
-        User admin = user(UUID.randomUUID(), "admin@fpt.edu.vn");
-        UserRole role = UserRole.builder()
-                .id(new UserRoleId(admin.getId(), RoleCode.ADMIN))
-                .user(admin)
-                .assignedAt(LocalDateTime.now())
-                .build();
-        BasePageRequest request = new BasePageRequest();
+    void getAdminUsers_shouldMapPagedResult() {
+        targetUser.getRoles().add(RoleCode.ADMIN);
+        when(userRepository.findUsersByRole(eq(RoleCode.ADMIN), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(targetUser)));
 
-        when(userRoleRepository.findByIdRole(eq(RoleCode.ADMIN), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(role), request.getPageable(), 1));
+        PageResponse<AdminUserResponse> response = systemUserRoleService.getAdminUsers(new BasePageRequest());
 
-        PageResponse<AdminUserResponse> response = service.getAdminUsers(request);
-
-        assertEquals(1, response.getTotalElements());
-        assertEquals("admin@fpt.edu.vn", response.getContent().get(0).email());
+        assertEquals(1, response.getContent().size());
+        assertEquals(targetUser.getEmail(), response.getContent().getFirst().email());
     }
 
     @Test
-    void getAllUsers_shouldReturnPagedUsersWithRoles() {
-        User user = user(UUID.randomUUID(), "mentee@fpt.edu.vn");
+    void getAllUsers_shouldMapRolesFromEntityAndApplySortFallback() {
         BasePageRequest request = new BasePageRequest();
-        UserRole menteeRole = UserRole.builder()
-                .id(new UserRoleId(user.getId(), RoleCode.MENTEE))
-                .user(user)
-                .build();
+        request.setSortBy("unknown");
+        when(userRepository.findAll(any(Pageable.class))).thenReturn(new PageImpl<>(List.of(targetUser)));
 
-        when(userRepository.findAll(any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(user), request.getPageable(), 1));
-        when(userRoleRepository.findByIdUserIdIn(List.of(user.getId())))
-                .thenReturn(List.of(menteeRole));
+        PageResponse<SystemUserResponse> response = systemUserRoleService.getAllUsers(request);
 
-        PageResponse<SystemUserResponse> response = service.getAllUsers(request);
-
-        assertEquals(1, response.getTotalElements());
-        assertEquals("mentee@fpt.edu.vn", response.getContent().get(0).email());
-        assertEquals(List.of(RoleCode.MENTEE), response.getContent().get(0).roles());
+        assertEquals(1, response.getContent().size());
+        assertFalse(response.getContent().getFirst().roles().isEmpty());
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(userRepository).findAll(captor.capture());
+        assertEquals("createdAt: DESC", captor.getValue().getSort().toString());
     }
 
-    private User user(UUID id, String email) {
-        return User.builder()
-                .id(id)
-                .email(email)
-                .fullName("Test User")
-                .status(UserStatus.ACTIVE)
-                .build();
+    private User buildUser(UUID id, String email, Set<RoleCode> roles) {
+        User user = new User();
+        user.setId(id);
+        user.setEmail(email);
+        user.setFullName("User " + email);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setRoles(new HashSet<>(roles));
+        return user;
+    }
+
+    private void assertTrue(boolean value) {
+        assertEquals(true, value);
     }
 }

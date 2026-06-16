@@ -1,27 +1,20 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
-import jakarta.persistence.Column;
-import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.util.UUID;
 
-@Embeddable
 @Getter
-@Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode
-public class UserRoleId implements Serializable {
-
-    @Column(name = "user_id")
+public class UserRoleId {
     private UUID userId;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role")
     private RoleCode role;
 }

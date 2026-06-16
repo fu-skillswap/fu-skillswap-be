@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorProfileUpsertRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;

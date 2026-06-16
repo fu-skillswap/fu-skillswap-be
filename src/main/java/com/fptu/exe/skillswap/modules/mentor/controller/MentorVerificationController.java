@@ -2,11 +2,11 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationDocumentResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestActionResult;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationSubmitRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationTimelineEventResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;

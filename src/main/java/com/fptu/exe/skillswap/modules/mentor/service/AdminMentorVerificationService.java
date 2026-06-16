@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -12,13 +14,13 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationLockResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueFilterRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationQueueItemResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.AdminMentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationChecklistResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationDocumentResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.MentorVerificationTimelineEventResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationLockResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationChecklistResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
@@ -96,7 +98,7 @@ public class AdminMentorVerificationService {
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = DateTimeUtil.now();
         request.setLockedBy(admin);
         request.setLockedAt(now);
         request.setLockExpiresAt(now.plusMinutes(LOCK_TTL_MINUTES));
@@ -120,7 +122,7 @@ public class AdminMentorVerificationService {
         request.setReviewNote(normalizedNote);
         request.setRejectionReason(null);
         request.setReviewedBy(reviewer);
-        request.setReviewedAt(LocalDateTime.now());
+        request.setReviewedAt(DateTimeUtil.now());
         request.setApprovedAt(null);
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
@@ -148,8 +150,8 @@ public class AdminMentorVerificationService {
         request.setReviewNote(trimToNull(reviewNote));
         request.setRejectionReason(null);
         request.setReviewedBy(reviewer);
-        request.setReviewedAt(LocalDateTime.now());
-        request.setApprovedAt(LocalDateTime.now());
+        request.setReviewedAt(DateTimeUtil.now());
+        request.setApprovedAt(DateTimeUtil.now());
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
         appendEvent(
@@ -161,7 +163,7 @@ public class AdminMentorVerificationService {
                 request.getReviewNote()
         );
 
-        updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE);
+        updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE, reviewer);
         return mapDetail(request, adminUserId);
     }
 
@@ -180,7 +182,7 @@ public class AdminMentorVerificationService {
         request.setReviewNote(null);
         request.setRejectionReason(normalizedReason);
         request.setReviewedBy(reviewer);
-        request.setReviewedAt(LocalDateTime.now());
+        request.setReviewedAt(DateTimeUtil.now());
         request.setApprovedAt(null);
         clearLock(request);
         mentorVerificationRequestRepository.save(request);
@@ -222,9 +224,19 @@ public class AdminMentorVerificationService {
     }
 
     private void updateMentorProfileStatus(UUID mentorUserId, MentorStatus targetStatus) {
+        updateMentorProfileStatus(mentorUserId, targetStatus, null);
+    }
+
+    private void updateMentorProfileStatus(UUID mentorUserId, MentorStatus targetStatus, User reviewer) {
         MentorProfile mentorProfile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor liên kết"));
         mentorProfile.setStatus(targetStatus);
+        if (targetStatus == MentorStatus.ACTIVE) {
+            mentorProfile.setVerifiedAt(DateTimeUtil.now());
+            if (reviewer != null) {
+                mentorProfile.setVerifiedBy(reviewer);
+            }
+        }
         mentorProfileRepository.save(mentorProfile);
     }
 
@@ -328,8 +340,8 @@ public class AdminMentorVerificationService {
         }
         if (!hasActiveLock(request) || isLockedBy(request, admin.getId())) {
             request.setLockedBy(admin);
-            request.setLockedAt(LocalDateTime.now());
-            request.setLockExpiresAt(LocalDateTime.now().plusMinutes(LOCK_TTL_MINUTES));
+            request.setLockedAt(DateTimeUtil.now());
+            request.setLockExpiresAt(DateTimeUtil.now().plusMinutes(LOCK_TTL_MINUTES));
             mentorVerificationRequestRepository.save(request);
         }
     }
@@ -359,7 +371,7 @@ public class AdminMentorVerificationService {
         LocalDateTime lockExpiresAt = activeLock ? request.getLockExpiresAt() : null;
         long secondsRemaining = lockExpiresAt == null
                 ? 0L
-                : Math.max(0L, Duration.between(LocalDateTime.now(), lockExpiresAt).toSeconds());
+                : Math.max(0L, Duration.between(DateTimeUtil.now(), lockExpiresAt).toSeconds());
 
         return AdminMentorVerificationLockResponse.builder()
                 .requestId(request.getId())
@@ -377,7 +389,7 @@ public class AdminMentorVerificationService {
     private boolean hasActiveLock(MentorVerificationRequest request) {
         return request.getLockedBy() != null
                 && request.getLockExpiresAt() != null
-                && request.getLockExpiresAt().isAfter(LocalDateTime.now());
+                && request.getLockExpiresAt().isAfter(DateTimeUtil.now());
     }
 
     private boolean isLockedBy(MentorVerificationRequest request, UUID adminUserId) {
@@ -441,3 +453,7 @@ public class AdminMentorVerificationService {
         return normalized == null ? null : normalized.toLowerCase();
     }
 }
+
+
+
+

@@ -1,9 +1,11 @@
 package com.fptu.exe.skillswap.modules.booking.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.booking.dto.AcceptBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.BookingResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.RejectBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +56,28 @@ public class MentorBookingController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.rejectBooking(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(summary = "Mentor hủy booking đã chấp nhận")
+    @PostMapping("/{bookingId}/cancel")
+    public ApiResponse<BookingResponse> cancelBooking(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody CancelBookingRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.cancelBookingByMentor(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(summary = "Mentor lưu hoặc cập nhật meeting link cho booking đã được chấp nhận")
+    @PatchMapping("/{bookingId}/meeting-link")
+    public ApiResponse<BookingResponse> saveMeetingLink(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody SaveMeetingLinkRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.saveMeetingLink(principal.getPublicId(), bookingId, request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.catalog.controller;
 
-import com.fptu.exe.skillswap.modules.catalog.dto.HelpTopicResponse;
+import com.fptu.exe.skillswap.modules.catalog.dto.response.HelpTopicResponse;
 import com.fptu.exe.skillswap.modules.catalog.service.CatalogService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
