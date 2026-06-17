@@ -10,7 +10,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -155,6 +154,7 @@ public class IdentityService {
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .build();
     }
 
