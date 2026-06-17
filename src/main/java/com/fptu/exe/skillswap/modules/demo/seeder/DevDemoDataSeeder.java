@@ -64,6 +64,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -82,8 +83,7 @@ import java.util.stream.Collectors;
 public class DevDemoDataSeeder implements CommandLineRunner {
 
     private static final String GOOGLE_PROVIDER = "GOOGLE";
-    private static final int ACTIVE_MENTOR_COUNT = 5;
-    private static final int PENDING_MENTOR_COUNT = 5;
+    private static final int TOTAL_MENTOR_COUNT = 100;
     private static final int MENTEE_COUNT = 10;
     private static final String DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
     private static final Set<VerificationStatus> OPEN_REQUEST_STATUSES = EnumSet.of(
@@ -115,17 +115,21 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         log.info("Starting SkillSwap demo data seeding...");
 
         Map<String, Tag> helpTopics = loadHelpTopics();
-        seedMentees();
+        purgeMenteeSeeds();
         seedMentors(helpTopics);
 
         log.info("SkillSwap demo data seeding completed successfully!");
     }
 
-    private void seedMentees() {
+    private void purgeMenteeSeeds() {
         for (StudentSeed seed : menteeSeeds()) {
-            User user = upsertUser(seed.email(), seed.fullName(), seed.avatarUrl(), Set.of(RoleCode.MENTEE));
-            upsertOauthAccount(user, demoProviderUserId(seed.email()));
-            upsertStudentProfile(user, seed);
+            userRepository.findByEmailIncludingDeleted(seed.email()).ifPresent(user -> {
+                studentProfileRepository.findWithDetailsByUserId(user.getId())
+                        .ifPresent(studentProfileRepository::delete);
+                userRepository.delete(user);
+            });
+            oauthAccountRepository.findByProviderAndProviderUserId(GOOGLE_PROVIDER, demoProviderUserId(seed.email()))
+                    .ifPresent(oauthAccountRepository::delete);
         }
     }
 
@@ -137,14 +141,8 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
             MentorProfile mentorProfile = upsertMentorProfile(user, seed);
             upsertMentorTags(mentorProfile, seed.helpTopicCodes(), helpTopics);
-
-            if (seed.activeMentor()) {
-                upsertMentorService(mentorProfile, seed, helpTopics);
-                upsertAvailabilityPlan(mentorProfile);
-                continue;
-            }
-
-            upsertPendingVerificationRequest(user, mentorProfile, seed, helpTopics);
+            upsertMentorService(mentorProfile, seed, helpTopics);
+            upsertAvailabilityPlan(mentorProfile);
         }
     }
 
@@ -494,298 +492,262 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     }
 
     private List<MentorSeed> mentorSeeds() {
-        return List.of(
-                new MentorSeed(
-                        "mentor01.demo@skillswap.local",
-                        "Nguyen Van Minh",
-                        "SE220001",
-                        CampusCode.HCM,
-                        "CNTT",
-                        "CNTT_KTPM",
-                        8,
-                        2022,
-                        true,
-                        2025,
-                        "Spring Boot Mentor | Backend Developer",
-                        "Spring Boot, REST API, PostgreSQL, Docker, clean architecture, support EXE101 and EXE201.",
-                        "EXE101, EXE201, PRJ301",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor01"),
-                        List.of("HELP_CV_REVIEW", "HELP_INTERVIEW", "HELP_QA"),
-                        "Review CV Backend",
-                        "Review CV for backend internship and junior backend roles.",
-                        60,
-                        false,
-                        BigDecimal.valueOf(120000),
-                        true,
-                        14,
-                        24,
-                        18,
-                        BigDecimal.valueOf(4.7)
-                ),
-                new MentorSeed(
-                        "mentor02.demo@skillswap.local",
-                        "Tran Thi Hoa",
-                        "SE220002",
-                        CampusCode.HA_NOI,
-                        "CNTT",
-                        "CNTT_TTNT",
-                        9,
-                        2021,
-                        false,
-                        null,
-                        "AI Mentor | Machine Learning",
-                        "Machine learning, Python, data processing, interview preparation, project guidance.",
-                        "ML101, AI100, DSA",
-                        TeachingMode.HYBRID,
-                        90,
-                        demoAvatarUrl("mentor02"),
-                        List.of("HELP_PROJECT_REVIEW", "HELP_INTERNSHIP", "HELP_STUDY_PLAN"),
-                        "Project Review AI",
-                        "Review AI/ML project and suggest improvements for final presentations.",
-                        90,
-                        false,
-                        BigDecimal.valueOf(180000),
-                        true,
-                        21,
-                        30,
-                        16,
-                        BigDecimal.valueOf(4.8)
-                ),
-                new MentorSeed(
-                        "mentor03.demo@skillswap.local",
-                        "Le Quang Huy",
-                        "SE220003",
-                        CampusCode.DA_NANG,
-                        "QTKD",
-                        "QTKD_MKT",
-                        7,
-                        2020,
-                        true,
-                        2024,
-                        "Career Mentor | Business Analyst",
-                        "Career planning, CV improvement, interview practice, product thinking, team communication.",
-                        "BUS101, COM102, EXE101",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor03"),
-                        List.of("HELP_CAREER_PATH", "HELP_CV_REVIEW", "HELP_INTERVIEW"),
-                        "Career Guidance",
-                        "Career orientation and internship preparation for business/tech students.",
-                        60,
-                        true,
-                        BigDecimal.ZERO,
-                        true,
-                        18,
-                        28,
-                        20,
-                        BigDecimal.valueOf(4.6)
-                ),
-                new MentorSeed(
-                        "mentor04.demo@skillswap.local",
-                        "Pham Duc Long",
-                        "SE220004",
-                        CampusCode.CAN_THO,
-                        "CTTT",
-                        "CTTT_TTDPM",
-                        8,
-                        2022,
-                        false,
-                        null,
-                        "Frontend Mentor | UI/UX Review",
-                        "Frontend architecture, UI/UX review, project storytelling, presentation tips.",
-                        "WEB101, UIX201, PRJ301",
-                        TeachingMode.HYBRID,
-                        60,
-                        demoAvatarUrl("mentor04"),
-                        List.of("HELP_PROJECT_REVIEW", "HELP_PRODUCT_FEEDBACK", "HELP_QA"),
-                        "UI Review Session",
-                        "Review frontend screens, UX flow and presentation quality.",
-                        60,
-                        false,
-                        BigDecimal.valueOf(100000),
-                        true,
-                        9,
-                        14,
-                        12,
-                        BigDecimal.valueOf(4.4)
-                ),
-                new MentorSeed(
-                        "mentor05.demo@skillswap.local",
-                        "Doan Minh Chau",
-                        "SE220005",
-                        CampusCode.QUY_NHON,
-                        "NN",
-                        "NN_NNA",
-                        8,
-                        2021,
-                        true,
-                        2024,
-                        "English Mentor | Interview Coach",
-                        "English communication, interview answering, study plan, internship support.",
-                        "ENG101, ENG201, COM102",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor05"),
-                        List.of("HELP_INTERVIEW", "HELP_CAREER_PATH", "HELP_STUDY_PLAN"),
-                        "Interview Practice",
-                        "Mock interview and feedback for English and communication skills.",
-                        60,
-                        false,
-                        BigDecimal.valueOf(150000),
-                        true,
-                        11,
-                        22,
-                        19,
-                        BigDecimal.valueOf(4.9)
-                ),
-                new MentorSeed(
-                        "mentor06.demo@skillswap.local",
-                        "Vo Anh Kiet",
-                        "SE220006",
-                        CampusCode.HCM,
-                        "CNTT",
-                        "CNTT_ATTT",
-                        7,
-                        2022,
-                        false,
-                        null,
-                        "Security Mentor | Pending Verification",
-                        "Information security basics, system hardening, secure coding, project review.",
-                        "SEC101, EXE101, DSA",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor06"),
-                        List.of("HELP_CV_REVIEW", "HELP_QA"),
-                        "Security Q&A",
-                        "Demo profile waiting for verification approval.",
-                        60,
-                        true,
-                        BigDecimal.valueOf(90000),
-                        false,
-                        null,
-                        0,
-                        0,
-                        BigDecimal.ZERO
-                ),
-                new MentorSeed(
-                        "mentor07.demo@skillswap.local",
-                        "Ngo Phuong Anh",
-                        "SE220007",
-                        CampusCode.HA_NOI,
-                        "CNTT",
-                        "CNTT_HTTT",
-                        6,
-                        2023,
-                        false,
-                        null,
-                        "System Analysis Mentor | Pending Verification",
-                        "Requirements analysis, database design, UML, documentation support.",
-                        "SE111, DB101, PRJ301",
-                        TeachingMode.HYBRID,
-                        60,
-                        demoAvatarUrl("mentor07"),
-                        List.of("HELP_PROJECT_REVIEW", "HELP_QA"),
-                        "System Analysis Basics",
-                        "Demo mentor profile awaiting approval.",
-                        60,
-                        true,
-                        BigDecimal.valueOf(110000),
-                        false,
-                        null,
-                        0,
-                        0,
-                        BigDecimal.ZERO
-                ),
-                new MentorSeed(
-                        "mentor08.demo@skillswap.local",
-                        "Bui Thanh Dat",
-                        "SE220008",
-                        CampusCode.DA_NANG,
-                        "QTKD",
-                        "QTKD_TMDT",
-                        7,
-                        2021,
-                        false,
-                        null,
-                        "E-commerce Mentor | Pending Verification",
-                        "E-commerce, business model, internship guidance, project review.",
-                        "BUS101, MKT201, EXE101",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor08"),
-                        List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"),
-                        "E-commerce Guidance",
-                        "Demo mentor profile awaiting approval.",
-                        60,
-                        true,
-                        BigDecimal.valueOf(100000),
-                        false,
-                        null,
-                        0,
-                        0,
-                        BigDecimal.ZERO
-                ),
-                new MentorSeed(
-                        "mentor09.demo@skillswap.local",
-                        "Ngo Minh Tue",
-                        "SE220009",
-                        CampusCode.CAN_THO,
-                        "CTTT",
-                        "CTTT_QHCC",
-                        9,
-                        2020,
-                        true,
-                        2024,
-                        "Communication Mentor | Pending Verification",
-                        "Public speaking, presentation, teamwork, project delivery, career orientation.",
-                        "COM101, COM102, PRJ301",
-                        TeachingMode.OFFLINE,
-                        90,
-                        demoAvatarUrl("mentor09"),
-                        List.of("HELP_INTERVIEW", "HELP_CAREER_PATH", "HELP_PRODUCT_FEEDBACK"),
-                        "Presentation Coaching",
-                        "Demo mentor profile awaiting approval.",
-                        90,
-                        false,
-                        BigDecimal.valueOf(140000),
-                        false,
-                        null,
-                        0,
-                        0,
-                        BigDecimal.ZERO
-                ),
-                new MentorSeed(
-                        "mentor10.demo@skillswap.local",
-                        "Luong Thi Mai",
-                        "SE220010",
-                        CampusCode.QUY_NHON,
-                        "LUAT",
-                        "LUAT_LKT",
-                        8,
-                        2023,
-                        false,
-                        null,
-                        "Law Mentor | Pending Verification",
-                        "Legal studies, presentation structure, career path, documentation support.",
-                        "LAW101, EXE101, COM102",
-                        TeachingMode.ONLINE,
-                        60,
-                        demoAvatarUrl("mentor10"),
-                        List.of("HELP_QA", "HELP_STUDY_PLAN"),
-                        "Law Study Support",
-                        "Demo mentor profile awaiting approval.",
-                        60,
-                        true,
-                        BigDecimal.valueOf(80000),
-                        false,
-                        null,
-                        0,
-                        0,
-                        BigDecimal.ZERO
-                )
-        );
+        List<MentorSeed> seeds = new ArrayList<>();
+
+        seeds.addAll(buildMentorGroup(
+                "ktpm-hcm",
+                "KTPM HCM",
+                CampusCode.HCM,
+                "CNTT",
+                "CNTT_KTPM",
+                20,
+                1,
+                List.of("HELP_CV_REVIEW", "HELP_INTERVIEW", "HELP_QA"),
+                "Spring Boot Mentor",
+                "Backend, Spring Boot, REST API, PostgreSQL, Docker, clean architecture",
+                "EXE101, EXE201, PRJ301",
+                TeachingMode.ONLINE,
+                60,
+                false,
+                BigDecimal.valueOf(120000L),
+                1L
+        ));
+
+        seeds.addAll(buildMentorGroup(
+                "ttdpt-hcm",
+                "TTDPT HCM",
+                CampusCode.HCM,
+                "CTTT",
+                "CTTT_TTDPM",
+                10,
+                21,
+                List.of("HELP_PROJECT_REVIEW", "HELP_PRODUCT_FEEDBACK", "HELP_QA"),
+                "Communication Mentor",
+                "Presentation, storytelling, teamwork, UX explanation, demo pitching",
+                "COM101, COM102, PRJ301",
+                TeachingMode.HYBRID,
+                90,
+                false,
+                BigDecimal.valueOf(100000L),
+                21L
+        ));
+
+        seeds.addAll(buildMentorGroup(
+                "ai-hcm",
+                "AI HCM",
+                CampusCode.HCM,
+                "CNTT",
+                "CNTT_TTNT",
+                10,
+                31,
+                List.of("HELP_CV_REVIEW", "HELP_INTERVIEW", "HELP_STUDY_PLAN"),
+                "AI Mentor",
+                "Machine learning, Python, data processing, model review, project guidance",
+                "AI100, ML101, DSA",
+                TeachingMode.ONLINE,
+                90,
+                false,
+                BigDecimal.valueOf(180000L),
+                41L
+        ));
+
+        seeds.addAll(buildMentorGroup(
+                "tkmts-hcm",
+                "TKMTS HCM",
+                CampusCode.HCM,
+                "CNTT",
+                "CNTT_TKDHMT",
+                10,
+                41,
+                List.of("HELP_PROJECT_REVIEW", "HELP_PRODUCT_FEEDBACK", "HELP_QA"),
+                "Design Mentor",
+                "UI design, visual storytelling, product demo, frontend presentation, design review",
+                "WEB101, UIX201, PRJ301",
+                TeachingMode.HYBRID,
+                60,
+                false,
+                BigDecimal.valueOf(110000L),
+                61L
+        ));
+
+        seeds.addAll(buildMentorGroup(
+                "biz-intl-hcm",
+                "BUS HCM",
+                CampusCode.HCM,
+                "QTKD",
+                "QTKD_KDQT",
+                10,
+                51,
+                List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP", "HELP_QA"),
+                "International Business Mentor",
+                "Business strategy, market analysis, internship guidance, communication",
+                "BUS101, MKT201, COM102",
+                TeachingMode.ONLINE,
+                60,
+                false,
+                BigDecimal.valueOf(130000L),
+                81L
+        ));
+
+        seeds.addAll(buildRandomMentors(40, 61));
+
+        if (seeds.size() != TOTAL_MENTOR_COUNT) {
+            throw new IllegalStateException("Demo mentor seed count must be exactly " + TOTAL_MENTOR_COUNT + ", but was " + seeds.size());
+        }
+        return seeds;
+    }
+
+    private List<MentorSeed> buildMentorGroup(
+            String emailPrefix,
+            String fullNamePrefix,
+            CampusCode campusCode,
+            String programCode,
+            String specializationCode,
+            int count,
+            int startIndex,
+            List<String> helpTopicCodes,
+            String headlinePrefix,
+            String expertisePrefix,
+            String supportingSubjectsPrefix,
+            TeachingMode teachingMode,
+            Integer sessionDuration,
+            boolean serviceFree,
+            BigDecimal basePrice,
+            long verifiedDaysStart
+    ) {
+        List<MentorSeed> seeds = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            int seedIndex = startIndex + i - 1;
+            boolean alumni = i % 4 == 0;
+            Integer graduationYear = alumni ? 2024 - (i % 3) : null;
+            String suffix = String.format("%02d", seedIndex);
+            String email = String.format("mentor%02d.demo@skillswap.local", seedIndex);
+            String fullName = fullNamePrefix + " " + suffix;
+            String studentCode = String.format("SE22%04d", seedIndex);
+            String headline = headlinePrefix + " " + suffix;
+            String expertiseDescription = expertisePrefix + ", mentor profile " + suffix;
+            String supportingSubjects = supportingSubjectsPrefix + ", EXE101, EXE201, PRJ301";
+            String serviceTitle = headlinePrefix + " Service " + suffix;
+            String serviceDescription = "Demo mentoring service " + suffix + " for " + expertisePrefix.toLowerCase();
+            BigDecimal priceAmount = serviceFree ? BigDecimal.ZERO : basePrice.add(BigDecimal.valueOf((i - 1L) * 5000L));
+            int totalCompletedSessions = 10 + i;
+            int totalReviews = 6 + (i % 12);
+            BigDecimal averageRating = BigDecimal.valueOf(450L - ((i - 1L) % 10L) * 5L, 2);
+
+            seeds.add(new MentorSeed(
+                    email,
+                    fullName,
+                    studentCode,
+                    campusCode,
+                    programCode,
+                    specializationCode,
+                    alumni ? 0 : 6 + (i % 3),
+                    2020 + (i % 5),
+                    alumni,
+                    graduationYear,
+                    headline,
+                    expertiseDescription,
+                    supportingSubjects,
+                    teachingMode,
+                    sessionDuration,
+                    demoAvatarUrl("mentor" + suffix),
+                    helpTopicCodes,
+                    serviceTitle,
+                    serviceDescription,
+                    sessionDuration,
+                    serviceFree,
+                    priceAmount,
+                    true,
+                    Math.toIntExact(verifiedDaysStart + i),
+                    totalCompletedSessions,
+                    totalReviews,
+                    averageRating
+            ));
+        }
+        return seeds;
+    }
+
+    private List<MentorSeed> buildRandomMentors(int count, int startIndex) {
+        List<CampusCode> campuses = new ArrayList<>(List.of(
+                CampusCode.HA_NOI,
+                CampusCode.DA_NANG,
+                CampusCode.CAN_THO,
+                CampusCode.QUY_NHON
+        ));
+        Collections.shuffle(campuses, new java.util.Random(20260617L));
+
+        List<RandomTrack> tracks = new ArrayList<>(List.of(
+                new RandomTrack("CNTT", "CNTT_ATTT", List.of("HELP_CV_REVIEW", "HELP_QA"), "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(95000L)),
+                new RandomTrack("CNTT", "CNTT_HTTT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, BigDecimal.valueOf(105000L)),
+                new RandomTrack("CNTT", "CNTT_TTNT", List.of("HELP_INTERVIEW", "HELP_STUDY_PLAN"), "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, BigDecimal.valueOf(175000L)),
+                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PRODUCT_FEEDBACK"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, BigDecimal.valueOf(90000L)),
+                new RandomTrack("NN", "NN_NNA", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(115000L)),
+                new RandomTrack("LUAT", "LUAT_LKT", List.of("HELP_QA", "HELP_STUDY_PLAN"), "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(80000L)),
+                new RandomTrack("QTKD", "QTKD_MKT", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, BigDecimal.valueOf(100000L)),
+                new RandomTrack("QTKD", "QTKD_TMDT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "E-commerce Mentor", "E-commerce, product review, project storytelling, digital business", "ECOM101, PRJ301, COM102", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(100000L))
+        ));
+        Collections.shuffle(tracks, new java.util.Random(20260618L));
+
+        List<MentorSeed> seeds = new ArrayList<>();
+        for (int i = 1; i <= count; i++) {
+            int seedIndex = startIndex + i - 1;
+            CampusCode campusCode = campuses.get((i - 1) % campuses.size());
+            RandomTrack track = tracks.get((i - 1) % tracks.size());
+            String suffix = String.format("%02d", seedIndex);
+            String fullNamePrefix = switch (track.programCode()) {
+                case "CNTT" -> "HCMU Mentor";
+                case "CTTT" -> "Comm Mentor";
+                case "NN" -> "Lang Mentor";
+                case "LUAT" -> "Law Mentor";
+                case "QTKD" -> "Biz Mentor";
+                default -> "Mentor";
+            };
+
+            seeds.add(new MentorSeed(
+                    String.format("mentor%02d.demo@skillswap.local", seedIndex),
+                    fullNamePrefix + " " + suffix,
+                    String.format("SE22%04d", seedIndex),
+                    campusCode,
+                    track.programCode(),
+                    track.specializationCode(),
+                    i % 5 == 0 ? 0 : 6 + (i % 3),
+                    2020 + (seedIndex % 5),
+                    i % 5 == 0,
+                    i % 5 == 0 ? 2023 - (i % 2) : null,
+                    track.headlinePrefix() + " " + suffix,
+                    track.expertisePrefix() + ", demo mentor " + suffix,
+                    track.supportingSubjectsPrefix() + ", EXE101, PRJ301",
+                    track.teachingMode(),
+                    track.sessionDuration(),
+                    demoAvatarUrl("mentor" + suffix),
+                    track.helpTopicCodes(),
+                    track.headlinePrefix() + " Service " + suffix,
+                    "Demo mentoring service " + suffix + " for " + track.expertisePrefix().toLowerCase(),
+                    track.sessionDuration(),
+                    track.serviceFree(),
+                    track.basePrice().add(BigDecimal.valueOf((i - 1L) * 3000L)),
+                    true,
+                    120 + i,
+                    5 + i,
+                    3 + (i % 10),
+                    BigDecimal.valueOf(430L - ((i - 1L) % 6L) * 6L, 2)
+            ));
+        }
+        return seeds;
+    }
+
+    private record RandomTrack(
+            String programCode,
+            String specializationCode,
+            List<String> helpTopicCodes,
+            String headlinePrefix,
+            String expertisePrefix,
+            String supportingSubjectsPrefix,
+            TeachingMode teachingMode,
+            Integer sessionDuration,
+            boolean serviceFree,
+            BigDecimal basePrice
+    ) {
     }
 
     private List<StudentSeed> menteeSeeds() {
