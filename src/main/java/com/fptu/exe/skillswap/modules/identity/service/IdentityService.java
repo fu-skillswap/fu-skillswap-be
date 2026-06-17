@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.RefreshTokenCookieProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -20,6 +21,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -37,6 +39,7 @@ public class IdentityService {
     private final AcademicService academicService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final RefreshTokenCookieProperties refreshTokenCookieProperties;
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
         if (request == null || request.getIdToken() == null || request.getIdToken().trim().isEmpty()) {
@@ -47,12 +50,11 @@ public class IdentityService {
     }
 
     @Transactional
-    public TokenResponse refreshToken(RefreshTokenRequest request) {
-        if (request == null || request.getRefreshToken() == null || request.getRefreshToken().trim().isEmpty()) {
+    public TokenResponse refreshToken(String rawRefreshToken) {
+        if (!StringUtils.hasText(rawRefreshToken)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Refresh token không được để trống");
         }
-        String rawToken = request.getRefreshToken();
-        String hash = jwtTokenProvider.hashToken(rawToken);
+        String hash = jwtTokenProvider.hashToken(rawRefreshToken);
 
         UserSession session = userSessionRepository.findByRefreshTokenHash(hash)
                 .orElseThrow(() -> new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã hết hạn hoặc không hợp lệ"));
@@ -80,7 +82,7 @@ public class IdentityService {
 
     @Transactional
     public void logout(String rawRefreshToken) {
-        if (rawRefreshToken == null || rawRefreshToken.trim().isEmpty()) {
+        if (!StringUtils.hasText(rawRefreshToken)) {
             return;
         }
         String hash = jwtTokenProvider.hashToken(rawRefreshToken);
@@ -153,8 +155,29 @@ public class IdentityService {
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
-                .refreshToken(refreshToken)
                 .build();
+    }
+
+    public String buildRefreshTokenCookieValue(String refreshToken) {
+        return buildRefreshTokenCookieValue(refreshToken, false);
+    }
+
+    public String buildRefreshTokenCookieValue(String refreshToken, boolean cleared) {
+        long maxAge = cleared ? 0L : jwtProperties.getJwt().getRefreshToken().getExpiration() / 1000;
+        boolean secure = refreshTokenCookieProperties.isSecure();
+        return org.springframework.http.ResponseCookie.from(refreshTokenCookieProperties.getName(),
+                        cleared ? "" : refreshToken)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(refreshTokenCookieProperties.getSameSite())
+                .path(refreshTokenCookieProperties.getPath())
+                .maxAge(maxAge)
+                .build()
+                .toString();
+    }
+
+    public String getRefreshTokenCookieName() {
+        return refreshTokenCookieProperties.getName();
     }
 
 }
