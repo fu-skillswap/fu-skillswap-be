@@ -69,7 +69,7 @@ class AdminMentorServiceTest {
         request.setStatus(MentorStatus.ACTIVE);
         request.setIsAvailable(true);
 
-        when(mentorProfileRepository.searchForAdmin(eq("backend"), eq(MentorStatus.ACTIVE), eq(true), any(Pageable.class)))
+        when(mentorProfileRepository.searchForAdmin(eq("%backend%"), eq(MentorStatus.ACTIVE), eq(true), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(profile)));
 
         PageResponse<AdminMentorListItemResponse> response = adminMentorService.getMentors(request);

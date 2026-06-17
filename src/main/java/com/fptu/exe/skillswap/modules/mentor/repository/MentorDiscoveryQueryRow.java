@@ -13,6 +13,7 @@ public record MentorDiscoveryQueryRow(
         String headline,
         String expertiseDescription,
         String supportingSubjects,
+        String bio,
         Boolean isAvailable,
         BigDecimal ratingAverage,
         Integer reviewCount,

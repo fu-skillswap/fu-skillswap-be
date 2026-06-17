@@ -51,15 +51,23 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and (:menteeProgramId is null or program.id = :menteeProgramId)
               and (:menteeSpecializationId is null or specialization.id = :menteeSpecializationId)
               and (:menteeSemester is null or sp.semester is null or sp.semester >= :menteeSemester)
-              and (:keyword is null
-                    or lower(coalesce(mp.supportingSubjects, '')) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.expertiseDescription, '')) like lower(concat('%', :keyword, '%'))
+              and (:keywordPattern is null
+                    or lower(coalesce(u.fullName, '')) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern
+                    or lower(coalesce(sp.bio, '')) like :keywordPattern
+                    or lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern
+                    or lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern
+                    or lower(coalesce(program.nameVi, '')) like :keywordPattern
+                    or lower(coalesce(specialization.nameVi, '')) like :keywordPattern
                     or exists (
                         select 1
                         from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms
                         where ms.mentorProfile.userId = mp.userId
                           and ms.isActive = true
-                          and lower(coalesce(ms.description, '')) like lower(concat('%', :keyword, '%'))
+                      and (
+                           lower(coalesce(ms.title, '')) like :keywordPattern
+                           or lower(coalesce(ms.description, '')) like :keywordPattern
+                      )
                     )
               )
               and (:campusId is null or campus.id = :campusId)
@@ -72,6 +80,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       and mt.id.tagType = :helpTopicTagType
                       and mt.id.tagId in :tagIds
               ))
+            order by mp.verifiedAt desc nulls last, mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last, mp.updatedAt desc nulls last
             """, countQuery = """
             select count(mp.userId)
             from MentorProfile mp
@@ -100,15 +109,23 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and (:menteeProgramId is null or program.id = :menteeProgramId)
               and (:menteeSpecializationId is null or specialization.id = :menteeSpecializationId)
               and (:menteeSemester is null or sp.semester is null or sp.semester >= :menteeSemester)
-              and (:keyword is null
-                    or lower(coalesce(mp.supportingSubjects, '')) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.expertiseDescription, '')) like lower(concat('%', :keyword, '%'))
+              and (:keywordPattern is null
+                    or lower(coalesce(u.fullName, '')) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern
+                    or lower(coalesce(sp.bio, '')) like :keywordPattern
+                    or lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern
+                    or lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern
+                    or lower(coalesce(program.nameVi, '')) like :keywordPattern
+                    or lower(coalesce(specialization.nameVi, '')) like :keywordPattern
                     or exists (
                         select 1
                         from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms
                         where ms.mentorProfile.userId = mp.userId
                           and ms.isActive = true
-                          and lower(coalesce(ms.description, '')) like lower(concat('%', :keyword, '%'))
+                      and (
+                           lower(coalesce(ms.title, '')) like :keywordPattern
+                           or lower(coalesce(ms.description, '')) like :keywordPattern
+                      )
                     )
               )
               and (:campusId is null or campus.id = :campusId)
@@ -125,7 +142,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     Page<UUID> searchDiscoverableMentorIds(
             @Param("mentorStatus") MentorStatus mentorStatus,
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
-            @Param("keyword") String keyword,
+            @Param("keywordPattern") String keywordPattern,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
             @Param("teachingMode") TeachingMode teachingMode,
@@ -167,15 +184,21 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and (:menteeProgramId is null or program.id = :menteeProgramId)
               and (:menteeSpecializationId is null or specialization.id = :menteeSpecializationId)
               and (:menteeSemester is null or sp.semester is null or sp.semester >= :menteeSemester)
-              and (:keyword is null
-                    or lower(coalesce(mp.supportingSubjects, '')) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.expertiseDescription, '')) like lower(concat('%', :keyword, '%'))
+              and (:keywordPattern is null
+                    or lower(coalesce(u.fullName, '')) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern
+                    or lower(coalesce(sp.bio, '')) like :keywordPattern
+                    or lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern
+                    or lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern
+                    or lower(coalesce(program.nameVi, '')) like :keywordPattern
+                    or lower(coalesce(specialization.nameVi, '')) like :keywordPattern
                     or exists (
                         select 1
                         from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms
                         where ms.mentorProfile.userId = mp.userId
                           and ms.isActive = true
-                          and lower(coalesce(ms.description, '')) like lower(concat('%', :keyword, '%'))
+                          and (lower(coalesce(ms.title, '')) like :keywordPattern
+                               or lower(coalesce(ms.description, '')) like :keywordPattern)
                     )
               )
               and (:campusId is null or campus.id = :campusId)
@@ -188,33 +211,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       and mt.id.tagType = :helpTopicTagType
                       and mt.id.tagId in :tagIds
               ))
-            order by
-              (
-                ((case when (:menteeSpecializationId is not null and specialization.id = :menteeSpecializationId) then 40.00 else 0.00 end) +
-                (case when (:menteeProgramId is not null and program.id = :menteeProgramId) then 18.00 else 0.00 end) +
-                (case when (:menteeCampusId is not null and campus.id = :menteeCampusId) then 10.00 else 0.00 end) +
-                (case when sp.isAlumni = true then 30.00
-                      when (:menteeSemester is not null and sp.semester is not null and sp.semester > :menteeSemester) then 20.00
-                      when (:menteeSemester is not null and sp.semester is not null and sp.semester = :menteeSemester) then 10.00
-                      else 0.00 end) +
-                (case when :keyword is not null and exists (
-                      select 1
-                      from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms
-                      where ms.mentorProfile.userId = mp.userId
-                        and ms.isActive = true
-                        and lower(coalesce(ms.description, '')) like lower(concat('%', :keyword, '%'))
-                ) then 30.00 else 0.00 end) +
-                (case when mp.verifiedAt is null then 0.00
-                      when timestampdiff(DAY, mp.verifiedAt, :now) < 3 then 10.00
-                      else (0.20 * floor(timestampdiff(DAY, mp.verifiedAt, :now) / 7.00)) end) +
-                (0.10 * coalesce(mp.totalCompletedSessions, 0)) -
-                (0.05 * coalesce(mp.totalRejectedBookings, 0)) -
-                coalesce(mp.lateCancellationPenaltyPoints, 0.00)) *
-                (case when coalesce(mp.totalReviews, 0) = 0 then 1.00
-                      else (coalesce(mp.averageRating, 0.00) / 5.00) end)
-              ) desc,
-              mp.totalCompletedSessions desc,
-              mp.averageRating desc
+            order by mp.verifiedAt desc nulls last, mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last, mp.updatedAt desc nulls last
             """, countQuery = """
             select count(mp.userId)
             from MentorProfile mp
@@ -239,16 +236,27 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
               )
+              and (:menteeCampusId is null or campus.id = :menteeCampusId)
               and (:menteeProgramId is null or program.id = :menteeProgramId)
-              and (:keyword is null
-                    or lower(coalesce(mp.supportingSubjects, '')) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.expertiseDescription, '')) like lower(concat('%', :keyword, '%'))
+              and (:menteeSpecializationId is null or specialization.id = :menteeSpecializationId)
+              and (:menteeSemester is null or sp.semester is null or sp.semester >= :menteeSemester)
+              and (:keywordPattern is null
+                    or lower(coalesce(u.fullName, '')) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern
+                    or lower(coalesce(sp.bio, '')) like :keywordPattern
+                    or lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern
+                    or lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern
+                    or lower(coalesce(program.nameVi, '')) like :keywordPattern
+                    or lower(coalesce(specialization.nameVi, '')) like :keywordPattern
                     or exists (
                         select 1
                         from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms
                         where ms.mentorProfile.userId = mp.userId
                           and ms.isActive = true
-                          and lower(coalesce(ms.description, '')) like lower(concat('%', :keyword, '%'))
+                          and (
+                               lower(coalesce(ms.title, '')) like :keywordPattern
+                               or lower(coalesce(ms.description, '')) like :keywordPattern
+                          )
                     )
               )
               and (:campusId is null or campus.id = :campusId)
@@ -265,7 +273,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     Page<UUID> searchDiscoverableMentorIdsSortedByRelevance(
             @Param("mentorStatus") MentorStatus mentorStatus,
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
-            @Param("keyword") String keyword,
+            @Param("keywordPattern") String keywordPattern,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
             @Param("teachingMode") TeachingMode teachingMode,
@@ -289,6 +297,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 mp.headline,
                 mp.expertiseDescription,
                 mp.supportingSubjects,
+                sp.bio,
                 mp.isAvailable,
                 mp.averageRating,
                 mp.totalReviews,
@@ -318,24 +327,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @Query("""
             select new com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow(
                 mp.userId, u.fullName, u.avatarUrl, mp.headline, mp.expertiseDescription, mp.supportingSubjects,
-                mp.isAvailable, mp.averageRating, mp.totalReviews, mp.totalCompletedSessions, mp.teachingMode, mp.verifiedAt,
+                sp.bio, mp.isAvailable, mp.averageRating, mp.totalReviews, mp.totalCompletedSessions, mp.teachingMode, mp.verifiedAt,
                 campus.id, campus.name, program.id, program.nameVi, specialization.id, specialization.nameVi, sp.semester, sp.isAlumni,
-                (
-                  ((case when (:menteeSpecializationId is not null and specialization.id = :menteeSpecializationId) then 40.00 else 0.00 end) +
-                  (case when (:menteeProgramId is not null and program.id = :menteeProgramId) then 18.00 else 0.00 end) +
-                  (case when (:menteeCampusId is not null and campus.id = :menteeCampusId) then 10.00 else 0.00 end) +
-                  (case when sp.isAlumni = true then 30.00
-                        when (:menteeSemester is not null and sp.semester is not null and sp.semester > :menteeSemester) then 20.00
-                        when (:menteeSemester is not null and sp.semester is not null and sp.semester = :menteeSemester) then 10.00
-                        else 0.00 end) +
-                  (case when mp.verifiedAt is null then 0.00
-                        when timestampdiff(DAY, mp.verifiedAt, :now) < 3 then 10.00
-                        else (0.20 * floor(timestampdiff(DAY, mp.verifiedAt, :now) / 7.00)) end) +
-                  (0.10 * coalesce(mp.totalCompletedSessions, 0)) -
-                  (0.05 * coalesce(mp.totalRejectedBookings, 0)) -
-                  coalesce(mp.lateCancellationPenaltyPoints, 0.00)) *
-                  (case when coalesce(mp.totalReviews, 0) = 0 then 1.00 else (coalesce(mp.averageRating, 0.00) / 5.00) end)
-                )
+                null
             )
             from MentorProfile mp
             join mp.user u
@@ -359,34 +353,12 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
               )
-            order by
-              (
-                ((case when (:menteeSpecializationId is not null and specialization.id = :menteeSpecializationId) then 40.00 else 0.00 end) +
-                (case when (:menteeProgramId is not null and program.id = :menteeProgramId) then 18.00 else 0.00 end) +
-                (case when (:menteeCampusId is not null and campus.id = :menteeCampusId) then 10.00 else 0.00 end) +
-                (case when sp.isAlumni = true then 30.00
-                      when (:menteeSemester is not null and sp.semester is not null and sp.semester > :menteeSemester) then 20.00
-                      when (:menteeSemester is not null and sp.semester is not null and sp.semester = :menteeSemester) then 10.00
-                      else 0.00 end) +
-                (case when mp.verifiedAt is null then 0.00
-                      when timestampdiff(DAY, mp.verifiedAt, :now) < 3 then 10.00
-                      else (0.20 * floor(timestampdiff(DAY, mp.verifiedAt, :now) / 7.00)) end) +
-                (0.10 * coalesce(mp.totalCompletedSessions, 0)) -
-                (0.05 * coalesce(mp.totalRejectedBookings, 0)) -
-                coalesce(mp.lateCancellationPenaltyPoints, 0.00)) *
-                (case when coalesce(mp.totalReviews, 0) = 0 then 1.00 else (coalesce(mp.averageRating, 0.00) / 5.00) end)
-              ) desc,
-              mp.totalCompletedSessions desc,
-              mp.averageRating desc
+            order by mp.verifiedAt desc nulls last, mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last, mp.updatedAt desc nulls last
             """)
     List<MentorDiscoveryQueryRow> findRecommendationCandidatesSortedByRelevance(
             @Param("mentorStatus") MentorStatus mentorStatus,
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("excludedUserId") UUID excludedUserId,
-            @Param("menteeCampusId") UUID menteeCampusId,
-            @Param("menteeProgramId") UUID menteeProgramId,
-            @Param("menteeSpecializationId") UUID menteeSpecializationId,
-            @Param("menteeSemester") Integer menteeSemester,
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
@@ -406,24 +378,24 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             join mp.user u
             where (:status is null or mp.status = :status)
               and (:isAvailable is null or mp.isAvailable = :isAvailable)
-              and (:keyword is null
-                    or lower(u.email) like lower(concat('%', :keyword, '%'))
-                    or lower(u.fullName) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.headline, '')) like lower(concat('%', :keyword, '%')))
+              and (:keywordPattern is null
+                    or lower(u.email) like :keywordPattern
+                    or lower(u.fullName) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern)
             """, countQuery = """
             select count(mp.userId)
             from MentorProfile mp
             join mp.user u
             where (:status is null or mp.status = :status)
               and (:isAvailable is null or mp.isAvailable = :isAvailable)
-              and (:keyword is null
-                    or lower(u.email) like lower(concat('%', :keyword, '%'))
-                    or lower(u.fullName) like lower(concat('%', :keyword, '%'))
-                    or lower(coalesce(mp.headline, '')) like lower(concat('%', :keyword, '%')))
+              and (:keywordPattern is null
+                    or lower(u.email) like :keywordPattern
+                    or lower(u.fullName) like :keywordPattern
+                    or lower(coalesce(mp.headline, '')) like :keywordPattern)
             """)
     @EntityGraph(attributePaths = {"user"})
     Page<MentorProfile> searchForAdmin(
-            @Param("keyword") String keyword,
+            @Param("keywordPattern") String keywordPattern,
             @Param("status") MentorStatus status,
             @Param("isAvailable") Boolean isAvailable,
             Pageable pageable

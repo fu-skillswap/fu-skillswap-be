@@ -1,6 +1,9 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.academic.domain.Campus;
+import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
@@ -84,13 +87,29 @@ class MentorDiscoveryServiceTest {
     private StudentProfile studentProfile;
     private MentorProfile mentorProfile;
     private User mentorUser;
+    private Campus campus;
+    private AcademicProgram academicProgram;
+    private Specialization specialization;
 
     @BeforeEach
     void setUp() {
         userId = UUID.randomUUID();
         mentorUserId = UUID.randomUUID();
+        campus = new Campus();
+        campus.setId(UUID.randomUUID());
+        campus.setName("Hanoi");
+        academicProgram = new AcademicProgram();
+        academicProgram.setId(UUID.randomUUID());
+        academicProgram.setNameVi("CNTT");
+        specialization = new Specialization();
+        specialization.setId(UUID.randomUUID());
+        specialization.setNameVi("Backend");
         studentProfile = new StudentProfile();
         studentProfile.setUserId(userId);
+        studentProfile.setCampus(campus);
+        studentProfile.setProgram(academicProgram);
+        studentProfile.setSpecialization(specialization);
+        studentProfile.setSemester(8);
 
         mentorUser = new User();
         mentorUser.setId(mentorUserId);
@@ -132,10 +151,10 @@ class MentorDiscoveryServiceTest {
         when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
 
         PageImpl<UUID> mentorIdPage = new PageImpl<>(Collections.singletonList(mentorUserId));
-        when(mentorProfileRepository.searchDiscoverableMentorIdsSortedByRelevance(
+        when(mentorProfileRepository.searchDiscoverableMentorIds(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                eq("Java"),
+                eq("%java%"),
                 any(), any(), any(), any(), anyBoolean(), anyList(),
                 any(), any(), any(), any(), any(), any(Pageable.class)
         )).thenReturn(mentorIdPage);
@@ -143,6 +162,8 @@ class MentorDiscoveryServiceTest {
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
                 .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.ZERO, 0, 3.0)));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(anyList()))
                 .thenReturn(Collections.emptyList());
 
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
@@ -169,6 +190,8 @@ class MentorDiscoveryServiceTest {
                 .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.2), 2, 25.0)));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
                 .thenReturn(Collections.emptyList());
+        when(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(anyList()))
+                .thenReturn(Collections.emptyList());
 
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
 
@@ -183,7 +206,7 @@ class MentorDiscoveryServiceTest {
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
                 eq(userId),
-                any(), any(), any(), any(), any(), any(Pageable.class)
+                any(), any(Pageable.class)
         )).thenReturn(List.of());
 
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
@@ -198,15 +221,15 @@ class MentorDiscoveryServiceTest {
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
                 eq(userId),
-                any(), any(), any(), any(), any(), any(Pageable.class)
-        )).thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.8), 5, 88.25)));
+                any(), any(Pageable.class)
+        )).thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.8), 5, 0.0)));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
                 .thenReturn(Collections.emptyList());
 
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
         assertEquals(1, recommendations.size());
-        assertEquals(new BigDecimal("88.25"), recommendations.getFirst().matchScore());
+        assertEquals(new BigDecimal("90.00"), recommendations.getFirst().matchScore());
         assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 
@@ -290,21 +313,22 @@ class MentorDiscoveryServiceTest {
                 id,
                 "Mentor Full Name",
                 "avatar.png",
-                "headline",
-                "expertise",
-                "subjects",
+                "Java headline",
+                "Java expertise",
+                "Java subjects",
+                "Java mentor bio",
                 true,
                 rating,
                 reviewCount,
                 5,
                 TeachingMode.ONLINE,
                 LocalDateTime.now().minusDays(10),
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
+                campus.getId(),
+                campus.getName(),
+                academicProgram.getId(),
+                academicProgram.getNameVi(),
+                specialization.getId(),
+                specialization.getNameVi(),
                 8,
                 false,
                 matchScore
