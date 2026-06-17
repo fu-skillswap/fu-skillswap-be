@@ -84,6 +84,7 @@ class MentorDiscoveryServiceTest {
 
     private UUID userId;
     private UUID mentorUserId;
+    private UUID fallbackMentorUserId;
     private StudentProfile studentProfile;
     private MentorProfile mentorProfile;
     private User mentorUser;
@@ -95,6 +96,7 @@ class MentorDiscoveryServiceTest {
     void setUp() {
         userId = UUID.randomUUID();
         mentorUserId = UUID.randomUUID();
+        fallbackMentorUserId = UUID.randomUUID();
         campus = new Campus();
         campus.setId(UUID.randomUUID());
         campus.setName("Hanoi");
@@ -185,17 +187,22 @@ class MentorDiscoveryServiceTest {
                 eq(null),
                 any(), any(), any(), any(), anyBoolean(), anyList(),
                 any(), any(), any(), any(), any(), any(Pageable.class)
-        )).thenReturn(new PageImpl<>(List.of(mentorUserId)));
+        )).thenReturn(
+                new PageImpl<>(List.of(mentorUserId)),
+                new PageImpl<>(List.of(fallbackMentorUserId))
+        );
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
                 .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.valueOf(4.2), 2, 25.0)));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(fallbackMentorUserId)))
+                .thenReturn(List.of(discoveryRow(fallbackMentorUserId, BigDecimal.valueOf(3.9), 1, 10.0)));
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
-                .thenReturn(Collections.emptyList());
+                .thenReturn(Collections.emptyList(), Collections.emptyList());
         when(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(anyList()))
-                .thenReturn(Collections.emptyList());
+                .thenReturn(Collections.emptyList(), Collections.emptyList());
 
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
 
-        assertEquals(1, response.getContent().size());
+        assertEquals(2, response.getContent().size());
         assertEquals(0, response.getContent().getFirst().ratingAverage().compareTo(new BigDecimal("4.20")));
     }
 

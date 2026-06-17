@@ -187,8 +187,19 @@ public class MentorDiscoveryService {
                             .comparing(SearchRankedMentor::profileScore).reversed()
                             .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
                             .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
-                            .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
+                    .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
                     .toList();
+        }
+
+        if (!hasKeyword && rankedMentors.size() < requestedSize) {
+            rankedMentors = appendFallbackMentors(
+                    rankedMentors,
+                    requestedSize,
+                    menteeProfile,
+                    relevanceSort,
+                    currentUserId,
+                    safeRequest
+            );
         }
 
         int fromIndex = Math.min(requestedPage * requestedSize, rankedMentors.size());
@@ -592,6 +603,76 @@ public class MentorDiscoveryService {
             case "study", "planning", "plan" -> List.of("ke hoach hoc tap");
             default -> List.of();
         };
+    }
+
+    private List<SearchRankedMentor> appendFallbackMentors(
+            List<SearchRankedMentor> primaryMentors,
+            int requestedSize,
+            StudentProfile menteeProfile,
+            boolean relevanceSort,
+            UUID currentUserId,
+            MentorDiscoverySearchRequest request
+    ) {
+        Set<UUID> selectedIds = primaryMentors.stream()
+                .map(candidate -> candidate.row().mentorUserId())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Page<UUID> fallbackIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
+                MentorStatus.ACTIVE,
+                MentorTagType.HELP_TOPIC,
+                null,
+                null,
+                null,
+                null,
+                null,
+                false,
+                List.of(EMPTY_TAG_ID),
+                null,
+                null,
+                null,
+                null,
+                currentTime(),
+                PageRequest.of(0, Math.min(SEARCH_CANDIDATE_CAP, Math.max(requestedSize * 5, requestedSize)))
+        );
+
+        List<MentorDiscoveryQueryRow> fallbackRows = loadDiscoveryRowsInPageOrder(
+                fallbackIdPage.getContent().stream()
+                        .filter(id -> id != null && !selectedIds.contains(id))
+                        .toList()
+        );
+        if (fallbackRows.isEmpty()) {
+            return primaryMentors;
+        }
+
+        Map<UUID, List<MentorTagResponse>> fallbackHelpTopics = loadTagsByMentor(
+                fallbackRows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
+                Set.of(MentorTagType.HELP_TOPIC)
+        );
+        Map<UUID, List<MentorServiceResponse>> fallbackServices = loadServicesByMentor(
+                fallbackRows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList()
+        );
+
+        List<SearchRankedMentor> merged = new ArrayList<>(primaryMentors);
+        for (MentorDiscoveryQueryRow row : fallbackRows) {
+            if (selectedIds.contains(row.mentorUserId())) {
+                continue;
+            }
+            merged.add(rankSearchCandidate(
+                    row,
+                    fallbackHelpTopics.getOrDefault(row.mentorUserId(), List.of()),
+                    fallbackServices.getOrDefault(row.mentorUserId(), List.of()),
+                    menteeProfile,
+                    null,
+                    List.of(),
+                    relevanceSort,
+                    false
+            ));
+            selectedIds.add(row.mentorUserId());
+            if (merged.size() >= requestedSize) {
+                break;
+            }
+        }
+        return merged;
     }
 
     private record SearchRankedMentor(
