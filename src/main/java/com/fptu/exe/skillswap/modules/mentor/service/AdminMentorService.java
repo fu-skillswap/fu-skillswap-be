@@ -24,7 +24,7 @@ public class AdminMentorService {
     public PageResponse<AdminMentorListItemResponse> getMentors(AdminMentorListRequest request) {
         AdminMentorListRequest safeRequest = request == null ? new AdminMentorListRequest() : request;
         Page<MentorProfile> page = mentorProfileRepository.searchForAdmin(
-                normalizeKeyword(safeRequest.getKeyword()),
+                buildKeywordPattern(safeRequest.getKeyword()),
                 safeRequest.getStatus(),
                 safeRequest.getIsAvailable(),
                 adminMentorPageable(safeRequest)
@@ -86,5 +86,13 @@ public class AdminMentorService {
             return null;
         }
         return keyword.trim();
+    }
+
+    private String buildKeywordPattern(String keyword) {
+        String normalized = normalizeKeyword(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return "%" + normalized.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ") + "%";
     }
 }

@@ -40,19 +40,23 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -61,16 +65,19 @@ public class MentorDiscoveryService {
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final UUID EMPTY_TAG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-    private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(40);
-    private static final BigDecimal SAME_PROGRAM_SCORE = decimal(18);
+    private static final BigDecimal SAME_PROGRAM_SCORE = decimal(40);
+    private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(30);
     private static final BigDecimal SAME_CAMPUS_SCORE = decimal(10);
-    private static final BigDecimal MENTOR_ALUMNI_SCORE = decimal(30);
-    private static final BigDecimal MENTOR_HIGHER_SEMESTER_SCORE = decimal(20);
+    private static final BigDecimal MENTOR_ALUMNI_SCORE = decimal(20);
+    private static final BigDecimal MENTOR_HIGHER_SEMESTER_SCORE = decimal(15);
     private static final BigDecimal MENTOR_EQUAL_SEMESTER_SCORE = decimal(10);
-    private static final BigDecimal NEWLY_ACTIVE_SCORE = decimal(10);
-    private static final BigDecimal TENURE_STEP_SCORE = decimal("0.2");
-    private static final BigDecimal COMPLETED_SESSION_SCORE = decimal("0.1");
-    private static final BigDecimal MAX_RATING = decimal(5);
+    private static final BigDecimal SEARCH_EXACT_PHRASE_SCORE = decimal(50);
+    private static final BigDecimal SEARCH_PREFIX_SCORE = decimal(25);
+    private static final BigDecimal SEARCH_TOKEN_SCORE = decimal(8);
+    private static final BigDecimal SEARCH_TAG_SCORE = decimal(10);
+    private static final BigDecimal SEARCH_SERVICE_SCORE = decimal(12);
+    private static final BigDecimal SEARCH_BIO_SCORE = decimal(8);
+    private static final int SEARCH_CANDIDATE_CAP = 500;
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -87,73 +94,119 @@ public class MentorDiscoveryService {
 
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
+        boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
+        String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
+        String keywordPattern = buildKeywordPattern(safeRequest.getKeyword());
+        List<String> keywordTokens = normalizeTokens(normalizedKeyword);
 
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
         UUID menteeCampusId = menteeProfile != null && menteeProfile.getCampus() != null ? menteeProfile.getCampus().getId() : null;
         UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
         UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
         Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
-        LocalDateTime now = currentTime();
+        int requestedPage = Math.max(safeRequest.getPage(), 0);
+        int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
+        boolean relevanceSort = isRelevanceSort(safeRequest.getSortBy());
+        boolean useInMemoryRanking = hasKeyword || relevanceSort;
 
-        String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
-        Page<UUID> mentorIdPage;
-        if (isRelevanceSort(safeRequest.getSortBy())) {
-            Pageable pageable = PageRequest.of(Math.max(safeRequest.getPage(), 0), Math.min(Math.max(safeRequest.getSize(), 1), 30));
-            mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIdsSortedByRelevance(
-                    MentorStatus.ACTIVE,
-                    MentorTagType.HELP_TOPIC,
-                    normalizedKeyword,
-                    safeRequest.getCampusId(),
-                    safeRequest.getSpecializationId(),
-                    safeRequest.getTeachingMode(),
-                    safeRequest.getIsAvailable(),
-                    hasTagFilter(safeRequest.getTagIds()),
-                    tagIds,
-                    menteeCampusId,
-                    menteeProgramId,
-                    menteeSpecializationId,
-                    menteeSemester,
-                    now,
-                    pageable
-            );
-        } else {
-            mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
-                    MentorStatus.ACTIVE,
-                    MentorTagType.HELP_TOPIC,
-                    normalizedKeyword,
-                    safeRequest.getCampusId(),
-                    safeRequest.getSpecializationId(),
-                    safeRequest.getTeachingMode(),
-                    safeRequest.getIsAvailable(),
-                    hasTagFilter(safeRequest.getTagIds()),
-                    tagIds,
-                    menteeCampusId,
-                    menteeProgramId,
-                    menteeSpecializationId,
-                    menteeSemester,
-                    now,
-                    searchPageable(safeRequest)
-            );
-        }
+        int fetchSize = useInMemoryRanking
+                ? Math.min(SEARCH_CANDIDATE_CAP, Math.max(requestedSize * Math.max(requestedPage + 1, 1) * 10, requestedSize * 10))
+                : requestedSize;
+
+        Pageable basePageable = useInMemoryRanking
+                ? PageRequest.of(0, fetchSize)
+                : searchPageable(safeRequest);
+
+        Page<UUID> mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
+                MentorStatus.ACTIVE,
+                MentorTagType.HELP_TOPIC,
+                keywordPattern,
+                safeRequest.getCampusId(),
+                safeRequest.getSpecializationId(),
+                safeRequest.getTeachingMode(),
+                safeRequest.getIsAvailable(),
+                hasTagFilter(safeRequest.getTagIds()),
+                tagIds,
+                menteeCampusId,
+                menteeProgramId,
+                menteeSpecializationId,
+                menteeSemester,
+                currentTime(),
+                basePageable
+        );
 
         List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(mentorIdPage.getContent());
+        if (rows.isEmpty()) {
+            return PageResponse.<MentorDiscoveryCardResponse>builder()
+                    .content(List.of())
+                    .page(requestedPage)
+                    .size(requestedSize)
+                    .totalElements(0)
+                    .totalPages(0)
+                    .last(true)
+                    .build();
+        }
 
         Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
                 rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
                 Set.of(MentorTagType.HELP_TOPIC)
         );
+        Map<UUID, List<MentorServiceResponse>> servicesByMentor = loadServicesByMentor(
+                rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList()
+        );
 
-        List<MentorDiscoveryCardResponse> content = rows.stream()
-                .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
+        List<SearchRankedMentor> rankedMentors = rows.stream()
+                .map(row -> rankSearchCandidate(
+                        row,
+                        helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                        servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                        menteeProfile,
+                        normalizedKeyword,
+                        keywordTokens,
+                        relevanceSort,
+                        hasKeyword
+                ))
                 .toList();
+
+        rankedMentors = rankedMentors.stream()
+                .filter(candidate -> !hasKeyword || candidate.keywordScore().compareTo(ZERO) > 0)
+                .toList();
+
+        if (hasKeyword) {
+            rankedMentors = rankedMentors.stream()
+                    .sorted(Comparator
+                            .comparing(SearchRankedMentor::keywordScore).reversed()
+                            .thenComparing(SearchRankedMentor::profileScore, Comparator.reverseOrder())
+                            .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
+                    .toList();
+        } else if (relevanceSort) {
+            rankedMentors = rankedMentors.stream()
+                    .sorted(Comparator
+                            .comparing(SearchRankedMentor::profileScore).reversed()
+                            .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
+                    .toList();
+        }
+
+        int fromIndex = Math.min(requestedPage * requestedSize, rankedMentors.size());
+        int toIndex = Math.min(fromIndex + requestedSize, rankedMentors.size());
+        List<MentorDiscoveryCardResponse> content = rankedMentors.subList(fromIndex, toIndex).stream()
+                .map(candidate -> toCardResponse(candidate.row(), helpTopicsByMentor.getOrDefault(candidate.row().mentorUserId(), List.of())))
+                .toList();
+
+        long totalElements = rankedMentors.size();
+        int totalPages = requestedSize == 0 ? 0 : (int) Math.ceil((double) totalElements / requestedSize);
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
                 .content(content)
-                .page(mentorIdPage.getNumber())
-                .size(mentorIdPage.getSize())
-                .totalElements(mentorIdPage.getTotalElements())
-                .totalPages(mentorIdPage.getTotalPages())
-                .last(mentorIdPage.isLast())
+                .page(requestedPage)
+                .size(requestedSize)
+                .totalElements(totalElements)
+                .totalPages(totalPages)
+                .last(requestedPage >= Math.max(totalPages - 1, 0))
                 .build();
     }
 
@@ -165,22 +218,15 @@ public class MentorDiscoveryService {
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
-        UUID menteeCampusId = menteeProfile != null && menteeProfile.getCampus() != null ? menteeProfile.getCampus().getId() : null;
-        UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
-        UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
-        Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
         LocalDateTime now = currentTime();
+        int candidateFetchSize = Math.min(30, Math.max(safeLimit * 3, safeLimit));
 
         List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
                 MentorTagType.HELP_TOPIC,
                 currentUserId,
-                menteeCampusId,
-                menteeProgramId,
-                menteeSpecializationId,
-                menteeSemester,
                 now,
-                PageRequest.of(0, safeLimit)
+                PageRequest.of(0, candidateFetchSize)
         );
 
         if (candidates.isEmpty()) {
@@ -194,6 +240,11 @@ public class MentorDiscoveryService {
 
         return candidates.stream()
                 .map(candidate -> toRecommendation(candidate, helpTopicsByMentor.getOrDefault(candidate.mentorUserId(), List.of()), menteeProfile))
+                .sorted(Comparator
+                        .comparing(MentorRecommendationResponse::matchScore).reversed()
+                        .thenComparing(response -> defaultInteger(response.mentor().completedSessions()), Comparator.reverseOrder())
+                        .thenComparing(response -> defaultDecimal(response.mentor().ratingAverage()), Comparator.reverseOrder()))
+                .limit(safeLimit)
                 .toList();
     }
 
@@ -288,17 +339,15 @@ public class MentorDiscoveryService {
             StudentProfile menteeProfile
     ) {
         List<String> reasons = new ArrayList<>();
-        calculateMatchScore(candidate, menteeProfile, reasons);
+        BigDecimal score = calculateMatchScore(candidate, menteeProfile, reasons);
 
-        if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có nhiều phiên mentoring hoàn thành"::equals)) {
+        if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có phiên mentoring hoàn thành"::equals)) {
             reasons.add("Đã có phiên mentoring hoàn thành");
         }
 
         if (reasons.isEmpty()) {
             reasons.add("Phù hợp với các tiêu chí discovery hiện tại");
         }
-
-        BigDecimal score = candidate.matchScore() == null ? ZERO : BigDecimal.valueOf(candidate.matchScore()).setScale(2, RoundingMode.HALF_UP);
 
         return MentorRecommendationResponse.builder()
                 .mentor(toCardResponse(candidate, helpTopicTags))
@@ -311,95 +360,37 @@ public class MentorDiscoveryService {
         BigDecimal baseScore = ZERO;
 
         if (menteeProfile != null) {
-            if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
-                baseScore = baseScore.add(SAME_SPECIALIZATION_SCORE);
-                reasons.add("Cùng chuyên ngành với mentee");
-            }
             if (sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId())) {
                 baseScore = baseScore.add(SAME_PROGRAM_SCORE);
                 reasons.add("Cùng chương trình học");
+            }
+            if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
+                baseScore = baseScore.add(SAME_SPECIALIZATION_SCORE);
+                reasons.add("Cùng chuyên ngành với mentee");
             }
             if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
                 baseScore = baseScore.add(SAME_CAMPUS_SCORE);
                 reasons.add("Cùng campus");
             }
-            baseScore = baseScore.add(calculateStudentProfileScore(menteeProfile, candidate, reasons));
+            if (Boolean.TRUE.equals(candidate.alumni())) {
+                baseScore = baseScore.add(MENTOR_ALUMNI_SCORE);
+                reasons.add("Mentor là cựu sinh viên");
+            } else {
+                Integer menteeSemester = menteeProfile.getSemester();
+                Integer mentorSemester = candidate.semester();
+                if (menteeSemester != null && mentorSemester != null) {
+                    if (mentorSemester > menteeSemester) {
+                        baseScore = baseScore.add(MENTOR_HIGHER_SEMESTER_SCORE);
+                        reasons.add("Mentor đi trước mentee về học kỳ");
+                    } else if (mentorSemester.equals(menteeSemester)) {
+                        baseScore = baseScore.add(MENTOR_EQUAL_SEMESTER_SCORE);
+                        reasons.add("Mentor cùng học kỳ chuyên ngành với mentee");
+                    }
+                }
+            }
         }
 
-        baseScore = baseScore.add(calculateActivityScore(candidate, reasons));
-        baseScore = baseScore.add(calculateContributionScore(candidate.completedSessions(), reasons));
-
-        BigDecimal ratingFactor = calculateRatingFactor(candidate.ratingAverage(), candidate.reviewCount(), reasons);
-        return baseScore.multiply(ratingFactor).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal calculateStudentProfileScore(StudentProfile menteeProfile, MentorDiscoveryQueryRow candidate, List<String> reasons) {
-        if (Boolean.TRUE.equals(candidate.alumni())) {
-            reasons.add("Mentor là cựu sinh viên");
-            return MENTOR_ALUMNI_SCORE;
-        }
-
-        Integer menteeSemester = menteeProfile.getSemester();
-        Integer mentorSemester = candidate.semester();
-        if (menteeSemester == null || mentorSemester == null) {
-            return ZERO;
-        }
-        if (mentorSemester > menteeSemester) {
-            reasons.add("Mentor đi trước mentee về học kỳ");
-            return MENTOR_HIGHER_SEMESTER_SCORE;
-        }
-        if (mentorSemester.equals(menteeSemester)) {
-            reasons.add("Mentor cùng học kỳ chuyên ngành với mentee");
-            return MENTOR_EQUAL_SEMESTER_SCORE;
-        }
-        return ZERO;
-    }
-
-    private BigDecimal calculateActivityScore(MentorDiscoveryQueryRow candidate, List<String> reasons) {
-        LocalDateTime verifiedAt = candidate.verifiedAt();
-        if (verifiedAt == null) {
-            return ZERO;
-        }
-
-        long activeDays = Math.max(0, ChronoUnit.DAYS.between(verifiedAt, currentTime()));
-        if (activeDays < 3) {
-            reasons.add("Mentor mới active gần đây");
-            return NEWLY_ACTIVE_SCORE;
-        }
-
-        BigDecimal tenureScore = TENURE_STEP_SCORE.multiply(BigDecimal.valueOf(activeDays / 7L));
-        if (tenureScore.compareTo(ZERO) > 0) {
-            reasons.add("Mentor có thời gian đóng góp ổn định");
-        }
-        return tenureScore;
-    }
-
-    private BigDecimal calculateRatingFactor(BigDecimal ratingAverage, Integer reviewCount, List<String> reasons) {
-        BigDecimal normalizedRating = defaultDecimal(ratingAverage);
-        int normalizedReviewCount = defaultInteger(reviewCount);
-        if (normalizedReviewCount <= 0) {
-            return BigDecimal.ONE.setScale(4, RoundingMode.HALF_UP);
-        }
-        if (normalizedRating.compareTo(BigDecimal.ZERO) <= 0) {
-            return ZERO;
-        }
-
-        if (normalizedRating.compareTo(BigDecimal.valueOf(4.0)) >= 0 && normalizedReviewCount >= 3) {
-            reasons.add("Được đánh giá tốt và có độ tin cậy từ review");
-        }
-        return normalizedRating.divide(MAX_RATING, 4, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal calculateContributionScore(Integer completedSessions, List<String> reasons) {
-        int normalizedCompletedSessions = defaultInteger(completedSessions);
-        if (normalizedCompletedSessions <= 0) {
-            return ZERO;
-        }
-
-        if (normalizedCompletedSessions >= 10) {
-            reasons.add("Đã có nhiều phiên mentoring hoàn thành");
-        }
-        return COMPLETED_SESSION_SCORE.multiply(BigDecimal.valueOf(normalizedCompletedSessions));
+        return baseScore.setScale(2, RoundingMode.HALF_UP);
     }
 
     private Map<UUID, List<MentorTagResponse>> loadTagsByMentor(Collection<UUID> mentorUserIds, Set<MentorTagType> tagTypes) {
@@ -416,6 +407,200 @@ public class MentorDiscoveryService {
                 .forEach(mentorTag -> result.computeIfAbsent(mentorTag.getId().getMentorUserId(), ignored -> new ArrayList<>())
                         .add(toTagResponse(mentorTag)));
         return result;
+    }
+
+    private Map<UUID, List<MentorServiceResponse>> loadServicesByMentor(Collection<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, List<MentorServiceResponse>> result = new HashMap<>();
+        mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(new ArrayList<>(mentorUserIds))
+                .forEach(service -> result.computeIfAbsent(
+                                service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId(),
+                                ignored -> new ArrayList<>())
+                        .add(toServiceResponse(service)));
+        result.remove(null);
+        return result;
+    }
+
+    private SearchRankedMentor rankSearchCandidate(
+            MentorDiscoveryQueryRow row,
+            List<MentorTagResponse> helpTopicTags,
+            List<MentorServiceResponse> services,
+            StudentProfile menteeProfile,
+            String normalizedKeyword,
+            List<String> keywordTokens,
+            boolean relevanceSort,
+            boolean keywordSearch
+    ) {
+        BigDecimal keywordScore = keywordSearch
+                ? calculateKeywordScore(row, helpTopicTags, services, normalizedKeyword, keywordTokens)
+                : ZERO;
+        BigDecimal profileScore = relevanceSort ? calculateMatchScore(row, menteeProfile, new ArrayList<>()) : ZERO;
+        return new SearchRankedMentor(row, helpTopicTags, services, keywordScore, profileScore);
+    }
+
+    private BigDecimal calculateKeywordScore(
+            MentorDiscoveryQueryRow row,
+            List<MentorTagResponse> helpTopicTags,
+            List<MentorServiceResponse> services,
+            String normalizedKeyword,
+            List<String> keywordTokens
+    ) {
+        if (normalizedKeyword == null || normalizedKeyword.isBlank()) {
+            return ZERO;
+        }
+
+        String fullText = normalizeSearchText(buildSearchCorpus(row, helpTopicTags, services));
+        if (fullText.isBlank()) {
+            return ZERO;
+        }
+
+        BigDecimal score = ZERO;
+        if (fullText.contains(normalizedKeyword)) {
+            score = score.add(SEARCH_EXACT_PHRASE_SCORE);
+        }
+
+        Set<String> normalizedTokenSet = keywordTokens == null ? Set.of() : new LinkedHashSet<>(keywordTokens);
+        int matchedTokens = 0;
+        for (String token : normalizedTokenSet) {
+            if (token.isBlank()) {
+                continue;
+            }
+            if (containsToken(fullText, token)) {
+                matchedTokens++;
+                score = score.add(SEARCH_TOKEN_SCORE);
+            }
+        }
+
+        for (MentorTagResponse tag : helpTopicTags) {
+            String tagText = normalizeSearchText((tag.nameVi() == null ? "" : tag.nameVi()) + " " + (tag.code() == null ? "" : tag.code()));
+            if (!tagText.isBlank() && containsAnyToken(tagText, normalizedTokenSet)) {
+                score = score.add(SEARCH_TAG_SCORE);
+            }
+        }
+
+        for (MentorServiceResponse service : services) {
+            String serviceText = normalizeSearchText((service.title() == null ? "" : service.title()) + " " + (service.description() == null ? "" : service.description()));
+            if (!serviceText.isBlank() && containsAnyToken(serviceText, normalizedTokenSet)) {
+                score = score.add(SEARCH_SERVICE_SCORE);
+            }
+        }
+
+        if (row.bio() != null && containsAnyToken(normalizeSearchText(row.bio()), normalizedTokenSet)) {
+            score = score.add(SEARCH_BIO_SCORE);
+        }
+
+        if (matchedTokens > 0 && !normalizedTokenSet.isEmpty()) {
+            BigDecimal coverageBonus = BigDecimal.valueOf((matchedTokens * 100L) / normalizedTokenSet.size())
+                    .divide(BigDecimal.valueOf(10), 2, RoundingMode.HALF_UP);
+            score = score.add(coverageBonus);
+        }
+
+        return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private boolean containsAnyToken(String text, Set<String> tokens) {
+        if (text == null || text.isBlank() || tokens == null || tokens.isEmpty()) {
+            return false;
+        }
+        for (String token : tokens) {
+            if (containsToken(text, token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsToken(String text, String token) {
+        if (text == null || token == null || token.isBlank()) {
+            return false;
+        }
+        return text.contains(token) || text.startsWith(token);
+    }
+
+    private String buildSearchCorpus(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags, List<MentorServiceResponse> services) {
+        List<String> parts = new ArrayList<>();
+        addIfHasText(parts, row.displayName());
+        addIfHasText(parts, row.headline());
+        addIfHasText(parts, row.expertiseDescription());
+        addIfHasText(parts, row.supportingSubjects());
+        addIfHasText(parts, row.bio());
+        addIfHasText(parts, row.campusName());
+        addIfHasText(parts, row.programName());
+        addIfHasText(parts, row.specializationName());
+        helpTopicTags.forEach(tag -> {
+            addIfHasText(parts, tag.nameVi());
+            addIfHasText(parts, tag.nameEn());
+            addIfHasText(parts, tag.code());
+        });
+        services.forEach(service -> {
+            addIfHasText(parts, service.title());
+            addIfHasText(parts, service.description());
+            if (service.helpTopics() != null) {
+                service.helpTopics().forEach(tag -> {
+                    addIfHasText(parts, tag.nameVi());
+                    addIfHasText(parts, tag.code());
+                });
+            }
+        });
+        return String.join(" ", parts);
+    }
+
+    private void addIfHasText(List<String> parts, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            parts.add(value);
+        }
+    }
+
+    private String normalizeSearchText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        normalized = normalized.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return normalized;
+    }
+
+    private List<String> normalizeTokens(String keyword) {
+        String normalizedKeyword = normalizeSearchText(keyword);
+        if (normalizedKeyword.isBlank()) {
+            return List.of();
+        }
+
+        Set<String> tokens = new LinkedHashSet<>();
+        for (String token : normalizedKeyword.split("\\s+")) {
+            if (!token.isBlank()) {
+                tokens.add(token);
+                tokens.addAll(expandSearchToken(token));
+            }
+        }
+        return tokens.stream().filter(token -> !token.isBlank()).toList();
+    }
+
+    private List<String> expandSearchToken(String token) {
+        return switch (token) {
+            case "cv", "resume" -> List.of("cv", "resume", "ho so");
+            case "interview" -> List.of("phong van");
+            case "project" -> List.of("do an");
+            case "study", "planning", "plan" -> List.of("ke hoach hoc tap");
+            default -> List.of();
+        };
+    }
+
+    private record SearchRankedMentor(
+            MentorDiscoveryQueryRow row,
+            List<MentorTagResponse> helpTopics,
+            List<MentorServiceResponse> services,
+            BigDecimal keywordScore,
+            BigDecimal profileScore
+    ) {
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
@@ -630,6 +815,14 @@ public class MentorDiscoveryService {
         return keyword.trim();
     }
 
+    private String buildKeywordPattern(String keyword) {
+        String normalized = normalizeKeyword(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return "%" + normalized.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ") + "%";
+    }
+
     private boolean isRelevanceSort(String sortBy) {
         return sortBy == null || sortBy.isBlank() || "relevance".equalsIgnoreCase(sortBy.trim());
     }
@@ -656,11 +849,5 @@ public class MentorDiscoveryService {
 
     private static BigDecimal decimal(String value) {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private record RankedMentorCard(
-            MentorDiscoveryCardResponse card,
-            BigDecimal matchScore
-    ) {
     }
 }

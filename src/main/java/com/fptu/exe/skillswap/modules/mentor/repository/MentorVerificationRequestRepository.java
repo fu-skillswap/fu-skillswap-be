@@ -46,9 +46,9 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
               and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
               and (:submittedTo is null or r.submittedAt <= :submittedTo)
               and (
-                    :keyword is null
-                    or lower(mentor.email) like concat(:keyword, '%')
-                    or lower(mentor.fullName) like concat(:keyword, '%')
+                    :keywordPattern is null
+                    or lower(mentor.email) like :keywordPattern
+                    or lower(mentor.fullName) like :keywordPattern
                   )
             """,
             countQuery = """
@@ -59,14 +59,14 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
               and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
               and (:submittedTo is null or r.submittedAt <= :submittedTo)
               and (
-                    :keyword is null
-                    or lower(mentor.email) like concat(:keyword, '%')
-                    or lower(mentor.fullName) like concat(:keyword, '%')
+                    :keywordPattern is null
+                    or lower(mentor.email) like :keywordPattern
+                    or lower(mentor.fullName) like :keywordPattern
                   )
             """)
     Page<AdminMentorVerificationQueueProjection> searchAdminQueue(
             @Param("status") VerificationStatus status,
-            @Param("keyword") String keyword,
+            @Param("keywordPattern") String keywordPattern,
             @Param("submittedFrom") LocalDateTime submittedFrom,
             @Param("submittedTo") LocalDateTime submittedTo,
             Pageable pageable

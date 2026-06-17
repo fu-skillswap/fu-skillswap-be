@@ -61,7 +61,7 @@ public class AdminMentorVerificationService {
                 : filterRequest;
         Page<AdminMentorVerificationQueueProjection> page = mentorVerificationRequestRepository.searchAdminQueue(
                 resolvedFilter.getStatus(),
-                normalizeKeyword(resolvedFilter.getKeyword()),
+                buildKeywordPattern(resolvedFilter.getKeyword()),
                 resolvedFilter.getSubmittedFrom(),
                 resolvedFilter.getSubmittedTo(),
                 resolvedFilter.getPageable()
@@ -451,6 +451,14 @@ public class AdminMentorVerificationService {
     private String normalizeKeyword(String keyword) {
         String normalized = trimToNull(keyword);
         return normalized == null ? null : normalized.toLowerCase();
+    }
+
+    private String buildKeywordPattern(String keyword) {
+        String normalized = normalizeKeyword(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return "%" + normalized.replaceAll("\\s+", " ") + "%";
     }
 }
 
