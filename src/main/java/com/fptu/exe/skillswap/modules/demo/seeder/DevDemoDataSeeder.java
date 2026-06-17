@@ -75,6 +75,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
+@Profile({"dev", "prod"})
 @RequiredArgsConstructor
 @Slf4j
 @Order(2)
