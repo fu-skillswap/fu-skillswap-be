@@ -21,7 +21,7 @@ public class UserMeResponse {
     @Schema(description = "ID công khai của người dùng", example = "3fa85f64-5717-4562-b3fc-2c963f66afa6")
     private UUID publicId;
 
-    @Schema(description = "Địa chỉ email Google", example = "nguyenvana@fpt.edu.vn")
+    @Schema(description = "Địa chỉ email Google", example = "nguyenvana@gmail.com")
     private String email;
 
     @Schema(description = "Tên hiển thị", example = "Nguyễn Văn A")

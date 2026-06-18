@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificatio
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationReviewRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +47,14 @@ public class AdminMentorVerificationController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId
     ) {
-        return ApiResponse.success(adminMentorVerificationService.getRequestDetail(principal.getPublicId(), requestId));
+        return ApiResponse.success(adminMentorVerificationService.getRequestDetail(requiredAdminId(principal), requestId));
+    }
+
+    private UUID requiredAdminId(UserPrincipal principal) {
+        if (principal == null || !principal.getRoles().contains(RoleCode.ADMIN)) {
+            throw new AccessDeniedException("Bạn không có quyền thực hiện hành động này");
+        }
+        return principal.getPublicId();
     }
 
     @Operation(summary = "Xem trạng thái soft lock hiện tại của hồ sơ xác thực mentor")

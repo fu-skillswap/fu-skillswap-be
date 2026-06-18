@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.response;
 
+import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import lombok.Builder;
 
@@ -34,6 +35,8 @@ public record AdminMentorVerificationRequestResponse(
         LocalDateTime updatedAt,
         List<MentorVerificationDocumentResponse> documents,
         List<MentorVerificationTimelineEventResponse> timeline,
-        MentorVerificationChecklistResponse checklist
+        MentorVerificationChecklistResponse checklist,
+        MentorProfileResponse mentorProfile,
+        StudentProfileResponse studentProfile
 ) {
 }

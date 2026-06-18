@@ -14,6 +14,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
@@ -271,6 +273,14 @@ public class AdminMentorVerificationService {
         User reviewer = request.getReviewedBy();
         User lockedBy = request.getLockedBy();
 
+        MentorProfileResponse mentorProfile = mentorProfileService.getMyProfile(mentor.getId());
+        StudentProfileResponse studentProfile = null;
+        try {
+            studentProfile = academicService.getStudentProfile(mentor.getId());
+        } catch (Exception e) {
+            // Student profile might not exist (e.g. for mock/test data), fall back to null
+        }
+
         return AdminMentorVerificationRequestResponse.builder()
                 .requestId(request.getId())
                 .mentorUserId(mentor.getId())
@@ -298,6 +308,8 @@ public class AdminMentorVerificationService {
                 .documents(documents)
                 .timeline(timeline)
                 .checklist(buildChecklist(mentor.getId(), documents))
+                .mentorProfile(mentorProfile)
+                .studentProfile(studentProfile)
                 .build();
     }
 

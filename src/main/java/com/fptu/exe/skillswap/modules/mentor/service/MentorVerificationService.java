@@ -48,13 +48,13 @@ public class MentorVerificationService {
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
 
-    @Value("${skillswap.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
+    @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
     private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
 
-    @Value("${skillswap.mentor-verification.submit-requirements.student-profile-completed:true}")
+    @Value("${application.mentor-verification.submit-requirements.student-profile-completed:true}")
     private boolean requireCompletedStudentProfile = true;
 
-    @Value("${skillswap.mentor-verification.submit-requirements.mentor-profile-completed:true}")
+    @Value("${application.mentor-verification.submit-requirements.mentor-profile-completed:true}")
     private boolean requireCompletedMentorProfile = true;
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
