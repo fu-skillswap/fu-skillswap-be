@@ -4,6 +4,7 @@ import com.cloudinary.Cloudinary;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +17,7 @@ import java.util.Map;
  */
 @Configuration
 @RequiredArgsConstructor
+@Slf4j
 public class CloudinaryConfig {
 
     private final CloudinaryProperties cloudinaryProperties;
@@ -24,11 +26,14 @@ public class CloudinaryConfig {
     @ConditionalOnProperty(prefix = "application.cloudinary", name = "enabled", havingValue = "true")
     public Cloudinary cloudinary() {
         validateCloudinaryProperties();
+        log.info("CLOUDINARY CONFIG ACTIVE: cloudName={}, folder={}",
+                cloudinaryProperties.getCloudName(),
+                cloudinaryProperties.getFolder());
         return new Cloudinary(Map.of(
                 "cloud_name", cloudinaryProperties.getCloudName(),
-                "api_key",    cloudinaryProperties.getApiKey(),
+                "api_key", cloudinaryProperties.getApiKey(),
                 "api_secret", cloudinaryProperties.getApiSecret(),
-                "secure",     true   // luôn dùng HTTPS
+                "secure", true // luôn dùng HTTPS
         ));
     }
 
@@ -38,8 +43,7 @@ public class CloudinaryConfig {
                 || !StringUtils.hasText(cloudinaryProperties.getApiSecret())) {
             throw new BaseException(
                     ErrorCode.CONFIGURATION_ERROR,
-                    "Cloudinary được bật nhưng thiếu CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY hoặc CLOUDINARY_API_SECRET"
-            );
+                    "Cloudinary được bật nhưng thiếu CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY hoặc CLOUDINARY_API_SECRET");
         }
     }
 }
