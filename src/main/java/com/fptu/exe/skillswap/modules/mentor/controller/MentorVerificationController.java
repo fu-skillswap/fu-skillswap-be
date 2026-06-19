@@ -99,7 +99,7 @@ public class MentorVerificationController {
 
     @Operation(
             summary = "Tải minh chứng xác thực mentor",
-            description = "Chấp nhận JPG, PNG hoặc PDF. Ảnh sẽ lưu qua Cloudinary, PDF sẽ lưu qua R2."
+            description = "Chấp nhận JPG, PNG hoặc PDF. Ảnh sẽ ưu tiên lưu qua Cloudinary, nếu Cloudinary chưa bật thì sẽ lưu qua R2; PDF sẽ lưu qua R2."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Tải tài liệu thành công"),

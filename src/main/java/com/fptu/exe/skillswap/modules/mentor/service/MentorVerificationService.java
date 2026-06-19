@@ -320,9 +320,8 @@ public class MentorVerificationService {
         }
         String contentType = normalizeContentType(file.getContentType());
         try {
-            if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
-                CloudinaryService service = cloudinaryService
-                        .orElseThrow(() -> new BaseException(ErrorCode.CONFIGURATION_ERROR, "Cloudinary chưa được cấu hình cho upload ảnh"));
+            if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType) && cloudinaryService.isPresent()) {
+                CloudinaryService service = cloudinaryService.get();
                 CloudinaryService.CloudinaryUploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
                 return storedFileRepository.save(StoredFile.builder()
                         .owner(user)
@@ -336,8 +335,13 @@ public class MentorVerificationService {
                         .build());
             }
 
-            R2DocumentStorageService service = r2DocumentStorageService
-                    .orElseThrow(() -> new BaseException(ErrorCode.CONFIGURATION_ERROR, "R2 chưa được cấu hình cho upload PDF"));
+            R2DocumentStorageService service = r2DocumentStorageService.orElseThrow(() -> {
+                if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+                    return new BaseException(ErrorCode.CONFIGURATION_ERROR,
+                            "Chưa cấu hình Cloudinary hoặc R2 để upload ảnh");
+                }
+                return new BaseException(ErrorCode.CONFIGURATION_ERROR, "R2 chưa được cấu hình cho upload PDF");
+            });
             R2DocumentStorageService.R2UploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
             return storedFileRepository.save(StoredFile.builder()
                     .owner(user)
