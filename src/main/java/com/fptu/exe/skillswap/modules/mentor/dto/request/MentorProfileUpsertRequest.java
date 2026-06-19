@@ -5,6 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -49,6 +50,11 @@ public record MentorProfileUpsertRequest(
         String githubUrl,
 
         @Schema(example = "https://example.dev")
-        String portfolioUrl
+        String portfolioUrl,
+
+        @Schema(example = "0912345678", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotBlank(message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
+        @Pattern(regexp = "^(0)(3|5|7|8|9)[0-9]{8}$", message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
+        String phoneNumber
 ) {
 }

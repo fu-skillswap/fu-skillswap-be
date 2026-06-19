@@ -86,10 +86,24 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     private static final int TOTAL_MENTOR_COUNT = 100;
     private static final int MENTEE_COUNT = 10;
     private static final String DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh";
+    private static final int MIN_QUALIFIED_HCM_MENTORS = 30;
     private static final Set<VerificationStatus> OPEN_REQUEST_STATUSES = EnumSet.of(
             VerificationStatus.DRAFT,
             VerificationStatus.PENDING_REVIEW,
             VerificationStatus.NEEDS_REVISION
+    );
+    private static final List<String> VIETNAMESE_LAST_NAMES = List.of(
+            "Nguyen", "Tran", "Le", "Pham", "Hoang", "Huynh", "Phan", "Vu", "Vo", "Dang",
+            "Bui", "Do", "Ho", "Ngo", "Duong", "Ly", "Mai", "Dinh", "Truong", "Cao"
+    );
+    private static final List<String> VIETNAMESE_MIDDLE_NAMES = List.of(
+            "Minh", "Gia", "Thanh", "Ngoc", "Quoc", "Bao", "Anh", "Duc", "Thu", "Tien",
+            "Khanh", "Hoai", "Nhat", "Phuong", "Tu", "Xuan", "Yen", "Hai", "Lan", "My"
+    );
+    private static final List<String> VIETNAMESE_GIVEN_NAMES = List.of(
+            "Khang", "Linh", "Huy", "Vy", "Quan", "Trang", "Phong", "Nhi", "Thinh", "Ha",
+            "Dat", "Chau", "An", "Ngan", "Tam", "Hanh", "Kiet", "Quyen", "Son", "Truc",
+            "Phuc", "Thao", "Long", "Nhu", "Lam", "Uyen", "Tai", "Yen", "Duy", "Quynh"
     );
 
     private final UserRepository userRepository;
@@ -117,6 +131,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         Map<String, Tag> helpTopics = loadHelpTopics();
         purgeMenteeSeeds();
         seedMentors(helpTopics);
+        logQualifiedMentorStatistics();
 
         log.info("SkillSwap demo data seeding completed successfully!");
     }
@@ -223,17 +238,11 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             return;
         }
 
-        Set<UUID> existingTagIds = mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(
-                        mentorProfile.getUserId(),
-                        List.of(MentorTagType.HELP_TOPIC)
-                ).stream()
-                .map(item -> item.getId().getTagId())
-                .collect(Collectors.toSet());
-
+        mentorTagRepository.deleteByIdMentorUserId(mentorProfile.getUserId());
         boolean primaryAssigned = false;
         for (String code : tagCodes) {
             Tag tag = tags.get(code);
-            if (tag == null || existingTagIds.contains(tag.getId())) {
+            if (tag == null) {
                 continue;
             }
 
@@ -252,6 +261,9 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         List<MentorService> existing = mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorProfile.getUserId());
         if (!existing.isEmpty()) {
             MentorService service = existing.get(0);
+            if (existing.size() > 1) {
+                mentorServiceRepository.deleteAll(existing.subList(1, existing.size()));
+            }
             service.setMentorProfile(mentorProfile);
             service.setTitle(seed.serviceTitle());
             service.setDescription(seed.serviceDescription());
@@ -622,13 +634,13 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             Integer graduationYear = alumni ? 2024 - (i % 3) : null;
             String suffix = String.format("%02d", seedIndex);
             String email = String.format("mentor%02d.demo@skillswap.local", seedIndex);
-            String fullName = fullNamePrefix + " " + suffix;
+            String fullName = vietnameseFullName(seedIndex);
             String studentCode = String.format("SE22%04d", seedIndex);
-            String headline = headlinePrefix + " " + suffix;
-            String expertiseDescription = expertisePrefix + ", mentor profile " + suffix;
-            String supportingSubjects = supportingSubjectsPrefix + ", EXE101, EXE201, PRJ301";
-            String serviceTitle = headlinePrefix + " Service " + suffix;
-            String serviceDescription = "Demo mentoring service " + suffix + " for " + expertisePrefix.toLowerCase();
+            String headline = specializedHeadline(programCode, specializationCode, seedIndex, alumni);
+            String expertiseDescription = specializedExpertiseDescription(programCode, specializationCode, seedIndex, alumni);
+            String supportingSubjects = specializedSupportingSubjects(programCode, specializationCode, seedIndex);
+            String serviceTitle = specializedServiceTitle(programCode, specializationCode, seedIndex);
+            String serviceDescription = specializedServiceDescription(programCode, specializationCode, seedIndex);
             BigDecimal priceAmount = serviceFree ? BigDecimal.ZERO : basePrice.add(BigDecimal.valueOf((i - 1L) * 5000L));
             int totalCompletedSessions = 10 + i;
             int totalReviews = 6 + (i % 12);
@@ -645,9 +657,9 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     2020 + (i % 5),
                     alumni,
                     graduationYear,
-                    headline,
-                    expertiseDescription,
-                    supportingSubjects,
+                    headlinePrefix + " " + suffix,
+                    expertisePrefix,
+                    supportingSubjectsPrefix,
                     teachingMode,
                     sessionDuration,
                     demoAvatarUrl("mentor" + suffix),
@@ -662,7 +674,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     totalCompletedSessions,
                     totalReviews,
                     averageRating
-            ));
+            ).withProfileContent(fullName, headline, expertiseDescription, supportingSubjects));
         }
         return seeds;
     }
@@ -694,18 +706,16 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             CampusCode campusCode = campuses.get((i - 1) % campuses.size());
             RandomTrack track = tracks.get((i - 1) % tracks.size());
             String suffix = String.format("%02d", seedIndex);
-            String fullNamePrefix = switch (track.programCode()) {
-                case "CNTT" -> "HCMU Mentor";
-                case "CTTT" -> "Comm Mentor";
-                case "NN" -> "Lang Mentor";
-                case "LUAT" -> "Law Mentor";
-                case "QTKD" -> "Biz Mentor";
-                default -> "Mentor";
-            };
+            String fullName = vietnameseFullName(seedIndex);
+            String headline = specializedHeadline(track.programCode(), track.specializationCode(), seedIndex, i % 5 == 0);
+            String expertiseDescription = specializedExpertiseDescription(track.programCode(), track.specializationCode(), seedIndex, i % 5 == 0);
+            String supportingSubjects = specializedSupportingSubjects(track.programCode(), track.specializationCode(), seedIndex);
+            String serviceTitle = specializedServiceTitle(track.programCode(), track.specializationCode(), seedIndex);
+            String serviceDescription = specializedServiceDescription(track.programCode(), track.specializationCode(), seedIndex);
 
             seeds.add(new MentorSeed(
                     String.format("mentor%02d.demo@skillswap.local", seedIndex),
-                    fullNamePrefix + " " + suffix,
+                    fullName,
                     String.format("SE22%04d", seedIndex),
                     campusCode,
                     track.programCode(),
@@ -714,15 +724,15 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     2020 + (seedIndex % 5),
                     i % 5 == 0,
                     i % 5 == 0 ? 2023 - (i % 2) : null,
-                    track.headlinePrefix() + " " + suffix,
-                    track.expertisePrefix() + ", demo mentor " + suffix,
-                    track.supportingSubjectsPrefix() + ", EXE101, PRJ301",
+                    headline,
+                    expertiseDescription,
+                    supportingSubjects,
                     track.teachingMode(),
                     track.sessionDuration(),
                     demoAvatarUrl("mentor" + suffix),
                     track.helpTopicCodes(),
-                    track.headlinePrefix() + " Service " + suffix,
-                    "Demo mentoring service " + suffix + " for " + track.expertisePrefix().toLowerCase(),
+                    serviceTitle,
+                    serviceDescription,
                     track.sessionDuration(),
                     track.serviceFree(),
                     track.basePrice().add(BigDecimal.valueOf((i - 1L) * 3000L)),
@@ -734,6 +744,266 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             ));
         }
         return seeds;
+    }
+
+    private void logQualifiedMentorStatistics() {
+        List<MentorProfile> activeMentors = mentorProfileRepository.findByStatus(MentorStatus.ACTIVE);
+        Map<UUID, StudentProfile> studentProfiles = studentProfileRepository.findAll().stream()
+                .filter(profile -> profile.getUser() != null && profile.getUser().getId() != null)
+                .collect(Collectors.toMap(profile -> profile.getUser().getId(), profile -> profile, (left, right) -> left));
+
+        List<MentorProfile> qualifiedMentors = activeMentors.stream()
+                .filter(this::isQualifiedDiscoverableMentor)
+                .filter(profile -> {
+                    StudentProfile studentProfile = studentProfiles.get(profile.getUserId());
+                    return studentProfile != null
+                            && studentProfile.getCampus() != null
+                            && studentProfile.getCampus().getCode() == CampusCode.HCM;
+                })
+                .toList();
+
+        if (qualifiedMentors.size() < MIN_QUALIFIED_HCM_MENTORS) {
+            throw new IllegalStateException("Demo data must contain at least " + MIN_QUALIFIED_HCM_MENTORS
+                    + " qualified HCM mentors, but found " + qualifiedMentors.size());
+        }
+
+        Map<String, Long> campusStats = qualifiedMentors.stream()
+                .map(profile -> studentProfiles.get(profile.getUserId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        profile -> profile.getCampus().getCode().name(),
+                        java.util.TreeMap::new,
+                        Collectors.counting()
+                ));
+
+        Map<String, Long> programStats = qualifiedMentors.stream()
+                .map(profile -> studentProfiles.get(profile.getUserId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        profile -> profile.getProgram() == null ? "UNKNOWN" : profile.getProgram().getCode(),
+                        java.util.TreeMap::new,
+                        Collectors.counting()
+                ));
+
+        Map<String, Long> specializationStats = qualifiedMentors.stream()
+                .map(profile -> studentProfiles.get(profile.getUserId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(
+                        profile -> profile.getSpecialization() == null ? "UNKNOWN" : profile.getSpecialization().getCode(),
+                        java.util.TreeMap::new,
+                        Collectors.counting()
+                ));
+
+        log.info("Qualified HCM mentors after seed: {}", qualifiedMentors.size());
+        log.info("Qualified mentor stats by campus: {}", campusStats);
+        log.info("Qualified mentor stats by program: {}", programStats);
+        log.info("Qualified mentor stats by specialization: {}", specializationStats);
+    }
+
+    private boolean isQualifiedDiscoverableMentor(MentorProfile profile) {
+        return profile != null
+                && profile.getUser() != null
+                && profile.getUser().getStatus() == UserStatus.ACTIVE
+                && profile.getStatus() == MentorStatus.ACTIVE
+                && profile.getVerifiedAt() != null
+                && profile.isAvailable()
+                && profile.getTeachingMode() != null
+                && profile.getSessionDuration() != null
+                && hasText(profile.getHeadline())
+                && hasText(profile.getExpertiseDescription())
+                && hasText(profile.getSupportingSubjects())
+                && !mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC)).isEmpty();
+    }
+
+    private String vietnameseFullName(int seedIndex) {
+        String lastName = VIETNAMESE_LAST_NAMES.get(seedIndex % VIETNAMESE_LAST_NAMES.size());
+        String middleName = VIETNAMESE_MIDDLE_NAMES.get((seedIndex * 3) % VIETNAMESE_MIDDLE_NAMES.size());
+        String givenName = VIETNAMESE_GIVEN_NAMES.get((seedIndex * 7) % VIETNAMESE_GIVEN_NAMES.size());
+        return lastName + " " + middleName + " " + givenName;
+    }
+
+    private String specializedHeadline(String programCode, String specializationCode, int seedIndex, boolean alumni) {
+        return switch (specializationCode) {
+            case "CNTT_KTPM" -> alumni
+                    ? "Alumni backend mentor | Spring Boot, PostgreSQL, Docker"
+                    : keywordVariant(seedIndex,
+                            "Mentor backend Java | Spring Boot, REST API, SWP391",
+                            "Mentor fullstack | React, Spring Boot, database design",
+                            "Mentor project | OJT, PRJ301, clean architecture");
+            case "CNTT_TTNT" -> keywordVariant(seedIndex,
+                    "Mentor AI | Python, machine learning, data preprocessing",
+                    "Mentor tri tue nhan tao | model review, MLOps co ban, portfolio AI",
+                    "Mentor data science | Pandas, notebook, project AI");
+            case "CNTT_HTTT" -> keywordVariant(seedIndex,
+                    "Mentor he thong thong tin | database, UML, BA co ban",
+                    "Mentor phan tich he thong | database design, ERD, SQL",
+                    "Mentor database | requirements, system analysis, documentation");
+            case "CNTT_ATTT" -> keywordVariant(seedIndex,
+                    "Mentor an toan thong tin | secure coding, OWASP, network basics",
+                    "Mentor security | pentest co ban, authentication, logging",
+                    "Mentor cyber security | secure API, risk review, SOC mindset");
+            case "CNTT_TKDHMT" -> keywordVariant(seedIndex,
+                    "Mentor UI/UX | Figma, design system, presentation deck",
+                    "Mentor thiet ke do hoa so | UI review, portfolio, storytelling",
+                    "Mentor san pham so | React UI, UX writing, visual critique");
+            case "CTTT_TTDPM" -> keywordVariant(seedIndex,
+                    "Mentor multimedia | React, storytelling, pitching, demo day",
+                    "Mentor presentation | content plan, communication, UX explanation",
+                    "Mentor truyền thông số | product demo, public speaking, teamwork");
+            case "QTKD_KDQT" -> keywordVariant(seedIndex,
+                    "Mentor kinh doanh quốc tế | case analysis, internship prep",
+                    "Mentor business | market research, communication, CV review",
+                    "Mentor career | networking, OJT mindset, business presentation");
+            case "QTKD_MKT" -> keywordVariant(seedIndex,
+                    "Mentor digital marketing | content, campaign review, analytics",
+                    "Mentor marketing | brand pitch, customer insight, CV review",
+                    "Mentor growth | research, internship prep, presentation");
+            case "QTKD_TMDT" -> keywordVariant(seedIndex,
+                    "Mentor thương mại điện tử | e-commerce, project review, SQL cơ bản",
+                    "Mentor e-commerce | product flow, analytics, pitching",
+                    "Mentor digital business | PRJ301, idea validation, feedback");
+            case "NN_NNA" -> keywordVariant(seedIndex,
+                    "Mentor tiếng Anh | interview, speaking, presentation",
+                    "Mentor English communication | CV, mock interview, confidence",
+                    "Mentor language | study plan, speaking, career support");
+            case "LUAT_LKT" -> keywordVariant(seedIndex,
+                    "Mentor luật kinh tế | legal writing, report structure, presentation",
+                    "Mentor law | business law basics, argumentation, thesis support",
+                    "Mentor học thuật | documentation, critical thinking, defense");
+            default -> switch (programCode) {
+                case "CNTT" -> "Mentor công nghệ | project review, backend, database";
+                case "CTTT" -> "Mentor truyền thông | content, pitching, collaboration";
+                case "QTKD" -> "Mentor kinh doanh | internship, CV, communication";
+                default -> "Mentor SkillSwap | hỗ trợ môn học và định hướng";
+            };
+        };
+    }
+
+    private String specializedExpertiseDescription(String programCode, String specializationCode, int seedIndex, boolean alumni) {
+        String intro = alumni
+                ? "Mình là alumni FPT đã đi làm và thường hỗ trợ sinh viên chuẩn bị internship, OJT và project học kỳ."
+                : "Mình là mentor đang theo học hoặc vừa hoàn thành các học kỳ chuyên ngành tại FPT, quen với cách chấm project và review báo cáo.";
+
+        return switch (specializationCode) {
+            case "CNTT_KTPM" -> intro + " Mình mạnh về Spring Boot, REST API, PostgreSQL, Docker và clean architecture. Có thể hỗ trợ các môn như EXE101, EXE201, SWP391, PRJ301, code review và tối ưu database.";
+            case "CNTT_TTNT" -> intro + " Mình tập trung vào Python, machine learning, data preprocessing và cách trình bày project AI rõ ràng. Có thể hỗ trợ portfolio AI, review notebook, model baseline và báo cáo thực nghiệm.";
+            case "CNTT_HTTT" -> intro + " Mình hỗ trợ database design, SQL, UML, requirements và system analysis. Phù hợp cho bạn đang làm đồ án cần ERD, use case, sequence diagram hoặc chuẩn bị bảo vệ proposal.";
+            case "CNTT_ATTT" -> intro + " Mình hỗ trợ secure coding, authentication, logging, OWASP và tư duy threat modeling cơ bản. Hợp với bạn muốn học backend an toàn hoặc làm project có yếu tố bảo mật.";
+            case "CNTT_TKDHMT" -> intro + " Mình hỗ trợ UI/UX, Figma, design critique, storytelling và cách kết nối giữa design với frontend React. Có thể review portfolio, case study và cấu trúc trình bày sản phẩm.";
+            case "CTTT_TTDPM" -> intro + " Mình hỗ trợ thuyết trình, storytelling, demo pitching và phối hợp nội dung cho project liên ngành. Hợp với các bạn cần luyện trình bày đồ án, bảo vệ project hoặc demo day.";
+            case "QTKD_KDQT" -> intro + " Mình hỗ trợ market analysis, business presentation, networking, CV và định hướng internship. Có thể review slide, assignment và tình huống thực tế trong môi trường doanh nghiệp.";
+            case "QTKD_MKT" -> intro + " Mình hỗ trợ content planning, campaign thinking, customer insight và CV cho ngành marketing. Hợp với bạn cần góp ý proposal, deck, case study hoặc định hướng thực tập.";
+            case "QTKD_TMDT" -> intro + " Mình hỗ trợ e-commerce flow, phân tích sản phẩm, idea validation và cách trình bày project kinh doanh số. Có thể review assignment, phản biện logic và luyện pitching.";
+            case "NN_NNA" -> intro + " Mình hỗ trợ speaking, mock interview, CV tiếng Anh và kỹ năng trình bày học thuật. Hợp với bạn muốn tăng tự tin khi phỏng vấn hoặc thuyết trình trước hội đồng.";
+            case "LUAT_LKT" -> intro + " Mình hỗ trợ legal writing, lập luận, cấu trúc báo cáo và cách trình bày case. Hợp với bạn cần định hướng môn học, phản biện nội dung hoặc chuẩn bị bảo vệ bài làm.";
+            default -> intro + " Mình có thể hỗ trợ review bài tập, giải đáp thắc mắc, định hướng môn học và góp ý project theo bối cảnh FPT.";
+        };
+    }
+
+    private String specializedSupportingSubjects(String programCode, String specializationCode, int seedIndex) {
+        return switch (specializationCode) {
+            case "CNTT_KTPM" -> keywordVariant(seedIndex,
+                    "EXE101, EXE201, SWP391, PRJ301, Spring Boot, PostgreSQL, Docker",
+                    "OJT, PRJ301, React, Spring Boot, REST API, database design",
+                    "Java backend, Clean Architecture, CI/CD cơ bản, code review");
+            case "CNTT_TTNT" -> keywordVariant(seedIndex,
+                    "Python, Machine Learning, AI100, ML101, data preprocessing",
+                    "Model evaluation, notebook review, portfolio AI, Pandas",
+                    "Deep learning cơ bản, project AI, data storytelling");
+            case "CNTT_HTTT" -> keywordVariant(seedIndex,
+                    "Database Design, SQL, UML201, system analysis, BA cơ bản",
+                    "ERD, sequence diagram, use case, report structure",
+                    "Requirements, documentation, PRJ301, architecture review");
+            case "CNTT_ATTT" -> keywordVariant(seedIndex,
+                    "Secure coding, OWASP, authentication, JWT, logging",
+                    "Network basics, API security, risk review, backend security",
+                    "System hardening, threat modeling, security checklist");
+            case "CNTT_TKDHMT" -> keywordVariant(seedIndex,
+                    "Figma, UI/UX critique, design system, portfolio",
+                    "React UI, presentation deck, case study, visual storytelling",
+                    "Prototype review, typography, color system, product demo");
+            case "CTTT_TTDPM" -> keywordVariant(seedIndex,
+                    "COM101, COM102, PRJ301, storytelling, pitching",
+                    "Presentation, teamwork, demo script, public speaking",
+                    "Content planning, UX explanation, stage confidence");
+            case "QTKD_KDQT" -> keywordVariant(seedIndex,
+                    "BUS101, MKT201, communication, internship prep",
+                    "Case analysis, business presentation, CV review, OJT mindset",
+                    "Market research, networking, slide review, report critique");
+            case "QTKD_MKT" -> keywordVariant(seedIndex,
+                    "Marketing plan, customer insight, content review, campaign critique",
+                    "Brand storytelling, proposal review, CV, internship support",
+                    "Analytics cơ bản, pitch deck, communication");
+            case "QTKD_TMDT" -> keywordVariant(seedIndex,
+                    "E-commerce, product flow, PRJ301, business analytics",
+                    "Proposal review, idea validation, pitching, report structure",
+                    "Digital business, customer journey, feedback presentation");
+            case "NN_NNA" -> keywordVariant(seedIndex,
+                    "English speaking, mock interview, CV tiếng Anh",
+                    "Presentation, confidence, study guidance, communication",
+                    "Listening-speaking, internship interview, pronunciation");
+            case "LUAT_LKT" -> keywordVariant(seedIndex,
+                    "Legal writing, report structure, argumentation, presentation",
+                    "Business law basics, case reading, thesis support",
+                    "Study guidance, documentation, defense preparation");
+            default -> switch (programCode) {
+                case "CNTT" -> "Project review, backend, database, giải đáp thắc mắc";
+                case "QTKD" -> "CV review, internship support, business presentation";
+                default -> "Hướng dẫn môn học, giải đáp thắc mắc, review project";
+            };
+        };
+    }
+
+    private String specializedServiceTitle(String programCode, String specializationCode, int seedIndex) {
+        return switch (specializationCode) {
+            case "CNTT_KTPM" -> keywordVariant(seedIndex,
+                    "Review đồ án backend Spring Boot và database",
+                    "Mentoring OJT, SWP391 và project fullstack React + Spring",
+                    "Code review Java backend và clean architecture");
+            case "CNTT_TTNT" -> keywordVariant(seedIndex,
+                    "Review project AI và portfolio machine learning",
+                    "Mentoring Python, data preprocessing và model baseline",
+                    "Hỗ trợ report, notebook và thuyết trình project AI");
+            case "CNTT_HTTT" -> keywordVariant(seedIndex,
+                    "Review database, UML và system analysis",
+                    "Mentoring requirements, ERD và báo cáo đồ án",
+                    "Hỗ trợ PRJ301, SQL và kiến trúc hệ thống");
+            case "CNTT_TKDHMT" -> keywordVariant(seedIndex,
+                    "Review portfolio UI/UX và case study",
+                    "Mentoring Figma, React UI và product storytelling",
+                    "Góp ý design system và bài thuyết trình sản phẩm");
+            case "CTTT_TTDPM" -> keywordVariant(seedIndex,
+                    "Luyện pitching và demo presentation",
+                    "Góp ý storytelling, teamwork và nội dung demo",
+                    "Review slide, script và kỹ năng đứng trình bày");
+            default -> keywordVariant(seedIndex,
+                    "Mentoring định hướng môn học và review project",
+                    "Hỗ trợ internship, CV và giải đáp thắc mắc",
+                    "Góp ý assignment, báo cáo và kỹ năng trình bày");
+        };
+    }
+
+    private String specializedServiceDescription(String programCode, String specializationCode, int seedIndex) {
+        return switch (specializationCode) {
+            case "CNTT_KTPM" -> "Buổi mentoring tập trung vào Spring Boot, database, SWP391, OJT hoặc review code Java backend. Mentee có thể mang source code, ERD hoặc backlog để được góp ý thực tế.";
+            case "CNTT_TTNT" -> "Buổi mentoring tập trung vào project AI, Python, data cleaning và cách trình bày kết quả mô hình. Phù hợp cho bạn cần review notebook, baseline hoặc portfolio học máy.";
+            case "CNTT_HTTT" -> "Buổi mentoring tập trung vào SQL, database design, UML và logic nghiệp vụ của đồ án. Phù hợp khi bạn cần rà ERD, use case hoặc report system analysis.";
+            case "CNTT_TKDHMT" -> "Buổi mentoring tập trung vào Figma, UI critique, case study và cách kể chuyện sản phẩm. Có thể review portfolio, prototype hoặc màn hình React UI.";
+            case "CTTT_TTDPM" -> "Buổi mentoring tập trung vào storytelling, pitching, script và cách phối hợp nhóm để demo thuyết phục hơn. Hợp với bạn chuẩn bị bảo vệ project hoặc làm presentation quan trọng.";
+            default -> "Buổi mentoring tập trung vào giải đáp thắc mắc, review project, định hướng môn học và góp ý tài liệu thực tế theo bối cảnh FPT.";
+        };
+    }
+
+    private String keywordVariant(int seedIndex, String first, String second, String third) {
+        return switch (Math.floorMod(seedIndex, 3)) {
+            case 0 -> first;
+            case 1 -> second;
+            default -> third;
+        };
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private record RandomTrack(
@@ -810,6 +1080,43 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             Integer totalReviews,
             BigDecimal averageRating
     ) {
+        private MentorSeed withProfileContent(
+                String fullName,
+                String headline,
+                String expertiseDescription,
+                String supportingSubjects
+        ) {
+            return new MentorSeed(
+                    email,
+                    fullName,
+                    studentCode,
+                    campusCode,
+                    programCode,
+                    specializationCode,
+                    semester,
+                    intakeYear,
+                    alumni,
+                    graduationYear,
+                    headline,
+                    expertiseDescription,
+                    supportingSubjects,
+                    teachingMode,
+                    sessionDuration,
+                    avatarUrl,
+                    helpTopicCodes,
+                    serviceTitle,
+                    serviceDescription,
+                    serviceDuration,
+                    serviceFree,
+                    priceAmount,
+                    activeMentor,
+                    verifiedDaysAgo,
+                    totalCompletedSessions,
+                    totalReviews,
+                    averageRating
+            );
+        }
+
         private StudentSeed toStudentSeed() {
             return new StudentSeed(email, fullName, studentCode, campusCode, programCode, specializationCode, semester, intakeYear, alumni, graduationYear, avatarUrl, expertiseDescription);
         }

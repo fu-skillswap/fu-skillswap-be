@@ -68,6 +68,7 @@ public class MentorProfileService {
         profile.setHeadline(clean(request.headline()));
         profile.setExpertiseDescription(clean(request.expertiseDescription()));
         profile.setSupportingSubjects(cleanNullable(request.supportingSubjects()));
+        profile.setPhoneNumber(clean(request.phoneNumber()));
         if (request.isAvailable() != null) {
             boolean wasAvailable = profile.isAvailable();
             boolean nowAvailable = request.isAvailable();
@@ -178,6 +179,7 @@ public class MentorProfileService {
                 .linkedinUrl(profile.getLinkedinUrl())
                 .githubUrl(profile.getGithubUrl())
                 .portfolioUrl(profile.getPortfolioUrl())
+                .phoneNumber(profile.getPhoneNumber())
                 .teachingMode(profile.getTeachingMode())
                 .sessionDuration(profile.getSessionDuration())
                 .ratingAverage(profile.getAverageRating())
@@ -214,6 +216,7 @@ public class MentorProfileService {
     private boolean isRequiredFieldsCompleted(MentorProfile profile, List<MentorTagResponse> helpTopics) {
         return hasText(profile.getHeadline())
                 && hasText(profile.getExpertiseDescription())
+                && hasText(profile.getPhoneNumber())
                 && !helpTopics.isEmpty()
                 && profile.getTeachingMode() != null
                 && profile.getSessionDuration() != null;

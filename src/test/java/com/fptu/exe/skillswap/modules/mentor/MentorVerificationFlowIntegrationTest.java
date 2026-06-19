@@ -76,6 +76,9 @@ class MentorVerificationFlowIntegrationTest {
     @Autowired
     private MentorProfileService mentorProfileService;
 
+    @Autowired
+    private com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository mentorVerificationRequestRepository;
+
     private User mentorUser;
     private User adminUser;
 
@@ -138,8 +141,13 @@ class MentorVerificationFlowIntegrationTest {
                 60,
                 "https://linkedin.com",
                 "https://github.com",
-                "https://portfolio.com"
+                "https://portfolio.com",
+                "0912345678"
         ));
+
+        var savedProfile = mentorProfileService.getMyProfile(mentorId);
+        assertEquals("0912345678", savedProfile.phoneNumber());
+        assertTrue(savedProfile.requiredFieldsCompleted());
 
         // 3. Save documents as Cloudinary URLs sent from FE
         mentorVerificationService.uploadDocument(
@@ -202,10 +210,126 @@ class MentorVerificationFlowIntegrationTest {
                 adminUser.getId(), resubmitted.requestId(), "Approved!"
         );
         assertEquals(VerificationStatus.APPROVED, approved.status());
+        assertEquals(VerificationStatus.APPROVED, mentorVerificationService.getMyRequest(mentorId).status());
 
         // MentorProfile should go ACTIVE
         profile = mentorProfileRepository.findById(mentorId).orElseThrow();
         assertEquals(MentorStatus.ACTIVE, profile.getStatus());
         assertNotNull(profile.getVerifiedAt());
+    }
+
+    @Test
+    void requestToBecomeMentor_existingDraftShouldReturnSameRequest() {
+        UUID mentorId = mentorUser.getId();
+
+        var first = mentorVerificationService.requestToBecomeMentor(mentorId);
+        var second = mentorVerificationService.requestToBecomeMentor(mentorId);
+
+        assertTrue(first.created());
+        assertFalse(second.created());
+        assertEquals(first.data().requestId(), second.data().requestId());
+    }
+
+    @Test
+    void getMyRequest_afterWithdrawShouldStillReturnLatestFinalStatus() {
+        UUID mentorId = mentorUser.getId();
+
+        MentorVerificationRequestResponse draft = mentorVerificationService.requestToBecomeMentor(mentorId).data();
+        MentorVerificationRequestResponse withdrawn = mentorVerificationService.withdraw(mentorId);
+
+        assertEquals(VerificationStatus.WITHDRAWN, withdrawn.status());
+        assertEquals(draft.requestId(), mentorVerificationService.getMyRequest(mentorId).requestId());
+        assertEquals(VerificationStatus.WITHDRAWN, mentorVerificationService.getMyRequest(mentorId).status());
+        assertFalse(mentorVerificationService.getTimeline(mentorId).isEmpty());
+    }
+
+    @Test
+    void requestToBecomeMentor_afterRejectedShouldCreateNewRequestWithPreviousRequest() {
+        UUID mentorId = mentorUser.getId();
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        AdminMentorVerificationRequestResponse rejected = adminMentorVerificationService.reject(
+                adminUser.getId(),
+                pending.requestId(),
+                "Minh chứng chưa đạt"
+        );
+
+        assertEquals(VerificationStatus.REJECTED, rejected.status());
+        assertEquals(VerificationStatus.REJECTED, mentorVerificationService.getMyRequest(mentorId).status());
+
+        MentorVerificationRequestResponse reopened = mentorVerificationService.requestToBecomeMentor(mentorId).data();
+        assertEquals(VerificationStatus.DRAFT, reopened.status());
+
+        var latest = mentorVerificationRequestRepository.findById(reopened.requestId()).orElseThrow();
+        assertNotNull(latest.getPreviousRequest());
+        assertEquals(rejected.requestId(), latest.getPreviousRequest().getId());
+    }
+
+    private MentorVerificationRequestResponse createSubmittedRequest(UUID mentorId) {
+        mentorVerificationService.requestToBecomeMentor(mentorId);
+
+        Campus campus = campusRepository.findAll().stream().findFirst().orElseThrow();
+        AcademicProgram program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
+        Specialization specialization = specializationRepository.findAll().stream().findFirst().orElseThrow();
+
+        studentProfileRepository.save(StudentProfile.builder()
+                .user(mentorUser)
+                .studentCode("SE" + Math.abs(mentorId.hashCode()))
+                .campus(campus)
+                .program(program)
+                .specialization(specialization)
+                .semester(5)
+                .intakeYear(2022)
+                .build());
+
+        Tag activeTag = tagRepository.save(Tag.builder()
+                .code("TEST_HELP_TOPIC_" + Math.abs(mentorId.hashCode()))
+                .nameVi("Chủ đề test " + mentorId)
+                .type(TagType.HELP_TOPIC)
+                .status(TagStatus.ACTIVE)
+                .build());
+
+        mentorProfileService.upsertProfile(mentorId, new MentorProfileUpsertRequest(
+                "Super Mentor headline",
+                "I am an expert in java",
+                "Spring, Java",
+                true,
+                List.of(activeTag.getId()),
+                TeachingMode.ONLINE,
+                60,
+                "https://linkedin.com/in/test",
+                "https://github.com/test",
+                "https://portfolio.com/test",
+                "0912345678"
+        ));
+
+        mentorVerificationService.uploadDocument(
+                mentorId,
+                new MentorVerificationDocumentUploadRequest(
+                        VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                        "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
+                        "mentor-verification/integration/" + mentorId + "/fptu-proof",
+                        "proof.png",
+                        "image/png",
+                        1024L
+                )
+        );
+        mentorVerificationService.uploadDocument(
+                mentorId,
+                new MentorVerificationDocumentUploadRequest(
+                        VerificationDocumentType.EXPERTISE_PROOF,
+                        "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
+                        "mentor-verification/integration/" + mentorId + "/expertise-proof",
+                        "expertise-proof.png",
+                        "image/png",
+                        2048L
+                )
+        );
+
+        return mentorVerificationService.submit(
+                mentorId,
+                new MentorVerificationSubmitRequest("Please review my request", true)
+        );
     }
 }

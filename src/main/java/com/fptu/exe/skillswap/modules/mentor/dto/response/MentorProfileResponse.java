@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.dto.response;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -29,6 +30,8 @@ public record MentorProfileResponse(
         String linkedinUrl,
         String githubUrl,
         String portfolioUrl,
+        @Schema(example = "0912345678")
+        String phoneNumber,
         TeachingMode teachingMode,
         Integer sessionDuration,
         BigDecimal ratingAverage,

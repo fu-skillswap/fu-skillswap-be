@@ -44,7 +44,7 @@ public class MentorProfileController {
 
     @Operation(
             summary = "Tạo hoặc cập nhật hồ sơ mentor",
-            description = "Lưu toàn bộ hồ sơ mentor trong một lần: headline, expertiseDescription, supportingSubjects, help topics, hình thức mentoring, thời lượng tối đa và trạng thái sẵn sàng. Bio tiếp tục dùng từ StudentProfile để tránh trùng dữ liệu."
+            description = "Lưu toàn bộ hồ sơ mentor trong một lần: headline, expertiseDescription, phoneNumber, supportingSubjects, help topics, hình thức mentoring, thời lượng tối đa và trạng thái sẵn sàng. Bio tiếp tục dùng từ StudentProfile để tránh trùng dữ liệu."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ mentor thành công"),

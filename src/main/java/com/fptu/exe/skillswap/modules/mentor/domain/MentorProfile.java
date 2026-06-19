@@ -65,6 +65,9 @@ public class MentorProfile {
     @Column(name = "github_url", columnDefinition = "TEXT")
     private String githubUrl;
 
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
+
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @Builder.Default
     private BigDecimal averageRating = BigDecimal.ZERO;
