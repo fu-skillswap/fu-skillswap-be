@@ -124,6 +124,7 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                "mentor-verification/user-123/proof-jpg",
                 "proof.jpg",
                 "image/jpeg",
                 123L
@@ -134,7 +135,7 @@ class MentorVerificationServiceUploadTest {
         ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
         verify(storedFileRepository).save(fileCaptor.capture());
         assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("CLOUDINARY");
-        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.fileUrl());
+        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.publicId());
         assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo(uploadRequest.fileUrl());
     }
 
@@ -143,6 +144,7 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.EXPERTISE_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
+                "mentor-verification/user-123/proof-png",
                 "proof.png",
                 "image/png",
                 123L
@@ -158,6 +160,7 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.pdf",
+                "mentor-verification/user-123/proof-pdf",
                 "proof.pdf",
                 "application/pdf",
                 123L
@@ -174,6 +177,7 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.gif",
+                "mentor-verification/user-123/proof-gif",
                 "proof.gif",
                 "image/gif",
                 123L
@@ -190,11 +194,29 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                "mentor-verification/user-123/proof-jpg",
                 "proof.jpg",
                 "image/jpeg",
                 123L
         );
 
         serviceWithCloudinary.uploadDocument(userId, uploadRequest);
+    }
+
+    @Test
+    void uploadWithoutPublicId_shouldBeRejected() {
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                " ",
+                "proof.jpg",
+                "image/jpeg",
+                123L
+        );
+
+        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
+                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+
+        verify(storedFileRepository, never()).save(any());
     }
 }

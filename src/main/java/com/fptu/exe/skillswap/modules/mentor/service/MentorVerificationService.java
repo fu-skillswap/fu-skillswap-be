@@ -308,10 +308,14 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xác định người dùng tải tài liệu");
         }
         String fileUrl = trimToNull(request.fileUrl());
+        String publicId = trimToNull(request.publicId());
         String originalFilename = trimToNull(request.originalFilename());
         String contentType = normalizeContentType(request.contentType());
         if (!StringUtils.hasText(fileUrl)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
+        }
+        if (!StringUtils.hasText(publicId)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không được để trống");
         }
         if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
@@ -321,7 +325,7 @@ public class MentorVerificationService {
                 .purpose(FilePurpose.VERIFICATION_DOCUMENT)
                 .originalName(originalFilename)
                 .storageProvider("CLOUDINARY")
-                .storageKey(fileUrl)
+                .storageKey(publicId)
                 .publicUrl(fileUrl)
                 .mimeType(contentType)
                 .sizeBytes(request.sizeBytes())
@@ -337,6 +341,9 @@ public class MentorVerificationService {
         }
         if (!StringUtils.hasText(request.fileUrl())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
+        }
+        if (!StringUtils.hasText(request.publicId())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không được để trống");
         }
         if (request.sizeBytes() == null || request.sizeBytes() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước file không hợp lệ");

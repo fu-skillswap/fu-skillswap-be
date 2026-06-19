@@ -147,6 +147,7 @@ class MentorVerificationFlowIntegrationTest {
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                         "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
+                        "mentor-verification/integration/fptu-proof",
                         "proof.png",
                         "image/png",
                         1024L
@@ -157,6 +158,7 @@ class MentorVerificationFlowIntegrationTest {
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.EXPERTISE_PROOF,
                         "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
+                        "mentor-verification/integration/expertise-proof",
                         "expertise-proof.png",
                         "image/png",
                         2048L
