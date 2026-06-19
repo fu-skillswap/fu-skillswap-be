@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
-import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.academic.domain.Campus;
 import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
@@ -83,9 +82,6 @@ class MentorVerificationFlowIntegrationTest {
     @MockBean
     private CloudinaryService cloudinaryService;
 
-    @MockBean
-    private R2DocumentStorageService r2DocumentStorageService;
-
     private User mentorUser;
     private User adminUser;
 
@@ -95,10 +91,6 @@ class MentorVerificationFlowIntegrationTest {
         when(cloudinaryService.upload(any(), any())).thenReturn(
                 new CloudinaryService.CloudinaryUploadResult("public_id", "https://cloudinary.com/test.jpg")
         );
-        when(r2DocumentStorageService.upload(any(), any())).thenReturn(
-                new R2DocumentStorageService.R2UploadResult("object_key", "https://r2.com/test.pdf")
-        );
-
         // Setup admin and mentor users
         adminUser = userRepository.save(User.builder()
                 .email("admin-flow@test.com")
@@ -163,15 +155,15 @@ class MentorVerificationFlowIntegrationTest {
         MockMultipartFile imageFile = new MockMultipartFile(
                 "file", "proof.png", "image/png", "proof data".getBytes()
         );
-        MockMultipartFile pdfFile = new MockMultipartFile(
-                "file", "proof.pdf", "application/pdf", "pdf data".getBytes()
+        MockMultipartFile expertiseFile = new MockMultipartFile(
+                "file", "expertise-proof.png", "image/png", "expertise data".getBytes()
         );
 
         mentorVerificationService.uploadDocument(
                 mentorId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, imageFile
         );
         mentorVerificationService.uploadDocument(
-                mentorId, VerificationDocumentType.EXPERTISE_PROOF, pdfFile
+                mentorId, VerificationDocumentType.EXPERTISE_PROOF, expertiseFile
         );
 
         // 4. Submit verification
