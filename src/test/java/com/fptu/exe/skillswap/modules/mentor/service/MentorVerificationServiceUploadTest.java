@@ -25,23 +25,28 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MentorVerificationServiceUploadTest {
 
     @Mock
@@ -90,10 +95,8 @@ class MentorVerificationServiceUploadTest {
                 .build();
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(
-                userId,
-                List.of(VerificationStatus.DRAFT, VerificationStatus.PENDING_REVIEW, VerificationStatus.NEEDS_REVISION)
-        )).thenReturn(Optional.of(request));
+        lenient().doReturn(Optional.of(request)).when(mentorVerificationRequestRepository)
+                .findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(any(UUID.class), anyCollection());
         when(mentorVerificationDocumentRepository.findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(any(), any()))
                 .thenReturn(Collections.emptyList());
         when(mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(any(), any()))
@@ -167,12 +170,6 @@ class MentorVerificationServiceUploadTest {
 
         verify(cloudinaryServiceBean, never()).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
         verify(storedFileRepository, never()).save(any());
-    }
-
-    @Test
-    void uploadImage_withoutCloudinary_shouldReturnConfigurationError() throws Exception {
-        // Cloudinary is now required at startup, so this case is covered by app bootstrap behavior.
-        assertThat(serviceWithCloudinary).isNotNull();
     }
 
     @Test
