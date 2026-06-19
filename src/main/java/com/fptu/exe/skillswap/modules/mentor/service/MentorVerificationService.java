@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import java.util.Optional;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
@@ -19,16 +18,21 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -39,9 +43,11 @@ public class MentorVerificationService {
             VerificationStatus.PENDING_REVIEW,
             VerificationStatus.NEEDS_REVISION
     );
-    private static final Set<String> SUPPORTED_IMAGE_CONTENT_TYPES = Set.of("image/jpeg", "image/png");
+    private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "application/pdf");
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
+    private static final long MAX_DOCUMENT_SIZE_BYTES = 4L * 1024L * 1024L;
+    private static final Pattern PUBLIC_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]+$");
 
     @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
     private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
@@ -64,30 +70,40 @@ public class MentorVerificationService {
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
         requireUserId(userId);
-        User user = getRequiredUser(userId);
+        User user = getRequiredUserForUpdate(userId);
         Optional<MentorVerificationRequest> activeRequest = findActiveRequest(userId);
         if (activeRequest.isPresent()) {
             return new MentorVerificationRequestActionResult<>(buildResponse(activeRequest.get()), false);
         }
         MentorProfile mentorProfile = ensureMentorProfileExists(user);
         ensureMentorCanOpenVerificationRequest(mentorProfile);
-        MentorVerificationRequest request = createDraftRequest(user);
-        return new MentorVerificationRequestActionResult<>(buildResponse(request), true);
+        MentorVerificationRequest previousRequest = findLatestRequest(userId)
+                .filter(existing -> existing.getStatus() == VerificationStatus.REJECTED
+                        || existing.getStatus() == VerificationStatus.WITHDRAWN)
+                .orElse(null);
+        try {
+            MentorVerificationRequest request = createDraftRequest(user, previousRequest);
+            return new MentorVerificationRequestActionResult<>(buildResponse(request), true);
+        } catch (DataIntegrityViolationException ex) {
+            MentorVerificationRequest existingRequest = findActiveRequest(userId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đang có một hồ sơ xác thực mentor đang hoạt động"));
+            return new MentorVerificationRequestActionResult<>(buildResponse(existingRequest), false);
+        }
     }
 
     @Transactional(readOnly = true)
     public MentorVerificationRequestResponse getMyRequest(UUID userId) {
         requireUserId(userId);
-        MentorVerificationRequest request = findActiveRequest(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        MentorVerificationRequest request = findLatestRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
         return buildResponse(request);
     }
 
     @Transactional(readOnly = true)
     public List<MentorVerificationTimelineEventResponse> getTimeline(UUID userId) {
         requireUserId(userId);
-        MentorVerificationRequest request = findActiveRequest(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        MentorVerificationRequest request = findLatestRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
         return mentorVerificationRequestEventRepository
                 .findByRequestIdOrderByCreatedAtAsc(request.getId())
                 .stream()
@@ -102,8 +118,8 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã tài liệu không được để trống");
         }
 
-        MentorVerificationRequest request = findActiveRequest(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        MentorVerificationRequest request = findLatestRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
         MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
         return mapDocumentResponse(document);
@@ -115,7 +131,7 @@ public class MentorVerificationService {
             MentorVerificationDocumentUploadRequest uploadRequest
     ) {
         requireUserId(userId);
-        MentorVerificationRequest verificationRequest = findEditableRequest(userId);
+        MentorVerificationRequest verificationRequest = findEditableRequestForUpdate(userId);
         validateUploadInput(uploadRequest);
         enforceDocumentCountLimit(verificationRequest.getId(), uploadRequest.documentType());
 
@@ -150,7 +166,7 @@ public class MentorVerificationService {
         if (submitRequest == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu nộp hồ sơ không được để trống");
         }
-        MentorVerificationRequest request = findEditableRequest(userId);
+        MentorVerificationRequest request = findEditableRequestForUpdate(userId);
         boolean wasNeedsRevision = request.getStatus() == VerificationStatus.NEEDS_REVISION;
         VerificationStatus previousStatus = request.getStatus();
         ensureSubmissionEligible(userId, request);
@@ -190,7 +206,7 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã tài liệu không được để trống");
         }
 
-        MentorVerificationRequest request = findEditableRequest(userId);
+        MentorVerificationRequest request = findEditableRequestForUpdate(userId);
         MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
 
@@ -208,8 +224,8 @@ public class MentorVerificationService {
     @Transactional
     public MentorVerificationRequestResponse withdraw(UUID userId) {
         requireUserId(userId);
-        MentorVerificationRequest request = findActiveRequest(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor đang hoạt động"));
+        MentorVerificationRequest request = findLatestRequest(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
 
         if (request.getStatus() != VerificationStatus.DRAFT
                 && request.getStatus() != VerificationStatus.NEEDS_REVISION
@@ -241,11 +257,12 @@ public class MentorVerificationService {
         return buildResponse(request);
     }
 
-    private MentorVerificationRequest createDraftRequest(User user) {
+    private MentorVerificationRequest createDraftRequest(User user, MentorVerificationRequest previousRequest) {
         MentorVerificationRequest request = MentorVerificationRequest.builder()
                 .mentor(user)
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.DRAFT)
+                .previousRequest(previousRequest)
                 .build();
         MentorVerificationRequest savedRequest = mentorVerificationRequestRepository.save(request);
         appendEvent(savedRequest, MentorVerificationEventType.REQUEST_CREATED, user, null, VerificationStatus.DRAFT, null);
@@ -260,9 +277,16 @@ public class MentorVerificationService {
         );
     }
 
-    private MentorVerificationRequest findEditableRequest(UUID userId) {
+    private Optional<MentorVerificationRequest> findLatestRequest(UUID userId) {
+        requireUserId(userId);
+        return mentorVerificationRequestRepository.findFirstByMentorIdOrderByCreatedAtDesc(userId);
+    }
+
+    private MentorVerificationRequest findEditableRequestForUpdate(UUID userId) {
         MentorVerificationRequest request = findActiveRequest(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor để cập nhật"));
+        request = mentorVerificationRequestRepository.findByIdForUpdate(request.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor để cập nhật"));
         if (request.getStatus() != VerificationStatus.DRAFT && request.getStatus() != VerificationStatus.NEEDS_REVISION) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Hồ sơ hiện tại không cho phép chỉnh sửa tài liệu");
         }
@@ -311,15 +335,6 @@ public class MentorVerificationService {
         String publicId = trimToNull(request.publicId());
         String originalFilename = trimToNull(request.originalFilename());
         String contentType = normalizeContentType(request.contentType());
-        if (!StringUtils.hasText(fileUrl)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
-        }
-        if (!StringUtils.hasText(publicId)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không được để trống");
-        }
-        if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
-        }
         return storedFileRepository.save(StoredFile.builder()
                 .owner(user)
                 .purpose(FilePurpose.VERIFICATION_DOCUMENT)
@@ -339,18 +354,24 @@ public class MentorVerificationService {
         if (request.documentType() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
         }
-        if (!StringUtils.hasText(request.fileUrl())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
+        if (!StringUtils.hasText(request.fileUrl()) || !isValidHttpUrl(request.fileUrl())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ");
         }
-        if (!StringUtils.hasText(request.publicId())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không được để trống");
+        if (!StringUtils.hasText(request.publicId()) || !isValidPublicId(request.publicId())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không hợp lệ");
+        }
+        if (!StringUtils.hasText(request.originalFilename())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Tên file gốc không được để trống");
         }
         if (request.sizeBytes() == null || request.sizeBytes() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước file không hợp lệ");
         }
+        if (request.sizeBytes() > MAX_DOCUMENT_SIZE_BYTES) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 4MB");
+        }
         String contentType = normalizeContentType(request.contentType());
-        if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
+        if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
         }
     }
 
@@ -392,6 +413,12 @@ public class MentorVerificationService {
     private User getRequiredUser(UUID userId) {
         requireUserId(userId);
         return userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
+    }
+
+    private User getRequiredUserForUpdate(UUID userId) {
+        requireUserId(userId);
+        return userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
     }
 
@@ -534,14 +561,32 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
         }
         String contentType = normalizeContentType(request.contentType());
-        if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+        if ("application/pdf".equals(contentType)) {
+            return VerificationStorageKind.DOCUMENT;
+        }
+        if (SUPPORTED_CONTENT_TYPES.contains(contentType)) {
             return VerificationStorageKind.IMAGE;
         }
-        throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
+        throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
     }
 
     private String normalizeContentType(String contentType) {
         return contentType == null ? "" : contentType.trim().toLowerCase();
+    }
+
+    private boolean isValidHttpUrl(String fileUrl) {
+        try {
+            URI uri = new URI(fileUrl.trim());
+            String scheme = uri.getScheme();
+            return StringUtils.hasText(uri.getHost())
+                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
+        } catch (URISyntaxException ex) {
+            return false;
+        }
+    }
+
+    private boolean isValidPublicId(String publicId) {
+        return publicId != null && PUBLIC_ID_PATTERN.matcher(publicId.trim()).matches();
     }
 
     private void ensureMentorCanOpenVerificationRequest(MentorProfile mentorProfile) {

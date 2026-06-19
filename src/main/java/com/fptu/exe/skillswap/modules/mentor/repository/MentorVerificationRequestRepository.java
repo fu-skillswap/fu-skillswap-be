@@ -2,10 +2,12 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -28,6 +30,20 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
             Collection<VerificationStatus> statuses
     );
 
+    @EntityGraph(attributePaths = {"mentor", "reviewedBy", "previousRequest"})
+    Optional<MentorVerificationRequest> findFirstByMentorIdOrderByCreatedAtDesc(UUID mentorUserId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select r
+            from MentorVerificationRequest r
+            join fetch r.mentor mentor
+            left join fetch r.reviewedBy reviewer
+            left join fetch r.previousRequest previousRequest
+            where r.id = :requestId
+            """)
+    Optional<MentorVerificationRequest> findByIdForUpdate(@Param("requestId") UUID requestId);
+
     @Query(value = """
             select
                 r.id as requestId,
@@ -49,6 +65,8 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
                     or lower(mentor.fullName) like :keywordPattern
+                    or function('translate', lower(mentor.email), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                    or function('translate', lower(mentor.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                   )
             """,
             countQuery = """
@@ -62,11 +80,16 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
                     or lower(mentor.fullName) like :keywordPattern
+                    or function('translate', lower(mentor.email), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                    or function('translate', lower(mentor.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                   )
             """)
     Page<AdminMentorVerificationQueueProjection> searchAdminQueue(
             @Param("status") VerificationStatus status,
             @Param("keywordPattern") String keywordPattern,
+            @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
+            @Param("accentedCharacters") String accentedCharacters,
+            @Param("plainCharacters") String plainCharacters,
             @Param("submittedFrom") LocalDateTime submittedFrom,
             @Param("submittedTo") LocalDateTime submittedTo,
             Pageable pageable
