@@ -141,7 +141,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadJpg_shouldStoreToCloudinary() {
+    void uploadJpg_shouldStoreToCloudinary() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
         serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file);
@@ -155,7 +155,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadPng_shouldStoreToCloudinary() {
+    void uploadPng_shouldStoreToCloudinary() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.png", "image/png", new byte[]{1, 2, 3});
 
         serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.EXPERTISE_PROOF, file);
@@ -165,7 +165,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadPdf_shouldBeRejected() {
+    void uploadPdf_shouldBeRejected() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.pdf", "application/pdf", new byte[]{1, 2, 3});
 
         assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
@@ -176,7 +176,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadUnknownType_shouldBeRejected() {
+    void uploadUnknownType_shouldBeRejected() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.gif", "image/gif", new byte[]{1, 2, 3});
 
         assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
@@ -187,7 +187,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadImage_withoutCloudinary_shouldReturnConfigurationError() {
+    void uploadImage_withoutCloudinary_shouldReturnConfigurationError() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
         assertThatThrownBy(() -> serviceWithoutCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
@@ -197,7 +197,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadImage_shouldNotRequireR2() {
+    void uploadImage_shouldNotRequireR2() throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
 
         serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file);
