@@ -65,8 +65,8 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
                     or lower(mentor.fullName) like :keywordPattern
-                    or function('translate', lower(mentor.email), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
-                    or function('translate', lower(mentor.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                    or lower(function('translate', mentor.email, 'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ', 'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy')) like :normalizedKeywordPattern
+                    or lower(function('translate', mentor.fullName, 'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ', 'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy')) like :normalizedKeywordPattern
                   )
             """,
             countQuery = """
@@ -80,16 +80,16 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
                     or lower(mentor.fullName) like :keywordPattern
-                    or function('translate', lower(mentor.email), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
-                    or function('translate', lower(mentor.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                    or lower(function('translate', mentor.email, 'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ', 'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy')) like :normalizedKeywordPattern
+                    or lower(function('translate', mentor.fullName, 'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ', 'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy')) like :normalizedKeywordPattern
                   )
             """)
     Page<AdminMentorVerificationQueueProjection> searchAdminQueue(
             @Param("status") VerificationStatus status,
+            @Param("keyword") String keyword,
+            @Param("normalizedKeyword") String normalizedKeyword,
             @Param("keywordPattern") String keywordPattern,
             @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
-            @Param("accentedCharacters") String accentedCharacters,
-            @Param("plainCharacters") String plainCharacters,
             @Param("submittedFrom") LocalDateTime submittedFrom,
             @Param("submittedTo") LocalDateTime submittedTo,
             Pageable pageable

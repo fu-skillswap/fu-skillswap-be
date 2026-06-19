@@ -31,15 +31,18 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -47,6 +50,8 @@ import java.util.UUID;
 public class AdminMentorVerificationService {
 
     private static final int LOCK_TTL_MINUTES = 5;
+    private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
+    private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
@@ -61,9 +66,16 @@ public class AdminMentorVerificationService {
         AdminMentorVerificationQueueFilterRequest resolvedFilter = filterRequest == null
                 ? new AdminMentorVerificationQueueFilterRequest()
                 : filterRequest;
+        String keyword = trimToNull(resolvedFilter.getKeyword());
+        String normalizedKeyword = normalizeSearchText(keyword);
+        String keywordPattern = toLikePattern(keyword);
+        String normalizedKeywordPattern = toLikePattern(normalizedKeyword);
         Page<AdminMentorVerificationQueueProjection> page = mentorVerificationRequestRepository.searchAdminQueue(
                 resolvedFilter.getStatus(),
-                buildKeywordPattern(resolvedFilter.getKeyword()),
+                keyword,
+                normalizedKeyword,
+                keywordPattern,
+                normalizedKeywordPattern,
                 resolvedFilter.getSubmittedFrom(),
                 resolvedFilter.getSubmittedTo(),
                 resolvedFilter.getPageable()
@@ -277,8 +289,8 @@ public class AdminMentorVerificationService {
         StudentProfileResponse studentProfile = null;
         try {
             studentProfile = academicService.getStudentProfile(mentor.getId());
-        } catch (Exception e) {
-            // Student profile might not exist (e.g. for mock/test data), fall back to null
+        } catch (ResourceNotFoundException ex) {
+            studentProfile = null;
         }
 
         return AdminMentorVerificationRequestResponse.builder()
@@ -460,17 +472,25 @@ public class AdminMentorVerificationService {
         return value.trim();
     }
 
-    private String normalizeKeyword(String keyword) {
+    private String normalizeSearchText(String keyword) {
         String normalized = trimToNull(keyword);
-        return normalized == null ? null : normalized.toLowerCase();
-    }
-
-    private String buildKeywordPattern(String keyword) {
-        String normalized = normalizeKeyword(keyword);
         if (normalized == null) {
             return null;
         }
-        return "%" + normalized.replaceAll("\\s+", " ") + "%";
+        return Normalizer.normalize(normalized, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private String toLikePattern(String keyword) {
+        String normalized = trimToNull(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return "%" + normalized.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ") + "%";
     }
 }
 
