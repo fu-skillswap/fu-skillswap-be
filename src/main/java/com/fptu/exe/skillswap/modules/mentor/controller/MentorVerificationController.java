@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
@@ -20,12 +20,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -98,25 +96,23 @@ public class MentorVerificationController {
     }
 
     @Operation(
-            summary = "Tải minh chứng xác thực mentor",
-            description = "Chấp nhận JPG hoặc PNG. Minh chứng xác thực mentor sẽ được lưu qua Cloudinary."
+            summary = "Lưu minh chứng xác thực mentor đã upload sẵn",
+            description = "FE upload ảnh JPG/PNG lên Cloudinary trước, sau đó gửi URL cùng metadata về BE để lưu."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Tải tài liệu thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
-    @PostMapping(path = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(path = "/documents", consumes = "application/json")
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam("documentType") VerificationDocumentType documentType,
-            @RequestPart("file") MultipartFile file
+            @Valid @RequestBody MentorVerificationDocumentUploadRequest request
     ) {
         ensureAuthenticated(principal);
         MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
                 principal.getPublicId(),
-                documentType,
-                file
+                request
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }

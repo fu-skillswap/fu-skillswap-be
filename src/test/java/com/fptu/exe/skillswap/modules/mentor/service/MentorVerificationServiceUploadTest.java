@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
@@ -13,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
@@ -27,7 +27,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
@@ -38,7 +37,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -69,8 +67,6 @@ class MentorVerificationServiceUploadTest {
     private TagRepository tagRepository;
     @Mock
     private MentorTagRepository mentorTagRepository;
-    @Mock
-    private CloudinaryService cloudinaryServiceBean;
 
     private MentorVerificationService serviceWithCloudinary;
     private UUID userId;
@@ -107,8 +103,6 @@ class MentorVerificationServiceUploadTest {
                 .thenReturn(Collections.emptyList());
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
         when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
-        when(cloudinaryServiceBean.upload(any(org.springframework.web.multipart.MultipartFile.class), anyString())).thenAnswer(invocation ->
-                new CloudinaryService.CloudinaryUploadResult("mentor-verification/sample-public-id", "https://res.cloudinary.com/demo/sample.jpg"));
 
         serviceWithCloudinary = new MentorVerificationService(
                 mentorVerificationRequestRepository,
@@ -118,8 +112,7 @@ class MentorVerificationServiceUploadTest {
                 academicService,
                 mentorProfileService,
                 userRepository,
-                storedFileRepository,
-                cloudinaryServiceBean
+                storedFileRepository
         );
         ReflectionTestUtils.setField(serviceWithCloudinary, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedStudentProfile", false);
@@ -128,56 +121,80 @@ class MentorVerificationServiceUploadTest {
 
     @Test
     void uploadJpg_shouldStoreToCloudinary() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                "proof.jpg",
+                "image/jpeg",
+                123L
+        );
 
-        serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file);
+        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
 
         ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
         verify(storedFileRepository).save(fileCaptor.capture());
         assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("CLOUDINARY");
-        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo("mentor-verification/sample-public-id");
-        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo("https://res.cloudinary.com/demo/sample.jpg");
-        verify(cloudinaryServiceBean).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
+        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.fileUrl());
+        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo(uploadRequest.fileUrl());
     }
 
     @Test
     void uploadPng_shouldStoreToCloudinary() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.png", "image/png", new byte[]{1, 2, 3});
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.EXPERTISE_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
+                "proof.png",
+                "image/png",
+                123L
+        );
 
-        serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.EXPERTISE_PROOF, file);
+        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
 
-        verify(cloudinaryServiceBean).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
         verify(storedFileRepository).save(any());
     }
 
     @Test
     void uploadPdf_shouldBeRejected() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.pdf", "application/pdf", new byte[]{1, 2, 3});
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.pdf",
+                "proof.pdf",
+                "application/pdf",
+                123L
+        );
 
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
+        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
                 .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
 
-        verify(cloudinaryServiceBean, never()).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
         verify(storedFileRepository, never()).save(any());
     }
 
     @Test
     void uploadUnknownType_shouldBeRejected() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.gif", "image/gif", new byte[]{1, 2, 3});
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.gif",
+                "proof.gif",
+                "image/gif",
+                123L
+        );
 
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
+        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
                 .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
 
-        verify(cloudinaryServiceBean, never()).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
         verify(storedFileRepository, never()).save(any());
     }
 
     @Test
     void uploadImage_shouldNotRequireR2() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                "proof.jpg",
+                "image/jpeg",
+                123L
+        );
 
-        serviceWithCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file);
-
-        verify(cloudinaryServiceBean).upload(any(org.springframework.web.multipart.MultipartFile.class), anyString());
+        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
     }
 }

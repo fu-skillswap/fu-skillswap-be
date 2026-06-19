@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import java.util.Optional;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -24,9 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -63,7 +60,6 @@ public class MentorVerificationService {
     private final MentorProfileService mentorProfileService;
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
-    private final CloudinaryService cloudinaryService;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -116,29 +112,28 @@ public class MentorVerificationService {
     @Transactional
     public MentorVerificationRequestResponse uploadDocument(
             UUID userId,
-            VerificationDocumentType documentType,
-            MultipartFile file
+            MentorVerificationDocumentUploadRequest uploadRequest
     ) {
         requireUserId(userId);
-        MentorVerificationRequest request = findEditableRequest(userId);
-        validateUploadInput(documentType, file);
-        enforceDocumentCountLimit(request.getId(), documentType);
+        MentorVerificationRequest verificationRequest = findEditableRequest(userId);
+        validateUploadInput(uploadRequest);
+        enforceDocumentCountLimit(verificationRequest.getId(), uploadRequest.documentType());
 
         User user = getRequiredUser(userId);
-        StoredFile storedFile = storeVerificationFile(user, file, documentType);
+        StoredFile storedFile = storeVerificationFile(user, uploadRequest);
 
         int nextVersion = mentorVerificationDocumentRepository
-                .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(request.getId(), documentType)
+                .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(verificationRequest.getId(), uploadRequest.documentType())
                 .stream()
                 .map(MentorVerificationDocument::getVersion)
                 .max(Integer::compareTo)
                 .orElse(0) + 1;
 
         MentorVerificationDocument document = MentorVerificationDocument.builder()
-                .request(request)
-                .documentType(documentType)
+                .request(verificationRequest)
+                .documentType(uploadRequest.documentType())
                 .status(VerificationDocumentStatus.UPLOADED)
-                .storageKind(resolveStorageKind(file))
+                .storageKind(resolveStorageKind(uploadRequest))
                 .storedFile(storedFile)
                 .isActive(true)
                 .version(nextVersion)
@@ -146,7 +141,7 @@ public class MentorVerificationService {
                 .build();
 
         mentorVerificationDocumentRepository.save(document);
-        return buildResponse(request);
+        return buildResponse(verificationRequest);
     }
 
     @Transactional
@@ -308,47 +303,45 @@ public class MentorVerificationService {
                 });
     }
 
-    private StoredFile storeVerificationFile(User user, MultipartFile file, VerificationDocumentType documentType) {
+    private StoredFile storeVerificationFile(User user, MentorVerificationDocumentUploadRequest request) {
         if (user == null || user.getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xác định người dùng tải tài liệu");
         }
-        if (documentType == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
+        String fileUrl = trimToNull(request.fileUrl());
+        String originalFilename = trimToNull(request.originalFilename());
+        String contentType = normalizeContentType(request.contentType());
+        if (!StringUtils.hasText(fileUrl)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
         }
-        String contentType = normalizeContentType(file.getContentType());
-        try {
-            if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
-            }
-
-            CloudinaryService.CloudinaryUploadResult uploadResult =
-                    cloudinaryService.upload(file, "mentor-verification/" + user.getId());
-            return storedFileRepository.save(StoredFile.builder()
-                    .owner(user)
-                    .purpose(FilePurpose.VERIFICATION_DOCUMENT)
-                    .originalName(file.getOriginalFilename())
-                    .storageProvider("CLOUDINARY")
-                    .storageKey(uploadResult.publicId())
-                    .publicUrl(uploadResult.secureUrl())
-                    .mimeType(contentType)
-                    .sizeBytes(file.getSize())
-                    .build());
-        } catch (IOException ex) {
-            throw new BaseException(ErrorCode.STORAGE_ERROR, "Tải tài liệu xác thực thất bại do hệ thống lưu trữ tạm thời không khả dụng", ex);
+        if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
         }
+        return storedFileRepository.save(StoredFile.builder()
+                .owner(user)
+                .purpose(FilePurpose.VERIFICATION_DOCUMENT)
+                .originalName(originalFilename)
+                .storageProvider("CLOUDINARY")
+                .storageKey(fileUrl)
+                .publicUrl(fileUrl)
+                .mimeType(contentType)
+                .sizeBytes(request.sizeBytes())
+                .build());
     }
 
-    private void validateUploadInput(VerificationDocumentType documentType, MultipartFile file) {
-        if (documentType == null) {
+    private void validateUploadInput(MentorVerificationDocumentUploadRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
+        }
+        if (request.documentType() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
         }
-        if (file == null || file.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tệp tải lên không được để trống");
+        if (!StringUtils.hasText(request.fileUrl())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
         }
-        if (file.getSize() <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước tệp tải lên không hợp lệ");
+        if (request.sizeBytes() == null || request.sizeBytes() <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước file không hợp lệ");
         }
-        String contentType = normalizeContentType(file.getContentType());
+        String contentType = normalizeContentType(request.contentType());
         if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
         }
@@ -529,11 +522,11 @@ public class MentorVerificationService {
                 .build();
     }
 
-    private VerificationStorageKind resolveStorageKind(MultipartFile file) {
-        if (file == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tệp tải lên không được để trống");
+    private VerificationStorageKind resolveStorageKind(MentorVerificationDocumentUploadRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
         }
-        String contentType = normalizeContentType(file.getContentType());
+        String contentType = normalizeContentType(request.contentType());
         if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
             return VerificationStorageKind.IMAGE;
         }
