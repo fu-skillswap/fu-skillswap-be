@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.infrastructure.storage.CloudinaryService;
-import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -44,7 +43,6 @@ public class MentorVerificationService {
             VerificationStatus.NEEDS_REVISION
     );
     private static final Set<String> SUPPORTED_IMAGE_CONTENT_TYPES = Set.of("image/jpeg", "image/png");
-    private static final String PDF_CONTENT_TYPE = "application/pdf";
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
 
@@ -66,7 +64,6 @@ public class MentorVerificationService {
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final Optional<CloudinaryService> cloudinaryService;
-    private final Optional<R2DocumentStorageService> r2DocumentStorageService;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -320,36 +317,23 @@ public class MentorVerificationService {
         }
         String contentType = normalizeContentType(file.getContentType());
         try {
-            if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType) && cloudinaryService.isPresent()) {
-                CloudinaryService service = cloudinaryService.get();
-                CloudinaryService.CloudinaryUploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
-                return storedFileRepository.save(StoredFile.builder()
-                        .owner(user)
-                        .purpose(FilePurpose.VERIFICATION_DOCUMENT)
-                        .originalName(file.getOriginalFilename())
-                        .storageProvider("CLOUDINARY")
-                        .storageKey(uploadResult.publicId())
-                        .publicUrl(uploadResult.secureUrl())
-                        .mimeType(contentType)
-                        .sizeBytes(file.getSize())
-                        .build());
+            if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
             }
 
-            R2DocumentStorageService service = r2DocumentStorageService.orElseThrow(() -> {
-                if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
-                    return new BaseException(ErrorCode.CONFIGURATION_ERROR,
-                            "Chưa cấu hình Cloudinary hoặc R2 để upload ảnh");
-                }
-                return new BaseException(ErrorCode.CONFIGURATION_ERROR, "R2 chưa được cấu hình cho upload PDF");
-            });
-            R2DocumentStorageService.R2UploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
+            CloudinaryService service = cloudinaryService.orElseThrow(() -> new BaseException(
+                    ErrorCode.CONFIGURATION_ERROR,
+                    "Cloudinary chưa được cấu hình. Hãy bật CLOUDINARY_ENABLED=true và khai báo CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET"
+            ));
+
+            CloudinaryService.CloudinaryUploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
             return storedFileRepository.save(StoredFile.builder()
                     .owner(user)
                     .purpose(FilePurpose.VERIFICATION_DOCUMENT)
                     .originalName(file.getOriginalFilename())
-                    .storageProvider("R2")
-                    .storageKey(uploadResult.objectKey())
-                    .publicUrl(uploadResult.fileUrl())
+                    .storageProvider("CLOUDINARY")
+                    .storageKey(uploadResult.publicId())
+                    .publicUrl(uploadResult.secureUrl())
                     .mimeType(contentType)
                     .sizeBytes(file.getSize())
                     .build());
@@ -369,8 +353,8 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước tệp tải lên không hợp lệ");
         }
         String contentType = normalizeContentType(file.getContentType());
-        if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType) && !PDF_CONTENT_TYPE.equals(contentType)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
+        if (!SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
         }
     }
 
@@ -557,7 +541,7 @@ public class MentorVerificationService {
         if (SUPPORTED_IMAGE_CONTENT_TYPES.contains(contentType)) {
             return VerificationStorageKind.IMAGE;
         }
-        return VerificationStorageKind.DOCUMENT;
+        throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
     }
 
     private String normalizeContentType(String contentType) {
