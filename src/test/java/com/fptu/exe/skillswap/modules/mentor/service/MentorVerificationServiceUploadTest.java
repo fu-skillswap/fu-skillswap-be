@@ -75,7 +75,7 @@ class MentorVerificationServiceUploadTest {
     private MentorVerificationRequest request;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         userId = UUID.randomUUID();
         user = User.builder()
                 .id(userId)
