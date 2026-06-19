@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,7 +62,7 @@ public class MentorVerificationService {
     private final MentorProfileService mentorProfileService;
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
-    private final Optional<CloudinaryService> cloudinaryService;
+    private final CloudinaryService cloudinaryService;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -321,12 +320,8 @@ public class MentorVerificationService {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ ảnh JPG hoặc PNG");
             }
 
-            CloudinaryService service = cloudinaryService.orElseThrow(() -> new BaseException(
-                    ErrorCode.CONFIGURATION_ERROR,
-                    "Cloudinary chưa được cấu hình. Hãy bật CLOUDINARY_ENABLED=true và khai báo CLOUDINARY_CLOUD_NAME/CLOUDINARY_API_KEY/CLOUDINARY_API_SECRET"
-            ));
-
-            CloudinaryService.CloudinaryUploadResult uploadResult = service.upload(file, "mentor-verification/" + user.getId());
+            CloudinaryService.CloudinaryUploadResult uploadResult =
+                    cloudinaryService.upload(file, "mentor-verification/" + user.getId());
             return storedFileRepository.save(StoredFile.builder()
                     .owner(user)
                     .purpose(FilePurpose.VERIFICATION_DOCUMENT)

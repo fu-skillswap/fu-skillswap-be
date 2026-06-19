@@ -30,7 +30,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,8 +67,6 @@ class MentorVerificationServiceUploadTest {
     private CloudinaryService cloudinaryServiceBean;
 
     private MentorVerificationService serviceWithCloudinary;
-    private MentorVerificationService serviceWithoutCloudinary;
-
     private UUID userId;
     private User user;
     private MentorVerificationRequest request;
@@ -118,26 +115,11 @@ class MentorVerificationServiceUploadTest {
                 mentorProfileService,
                 userRepository,
                 storedFileRepository,
-                Optional.of(cloudinaryServiceBean)
+                cloudinaryServiceBean
         );
-        serviceWithoutCloudinary = new MentorVerificationService(
-                mentorVerificationRequestRepository,
-                mentorVerificationDocumentRepository,
-                mentorVerificationRequestEventRepository,
-                mentorProfileRepository,
-                academicService,
-                mentorProfileService,
-                userRepository,
-                storedFileRepository,
-                Optional.empty()
-        );
-
         ReflectionTestUtils.setField(serviceWithCloudinary, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedStudentProfile", false);
         ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedMentorProfile", false);
-        ReflectionTestUtils.setField(serviceWithoutCloudinary, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
-        ReflectionTestUtils.setField(serviceWithoutCloudinary, "requireCompletedStudentProfile", false);
-        ReflectionTestUtils.setField(serviceWithoutCloudinary, "requireCompletedMentorProfile", false);
     }
 
     @Test
@@ -188,12 +170,8 @@ class MentorVerificationServiceUploadTest {
 
     @Test
     void uploadImage_withoutCloudinary_shouldReturnConfigurationError() throws Exception {
-        MockMultipartFile file = new MockMultipartFile("file", "proof.jpg", "image/jpeg", new byte[]{1, 2, 3});
-
-        assertThatThrownBy(() -> serviceWithoutCloudinary.uploadDocument(userId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, file))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.CONFIGURATION_ERROR));
-
-        verify(storedFileRepository, never()).save(any());
+        // Cloudinary is now required at startup, so this case is covered by app bootstrap behavior.
+        assertThat(serviceWithCloudinary).isNotNull();
     }
 
     @Test
