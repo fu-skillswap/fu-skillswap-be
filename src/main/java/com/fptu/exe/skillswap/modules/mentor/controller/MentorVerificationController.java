@@ -56,7 +56,7 @@ public class MentorVerificationController {
                 : ResponseEntity.ok(ApiResponse.success(result.data()));
     }
 
-    @Operation(summary = "Xem hồ sơ xác thực mentor hiện tại")
+    @Operation(summary = "Xem hồ sơ xác thực mentor mới nhất, kể cả khi đã ở trạng thái cuối")
     @GetMapping
     public ApiResponse<MentorVerificationRequestResponse> getMyRequest(
             @AuthenticationPrincipal UserPrincipal principal
@@ -65,7 +65,7 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
     }
 
-    @Operation(summary = "Xem timeline hồ sơ xác thực mentor hiện tại")
+    @Operation(summary = "Xem timeline của hồ sơ xác thực mentor mới nhất, kể cả khi đã ở trạng thái cuối")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy timeline thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -97,11 +97,12 @@ public class MentorVerificationController {
 
     @Operation(
             summary = "Lưu minh chứng xác thực mentor đã upload sẵn",
-            description = "FE upload ảnh JPG/PNG lên Cloudinary trước, sau đó gửi URL cùng metadata về BE để lưu."
+            description = "FE upload file lên dịch vụ lưu trữ ngoài trước, sau đó gửi metadata JSON về BE để lưu. Chỉ hỗ trợ JPG, PNG hoặc PDF; kích thước tối đa 4MB; BE vẫn kiểm tra lại type, size và quota."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File vượt quá giới hạn cho phép"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
     @PostMapping(path = "/documents", consumes = "application/json")

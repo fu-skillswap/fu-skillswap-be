@@ -14,9 +14,15 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
+import java.util.Locale;
+
 @Service
 @RequiredArgsConstructor
 public class AdminMentorService {
+
+    private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
+    private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
     private final MentorProfileRepository mentorProfileRepository;
 
@@ -25,6 +31,9 @@ public class AdminMentorService {
         AdminMentorListRequest safeRequest = request == null ? new AdminMentorListRequest() : request;
         Page<MentorProfile> page = mentorProfileRepository.searchForAdmin(
                 buildKeywordPattern(safeRequest.getKeyword()),
+                buildNormalizedKeywordPattern(safeRequest.getKeyword()),
+                ACCENTED_CHARACTERS,
+                PLAIN_CHARACTERS,
                 safeRequest.getStatus(),
                 safeRequest.getIsAvailable(),
                 adminMentorPageable(safeRequest)
@@ -94,5 +103,26 @@ public class AdminMentorService {
             return null;
         }
         return "%" + normalized.toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ") + "%";
+    }
+
+    private String buildNormalizedKeywordPattern(String keyword) {
+        String normalized = normalizeSearchText(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return "%" + normalized + "%";
+    }
+
+    private String normalizeSearchText(String keyword) {
+        String normalized = normalizeKeyword(keyword);
+        if (normalized == null) {
+            return null;
+        }
+        return Normalizer.normalize(normalized, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
 }

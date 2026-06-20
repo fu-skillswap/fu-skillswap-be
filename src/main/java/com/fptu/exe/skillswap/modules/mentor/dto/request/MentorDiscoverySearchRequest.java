@@ -19,5 +19,4 @@ public class MentorDiscoverySearchRequest {
     private UUID campusId;
     private UUID specializationId;
     private TeachingMode teachingMode;
-    private Boolean isAvailable;
 }

@@ -8,27 +8,66 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
+import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AdminUserService {
 
+    private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "lastLoginAt", "fullName", "email", "status");
+
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
     private final AuditLogRepository auditLogRepository;
     private final ApplicationEventPublisher eventPublisher;
+
+    @Transactional(readOnly = true)
+    public PageResponse<AdminUserListItemResponse> getVisibleUsers(AdminUserListRequest request) {
+        AdminUserListRequest safeRequest = request == null ? new AdminUserListRequest() : request;
+        RoleCode targetRole = parseRoleFilter(safeRequest.getRole());
+        UserStatus targetStatus = parseStatusFilter(safeRequest.getStatus());
+        String keywordPattern = normalizeKeywordPattern(safeRequest.getKeyword());
+
+        Page<User> page = userRepository.searchAdminVisibleUsers(
+                keywordPattern,
+                targetStatus,
+                targetRole,
+                RoleCode.MENTEE,
+                RoleCode.MENTOR,
+                RoleCode.ADMIN,
+                RoleCode.SYSTEM_ADMIN,
+                buildPageable(safeRequest)
+        );
+
+        return PageResponse.<AdminUserListItemResponse>builder()
+                .content(page.getContent().stream().map(this::toAdminUserListItem).toList())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
 
     @Transactional
     public SystemUserResponse changeUserStatus(UUID adminId, UUID userId, boolean ban, String reason) {
@@ -86,6 +125,76 @@ public class AdminUserService {
                 .avatarUrl(user.getAvatarUrl())
                 .status(user.getStatus())
                 .roles(roles)
+                .lastLoginAt(user.getLastLoginAt())
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
+
+    private Pageable buildPageable(AdminUserListRequest request) {
+        int page = Math.max(request.getPage(), 0);
+        int size = Math.min(Math.max(request.getSize(), 1), 100);
+        Sort.Direction direction = request.resolveDirection();
+        String sortBy = resolveSortBy(request.getSortBy());
+        return PageRequest.of(page, size, Sort.by(direction, sortBy));
+    }
+
+    private String resolveSortBy(String sortBy) {
+        if (sortBy == null || !ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            return "createdAt";
+        }
+        return sortBy;
+    }
+
+    private String normalizeKeywordPattern(String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return null;
+        }
+        return "%" + keyword.trim().toLowerCase(Locale.ROOT) + "%";
+    }
+
+    private RoleCode parseRoleFilter(String role) {
+        if (role == null || role.isBlank()) {
+            return null;
+        }
+        try {
+            RoleCode roleCode = RoleCode.valueOf(role.trim().toUpperCase(Locale.ROOT));
+            if (roleCode != RoleCode.MENTEE && roleCode != RoleCode.MENTOR) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "role chỉ chấp nhận MENTEE hoặc MENTOR");
+            }
+            return roleCode;
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "role chỉ chấp nhận MENTEE hoặc MENTOR");
+        }
+    }
+
+    private UserStatus parseStatusFilter(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        try {
+            return UserStatus.valueOf(status.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "status không hợp lệ");
+        }
+    }
+
+    private AdminUserListItemResponse toAdminUserListItem(User user) {
+        List<RoleCode> visibleRoles = new ArrayList<>();
+        if (user.getRoles() != null) {
+            if (user.getRoles().contains(RoleCode.MENTEE)) {
+                visibleRoles.add(RoleCode.MENTEE);
+            }
+            if (user.getRoles().contains(RoleCode.MENTOR)) {
+                visibleRoles.add(RoleCode.MENTOR);
+            }
+        }
+        return AdminUserListItemResponse.builder()
+                .userId(user.getId())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
+                .status(user.getStatus())
+                .roles(visibleRoles)
                 .lastLoginAt(user.getLastLoginAt())
                 .createdAt(user.getCreatedAt())
                 .build();

@@ -94,4 +94,37 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
             @Param("submittedTo") LocalDateTime submittedTo,
             Pageable pageable
     );
+
+    @Query(value = """
+            select
+                r.id as requestId,
+                mentor.id as mentorUserId,
+                mentor.email as mentorEmail,
+                mentor.fullName as mentorFullName,
+                mentor.avatarUrl as mentorAvatarUrl,
+                r.status as status,
+                r.revisionCount as revisionCount,
+                r.submittedAt as submittedAt,
+                r.createdAt as createdAt,
+                r.updatedAt as updatedAt
+            from MentorVerificationRequest r
+            join r.mentor mentor
+            where (:status is null or r.status = :status)
+              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
+              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+            """,
+            countQuery = """
+            select count(r.id)
+            from MentorVerificationRequest r
+            join r.mentor mentor
+            where (:status is null or r.status = :status)
+              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
+              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+            """)
+    Page<AdminMentorVerificationQueueProjection> findAdminQueueWithoutKeyword(
+            @Param("status") VerificationStatus status,
+            @Param("submittedFrom") LocalDateTime submittedFrom,
+            @Param("submittedTo") LocalDateTime submittedTo,
+            Pageable pageable
+    );
 }

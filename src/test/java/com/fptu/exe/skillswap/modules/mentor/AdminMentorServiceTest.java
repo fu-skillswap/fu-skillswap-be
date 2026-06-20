@@ -69,7 +69,15 @@ class AdminMentorServiceTest {
         request.setStatus(MentorStatus.ACTIVE);
         request.setIsAvailable(true);
 
-        when(mentorProfileRepository.searchForAdmin(eq("%backend%"), eq(MentorStatus.ACTIVE), eq(true), any(Pageable.class)))
+        when(mentorProfileRepository.searchForAdmin(
+                eq("%backend%"),
+                eq("%backend%"),
+                any(),
+                any(),
+                eq(MentorStatus.ACTIVE),
+                eq(true),
+                any(Pageable.class)
+        ))
                 .thenReturn(new PageImpl<>(List.of(profile)));
 
         PageResponse<AdminMentorListItemResponse> response = adminMentorService.getMentors(request);
@@ -81,13 +89,13 @@ class AdminMentorServiceTest {
 
     @Test
     void getMentors_nullRequest_shouldUseDefaultSortByUpdatedAt() {
-        when(mentorProfileRepository.searchForAdmin(eq(null), eq(null), eq(null), any(Pageable.class)))
+        when(mentorProfileRepository.searchForAdmin(eq(null), eq(null), any(), any(), eq(null), eq(null), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         adminMentorService.getMentors(null);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(mentorProfileRepository).searchForAdmin(eq(null), eq(null), eq(null), captor.capture());
+        verify(mentorProfileRepository).searchForAdmin(eq(null), eq(null), any(), any(), eq(null), eq(null), captor.capture());
         assertEquals("updatedAt: DESC", captor.getValue().getSort().toString());
     }
 }

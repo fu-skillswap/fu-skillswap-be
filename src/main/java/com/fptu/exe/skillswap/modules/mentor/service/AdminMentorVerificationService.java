@@ -34,6 +34,9 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -50,6 +53,15 @@ import java.util.UUID;
 public class AdminMentorVerificationService {
 
     private static final int LOCK_TTL_MINUTES = 5;
+    private static final List<String> ALLOWED_SORT_FIELDS = List.of(
+            "submittedAt",
+            "createdAt",
+            "updatedAt",
+            "mentorFullName",
+            "mentorEmail",
+            "status",
+            "revisionCount"
+    );
     private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
@@ -70,16 +82,24 @@ public class AdminMentorVerificationService {
         String normalizedKeyword = normalizeSearchText(keyword);
         String keywordPattern = toLikePattern(keyword);
         String normalizedKeywordPattern = toLikePattern(normalizedKeyword);
-        Page<AdminMentorVerificationQueueProjection> page = mentorVerificationRequestRepository.searchAdminQueue(
-                resolvedFilter.getStatus(),
-                keyword,
-                normalizedKeyword,
-                keywordPattern,
-                normalizedKeywordPattern,
-                resolvedFilter.getSubmittedFrom(),
-                resolvedFilter.getSubmittedTo(),
-                resolvedFilter.getPageable()
-        );
+        Pageable pageable = buildQueuePageable(resolvedFilter);
+        Page<AdminMentorVerificationQueueProjection> page = keywordPattern == null
+                ? mentorVerificationRequestRepository.findAdminQueueWithoutKeyword(
+                        resolvedFilter.getStatus(),
+                        resolvedFilter.getSubmittedFrom(),
+                        resolvedFilter.getSubmittedTo(),
+                        pageable
+                )
+                : mentorVerificationRequestRepository.searchAdminQueue(
+                        resolvedFilter.getStatus(),
+                        keyword,
+                        normalizedKeyword,
+                        keywordPattern,
+                        normalizedKeywordPattern,
+                        resolvedFilter.getSubmittedFrom(),
+                        resolvedFilter.getSubmittedTo(),
+                        pageable
+                );
 
         return PageResponse.<AdminMentorVerificationQueueItemResponse>builder()
                 .content(page.getContent().stream().map(this::mapQueueItem).toList())
@@ -89,6 +109,21 @@ public class AdminMentorVerificationService {
                 .totalPages(page.getTotalPages())
                 .last(page.isLast())
                 .build();
+    }
+
+    private Pageable buildQueuePageable(AdminMentorVerificationQueueFilterRequest request) {
+        int page = Math.max(request.getPage(), 0);
+        int size = Math.min(Math.max(request.getSize(), 1), 100);
+        Sort.Direction direction = request.resolveDirection();
+        String sortBy = resolveQueueSortBy(request.getSortBy());
+        return PageRequest.of(page, size, Sort.by(direction, sortBy));
+    }
+
+    private String resolveQueueSortBy(String sortBy) {
+        if (sortBy == null || !ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            return "submittedAt";
+        }
+        return sortBy;
     }
 
     @Transactional

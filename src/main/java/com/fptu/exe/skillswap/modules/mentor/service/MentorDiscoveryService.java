@@ -72,12 +72,11 @@ public class MentorDiscoveryService {
     private static final BigDecimal MENTOR_HIGHER_SEMESTER_SCORE = decimal(15);
     private static final BigDecimal MENTOR_EQUAL_SEMESTER_SCORE = decimal(10);
     private static final BigDecimal SEARCH_EXACT_PHRASE_SCORE = decimal(50);
-    private static final BigDecimal SEARCH_PREFIX_SCORE = decimal(25);
     private static final BigDecimal SEARCH_TOKEN_SCORE = decimal(8);
     private static final BigDecimal SEARCH_TAG_SCORE = decimal(10);
     private static final BigDecimal SEARCH_SERVICE_SCORE = decimal(12);
     private static final BigDecimal SEARCH_BIO_SCORE = decimal(8);
-    private static final int SEARCH_CANDIDATE_CAP = 500;
+    private static final int SEARCH_CANDIDATE_CAP = 200;
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -96,46 +95,30 @@ public class MentorDiscoveryService {
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
         String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
-        String keywordPattern = buildKeywordPattern(safeRequest.getKeyword());
         List<String> keywordTokens = normalizeTokens(normalizedKeyword);
 
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
-        UUID menteeCampusId = menteeProfile != null && menteeProfile.getCampus() != null ? menteeProfile.getCampus().getId() : null;
-        UUID menteeProgramId = menteeProfile != null && menteeProfile.getProgram() != null ? menteeProfile.getProgram().getId() : null;
-        UUID menteeSpecializationId = menteeProfile != null && menteeProfile.getSpecialization() != null ? menteeProfile.getSpecialization().getId() : null;
-        Integer menteeSemester = menteeProfile != null ? menteeProfile.getSemester() : null;
         int requestedPage = Math.max(safeRequest.getPage(), 0);
         int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
         boolean relevanceSort = isRelevanceSort(safeRequest.getSortBy());
-        boolean useInMemoryRanking = hasKeyword || relevanceSort;
+        int fetchSize = Math.min(
+                SEARCH_CANDIDATE_CAP,
+                Math.max(requestedSize * Math.max(requestedPage + 1, 1) * 5, requestedSize * 5)
+        );
 
-        int fetchSize = useInMemoryRanking
-                ? Math.min(SEARCH_CANDIDATE_CAP, Math.max(requestedSize * Math.max(requestedPage + 1, 1) * 10, requestedSize * 10))
-                : requestedSize;
-
-        Pageable basePageable = useInMemoryRanking
-                ? PageRequest.of(0, fetchSize)
-                : searchPageable(safeRequest);
-
-        Page<UUID> mentorIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
+        List<UUID> candidateIds = mentorProfileRepository.findDiscoverableCandidateIds(
                 MentorStatus.ACTIVE,
                 MentorTagType.HELP_TOPIC,
-                keywordPattern,
                 safeRequest.getCampusId(),
                 safeRequest.getSpecializationId(),
                 safeRequest.getTeachingMode(),
-                safeRequest.getIsAvailable(),
                 hasTagFilter(safeRequest.getTagIds()),
                 tagIds,
-                menteeCampusId,
-                menteeProgramId,
-                menteeSpecializationId,
-                menteeSemester,
                 currentTime(),
-                basePageable
+                PageRequest.of(0, fetchSize)
         );
 
-        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(mentorIdPage.getContent());
+        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(candidateIds);
         if (rows.isEmpty()) {
             return PageResponse.<MentorDiscoveryCardResponse>builder()
                     .content(List.of())
@@ -163,13 +146,9 @@ public class MentorDiscoveryService {
                         menteeProfile,
                         normalizedKeyword,
                         keywordTokens,
-                        relevanceSort,
+                        hasKeyword || relevanceSort,
                         hasKeyword
                 ))
-                .toList();
-
-        rankedMentors = rankedMentors.stream()
-                .filter(candidate -> !hasKeyword || candidate.keywordScore().compareTo(ZERO) > 0)
                 .toList();
 
         if (hasKeyword) {
@@ -189,17 +168,10 @@ public class MentorDiscoveryService {
                             .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
                     .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
                     .toList();
-        }
-
-        if (!hasKeyword && rankedMentors.size() < requestedSize) {
-            rankedMentors = appendFallbackMentors(
-                    rankedMentors,
-                    requestedSize,
-                    menteeProfile,
-                    relevanceSort,
-                    currentUserId,
-                    safeRequest
-            );
+        } else {
+            rankedMentors = rankedMentors.stream()
+                    .sorted(searchComparator(safeRequest))
+                    .toList();
         }
 
         int fromIndex = Math.min(requestedPage * requestedSize, rankedMentors.size());
@@ -605,76 +577,6 @@ public class MentorDiscoveryService {
         };
     }
 
-    private List<SearchRankedMentor> appendFallbackMentors(
-            List<SearchRankedMentor> primaryMentors,
-            int requestedSize,
-            StudentProfile menteeProfile,
-            boolean relevanceSort,
-            UUID currentUserId,
-            MentorDiscoverySearchRequest request
-    ) {
-        Set<UUID> selectedIds = primaryMentors.stream()
-                .map(candidate -> candidate.row().mentorUserId())
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        Page<UUID> fallbackIdPage = mentorProfileRepository.searchDiscoverableMentorIds(
-                MentorStatus.ACTIVE,
-                MentorTagType.HELP_TOPIC,
-                null,
-                null,
-                null,
-                null,
-                null,
-                false,
-                List.of(EMPTY_TAG_ID),
-                null,
-                null,
-                null,
-                null,
-                currentTime(),
-                PageRequest.of(0, Math.min(SEARCH_CANDIDATE_CAP, Math.max(requestedSize * 5, requestedSize)))
-        );
-
-        List<MentorDiscoveryQueryRow> fallbackRows = loadDiscoveryRowsInPageOrder(
-                fallbackIdPage.getContent().stream()
-                        .filter(id -> id != null && !selectedIds.contains(id))
-                        .toList()
-        );
-        if (fallbackRows.isEmpty()) {
-            return primaryMentors;
-        }
-
-        Map<UUID, List<MentorTagResponse>> fallbackHelpTopics = loadTagsByMentor(
-                fallbackRows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
-                Set.of(MentorTagType.HELP_TOPIC)
-        );
-        Map<UUID, List<MentorServiceResponse>> fallbackServices = loadServicesByMentor(
-                fallbackRows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList()
-        );
-
-        List<SearchRankedMentor> merged = new ArrayList<>(primaryMentors);
-        for (MentorDiscoveryQueryRow row : fallbackRows) {
-            if (selectedIds.contains(row.mentorUserId())) {
-                continue;
-            }
-            merged.add(rankSearchCandidate(
-                    row,
-                    fallbackHelpTopics.getOrDefault(row.mentorUserId(), List.of()),
-                    fallbackServices.getOrDefault(row.mentorUserId(), List.of()),
-                    menteeProfile,
-                    null,
-                    List.of(),
-                    relevanceSort,
-                    false
-            ));
-            selectedIds.add(row.mentorUserId());
-            if (merged.size() >= requestedSize) {
-                break;
-            }
-        }
-        return merged;
-    }
-
     private record SearchRankedMentor(
             MentorDiscoveryQueryRow row,
             List<MentorTagResponse> helpTopics,
@@ -825,38 +727,27 @@ public class MentorDiscoveryService {
                 .toList();
     }
 
-    private Pageable searchPageable(MentorDiscoverySearchRequest request) {
-        int page = Math.max(request.getPage(), 0);
-        int size = Math.min(Math.max(request.getSize(), 1), 30);
-        Sort.Direction direction = request.getDirection() == null ? Sort.Direction.DESC : request.getDirection();
+    private Comparator<SearchRankedMentor> searchComparator(MentorDiscoverySearchRequest request) {
+        boolean ascending = request.getDirection() == Sort.Direction.ASC;
         String sortBy = request.getSortBy() == null ? "relevance" : request.getSortBy().trim();
 
-        List<Sort.Order> orders = switch (sortBy) {
-            case "ratingAverage" -> List.of(
-                    new Sort.Order(direction, "averageRating"),
-                    new Sort.Order(Sort.Direction.DESC, "totalReviews"),
-                    new Sort.Order(Sort.Direction.DESC, "totalCompletedSessions")
+        Comparator<SearchRankedMentor> primary = switch (sortBy) {
+            case "ratingAverage" -> Comparator.comparing(candidate -> defaultDecimal(candidate.row().ratingAverage()));
+            case "reviewCount" -> Comparator.comparing(candidate -> defaultInteger(candidate.row().reviewCount()));
+            case "completedSessions" -> Comparator.comparing(candidate -> defaultInteger(candidate.row().completedSessions()));
+            case "updatedAt" -> Comparator.comparing(
+                    candidate -> candidate.row().verifiedAt(),
+                    Comparator.nullsLast(Comparator.naturalOrder())
             );
-            case "reviewCount" -> List.of(
-                    new Sort.Order(direction, "totalReviews"),
-                    new Sort.Order(Sort.Direction.DESC, "averageRating")
-            );
-            case "completedSessions" -> List.of(
-                    new Sort.Order(direction, "totalCompletedSessions"),
-                    new Sort.Order(Sort.Direction.DESC, "averageRating")
-            );
-            case "updatedAt" -> List.of(
-                    new Sort.Order(direction, "updatedAt"),
-                    new Sort.Order(Sort.Direction.DESC, "verifiedAt")
-            );
-            default -> List.of(
-                    new Sort.Order(Sort.Direction.DESC, "isAvailable"),
-                    new Sort.Order(Sort.Direction.DESC, "averageRating"),
-                    new Sort.Order(Sort.Direction.DESC, "totalCompletedSessions"),
-                    new Sort.Order(Sort.Direction.DESC, "verifiedAt")
-            );
+            default -> Comparator.comparing(SearchRankedMentor::profileScore);
         };
-        return PageRequest.of(page, size, Sort.by(orders));
+        if (!ascending) {
+            primary = primary.reversed();
+        }
+        return primary
+                .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
+                .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
+                .thenComparing(candidate -> candidate.row().mentorUserId());
     }
 
     private Pageable reviewPageable(BasePageRequest request) {
@@ -894,14 +785,6 @@ public class MentorDiscoveryService {
             return null;
         }
         return keyword.trim();
-    }
-
-    private String buildKeywordPattern(String keyword) {
-        String normalized = normalizeKeyword(keyword);
-        if (normalized == null) {
-            return null;
-        }
-        return "%" + normalized.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ") + "%";
     }
 
     private boolean isRelevanceSort(String sortBy) {

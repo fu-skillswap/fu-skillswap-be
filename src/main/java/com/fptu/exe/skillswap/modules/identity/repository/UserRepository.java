@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
@@ -38,4 +39,27 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("select u from User u join u.roles r where r = :role")
     Page<User> findUsersByRole(@Param("role") RoleCode role, Pageable pageable);
+
+    @Query("""
+            select distinct u
+            from User u
+            where (:keywordPattern is null
+                    or lower(u.email) like :keywordPattern
+                    or lower(u.fullName) like :keywordPattern)
+              and (:status is null or u.status = :status)
+              and (:targetRole is null or :targetRole member of u.roles)
+              and (:menteeRole member of u.roles or :mentorRole member of u.roles)
+              and :adminRole not member of u.roles
+              and :systemAdminRole not member of u.roles
+            """)
+    Page<User> searchAdminVisibleUsers(
+            @Param("keywordPattern") String keywordPattern,
+            @Param("status") UserStatus status,
+            @Param("targetRole") RoleCode targetRole,
+            @Param("menteeRole") RoleCode menteeRole,
+            @Param("mentorRole") RoleCode mentorRole,
+            @Param("adminRole") RoleCode adminRole,
+            @Param("systemAdminRole") RoleCode systemAdminRole,
+            Pageable pageable
+    );
 }
