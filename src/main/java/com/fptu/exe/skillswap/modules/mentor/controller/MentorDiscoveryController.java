@@ -53,7 +53,7 @@ public class MentorDiscoveryController {
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
             @AuthenticationPrincipal UserPrincipal principal,
-            @ModelAttribute MentorDiscoverySearchRequest request
+            @ParameterObject @ModelAttribute MentorDiscoverySearchRequest request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorDiscoveryService.searchMentors(principal.getPublicId(), request));
