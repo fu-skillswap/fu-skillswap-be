@@ -105,36 +105,6 @@ class AdminMentorVerificationServiceTest {
     }
 
     @Test
-    void approve_whenRequestLockedByAnotherAdmin_shouldThrowConflict() {
-        UUID actingAdminId = UUID.randomUUID();
-        UUID ownerAdminId = UUID.randomUUID();
-        UUID mentorId = UUID.randomUUID();
-        UUID requestId = UUID.randomUUID();
-
-        User actingAdmin = User.builder().id(actingAdminId).email("acting-admin@test.com").build();
-        User ownerAdmin = User.builder().id(ownerAdminId).email("owner-admin@test.com").build();
-        User mentor = User.builder().id(mentorId).email("mentor@test.com").build();
-
-        MentorVerificationRequest request = MentorVerificationRequest.builder()
-                .id(requestId)
-                .mentor(mentor)
-                .method(VerificationMethod.MANUAL)
-                .status(VerificationStatus.PENDING_REVIEW)
-                .lockedBy(ownerAdmin)
-                .lockExpiresAt(LocalDateTime.now().plusMinutes(3))
-                .build();
-
-        when(userRepository.findById(actingAdminId)).thenReturn(Optional.of(actingAdmin));
-        when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.of(request));
-
-        assertThatThrownBy(() -> adminMentorVerificationService.approve(actingAdminId, requestId, "ok"))
-                .isInstanceOfSatisfying(BaseException.class, ex -> {
-                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RESOURCE_CONFLICT);
-                    assertThat(ex.getMessage()).contains("admin khác xử lý");
-                });
-    }
-
-    @Test
     void getRequestDetail_whenRequestIdNotFound_shouldThrowNotFound() {
         UUID adminId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();

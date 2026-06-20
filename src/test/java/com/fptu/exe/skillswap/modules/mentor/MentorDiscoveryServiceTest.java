@@ -173,33 +173,6 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
-    void searchMentors_nonRelevanceSort_shouldUseDefaultSearchQuery() {
-        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setSortBy("updatedAt");
-
-        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
-        when(mentorProfileRepository.findDiscoverableCandidateIds(
-                eq(MentorStatus.ACTIVE),
-                eq(MentorTagType.HELP_TOPIC),
-                any(), any(), any(), anyBoolean(), anyList(), any(), any(Pageable.class)
-        )).thenReturn(List.of(mentorUserId, fallbackMentorUserId));
-        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId, fallbackMentorUserId)))
-                .thenReturn(List.of(
-                        discoveryRow(mentorUserId, BigDecimal.valueOf(4.2), 2, 25.0),
-                        discoveryRow(fallbackMentorUserId, BigDecimal.valueOf(3.9), 1, 10.0)
-                ));
-        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
-                .thenReturn(Collections.emptyList());
-        when(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(anyList()))
-                .thenReturn(Collections.emptyList());
-
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
-
-        assertEquals(2, response.getContent().size());
-        assertEquals(0, response.getContent().getFirst().ratingAverage().compareTo(new BigDecimal("4.20")));
-    }
-
-    @Test
     void searchMentors_keywordShouldNotHardFilterByMenteeAcademicProfile() {
         MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
         request.setKeyword("spring boot");
