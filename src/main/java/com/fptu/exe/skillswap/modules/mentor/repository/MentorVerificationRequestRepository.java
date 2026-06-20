@@ -59,8 +59,8 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
             from MentorVerificationRequest r
             join r.mentor mentor
             where (:status is null or r.status = :status)
-              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
-              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+              and r.submittedAt >= coalesce(:submittedFrom, r.submittedAt)
+              and r.submittedAt <= coalesce(:submittedTo, r.submittedAt)
               and (
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
@@ -74,8 +74,8 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
             from MentorVerificationRequest r
             join r.mentor mentor
             where (:status is null or r.status = :status)
-              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
-              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+              and r.submittedAt >= coalesce(:submittedFrom, r.submittedAt)
+              and r.submittedAt <= coalesce(:submittedTo, r.submittedAt)
               and (
                     :keywordPattern is null
                     or lower(mentor.email) like :keywordPattern
@@ -110,16 +110,16 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
             from MentorVerificationRequest r
             join r.mentor mentor
             where (:status is null or r.status = :status)
-              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
-              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+              and r.submittedAt >= coalesce(:submittedFrom, r.submittedAt)
+              and r.submittedAt <= coalesce(:submittedTo, r.submittedAt)
             """,
             countQuery = """
             select count(r.id)
             from MentorVerificationRequest r
             join r.mentor mentor
             where (:status is null or r.status = :status)
-              and (:submittedFrom is null or r.submittedAt >= :submittedFrom)
-              and (:submittedTo is null or r.submittedAt <= :submittedTo)
+              and r.submittedAt >= coalesce(:submittedFrom, r.submittedAt)
+              and r.submittedAt <= coalesce(:submittedTo, r.submittedAt)
             """)
     Page<AdminMentorVerificationQueueProjection> findAdminQueueWithoutKeyword(
             @Param("status") VerificationStatus status,
