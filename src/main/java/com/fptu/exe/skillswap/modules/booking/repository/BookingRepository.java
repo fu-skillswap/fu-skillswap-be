@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -97,7 +98,30 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMenteeIdAndStatus(UUID menteeId, BookingStatus status);
 
+    long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
+
+    boolean existsBySlotIdAndStatus(UUID slotId, BookingStatus status);
+
+    boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
+
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            where booking.slot.id = :slotId
+              and booking.status = :status
+            """)
+    List<Booking> findBySlotIdAndStatusForUpdate(
+            @Param("slotId") UUID slotId,
+            @Param("status") BookingStatus status
+    );
 
     List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
 

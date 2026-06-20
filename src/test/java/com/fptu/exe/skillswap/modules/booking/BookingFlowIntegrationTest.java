@@ -1,5 +1,10 @@
 package com.fptu.exe.skillswap.modules.booking;
 
+import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
+import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
+import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
@@ -19,6 +24,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +51,18 @@ class BookingFlowIntegrationTest {
     private MentorProfileRepository mentorProfileRepository;
 
     @Autowired
+    private AcademicService academicService;
+
+    @Autowired
+    private CampusRepository campusRepository;
+
+    @Autowired
+    private AcademicProgramRepository academicProgramRepository;
+
+    @Autowired
+    private SpecializationRepository specializationRepository;
+
+    @Autowired
     private MentorAvailabilityService mentorAvailabilityService;
 
     @Autowired
@@ -65,6 +83,7 @@ class BookingFlowIntegrationTest {
                 .fullName("Mentee Booker")
                 .status(UserStatus.ACTIVE)
                 .build());
+        completeAcademicProfile(menteeUser.getId(), "SE190001");
 
         // Create Mentor
         mentorUser = userRepository.save(User.builder()
@@ -78,6 +97,9 @@ class BookingFlowIntegrationTest {
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now())
                 .isAvailable(true)
+                .headline("Spring Boot Mentor")
+                .expertiseDescription("Support Java backend and database mentoring")
+                .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());
     }
@@ -125,13 +147,14 @@ class BookingFlowIntegrationTest {
         BookingResponse booking = bookingService.createBooking(menteeId, createRequest);
         assertNotNull(booking);
         assertEquals(BookingStatus.PENDING, booking.status());
-        assertTrue(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
+        assertFalse(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
 
         // 4. Mentor accepts booking
         BookingResponse accepted = bookingService.acceptBooking(
                 mentorId, booking.bookingId(), new AcceptBookingRequest("Happy to help!")
         );
         assertEquals(BookingStatus.ACCEPTED, accepted.status());
+        assertTrue(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
 
         // 5. Mentor saves meeting link
         BookingResponse linked = bookingService.saveMeetingLink(
@@ -154,5 +177,22 @@ class BookingFlowIntegrationTest {
         );
         assertEquals(BookingStatus.COMPLETED, completed.status());
         assertNotNull(completed.completedAt());
+    }
+
+    private void completeAcademicProfile(UUID userId, String studentCode) {
+        var campus = campusRepository.findAll().stream().findFirst().orElseThrow();
+        var program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
+        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).stream().findFirst().orElseThrow();
+
+        academicService.updateStudentProfile(userId, StudentProfileRequest.builder()
+                .studentCode(studentCode)
+                .campusId(campus.getId())
+                .programId(program.getId())
+                .specializationId(specialization.getId())
+                .semester(5)
+                .intakeYear(2022)
+                .isAlumni(false)
+                .bio("Integration test profile")
+                .build());
     }
 }

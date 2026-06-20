@@ -28,6 +28,30 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             LocalDateTime endTime
     );
 
+    @Query("""
+            select slot
+            from MentorAvailabilitySlot slot
+            where slot.mentorProfile.userId = :mentorUserId
+              and slot.isActive = true
+              and slot.isBooked = false
+              and slot.startTime >= :startTime
+              and slot.startTime < :endTime
+              and (
+                    select count(booking.id)
+                    from Booking booking
+                    where booking.slot.id = slot.id
+                      and booking.status = :pendingStatus
+              ) < :maxPendingRequests
+            order by slot.startTime asc
+            """)
+    List<MentorAvailabilitySlot> findQueueAvailableSlots(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime,
+            @Param("pendingStatus") com.fptu.exe.skillswap.modules.booking.domain.BookingStatus pendingStatus,
+            @Param("maxPendingRequests") long maxPendingRequests
+    );
+
     boolean existsByMentorProfileUserIdAndStartTimeAndEndTimeAndIsActiveTrue(
             UUID mentorUserId,
             LocalDateTime startTime,

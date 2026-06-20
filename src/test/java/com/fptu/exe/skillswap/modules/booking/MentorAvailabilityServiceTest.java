@@ -180,7 +180,7 @@ class MentorAvailabilityServiceTest {
     }
 
     @Test
-    void getAvailableSlots_filtersBookedSlotsAndMapsDuration() {
+    void availability_shouldShowSlotWithLessThanThreePendingRequests() {
         MentorAvailabilitySlot availableSlot = new MentorAvailabilitySlot();
         availableSlot.setId(UUID.randomUUID());
         availableSlot.setStartTime(LocalDateTime.now().plusDays(1).withHour(8).withMinute(0));
@@ -189,16 +189,9 @@ class MentorAvailabilityServiceTest {
         availableSlot.setBooked(false);
         availableSlot.setActive(true);
 
-        MentorAvailabilitySlot bookedSlot = new MentorAvailabilitySlot();
-        bookedSlot.setId(UUID.randomUUID());
-        bookedSlot.setStartTime(LocalDateTime.now().plusDays(1).withHour(9).withMinute(0));
-        bookedSlot.setEndTime(bookedSlot.getStartTime().plusMinutes(60));
-        bookedSlot.setBooked(true);
-        bookedSlot.setActive(true);
-
-        when(mentorAvailabilitySlotRepository.findByMentorProfileUserIdAndStartTimeGreaterThanEqualAndStartTimeLessThanAndIsActiveTrueOrderByStartTimeAsc(
-                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class)
-        )).thenReturn(List.of(availableSlot, bookedSlot));
+        when(mentorAvailabilitySlotRepository.findQueueAvailableSlots(
+                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq(3L)
+        )).thenReturn(List.of(availableSlot));
 
         List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
                 mentorProfile,
@@ -208,6 +201,21 @@ class MentorAvailabilityServiceTest {
 
         assertEquals(1, response.size());
         assertEquals(60, response.getFirst().durationMinutes());
+    }
+
+    @Test
+    void availability_shouldHideSlotWithThreePendingRequests() {
+        when(mentorAvailabilitySlotRepository.findQueueAvailableSlots(
+                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq(3L)
+        )).thenReturn(List.of());
+
+        List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
+                mentorProfile,
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(2)
+        );
+
+        assertTrue(response.isEmpty());
     }
 
     @Test

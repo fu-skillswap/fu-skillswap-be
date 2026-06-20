@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
@@ -23,7 +24,9 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -37,6 +40,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -68,6 +72,9 @@ class BookingServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private AcademicService academicService;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -92,6 +99,9 @@ class BookingServiceTest {
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(testNow().minusDays(3))
                 .isAvailable(true)
+                .headline("Backend Mentor")
+                .expertiseDescription("Support Spring Boot and PostgreSQL")
+                .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .averageRating(BigDecimal.valueOf(4.8))
                 .totalReviews(5)
@@ -110,7 +120,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void createBooking_successful_marksSlotBookedAndMapsResponse() {
+    void createBooking_successful_keepsSlotUnbookedWhilePendingAndMapsResponse() {
         CreateBookingRequest request = new CreateBookingRequest(
                 mentorId,
                 slot.getId(),
@@ -120,7 +130,11 @@ class BookingServiceTest {
         );
 
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)).thenReturn(0L);
+        when(bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(eq(menteeId), eq(slot.getId()), any())).thenReturn(false);
 
         Booking savedBooking = Booking.builder()
                 .id(UUID.randomUUID())
@@ -140,9 +154,11 @@ class BookingServiceTest {
 
         assertNotNull(response);
         assertEquals(BookingStatus.PENDING, response.status());
+        assertEquals(BookingStatus.PENDING, response.sessionStatus());
+        assertEquals(savedBooking.getId(), response.sessionId());
         assertEquals(mentorId, response.mentorUserId());
         assertEquals(menteeId, response.menteeUserId());
-        assertTrue(slot.isBooked());
+        assertFalse(slot.isBooked());
     }
 
     @Test
@@ -157,7 +173,133 @@ class BookingServiceTest {
         );
 
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_withoutCompletedAcademicProfile_shouldThrowConflict() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(false);
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_adminAccount_shouldThrowAccessDenied() {
+        mentee.setRoles(Set.of(RoleCode.ADMIN));
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.ACCESS_DENIED, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_systemAdminAccount_shouldThrowAccessDenied() {
+        mentee.setRoles(Set.of(RoleCode.SYSTEM_ADMIN));
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.ACCESS_DENIED, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_mentorUserBookingAnotherMentor_shouldSucceed() {
+        User mentorBooker = buildUser(UUID.randomUUID(), "mentor-booker@test.com", "Mentor Booker", UserStatus.ACTIVE);
+        mentorBooker.setRoles(Set.of(RoleCode.MENTOR));
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Need architecture advice", null);
+
+        when(userRepository.findById(mentorBooker.getId())).thenReturn(Optional.of(mentorBooker));
+        when(academicService.hasCompletedStudentProfile(mentorBooker.getId())).thenReturn(true);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)).thenReturn(0L);
+        when(bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(eq(mentorBooker.getId()), eq(slot.getId()), any())).thenReturn(false);
+
+        Booking savedBooking = Booking.builder()
+                .id(UUID.randomUUID())
+                .mentee(mentorBooker)
+                .mentorProfile(mentorProfile)
+                .slot(slot)
+                .status(BookingStatus.PENDING)
+                .learningGoalTitle(request.learningGoalTitle())
+                .learningGoalDescription(request.learningGoalDescription())
+                .requestedStartTime(slot.getStartTime())
+                .requestedEndTime(slot.getEndTime())
+                .build();
+
+        when(bookingRepository.save(any(Booking.class))).thenReturn(savedBooking);
+
+        BookingResponse response = bookingService.createBooking(mentorBooker.getId(), request);
+
+        assertEquals(mentorBooker.getId(), response.menteeUserId());
+        assertEquals(BookingStatus.PENDING, response.status());
+    }
+
+    @Test
+    void createBooking_allowsUpToThreePendingRequestsForSameSlot() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)).thenReturn(2L);
+        when(bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(eq(menteeId), eq(slot.getId()), any())).thenReturn(false);
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.createBooking(menteeId, request);
+
+        assertEquals(BookingStatus.PENDING, response.status());
+        assertFalse(slot.isBooked());
+    }
+
+    @Test
+    void createBooking_fourthPendingRequestForSameSlot_shouldFail() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)).thenReturn(3L);
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_shouldFailIfSlotAlreadyHasAcceptedBooking() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(true);
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    @Test
+    void createBooking_sameMenteeSameSlotPendingOrAccepted_shouldFail() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)).thenReturn(1L);
+        when(bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(eq(menteeId), eq(slot.getId()), any())).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
 
@@ -178,7 +320,12 @@ class BookingServiceTest {
     @Test
     void acceptBooking_successful_setsAcceptedAtAndResponseNote() {
         Booking booking = bookingForDecision(BookingStatus.PENDING);
+        slot.setBooked(false);
         when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.findBySlotIdAndStatusForUpdate(slot.getId(), BookingStatus.PENDING)).thenReturn(List.of(booking));
+        when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
         BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
@@ -186,11 +333,37 @@ class BookingServiceTest {
         assertEquals(BookingStatus.ACCEPTED, response.status());
         assertEquals("Accepted", booking.getMentorResponseNote());
         assertNotNull(booking.getAcceptedAt());
+        assertTrue(slot.isBooked());
     }
 
     @Test
-    void rejectBooking_successful_releasesSlotAndCountsRejected() {
+    void mentorAccept_oneBooking_shouldAcceptItAndAutoRejectOtherPendingBookingsSameSlot() {
+        Booking selectedBooking = bookingForDecision(BookingStatus.PENDING);
+        Booking otherPendingBooking = bookingForDecision(BookingStatus.PENDING);
+        otherPendingBooking.setId(UUID.randomUUID());
+        slot.setBooked(false);
+
+        when(bookingRepository.findByIdForMentorDecision(selectedBooking.getId())).thenReturn(Optional.of(selectedBooking));
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.findBySlotIdAndStatusForUpdate(slot.getId(), BookingStatus.PENDING))
+                .thenReturn(List.of(selectedBooking, otherPendingBooking));
+        when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bookingRepository.save(selectedBooking)).thenReturn(selectedBooking);
+
+        BookingResponse response = bookingService.acceptBooking(mentorId, selectedBooking.getId(), new AcceptBookingRequest("Accepted"));
+
+        assertEquals(BookingStatus.ACCEPTED, response.status());
+        assertTrue(slot.isBooked());
+        assertEquals(BookingStatus.REJECTED, otherPendingBooking.getStatus());
+        assertEquals("Slot was accepted for another booking.", otherPendingBooking.getRejectReason());
+        assertNotNull(otherPendingBooking.getRejectedAt());
+    }
+
+    @Test
+    void rejectBooking_successful_keepsSlotAvailableAndCountsRejected() {
         Booking booking = bookingForDecision(BookingStatus.PENDING);
+        slot.setBooked(false);
         mentorProfile.setTotalRejectedBookings(1);
         when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
@@ -205,6 +378,21 @@ class BookingServiceTest {
         assertFalse(slot.isBooked());
         assertEquals(2, mentorProfile.getTotalRejectedBookings());
         assertEquals("Busy", booking.getRejectReason());
+    }
+
+    @Test
+    void mentorReject_onePendingRequest_shouldNotBookOrDeactivateSlot() {
+        Booking booking = bookingForDecision(BookingStatus.PENDING);
+        slot.setBooked(false);
+        slot.setActive(true);
+        when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.rejectBooking(mentorId, booking.getId(), new RejectBookingRequest("Not fit", null));
+
+        assertEquals(BookingStatus.REJECTED, response.status());
+        assertFalse(slot.isBooked());
+        assertTrue(slot.isActive());
     }
 
     @Test
@@ -257,6 +445,8 @@ class BookingServiceTest {
         assertNotNull(booking.getCompletedAt());
         assertEquals(5, mentorProfile.getTotalCompletedSessions());
         assertEquals(9, mentorProfile.getTotalSessions());
+        assertEquals(booking.getRequestedStartTime(), booking.getActualStartTime());
+        assertEquals(booking.getRequestedEndTime(), booking.getActualEndTime());
     }
 
     @Test
@@ -311,8 +501,9 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentee_pending_shouldReleaseSlot() {
+    void menteeCancel_pendingRequest_shouldNotChangeSlotBooked() {
         Booking booking = bookingForDecision(BookingStatus.PENDING);
+        slot.setBooked(false);
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -327,18 +518,43 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentee_acceptedWithinTwelveHours_shouldThrowConflict() {
+    void cancelBookingByMentee_acceptedBeforeEightHours_shouldReleaseSlot() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(testNow().plusHours(6));
+        booking.setRequestedStartTime(testNow().plusHours(9));
+        booking.setRequestedEndTime(testNow().plusHours(10));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
 
-        BaseException exception = assertThrows(BaseException.class, () -> bookingService.cancelBookingByMentee(
+        BookingResponse response = bookingService.cancelBookingByMentee(
                 menteeId,
                 booking.getId(),
                 new CancelBookingRequest("Too late")
-        ));
+        );
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(BookingStatus.CANCELLED_BY_MENTEE, response.status());
+        assertFalse(slot.isBooked());
+        assertTrue(slot.isActive());
+        assertNotNull(response.cancelledAt());
+    }
+
+    @Test
+    void cancelBookingByMentee_acceptedWithinEightHours_shouldDeactivateSlot() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        booking.setRequestedStartTime(testNow().plusHours(6));
+        booking.setRequestedEndTime(testNow().plusHours(7));
+        when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.cancelBookingByMentee(
+                menteeId,
+                booking.getId(),
+                new CancelBookingRequest("Too late")
+        );
+
+        assertEquals(BookingStatus.CANCELLED_BY_MENTEE, response.status());
+        assertFalse(slot.isBooked());
+        assertFalse(slot.isActive());
+        assertNotNull(response.cancelledAt());
     }
 
     @Test
@@ -415,8 +631,76 @@ class BookingServiceTest {
         assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
     }
 
+    @Test
+    void terminalStatuses_shouldRejectFurtherActions() {
+        for (BookingStatus status : List.of(
+                BookingStatus.REJECTED,
+                BookingStatus.CANCELLED_BY_MENTEE,
+                BookingStatus.CANCELLED_BY_MENTOR,
+                BookingStatus.COMPLETED
+        )) {
+            Booking mentorDecisionBooking = bookingForDecision(status);
+            when(bookingRepository.findByIdForMentorDecision(mentorDecisionBooking.getId())).thenReturn(Optional.of(mentorDecisionBooking));
+            assertThrows(BaseException.class, () -> bookingService.acceptBooking(mentorId, mentorDecisionBooking.getId(), new AcceptBookingRequest("Nope")));
+            assertThrows(BaseException.class, () -> bookingService.rejectBooking(mentorId, mentorDecisionBooking.getId(), new RejectBookingRequest("Nope", null)));
+
+            Booking cancellationBooking = bookingForDecision(status);
+            when(bookingRepository.findByIdForCancellation(cancellationBooking.getId())).thenReturn(Optional.of(cancellationBooking));
+            assertThrows(BaseException.class, () -> bookingService.cancelBookingByMentee(menteeId, cancellationBooking.getId(), new CancelBookingRequest("Nope")));
+            assertThrows(BaseException.class, () -> bookingService.cancelBookingByMentor(mentorId, cancellationBooking.getId(), new CancelBookingRequest("Nope")));
+
+            Booking completionBooking = bookingForDecision(status);
+            when(bookingRepository.findByIdForSessionUpdate(completionBooking.getId())).thenReturn(Optional.of(completionBooking));
+            assertThrows(BaseException.class, () -> bookingService.completeBooking(mentorId, completionBooking.getId(), new CompleteBookingRequest("Nope")));
+        }
+    }
+
+    @Test
+    void sessionStatus_shouldMirrorBookingStatus() {
+        for (BookingStatus status : BookingStatus.values()) {
+            Booking booking = bookingForDecision(status);
+            BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
+            assertEquals(status, response.status());
+            assertEquals(status, response.sessionStatus());
+        }
+    }
+
+    @Test
+    void actionSpecificFields_shouldOnlyChangeInMatchingActions() {
+        Booking acceptedBooking = bookingForDecision(BookingStatus.PENDING);
+        when(bookingRepository.findByIdForMentorDecision(acceptedBooking.getId())).thenReturn(Optional.of(acceptedBooking));
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)).thenReturn(false);
+        when(bookingRepository.findBySlotIdAndStatusForUpdate(slot.getId(), BookingStatus.PENDING)).thenReturn(List.of(acceptedBooking));
+        when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bookingRepository.save(acceptedBooking)).thenReturn(acceptedBooking);
+
+        bookingService.acceptBooking(mentorId, acceptedBooking.getId(), new AcceptBookingRequest("Accepted note"));
+        assertEquals("Accepted note", acceptedBooking.getMentorResponseNote());
+        assertNull(acceptedBooking.getRejectReason());
+        assertNull(acceptedBooking.getCancelReason());
+
+        Booking rejectedBooking = bookingForDecision(BookingStatus.PENDING);
+        when(bookingRepository.findByIdForMentorDecision(rejectedBooking.getId())).thenReturn(Optional.of(rejectedBooking));
+        when(bookingRepository.save(rejectedBooking)).thenReturn(rejectedBooking);
+
+        bookingService.rejectBooking(mentorId, rejectedBooking.getId(), new RejectBookingRequest("Reject reason", "Reject note"));
+        assertEquals("Reject reason", rejectedBooking.getRejectReason());
+        assertEquals("Reject note", rejectedBooking.getMentorResponseNote());
+        assertNull(rejectedBooking.getCancelReason());
+
+        Booking cancelledBooking = bookingForDecision(BookingStatus.PENDING);
+        when(bookingRepository.findByIdForCancellation(cancelledBooking.getId())).thenReturn(Optional.of(cancelledBooking));
+        when(bookingRepository.save(cancelledBooking)).thenReturn(cancelledBooking);
+
+        bookingService.cancelBookingByMentee(menteeId, cancelledBooking.getId(), new CancelBookingRequest("Cancel reason"));
+        assertEquals("Cancel reason", cancelledBooking.getCancelReason());
+        assertNull(cancelledBooking.getRejectReason());
+    }
+
     private Booking bookingForDecision(BookingStatus status) {
-        slot.setBooked(true);
+        slot.setBooked(status == BookingStatus.ACCEPTED || status == BookingStatus.COMPLETED);
+        slot.setActive(true);
         return Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)

@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
@@ -47,6 +48,7 @@ public class MentorAvailabilityService {
     private static final String APP_TIMEZONE = "Asia/Ho_Chi_Minh";
     private static final int MAX_LOOKAHEAD_DAYS = 31;
     private static final int MAX_GENERATED_SLOTS = 120;
+    private static final long MAX_PENDING_REQUESTS_PER_SLOT = 3;
     private static final Set<Integer> ALLOWED_SESSION_DURATIONS = Set.of(15, 30, 60, 90);
 
     private final MentorProfileRepository mentorProfileRepository;
@@ -136,13 +138,14 @@ public class MentorAvailabilityService {
         LocalDateTime fromTime = max(dateRange.fromDate().atStartOfDay(), now());
         LocalDateTime toTimeExclusive = dateRange.toDate().plusDays(1).atStartOfDay();
         return mentorAvailabilitySlotRepository
-                .findByMentorProfileUserIdAndStartTimeGreaterThanEqualAndStartTimeLessThanAndIsActiveTrueOrderByStartTimeAsc(
+                .findQueueAvailableSlots(
                         mentorProfile.getUserId(),
                         fromTime,
-                        toTimeExclusive
+                        toTimeExclusive,
+                        BookingStatus.PENDING,
+                        MAX_PENDING_REQUESTS_PER_SLOT
                 )
                 .stream()
-                .filter(slot -> !slot.isBooked())
                 .limit(MAX_GENERATED_SLOTS)
                 .map(slot -> toSlotResponse(slot, mentorProfile.getTeachingMode()))
                 .toList();
