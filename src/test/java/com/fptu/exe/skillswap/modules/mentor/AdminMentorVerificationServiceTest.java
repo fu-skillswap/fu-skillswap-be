@@ -68,7 +68,7 @@ class AdminMentorVerificationServiceTest {
                 eq(null),
                 eq(null),
                 any(Pageable.class)
-        )).thenReturn(Page.empty(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "submittedAt"))));
+        )).thenReturn(Page.empty(PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "submittedAt"))));
 
         PageResponse<AdminMentorVerificationQueueItemResponse> response =
                 adminMentorVerificationService.getQueue(new AdminMentorVerificationQueueFilterRequest());
@@ -94,7 +94,7 @@ class AdminMentorVerificationServiceTest {
                 eq(null),
                 eq(null),
                 any(Pageable.class)
-        )).thenReturn(Page.empty(PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "submittedAt"))));
+        )).thenReturn(Page.empty(PageRequest.of(0, 20, Sort.by(Sort.Direction.ASC, "submittedAt"))));
 
         PageResponse<AdminMentorVerificationQueueItemResponse> response =
                 adminMentorVerificationService.getQueue(request);

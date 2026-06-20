@@ -24,7 +24,7 @@ public class AdminMentorVerificationQueueFilterRequest extends BasePageRequest {
 
     public AdminMentorVerificationQueueFilterRequest() {
         setSortBy("submittedAt");
-        setDirection(Sort.Direction.DESC);
+        setDirection(Sort.Direction.ASC);
         setSize(20);
     }
 }
