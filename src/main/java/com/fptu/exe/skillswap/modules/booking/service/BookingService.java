@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
@@ -54,10 +55,8 @@ public class BookingService {
     private static final long MENTEE_ACCEPTED_CANCEL_RELEASE_DEADLINE_MINUTES = 8 * 60;
     private static final long MENTOR_SAFE_CANCEL_DEADLINE_MINUTES = 12 * 60;
     private static final long MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES = 6 * 60;
-    private static final long MAX_PENDING_REQUESTS_PER_SLOT = 3;
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
-    private static final String AUTO_REJECTED_SLOT_TAKEN_REASON = "Slot was accepted for another booking.";
 
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
@@ -123,7 +122,7 @@ public class BookingService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã được chấp nhận cho một booking khác");
         }
         long pendingBookings = bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING);
-        if (pendingBookings >= MAX_PENDING_REQUESTS_PER_SLOT) {
+        if (pendingBookings >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã đạt tối đa 3 yêu cầu chờ xác nhận");
         }
         if (bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(
@@ -225,7 +224,7 @@ public class BookingService {
             }
             pendingBooking.setStatus(BookingStatus.REJECTED);
             pendingBooking.setRejectedAt(now);
-            pendingBooking.setRejectReason(AUTO_REJECTED_SLOT_TAKEN_REASON);
+            pendingBooking.setRejectReason(BookingQueueConstants.AUTO_REJECT_SLOT_ACCEPTED_REASON);
         }
 
         bookingRepository.saveAll(pendingBookings);

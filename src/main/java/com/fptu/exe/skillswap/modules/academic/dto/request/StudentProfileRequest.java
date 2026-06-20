@@ -74,7 +74,7 @@ public class StudentProfileRequest {
     private Integer semester;
 
     @Schema(
-        description = "Năm nhập học (ví dụ: 2019 tương ứng khóa K19)",
+        description = "Năm nhập học, không được lớn hơn năm hiện tại (ví dụ: 2019 tương ứng khóa K19)",
         example = "2019",
         requiredMode = Schema.RequiredMode.REQUIRED
     )

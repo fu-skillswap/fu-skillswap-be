@@ -246,7 +246,7 @@ public class AcademicService {
     }
 
     private void validateAcademicTimeline(StudentProfileRequest request) {
-        int currentYear = Year.now().getValue() + 1;
+        int currentYear = Year.now().getValue();
 
         if (request.getSemester() != null && request.getSemester() < 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được nhỏ hơn 0");

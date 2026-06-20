@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.repository;
 
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.projection.MentorAvailabilityQueueProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -29,7 +30,17 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     );
 
     @Query("""
-            select slot
+            select slot.id as slotId,
+                   slot.startTime as startTime,
+                   slot.endTime as endTime,
+                   slot.timezone as timezone,
+                   case when slot.recurrenceRule is not null then true else false end as recurring,
+                   (
+                        select count(booking.id)
+                        from Booking booking
+                        where booking.slot.id = slot.id
+                          and booking.status = :pendingStatus
+                   ) as pendingRequestCount
             from MentorAvailabilitySlot slot
             where slot.mentorProfile.userId = :mentorUserId
               and slot.isActive = true
@@ -41,10 +52,10 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
                     from Booking booking
                     where booking.slot.id = slot.id
                       and booking.status = :pendingStatus
-              ) < :maxPendingRequests
+            ) < :maxPendingRequests
             order by slot.startTime asc
             """)
-    List<MentorAvailabilitySlot> findQueueAvailableSlots(
+    List<MentorAvailabilityQueueProjection> findQueueAvailableSlots(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime,

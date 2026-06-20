@@ -334,7 +334,7 @@ public class MentorVerificationService {
         String fileUrl = trimToNull(request.fileUrl());
         String publicId = trimToNull(request.publicId());
         String originalFilename = trimToNull(request.originalFilename());
-        String contentType = normalizeContentType(request.contentType());
+        String contentType = canonicalizeContentType(request.contentType());
         return storedFileRepository.save(StoredFile.builder()
                 .owner(user)
                 .purpose(FilePurpose.VERIFICATION_DOCUMENT)
@@ -369,7 +369,7 @@ public class MentorVerificationService {
         if (request.sizeBytes() > MAX_DOCUMENT_SIZE_BYTES) {
             throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 4MB");
         }
-        String contentType = normalizeContentType(request.contentType());
+        String contentType = canonicalizeContentType(request.contentType());
         if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
         }
@@ -560,7 +560,7 @@ public class MentorVerificationService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
         }
-        String contentType = normalizeContentType(request.contentType());
+        String contentType = canonicalizeContentType(request.contentType());
         if ("application/pdf".equals(contentType)) {
             return VerificationStorageKind.DOCUMENT;
         }
@@ -572,6 +572,14 @@ public class MentorVerificationService {
 
     private String normalizeContentType(String contentType) {
         return contentType == null ? "" : contentType.trim().toLowerCase();
+    }
+
+    private String canonicalizeContentType(String contentType) {
+        String normalized = normalizeContentType(contentType);
+        if ("image/jpg".equals(normalized) || "image/pjpeg".equals(normalized) || "image/jpe".equals(normalized)) {
+            return "image/jpeg";
+        }
+        return normalized;
     }
 
     private boolean isValidHttpUrl(String fileUrl) {

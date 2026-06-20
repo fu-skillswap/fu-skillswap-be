@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
@@ -9,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleRespo
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.projection.MentorAvailabilityQueueProjection;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -48,7 +50,6 @@ public class MentorAvailabilityService {
     private static final String APP_TIMEZONE = "Asia/Ho_Chi_Minh";
     private static final int MAX_LOOKAHEAD_DAYS = 31;
     private static final int MAX_GENERATED_SLOTS = 120;
-    private static final long MAX_PENDING_REQUESTS_PER_SLOT = 3;
     private static final Set<Integer> ALLOWED_SESSION_DURATIONS = Set.of(15, 30, 60, 90);
 
     private final MentorProfileRepository mentorProfileRepository;
@@ -143,7 +144,7 @@ public class MentorAvailabilityService {
                         fromTime,
                         toTimeExclusive,
                         BookingStatus.PENDING,
-                        MAX_PENDING_REQUESTS_PER_SLOT
+                        BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT
                 )
                 .stream()
                 .limit(MAX_GENERATED_SLOTS)
@@ -371,15 +372,20 @@ public class MentorAvailabilityService {
                 .build();
     }
 
-    private MentorAvailabilitySlotResponse toSlotResponse(MentorAvailabilitySlot slot, TeachingMode teachingMode) {
+    private MentorAvailabilitySlotResponse toSlotResponse(MentorAvailabilityQueueProjection slot, TeachingMode teachingMode) {
+        int pendingRequestCount = slot.getPendingRequestCount() == null ? 0 : slot.getPendingRequestCount().intValue();
+        int maxPendingRequests = BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT;
         return MentorAvailabilitySlotResponse.builder()
-                .slotId(slot.getId())
+                .slotId(slot.getSlotId())
                 .startTime(slot.getStartTime())
                 .endTime(slot.getEndTime())
                 .timezone(slot.getTimezone())
                 .durationMinutes((int) ChronoUnit.MINUTES.between(slot.getStartTime(), slot.getEndTime()))
                 .teachingMode(teachingMode)
-                .recurring(slot.getRecurrenceRule() != null && !slot.getRecurrenceRule().isBlank())
+                .recurring(Boolean.TRUE.equals(slot.getRecurring()))
+                .pendingRequestCount(pendingRequestCount)
+                .maxPendingRequests(maxPendingRequests)
+                .remainingRequestSlots(Math.max(0, maxPendingRequests - pendingRequestCount))
                 .build();
     }
 

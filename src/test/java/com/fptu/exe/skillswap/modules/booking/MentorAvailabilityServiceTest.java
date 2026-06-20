@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking;
 
+import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
@@ -8,6 +9,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRule
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.projection.MentorAvailabilityQueueProjection;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -181,16 +183,16 @@ class MentorAvailabilityServiceTest {
 
     @Test
     void availability_shouldShowSlotWithLessThanThreePendingRequests() {
-        MentorAvailabilitySlot availableSlot = new MentorAvailabilitySlot();
-        availableSlot.setId(UUID.randomUUID());
-        availableSlot.setStartTime(LocalDateTime.now().plusDays(1).withHour(8).withMinute(0));
-        availableSlot.setEndTime(availableSlot.getStartTime().plusMinutes(60));
-        availableSlot.setTimezone("Asia/Ho_Chi_Minh");
-        availableSlot.setBooked(false);
-        availableSlot.setActive(true);
+        MentorAvailabilityQueueProjection availableSlot = queueProjection(
+                UUID.randomUUID(),
+                LocalDateTime.now().plusDays(1).withHour(8).withMinute(0),
+                LocalDateTime.now().plusDays(1).withHour(9).withMinute(0),
+                false,
+                2L
+        );
 
         when(mentorAvailabilitySlotRepository.findQueueAvailableSlots(
-                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq(3L)
+                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq((long) BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT)
         )).thenReturn(List.of(availableSlot));
 
         List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
@@ -201,12 +203,15 @@ class MentorAvailabilityServiceTest {
 
         assertEquals(1, response.size());
         assertEquals(60, response.getFirst().durationMinutes());
+        assertEquals(2, response.getFirst().pendingRequestCount());
+        assertEquals(3, response.getFirst().maxPendingRequests());
+        assertEquals(1, response.getFirst().remainingRequestSlots());
     }
 
     @Test
     void availability_shouldHideSlotWithThreePendingRequests() {
         when(mentorAvailabilitySlotRepository.findQueueAvailableSlots(
-                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq(3L)
+                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq((long) BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT)
         )).thenReturn(List.of());
 
         List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
@@ -216,6 +221,33 @@ class MentorAvailabilityServiceTest {
         );
 
         assertTrue(response.isEmpty());
+    }
+
+    @Test
+    void availability_shouldReturnQueueMetadataForEmptyQueue() {
+        MentorAvailabilityQueueProjection availableSlot = queueProjection(
+                UUID.randomUUID(),
+                LocalDateTime.now().plusDays(1).withHour(10).withMinute(0),
+                LocalDateTime.now().plusDays(1).withHour(11).withMinute(0),
+                true,
+                0L
+        );
+
+        when(mentorAvailabilitySlotRepository.findQueueAvailableSlots(
+                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class), any(), eq((long) BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT)
+        )).thenReturn(List.of(availableSlot));
+
+        List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
+                mentorProfile,
+                LocalDate.now().plusDays(1),
+                LocalDate.now().plusDays(2)
+        );
+
+        assertEquals(1, response.size());
+        assertEquals(0, response.getFirst().pendingRequestCount());
+        assertEquals(3, response.getFirst().maxPendingRequests());
+        assertEquals(3, response.getFirst().remainingRequestSlots());
+        assertTrue(response.getFirst().recurring());
     }
 
     @Test
@@ -282,5 +314,45 @@ class MentorAvailabilityServiceTest {
         );
 
         verify(mentorAvailabilitySlotRepository, never()).save(any(MentorAvailabilitySlot.class));
+    }
+
+    private MentorAvailabilityQueueProjection queueProjection(
+            UUID slotId,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            boolean recurring,
+            long pendingRequestCount
+    ) {
+        return new MentorAvailabilityQueueProjection() {
+            @Override
+            public UUID getSlotId() {
+                return slotId;
+            }
+
+            @Override
+            public LocalDateTime getStartTime() {
+                return startTime;
+            }
+
+            @Override
+            public LocalDateTime getEndTime() {
+                return endTime;
+            }
+
+            @Override
+            public String getTimezone() {
+                return "Asia/Ho_Chi_Minh";
+            }
+
+            @Override
+            public Boolean getRecurring() {
+                return recurring;
+            }
+
+            @Override
+            public Long getPendingRequestCount() {
+                return pendingRequestCount;
+            }
+        };
     }
 }

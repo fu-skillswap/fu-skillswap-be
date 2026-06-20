@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
@@ -356,7 +357,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.ACCEPTED, response.status());
         assertTrue(slot.isBooked());
         assertEquals(BookingStatus.REJECTED, otherPendingBooking.getStatus());
-        assertEquals("Slot was accepted for another booking.", otherPendingBooking.getRejectReason());
+        assertEquals(BookingQueueConstants.AUTO_REJECT_SLOT_ACCEPTED_REASON, otherPendingBooking.getRejectReason());
         assertNotNull(otherPendingBooking.getRejectedAt());
     }
 

@@ -27,7 +27,7 @@ public record MentorVerificationDocumentUploadRequest(
         @Size(max = 255, message = "Tên file gốc không được vượt quá 255 ký tự")
         String originalFilename,
 
-        @Schema(example = "application/pdf", description = "Chỉ hỗ trợ image/jpeg, image/png hoặc application/pdf")
+        @Schema(example = "image/jpeg", description = "Chỉ hỗ trợ image/jpeg, image/jpg, image/png hoặc application/pdf")
         @NotBlank(message = "Loại nội dung file không được để trống")
         @Size(max = 100, message = "Loại nội dung file không được vượt quá 100 ký tự")
         String contentType,

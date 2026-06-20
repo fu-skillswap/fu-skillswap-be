@@ -15,6 +15,8 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -69,10 +71,33 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
     }
 
-    @Operation(summary = "Xem các slot còn trống của mentor để chuẩn bị booking")
+    @Operation(
+            summary = "Xem các slot còn hiển thị của mentor để chuẩn bị booking",
+            description = """
+                    Chỉ trả về các slot còn hiển thị trên discovery tại thời điểm gọi API.
+                    
+                    Slot sẽ không xuất hiện nếu:
+                    - đã ở quá khứ
+                    - inactive
+                    - đã có một booking được ACCEPTED
+                    - số request PENDING đã đạt giới hạn hệ thống
+                    
+                    Queue metadata trong từng slot:
+                    - pendingRequestCount: số request PENDING hiện tại
+                    - maxPendingRequests: giới hạn tối đa request PENDING cho mỗi slot
+                    - remainingRequestSlots: số suất request còn có thể nhận thêm
+                    
+                    Lưu ý: còn xuất hiện trong availability không có nghĩa mentee chắc chắn giữ được chỗ. Chỉ khi mentor ACCEPTED thì slot mới thuộc về một booking cụ thể.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy availability thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor hoặc mentor không ở trạng thái discoverable")
+    })
     @GetMapping("/{mentorUserId}/availability")
     public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailability(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId,
             @ParameterObject @ModelAttribute AvailabilityQueryRequest request
     ) {
