@@ -23,7 +23,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @EntityGraph(attributePaths = {"user"})
     Optional<MentorProfile> findWithUserByUserId(UUID userId);
 
-    @Query("""
+    @Query(value = """
             select mp.userId
             from MentorProfile mp
             join mp.user u
@@ -58,8 +58,42 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               ))
             order by mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last,
                      mp.updatedAt desc nulls last, mp.userId asc
+            """,
+            countQuery = """
+            select count(mp.userId)
+            from MentorProfile mp
+            join mp.user u
+            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join sp.campus campus
+            left join sp.program program
+            left join sp.specialization specialization
+            where mp.status = :mentorStatus
+              and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and mp.isAvailable = true
+              and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
+              and mp.verifiedAt is not null
+              and mp.headline is not null and trim(mp.headline) <> ''
+              and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
+              and mp.teachingMode is not null
+              and mp.sessionDuration is not null
+              and exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+              )
+              and (:campusId is null or campus.id = :campusId)
+              and (:specializationId is null or specialization.id = :specializationId)
+              and (:teachingMode is null or mp.teachingMode = :teachingMode)
+              and (:hasTagFilter = false or exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+                      and mt.id.tagId in :tagIds
+              ))
             """)
-    List<UUID> findDiscoverableCandidateIds(
+    Page<UUID> findDiscoverableCandidateIds(
             @Param("mentorStatus") MentorStatus mentorStatus,
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("campusId") UUID campusId,

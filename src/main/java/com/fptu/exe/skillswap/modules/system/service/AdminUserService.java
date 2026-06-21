@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -68,26 +67,14 @@ public class AdminUserService {
 
         List<User> users = page.getContent();
         
-        // Bulk fetch profiles and compute conflicts
+        // Bulk fetch profiles for admin display
         List<UUID> userIds = users.stream().map(User::getId).toList();
         List<StudentProfile> profiles = studentProfileRepository.findByUserIdIn(userIds);
         Map<UUID, StudentProfile> profileMap = profiles.stream()
                 .collect(Collectors.toMap(StudentProfile::getUserId, p -> p));
 
-        List<String> claimedCodes = profiles.stream()
-                .map(StudentProfile::getClaimedStudentCode)
-                .filter(code -> code != null && !code.isBlank())
-                .toList();
-
-        Set<String> conflictedCodes = Set.of();
-        if (!claimedCodes.isEmpty()) {
-            conflictedCodes = Set.copyOf(studentProfileRepository.findConflictingClaimedStudentCodes(claimedCodes));
-        }
-        
-        final Set<String> finalConflictedCodes = conflictedCodes;
-
         return PageResponse.<AdminUserListItemResponse>builder()
-                .content(users.stream().map(user -> toAdminUserListItem(user, profileMap.get(user.getId()), finalConflictedCodes)).toList())
+                .content(users.stream().map(user -> toAdminUserListItem(user, profileMap.get(user.getId()))).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -146,11 +133,6 @@ public class AdminUserService {
         auditLogRepository.save(auditLog);
 
         StudentProfile profile = studentProfileRepository.findById(userId).orElse(null);
-        Set<String> finalConflictedCodes = Set.of();
-        if (profile != null && profile.getClaimedStudentCode() != null) {
-            finalConflictedCodes = Set.copyOf(studentProfileRepository.findConflictingClaimedStudentCodes(List.of(profile.getClaimedStudentCode())));
-        }
-
         return SystemUserResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -160,7 +142,7 @@ public class AdminUserService {
                 .roles(roles)
                 .lastLoginAt(user.getLastLoginAt())
                 .createdAt(user.getCreatedAt())
-                .academicProfile(buildAcademicResponse(profile, finalConflictedCodes))
+                .academicProfile(buildAcademicResponse(profile))
                 .build();
     }
 
@@ -212,7 +194,7 @@ public class AdminUserService {
         }
     }
 
-    private AdminUserListItemResponse toAdminUserListItem(User user, StudentProfile profile, Set<String> conflictedCodes) {
+    private AdminUserListItemResponse toAdminUserListItem(User user, StudentProfile profile) {
         List<RoleCode> visibleRoles = new ArrayList<>();
         if (user.getRoles() != null) {
             if (user.getRoles().contains(RoleCode.MENTEE)) {
@@ -232,22 +214,16 @@ public class AdminUserService {
                 .roles(visibleRoles)
                 .lastLoginAt(user.getLastLoginAt())
                 .createdAt(user.getCreatedAt())
-                .academicProfile(buildAcademicResponse(profile, conflictedCodes))
+                .academicProfile(buildAcademicResponse(profile))
                 .build();
     }
 
-    private AdminUserAcademicResponse buildAcademicResponse(StudentProfile profile, Set<String> conflictedCodes) {
+    private AdminUserAcademicResponse buildAcademicResponse(StudentProfile profile) {
         if (profile == null) {
             return null;
         }
-        String claimed = profile.getClaimedStudentCode();
-        String verified = profile.getVerifiedStudentCode();
-        boolean conflict = claimed != null && conflictedCodes.contains(claimed);
         return AdminUserAcademicResponse.builder()
-                .claimedStudentCode(claimed)
-                .verifiedStudentCode(verified)
-                .studentCodeVerified(verified != null)
-                .studentCodeConflict(conflict)
+                .claimedStudentCode(profile.getClaimedStudentCode())
                 .build();
     }
 }

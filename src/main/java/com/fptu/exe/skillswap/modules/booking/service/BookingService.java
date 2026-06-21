@@ -63,6 +63,8 @@ public class BookingService {
     private final MentorServiceRepository mentorServiceRepository;
     private final UserRepository userRepository;
     private final AcademicService academicService;
+    private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -145,6 +147,15 @@ public class BookingService {
                 .requestedStartTime(slot.getStartTime())
                 .requestedEndTime(slot.getEndTime())
                 .build());
+
+        notificationService.createNotification(
+                request.mentorUserId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_CREATED,
+                "Bạn có yêu cầu đặt lịch mới",
+                mentee.getFullName() + " đã gửi yêu cầu đặt lịch mentoring.",
+                "BOOKING",
+                savedBooking.getId()
+        );
 
         return toBookingResponse(savedBooking);
     }
@@ -229,6 +240,41 @@ public class BookingService {
 
         bookingRepository.saveAll(pendingBookings);
         Booking savedBooking = bookingRepository.save(booking);
+
+        notificationService.createNotification(
+                savedBooking.getMentee().getId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
+                "Yêu cầu đặt lịch đã được chấp nhận",
+                savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        for (Booking pendingBooking : pendingBookings) {
+            if (!pendingBooking.getId().equals(booking.getId())) {
+                notificationService.createNotification(
+                        pendingBooking.getMentee().getId(),
+                        com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED,
+                        "Yêu cầu đặt lịch không còn khả dụng",
+                        "Khung giờ này đã được mentor chấp nhận cho một yêu cầu khác.",
+                        "BOOKING",
+                        pendingBooking.getId()
+                );
+            }
+        }
+
+        eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                .bookingId(savedBooking.getId())
+                .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
+                .recipientEmail(savedBooking.getMentee().getEmail())
+                .recipientName(savedBooking.getMentee().getFullName())
+                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                .bookingStartTime(savedBooking.getRequestedStartTime())
+                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .meetingLink(savedBooking.getMeetingLink())
+                .createdAt(DateTimeUtil.now())
+                .build());
+
         return toBookingResponse(savedBooking);
     }
 
@@ -250,6 +296,28 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+
+        notificationService.createNotification(
+                savedBooking.getMentee().getId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REJECTED,
+                "Yêu cầu đặt lịch đã bị từ chối",
+                savedBooking.getMentorProfile().getUser().getFullName() + " đã từ chối yêu cầu đặt lịch của bạn.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                .bookingId(savedBooking.getId())
+                .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_REJECTED_EMAIL)
+                .recipientEmail(savedBooking.getMentee().getEmail())
+                .recipientName(savedBooking.getMentee().getFullName())
+                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                .bookingStartTime(savedBooking.getRequestedStartTime())
+                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .reason(savedBooking.getRejectReason())
+                .createdAt(DateTimeUtil.now())
+                .build());
+
         return toBookingResponse(savedBooking);
     }
 
@@ -267,7 +335,18 @@ public class BookingService {
         booking.setMeetingLink(cleanMeetingLink(request.meetingLink()));
         booking.setLocation(trimToNull(request.location()));
 
-        return toBookingResponse(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+
+        notificationService.createNotification(
+                savedBooking.getMentee().getId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.MEETING_LINK_UPDATED,
+                "Thông tin buổi học đã được cập nhật",
+                savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        return toBookingResponse(savedBooking);
     }
 
     @Transactional
@@ -636,7 +715,30 @@ public class BookingService {
             applyMentorCancellationPenalty(mentorProfile, minutesUntilStart, now);
         }
 
-        return toBookingResponse(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+
+        notificationService.createNotification(
+                savedBooking.getMentee().getId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTOR,
+                "Mentor đã hủy lịch",
+                savedBooking.getMentorProfile().getUser().getFullName() + " đã hủy lịch mentoring.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                .bookingId(savedBooking.getId())
+                .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTOR_EMAIL)
+                .recipientEmail(savedBooking.getMentee().getEmail())
+                .recipientName(savedBooking.getMentee().getFullName())
+                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                .bookingStartTime(savedBooking.getRequestedStartTime())
+                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .reason(savedBooking.getCancelReason())
+                .createdAt(DateTimeUtil.now())
+                .build());
+
+        return toBookingResponse(savedBooking);
     }
 
     @Transactional
@@ -668,7 +770,30 @@ public class BookingService {
             }
         }
 
-        return toBookingResponse(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+
+        notificationService.createNotification(
+                savedBooking.getMentorProfile().getUserId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTEE,
+                "Mentee đã hủy lịch",
+                savedBooking.getMentee().getFullName() + " đã hủy lịch mentoring.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                .bookingId(savedBooking.getId())
+                .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTEE_EMAIL)
+                .recipientEmail(savedBooking.getMentorProfile().getUser().getEmail())
+                .recipientName(savedBooking.getMentorProfile().getUser().getFullName())
+                .actorName(savedBooking.getMentee().getFullName())
+                .bookingStartTime(savedBooking.getRequestedStartTime())
+                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .reason(savedBooking.getCancelReason())
+                .createdAt(DateTimeUtil.now())
+                .build());
+
+        return toBookingResponse(savedBooking);
     }
 }
 

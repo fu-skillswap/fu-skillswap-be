@@ -137,18 +137,30 @@ public class MentorDiscoveryService {
         }
         Pageable searchPageable = PageRequest.of(requestedPage, requestedSize, org.springframework.data.domain.Sort.by(orders));
 
-        Page<UUID> candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE,
-                MentorTagType.HELP_TOPIC,
-                safeRequest.getCampusId(),
-                safeRequest.getSpecializationId(),
-                safeRequest.getTeachingMode(),
-                hasTagFilter(safeRequest.getTagIds()),
-                tagIds,
-                hasKeyword ? "%" + normalizedKeyword + "%" : null,
-                currentTime(),
-                searchPageable
-        );
+        Page<UUID> candidatePage = hasKeyword
+                ? mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                        MentorStatus.ACTIVE,
+                        MentorTagType.HELP_TOPIC,
+                        safeRequest.getCampusId(),
+                        safeRequest.getSpecializationId(),
+                        safeRequest.getTeachingMode(),
+                        hasTagFilter(safeRequest.getTagIds()),
+                        tagIds,
+                        "%" + normalizedKeyword + "%",
+                        currentTime(),
+                        searchPageable
+                )
+                : mentorProfileRepository.findDiscoverableCandidateIds(
+                        MentorStatus.ACTIVE,
+                        MentorTagType.HELP_TOPIC,
+                        safeRequest.getCampusId(),
+                        safeRequest.getSpecializationId(),
+                        safeRequest.getTeachingMode(),
+                        hasTagFilter(safeRequest.getTagIds()),
+                        tagIds,
+                        currentTime(),
+                        searchPageable
+                );
 
         List<UUID> candidateIds = candidatePage.getContent();
         List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(candidateIds);

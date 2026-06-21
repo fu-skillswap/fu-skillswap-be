@@ -225,16 +225,40 @@ class MentorDiscoveryServiceTest {
         request.setCampusId(campus.getId());
 
         when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
-        when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+        when(mentorProfileRepository.findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC), eq(campus.getId()),
-                eq(null), eq(null), anyBoolean(), anyList(), any(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of()));
 
         mentorDiscoveryService.searchMentors(userId, request);
 
-        verify(mentorProfileRepository).findDiscoverableCandidateIdsWithKeyword(
+        verify(mentorProfileRepository).findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC), eq(campus.getId()),
-                eq(null), eq(null), anyBoolean(), anyList(), any(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+        );
+    }
+
+    @Test
+    void searchMentors_withoutKeywordShouldUseNonKeywordQuery() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setSortBy("relevance");
+        request.setSize(24);
+
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
+        when(mentorProfileRepository.findDiscoverableCandidateIds(
+                eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
+                eq(null), eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(mentorUserId)));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
+                .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.ZERO, 0, 3.0)));
+        stubEmptyCandidateRelations();
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+
+        assertEquals(1, response.getContent().size());
+        verify(mentorProfileRepository).findDiscoverableCandidateIds(
+                eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
+                eq(null), eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         );
     }
 

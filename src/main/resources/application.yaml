@@ -23,6 +23,15 @@ spring:
     baseline-on-migrate: false
     locations: classpath:db/migration
 
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp-relay.brevo.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+
   servlet:
     multipart:
       max-file-size: ${MAX_FILE_SIZE:4MB}
@@ -75,6 +84,9 @@ application:
     submit-requirements:
       student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
+  mail:
+    enabled: ${APPLICATION_MAIL_ENABLED:false}
+    from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
 
 logging:
   pattern:

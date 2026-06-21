@@ -7,8 +7,6 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.dao.DataIntegrityViolationException;
-
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,23 +42,20 @@ class StudentProfileRepositoryTest {
     }
 
     @Test
-    void migration_shouldRejectDuplicateVerifiedStudentCode() {
+    void migration_shouldAllowDuplicateClaimedStudentCodeAcrossMultipleProfiles() {
         User user1 = createUser("user3@test.com");
         User user2 = createUser("user4@test.com");
 
         StudentProfile profile1 = new StudentProfile();
         profile1.setUser(user1);
         profile1.setClaimedStudentCode("SE111");
-        profile1.setVerifiedStudentCode("VERIFIED_SE");
 
         StudentProfile profile2 = new StudentProfile();
         profile2.setUser(user2);
-        profile2.setClaimedStudentCode("SE222");
-        profile2.setVerifiedStudentCode("VERIFIED_SE"); // Same verified code
+        profile2.setClaimedStudentCode("SE111");
 
-        studentProfileRepository.saveAndFlush(profile1);
-
-        assertThrows(DataIntegrityViolationException.class, () -> {
+        assertDoesNotThrow(() -> {
+            studentProfileRepository.saveAndFlush(profile1);
             studentProfileRepository.saveAndFlush(profile2);
         });
     }

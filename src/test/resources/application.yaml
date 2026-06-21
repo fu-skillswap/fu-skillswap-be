@@ -13,6 +13,12 @@ spring:
     show-sql: false
   flyway:
     enabled: false
+  mail:
+    host: localhost
+    port: 1025
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
 
 application:
   cors:
@@ -27,3 +33,5 @@ application:
       client-id: test-google-client-id
   upload:
     dir: ./target/uploads-test
+  mail:
+    enabled: false

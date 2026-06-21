@@ -11,6 +11,15 @@ spring:
       ddl-auto: create
     show-sql: true
 
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:false}
+
 application:
   security:
     jwt:
@@ -19,6 +28,9 @@ application:
       client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
   upload:
     dir: ./uploads/files
+  mail:
+    enabled: ${APPLICATION_MAIL_ENABLED:false}
+    from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
 
 logging:
   level:

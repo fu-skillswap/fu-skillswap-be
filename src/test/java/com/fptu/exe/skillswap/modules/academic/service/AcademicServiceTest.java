@@ -108,11 +108,11 @@ class AcademicServiceTest {
     }
 
     @Test
-    void createStudentProfile_shouldNotSetVerifiedStudentCodeOnOnboarding() {
+    void createStudentProfile_shouldOnlyPersistClaimedStudentCodeOnOnboarding() {
         when(studentProfileRepository.findById(userId)).thenReturn(Optional.empty());
         when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(i -> {
             StudentProfile p = i.getArgument(0);
-            assertNull(p.getVerifiedStudentCode(), "Verified code should not be set during onboarding");
+            assertEquals("SE123456", p.getClaimedStudentCode(), "Claimed student code should be normalized and persisted");
             return p;
         });
 

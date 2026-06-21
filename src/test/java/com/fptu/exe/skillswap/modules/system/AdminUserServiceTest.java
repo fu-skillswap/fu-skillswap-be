@@ -140,7 +140,7 @@ class AdminUserServiceTest {
     }
 
     @Test
-    void adminListUsers_shouldIncludeAcademicProfileConflictField() {
+    void adminListUsers_shouldIncludeAcademicProfileClaimedCode() {
         targetUser.setFullName("Nguyen Van A");
         targetUser.setRoles(new HashSet<>(List.of(RoleCode.MENTOR)));
 
@@ -159,19 +159,16 @@ class AdminUserServiceTest {
         profile.setUserId(userId);
         profile.setClaimedStudentCode("SE123456");
         when(studentProfileRepository.findByUserIdIn(List.of(userId))).thenReturn(List.of(profile));
-        when(studentProfileRepository.findConflictingClaimedStudentCodes(List.of("SE123456"))).thenReturn(List.of("SE123456"));
 
         PageResponse<AdminUserListItemResponse> response = adminUserService.getVisibleUsers(new AdminUserListRequest());
 
         assertEquals(1, response.getContent().size());
-        
         assertNotNull(response.getContent().getFirst().academicProfile());
-        assertTrue(response.getContent().getFirst().academicProfile().studentCodeConflict());
         assertEquals("SE123456", response.getContent().getFirst().academicProfile().claimedStudentCode());
     }
 
     @Test
-    void adminListUsers_shouldUseBulkConflictLookup() {
+    void adminListUsers_shouldUseBulkProfileLookup() {
         targetUser.setFullName("Nguyen Van A");
         targetUser.setRoles(new HashSet<>(List.of(RoleCode.MENTOR)));
 
@@ -191,16 +188,15 @@ class AdminUserServiceTest {
         profile2.setClaimedStudentCode("SE999999");
 
         when(studentProfileRepository.findByUserIdIn(List.of(userId, targetUser2.getId()))).thenReturn(List.of(profile1, profile2));
-        when(studentProfileRepository.findConflictingClaimedStudentCodes(List.of("SE123456", "SE999999"))).thenReturn(List.of());
 
         adminUserService.getVisibleUsers(new AdminUserListRequest());
 
         // Verifies repository is called exactly once with a list, avoiding N+1
-        verify(studentProfileRepository, times(1)).findConflictingClaimedStudentCodes(anyList());
+        verify(studentProfileRepository, times(1)).findByUserIdIn(anyList());
     }
 
     @Test
-    void adminGetUser_shouldIncludeAcademicProfileConflictField() {
+    void adminGetUser_shouldIncludeAcademicProfileClaimedCode() {
         when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
         when(userRepository.findById(userId)).thenReturn(Optional.of(targetUser));
         when(userRepository.findRoleCodesByUserId(userId)).thenReturn(List.of(RoleCode.MENTEE));
@@ -209,12 +205,10 @@ class AdminUserServiceTest {
         profile.setUserId(userId);
         profile.setClaimedStudentCode("SE_CONFLICT");
         when(studentProfileRepository.findById(userId)).thenReturn(Optional.of(profile));
-        when(studentProfileRepository.findConflictingClaimedStudentCodes(List.of("SE_CONFLICT"))).thenReturn(List.of("SE_CONFLICT"));
 
         SystemUserResponse response = adminUserService.changeUserStatus(adminId, userId, false, "Good behavior");
 
         assertNotNull(response.academicProfile());
-        assertTrue(response.academicProfile().studentCodeConflict());
         assertEquals("SE_CONFLICT", response.academicProfile().claimedStudentCode());
     }
 

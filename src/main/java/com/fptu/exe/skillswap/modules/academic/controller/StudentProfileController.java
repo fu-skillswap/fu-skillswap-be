@@ -53,7 +53,7 @@ public class StudentProfileController {
             "**Ràng buộc:** Chuyên ngành phải thuộc ngành học đã chọn.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ thành công"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ: sai format MSSV, chuyên ngành không thuộc ngành, hoặc MSSV đã tồn tại"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ: sai format MSSV hoặc chuyên ngành không thuộc ngành"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Cơ sở / Ngành học / Chuyên ngành không tồn tại")
     })

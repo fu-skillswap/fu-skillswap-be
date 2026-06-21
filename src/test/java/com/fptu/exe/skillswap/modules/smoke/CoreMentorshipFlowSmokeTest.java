@@ -109,7 +109,7 @@ class CoreMentorshipFlowSmokeTest {
     }
 
     @Test
-    void test1_academicDuplicateMssvAndAdminVisibility() {
+    void test1_academicDuplicateMssvIsAllowed() {
         User u1 = createUser("mentee1-smoke@test.com", "Mentee One", new HashSet<>(Set.of(RoleCode.MENTEE)));
         User u2 = createUser("mentee2-smoke@test.com", "Mentee Two", new HashSet<>(Set.of(RoleCode.MENTEE)));
 
@@ -126,8 +126,6 @@ class CoreMentorshipFlowSmokeTest {
             .toList();
 
         assertEquals(2, conflicts.size(), "Should find both users");
-        assertTrue(conflicts.getFirst().academicProfile().studentCodeConflict(), "Conflict must be true");
-        assertTrue(conflicts.getLast().academicProfile().studentCodeConflict(), "Conflict must be true");
     }
 
     @Test

@@ -34,9 +34,6 @@ public class StudentProfile {
     @Column(name = "student_code", length = 30)
     private String claimedStudentCode;
 
-    @Column(name = "verified_student_code", length = 30, unique = true)
-    private String verifiedStudentCode;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campus_id", foreignKey = @ForeignKey(name = "fk_student_profiles_campus"))
     private Campus campus;
