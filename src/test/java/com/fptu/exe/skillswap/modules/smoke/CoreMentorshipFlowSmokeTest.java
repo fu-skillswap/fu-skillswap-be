@@ -134,7 +134,7 @@ class CoreMentorshipFlowSmokeTest {
         MentorVerificationSubmitRequest req = new MentorVerificationSubmitRequest("Here is my proof: https://res.cloudinary.com/demo/image/upload/sample.jpg", true);
         var submitRes = mentorVerificationService.submit(mentorApplicant.getId(), req);
 
-        adminMentorVerificationService.approve(admin.getId(), submitRes.requestId(), new com.fptu.exe.skillswap.modules.mentor.dto.request.AdminReviewMentorVerificationRequest("Approved"));
+        adminMentorVerificationService.approve(admin.getId(), submitRes.requestId(), "Approved");
 
         // Assert role and profile
         User updatedUser = userRepository.findById(mentorApplicant.getId()).orElseThrow();
