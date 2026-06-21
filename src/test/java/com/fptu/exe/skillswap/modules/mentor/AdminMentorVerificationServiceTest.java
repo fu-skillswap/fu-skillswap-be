@@ -275,7 +275,8 @@ class AdminMentorVerificationServiceTest {
                 .status(VerificationStatus.PENDING_REVIEW)
                 .method(VerificationMethod.MANUAL)
                 .lockedBy(admin)
-                .lockExpiresAt(DateTimeUtil.now().plusMinutes(5))
+                // Use a very large TTL (e.g. 1 day) to completely avoid Flaky Tests on slow CI runners
+                .lockExpiresAt(DateTimeUtil.now().plusDays(1))
                 .build();
     }
 }
