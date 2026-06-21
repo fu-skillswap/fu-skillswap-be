@@ -64,6 +64,10 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private BookingService bookingService;
     @Autowired private MentorAvailabilitySlotRepository slotRepository;
     @Autowired private MentorProfileRepository mentorProfileRepository;
+    @Autowired private com.fptu.exe.skillswap.modules.booking.repository.BookingRepository bookingRepository;
+    @Autowired private jakarta.persistence.EntityManager entityManager;
+    @Autowired private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
+    @Autowired private com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService mentorProfileService;
     
     @Autowired private CampusRepository campusRepository;
     @Autowired private AcademicProgramRepository programRepository;
@@ -100,6 +104,7 @@ class CoreMentorshipFlowSmokeTest {
         req.setSpecializationId(specializationId);
         req.setSemester(5);
         req.setIntakeYear(2022);
+        req.setIsAlumni(false);
         academicService.updateStudentProfile(userId, req);
     }
 
@@ -129,11 +134,64 @@ class CoreMentorshipFlowSmokeTest {
     void test2_mentorVerificationApprovalUnlocksDiscovery() {
         User mentorApplicant = createUser("applicant-smoke@test.com", "Mentor App", new HashSet<>(Set.of(RoleCode.MENTEE)));
         completeAcademic(mentorApplicant.getId(), "SE999999");
+        // Initialize draft request
+        mentorVerificationService.requestToBecomeMentor(mentorApplicant.getId());
+        entityManager.flush();
+        entityManager.clear();
+
+        var helpTopicTag = tagRepository.findAll().stream()
+            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
+            .findFirst().orElseThrow();
+
+        var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
+                "Senior Java Developer",
+                "5 years of Spring Boot experience",
+                null,
+                false,
+                List.of(helpTopicTag.getId()),
+                com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode.ONLINE,
+                60,
+                null,
+                null,
+                null,
+                "0912345678"
+        );
+        mentorProfileService.upsertProfile(mentorApplicant.getId(), upsertReq);
+
+        MentorProfile mp = mentorProfileRepository.findById(mentorApplicant.getId()).orElseThrow();
+        mp.setStatus(com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT);
+        mp.setVerifiedAt(null);
+        mentorProfileRepository.saveAndFlush(mp);
+        entityManager.clear();
+
+        // Upload document
+        mentorVerificationService.uploadDocument(mentorApplicant.getId(), 
+            new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
+                com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+                "sample_public_id",
+                "sample.jpg",
+                "image/jpeg",
+                1024L
+            )
+        );
+        mentorVerificationService.uploadDocument(mentorApplicant.getId(), 
+            new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
+                com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.EXPERTISE_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/expert.jpg",
+                "expert_public_id",
+                "expert.jpg",
+                "image/jpeg",
+                1024L
+            )
+        );
 
         // Submit verification
-        MentorVerificationSubmitRequest req = new MentorVerificationSubmitRequest("Here is my proof: https://res.cloudinary.com/demo/image/upload/sample.jpg", true);
+        MentorVerificationSubmitRequest req = new MentorVerificationSubmitRequest("Here is my proof", true);
         var submitRes = mentorVerificationService.submit(mentorApplicant.getId(), req);
 
+        // Admin must view the details to acquire the review lock
+        adminMentorVerificationService.getRequestDetail(admin.getId(), submitRes.requestId());
         adminMentorVerificationService.approve(admin.getId(), submitRes.requestId(), "Approved");
 
         // Assert role and profile
@@ -152,29 +210,43 @@ class CoreMentorshipFlowSmokeTest {
     @Test
     void test3_bookingQueueAcceptsOneOfThree() {
         User mentor = createUser("q-mentor@test.com", "Queue Mentor", new HashSet<>(Set.of(RoleCode.MENTEE, RoleCode.MENTOR)));
-        MentorProfile mp = new MentorProfile();
-        mp.setUser(mentor);
+        // Initialize draft request
+        mentorVerificationService.requestToBecomeMentor(mentor.getId());
+        entityManager.flush();
+        entityManager.clear();
+
+        var helpTopicTag = tagRepository.findAll().stream()
+            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
+            .findFirst().orElseThrow();
+
+        var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
+                "Senior Java Developer",
+                "5 years of Spring Boot experience",
+                null,
+                false,
+                List.of(helpTopicTag.getId()),
+                com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode.ONLINE,
+                60,
+                null,
+                null,
+                null,
+                "0912345678"
+        );
+        mentorProfileService.upsertProfile(mentor.getId(), upsertReq);
+
+        MentorProfile mp = mentorProfileRepository.findById(mentor.getId()).orElseThrow();
         mp.setStatus(MentorStatus.ACTIVE);
         mp.setAvailable(true);
         mp.setVerifiedAt(LocalDateTime.now());
-        mentorProfileRepository.save(mp);
+        mentorProfileRepository.saveAndFlush(mp);
+        entityManager.clear();
 
-        // Add slot
-        UpsertAvailabilityRuleRequest ruleReq = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.NONE,
-                null,
-                LocalDate.now().plusDays(2),
-                null,
-                LocalTime.of(10, 0),
-                LocalTime.of(12, 0),
-                "Smoke test"
-        );
-        mentorAvailabilityService.createRule(mentor.getId(), ruleReq);
-
-        MentorAvailabilitySlot slot = slotRepository.findAll().stream()
-                .filter(s -> s.getMentorProfile().getUserId().equals(mp.getUserId()))
-                .findFirst().orElseThrow();
+        // Add slot manually to avoid async event issues
+        MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
+        slot.setMentorProfile(mp);
+        slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0));
+        slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0));
+        slotRepository.saveAndFlush(slot);
 
         // 3 Mentees book
         User m1 = createUser("m1@test.com", "M1", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m1.getId(), "M111");
@@ -220,29 +292,46 @@ class CoreMentorshipFlowSmokeTest {
     @Test
     void test4_completeAndFeedbackDoesNotBreakRating() {
         User mentor = createUser("fb-mentor@test.com", "FB Mentor", new HashSet<>(Set.of(RoleCode.MENTEE, RoleCode.MENTOR)));
-        MentorProfile mp = new MentorProfile();
-        mp.setUser(mentor);
+        // Initialize draft request
+        mentorVerificationService.requestToBecomeMentor(mentor.getId());
+        entityManager.flush();
+        entityManager.clear();
+
+        var helpTopicTag = tagRepository.findAll().stream()
+            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
+            .findFirst().orElseThrow();
+
+        var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
+                "Senior Java Developer",
+                "5 years of Spring Boot experience",
+                null,
+                false,
+                List.of(helpTopicTag.getId()),
+                com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode.ONLINE,
+                60,
+                null,
+                null,
+                null,
+                "0912345678"
+        );
+        mentorProfileService.upsertProfile(mentor.getId(), upsertReq);
+
+        MentorProfile mp = mentorProfileRepository.findById(mentor.getId()).orElseThrow();
         mp.setStatus(MentorStatus.ACTIVE);
         mp.setAvailable(true);
         mp.setVerifiedAt(LocalDateTime.now());
-        mentorProfileRepository.save(mp);
+        mentorProfileRepository.saveAndFlush(mp);
+        entityManager.clear();
 
         User mentee = createUser("fb-mentee@test.com", "FB Mentee", new HashSet<>(Set.of(RoleCode.MENTEE)));
         completeAcademic(mentee.getId(), "FB111");
 
-        // Use mock slot for booking
-        UpsertAvailabilityRuleRequest ruleReq = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.NONE,
-                null,
-                LocalDate.now().minusDays(1),
-                null,
-                LocalTime.of(10, 0),
-                LocalTime.of(12, 0),
-                "Smoke test"
-        );
-        mentorAvailabilityService.createRule(mentor.getId(), ruleReq);
-        var slot = slotRepository.findAll().stream().filter(s -> s.getMentorProfile().getUserId().equals(mp.getUserId())).findFirst().orElseThrow();
+        // Add slot manually to avoid async event issues
+        MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
+        slot.setMentorProfile(mp);
+        slot.setStartTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0));
+        slot.setEndTime(LocalDateTime.now().plusDays(1).withHour(12).withMinute(0));
+        slotRepository.saveAndFlush(slot);
 
         CreateBookingRequest bReq = new CreateBookingRequest(
                 mentor.getId(),
@@ -255,6 +344,16 @@ class CoreMentorshipFlowSmokeTest {
 
         AcceptBookingRequest aReq = new AcceptBookingRequest("Sure");
         bookingService.acceptBooking(mentor.getId(), bk.bookingId(), aReq);
+
+        // Fast-forward time so we can complete it
+        slot.setStartTime(LocalDateTime.now().minusDays(1));
+        slot.setEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
+        slotRepository.saveAndFlush(slot);
+        
+        var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
+        booking.setRequestedStartTime(LocalDateTime.now().minusDays(1));
+        booking.setRequestedEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
+        bookingRepository.saveAndFlush(booking);
 
         // Complete booking
         CompleteBookingRequest cReq = new CompleteBookingRequest("Great session");
@@ -273,7 +372,7 @@ class CoreMentorshipFlowSmokeTest {
         // Check rating update
         var updatedProfile = mentorProfileRepository.findById(mentor.getId()).orElseThrow();
         assertEquals(1, updatedProfile.getTotalReviews());
-        assertEquals(5.0, updatedProfile.getAverageRating());
+        assertEquals(new java.math.BigDecimal("5.00"), updatedProfile.getAverageRating());
         assertEquals(1, updatedProfile.getTotalCompletedSessions());
     }
 }
