@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,7 +34,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -275,7 +275,7 @@ class AdminMentorVerificationServiceTest {
                 .status(VerificationStatus.PENDING_REVIEW)
                 .method(VerificationMethod.MANUAL)
                 .lockedBy(admin)
-                .lockExpiresAt(LocalDateTime.now().plusMinutes(5))
+                .lockExpiresAt(DateTimeUtil.now().plusMinutes(5))
                 .build();
     }
 }
