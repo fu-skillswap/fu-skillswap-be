@@ -395,7 +395,26 @@ public class BookingService {
             mentorProfile.setTotalSessions(defaultInteger(mentorProfile.getTotalSessions()) + 1);
         }
 
-        return toBookingResponse(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+        boolean completedByMentor = isMentorOfBooking(savedBooking, currentUserId);
+        UUID recipientUserId = completedByMentor
+                ? savedBooking.getMentee().getId()
+                : savedBooking.getMentorProfile().getUser().getId();
+        String title = "Buổi mentoring đã được hoàn tất";
+        String message = completedByMentor
+                ? "Buổi mentoring của bạn đã được đánh dấu hoàn tất."
+                : "Buổi mentoring với " + savedBooking.getMentee().getFullName() + " đã được đánh dấu hoàn tất.";
+
+        notificationService.createNotification(
+                recipientUserId,
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
+                title,
+                message,
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        return toBookingResponse(savedBooking);
     }
 
     @Transactional(readOnly = true)

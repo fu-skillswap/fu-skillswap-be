@@ -456,6 +456,41 @@ class BookingServiceTest {
         assertEquals(9, mentorProfile.getTotalSessions());
         assertEquals(booking.getRequestedStartTime(), booking.getActualStartTime());
         assertEquals(booking.getRequestedEndTime(), booking.getActualEndTime());
+        verify(notificationService).createNotification(
+                eq(menteeId),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED),
+                eq("Buổi mentoring đã được hoàn tất"),
+                eq("Buổi mentoring của bạn đã được đánh dấu hoàn tất."),
+                eq("BOOKING"),
+                eq(booking.getId())
+        );
+    }
+
+    @Test
+    void completeBooking_asMentee_shouldNotifyMentor() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        booking.setRequestedStartTime(testNow().minusHours(1));
+        booking.setRequestedEndTime(testNow().plusMinutes(10));
+
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.completeBooking(
+                menteeId,
+                booking.getId(),
+                new CompleteBookingRequest("Done")
+        );
+
+        assertEquals(BookingStatus.COMPLETED, response.status());
+        assertEquals("Done", booking.getMenteeNote());
+        verify(notificationService).createNotification(
+                eq(mentorId),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED),
+                eq("Buổi mentoring đã được hoàn tất"),
+                eq("Buổi mentoring với Mentee User đã được đánh dấu hoàn tất."),
+                eq("BOOKING"),
+                eq(booking.getId())
+        );
     }
 
     @Test
@@ -472,6 +507,7 @@ class BookingServiceTest {
         ));
 
         assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
     }
 
     @Test

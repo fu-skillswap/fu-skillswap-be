@@ -28,6 +28,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQ
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -72,6 +74,7 @@ public class AdminMentorVerificationService {
     private final UserRepository userRepository;
     private final AcademicService academicService;
     private final MentorProfileService mentorProfileService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorVerificationQueueItemResponse> getQueue(AdminMentorVerificationQueueFilterRequest filterRequest) {
@@ -189,6 +192,14 @@ public class AdminMentorVerificationService {
         );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
+        notificationService.createNotification(
+                request.getMentor().getId(),
+                NotificationType.MENTOR_VERIFICATION_NEEDS_REVISION,
+                "Hồ sơ mentor cần được bổ sung",
+                "Hồ sơ mentor của bạn cần được bổ sung thông tin trước khi xét duyệt.",
+                "MENTOR_VERIFICATION",
+                request.getId()
+        );
         return mapDetail(request, adminUserId);
     }
 
@@ -230,6 +241,14 @@ public class AdminMentorVerificationService {
             userRepository.save(mentor);
         }
 
+        notificationService.createNotification(
+                mentor.getId(),
+                NotificationType.MENTOR_VERIFICATION_APPROVED,
+                "Yêu cầu trở thành mentor đã được duyệt",
+                "Hồ sơ mentor của bạn đã được duyệt. Bạn có thể bắt đầu nhận yêu cầu đặt lịch.",
+                "MENTOR_VERIFICATION",
+                request.getId()
+        );
         return mapDetail(request, adminUserId);
     }
 
@@ -262,6 +281,14 @@ public class AdminMentorVerificationService {
         );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
+        notificationService.createNotification(
+                request.getMentor().getId(),
+                NotificationType.MENTOR_VERIFICATION_REJECTED,
+                "Yêu cầu trở thành mentor đã bị từ chối",
+                "Hồ sơ mentor của bạn chưa được duyệt. Vui lòng xem lý do từ chối và cập nhật lại nếu cần.",
+                "MENTOR_VERIFICATION",
+                request.getId()
+        );
         return mapDetail(request, adminUserId);
     }
 

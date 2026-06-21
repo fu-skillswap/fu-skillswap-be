@@ -10,6 +10,8 @@ import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackReposit
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class SessionFeedbackService {
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final BookingRepository bookingRepository;
     private final MentorProfileRepository mentorProfileRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public SessionFeedbackResponse submitFeedback(UUID reviewerId, UUID bookingId, SubmitFeedbackRequest request) {
@@ -77,6 +80,15 @@ public class SessionFeedbackService {
         if (reviewee.getId().equals(mentor.getId())) {
             updateMentorRatingStats(mentorProfile);
         }
+
+        notificationService.createNotification(
+                reviewee.getId(),
+                NotificationType.FEEDBACK_RECEIVED,
+                "Bạn vừa nhận được đánh giá mới",
+                reviewer.getFullName() + " đã gửi đánh giá sau buổi mentoring.",
+                "FEEDBACK",
+                feedback.getId()
+        );
 
         return toResponse(feedback);
     }

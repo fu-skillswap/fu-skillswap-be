@@ -11,6 +11,8 @@ import com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,6 +46,9 @@ class SessionFeedbackServiceTest {
 
     @Mock
     private MentorProfileRepository mentorProfileRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private SessionFeedbackService sessionFeedbackService;
@@ -144,6 +150,14 @@ class SessionFeedbackServiceTest {
         assertEquals("4.67", mentorProfile.getAverageRating().toString());
         assertEquals(true, response.isPublic());
         verify(mentorProfileRepository).save(mentorProfile);
+        verify(notificationService).createNotification(
+                eq(mentorId),
+                eq(NotificationType.FEEDBACK_RECEIVED),
+                eq("Bạn vừa nhận được đánh giá mới"),
+                eq("Mentee đã gửi đánh giá sau buổi mentoring."),
+                eq("FEEDBACK"),
+                eq(response.getId())
+        );
     }
 
     @Test
@@ -156,6 +170,18 @@ class SessionFeedbackServiceTest {
 
         assertEquals(ErrorCode.ACCESS_DENIED, exception.getErrorCode());
         verify(sessionFeedbackRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void submitFeedback_failedDuplicate_shouldNotCreateNotification() {
+        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(true);
+
+        assertThrows(BaseException.class, () ->
+                sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request())
+        );
+
+        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
     }
 
     private SubmitFeedbackRequest request() {

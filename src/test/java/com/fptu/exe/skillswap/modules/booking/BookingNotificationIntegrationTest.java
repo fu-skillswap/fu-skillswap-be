@@ -185,11 +185,15 @@ class BookingNotificationIntegrationTest {
     @Test
     void rejectBooking_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         bookingService.rejectBooking(mentorUser.getId(), b1.bookingId(), new RejectBookingRequest("No time", "Sorry"));
 
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
-        assertEquals(1, menteeNotis.size());
-        assertEquals(NotificationType.BOOKING_REJECTED.name(), menteeNotis.get(0).getType());
+        assertEquals(unreadBefore + 1, menteeNotis.size());
+        assertTrue(menteeNotis.stream().anyMatch(n ->
+                NotificationType.BOOKING_REJECTED.name().equals(n.getType())
+                        && b1.bookingId().equals(n.getRelatedEntityId())
+        ));
     }
 
     @Test
@@ -203,7 +207,10 @@ class BookingNotificationIntegrationTest {
         
         var mentorNotis = notificationService.getMyNotifications(mentorUser.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, mentorNotis.size());
-        assertEquals(NotificationType.BOOKING_CANCELLED_BY_MENTEE.name(), mentorNotis.get(0).getType()); // it is newest first
+        assertTrue(mentorNotis.stream().anyMatch(n ->
+                NotificationType.BOOKING_CANCELLED_BY_MENTEE.name().equals(n.getType())
+                        && b1.bookingId().equals(n.getRelatedEntityId())
+        ));
     }
 
     @Test
@@ -218,7 +225,10 @@ class BookingNotificationIntegrationTest {
         
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, menteeNotis.size());
-        assertEquals(NotificationType.BOOKING_CANCELLED_BY_MENTOR.name(), menteeNotis.get(0).getType());
+        assertTrue(menteeNotis.stream().anyMatch(n ->
+                NotificationType.BOOKING_CANCELLED_BY_MENTOR.name().equals(n.getType())
+                        && b1.bookingId().equals(n.getRelatedEntityId())
+        ));
     }
 
     @Test
@@ -232,7 +242,10 @@ class BookingNotificationIntegrationTest {
         
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, menteeNotis.size());
-        assertEquals(NotificationType.MEETING_LINK_UPDATED.name(), menteeNotis.get(0).getType());
+        assertTrue(menteeNotis.stream().anyMatch(n ->
+                NotificationType.MEETING_LINK_UPDATED.name().equals(n.getType())
+                        && b1.bookingId().equals(n.getRelatedEntityId())
+        ));
     }
 
     @Test
