@@ -93,6 +93,7 @@ public class MentorDiscoveryService {
 
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
+
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
         String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
         List<String> keywordTokens = normalizeTokens(normalizedKeyword);
@@ -100,13 +101,43 @@ public class MentorDiscoveryService {
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
         int requestedPage = Math.max(safeRequest.getPage(), 0);
         int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
-        boolean relevanceSort = isRelevanceSort(safeRequest.getSortBy());
-        int fetchSize = Math.min(
-                SEARCH_CANDIDATE_CAP,
-                Math.max(requestedSize * Math.max(requestedPage + 1, 1) * 5, requestedSize * 5)
-        );
+        org.springframework.data.domain.Sort.Direction direction = safeRequest.getDirection() == org.springframework.data.domain.Sort.Direction.ASC ? org.springframework.data.domain.Sort.Direction.ASC : org.springframework.data.domain.Sort.Direction.DESC;
+        String sortBy = safeRequest.getSortBy() == null ? "relevance" : safeRequest.getSortBy().trim();
 
-        List<UUID> candidateIds = mentorProfileRepository.findDiscoverableCandidateIds(
+        List<org.springframework.data.domain.Sort.Order> orders = new java.util.ArrayList<>();
+        switch (sortBy) {
+            case "ratingAverage" -> {
+                orders.add(new org.springframework.data.domain.Sort.Order(direction, "averageRating"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "updatedAt"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
+            }
+            case "reviewCount" -> {
+                orders.add(new org.springframework.data.domain.Sort.Order(direction, "totalReviews"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
+            }
+            case "completedSessions" -> {
+                orders.add(new org.springframework.data.domain.Sort.Order(direction, "totalCompletedSessions"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
+            }
+            case "updatedAt" -> {
+                orders.add(new org.springframework.data.domain.Sort.Order(direction, "verifiedAt"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
+            }
+            default -> {
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "updatedAt"));
+                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
+            }
+        }
+        Pageable searchPageable = PageRequest.of(requestedPage, requestedSize, org.springframework.data.domain.Sort.by(orders));
+
+        Page<UUID> candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE,
                 MentorTagType.HELP_TOPIC,
                 safeRequest.getCampusId(),
@@ -114,82 +145,43 @@ public class MentorDiscoveryService {
                 safeRequest.getTeachingMode(),
                 hasTagFilter(safeRequest.getTagIds()),
                 tagIds,
+                hasKeyword ? "%" + normalizedKeyword + "%" : null,
                 currentTime(),
-                PageRequest.of(0, fetchSize)
+                searchPageable
         );
 
+        List<UUID> candidateIds = candidatePage.getContent();
         List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(candidateIds);
         if (rows.isEmpty()) {
             return PageResponse.<MentorDiscoveryCardResponse>builder()
                     .content(List.of())
-                    .page(requestedPage)
-                    .size(requestedSize)
-                    .totalElements(0)
-                    .totalPages(0)
-                    .last(true)
+                    .page(candidatePage.getNumber())
+                    .size(candidatePage.getSize())
+                    .totalElements(candidatePage.getTotalElements())
+                    .totalPages(candidatePage.getTotalPages())
+                    .last(candidatePage.isLast())
                     .build();
         }
 
         Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
-                rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
+                candidateIds,
                 Set.of(MentorTagType.HELP_TOPIC)
         );
         Map<UUID, List<MentorServiceResponse>> servicesByMentor = loadServicesByMentor(
-                rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList()
+                candidateIds
         );
 
-        List<SearchRankedMentor> rankedMentors = rows.stream()
-                .map(row -> rankSearchCandidate(
-                        row,
-                        helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                        servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                        menteeProfile,
-                        normalizedKeyword,
-                        keywordTokens,
-                        hasKeyword || relevanceSort,
-                        hasKeyword
-                ))
+        List<MentorDiscoveryCardResponse> content = rows.stream()
+                .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
                 .toList();
-
-        if (hasKeyword) {
-            rankedMentors = rankedMentors.stream()
-                    .sorted(Comparator
-                            .comparing(SearchRankedMentor::keywordScore).reversed()
-                            .thenComparing(SearchRankedMentor::profileScore, Comparator.reverseOrder())
-                            .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
-                            .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
-                            .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
-                    .toList();
-        } else if (relevanceSort) {
-            rankedMentors = rankedMentors.stream()
-                    .sorted(Comparator
-                            .comparing(SearchRankedMentor::profileScore).reversed()
-                            .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
-                            .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
-                    .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder())))
-                    .toList();
-        } else {
-            rankedMentors = rankedMentors.stream()
-                    .sorted(searchComparator(safeRequest))
-                    .toList();
-        }
-
-        int fromIndex = Math.min(requestedPage * requestedSize, rankedMentors.size());
-        int toIndex = Math.min(fromIndex + requestedSize, rankedMentors.size());
-        List<MentorDiscoveryCardResponse> content = rankedMentors.subList(fromIndex, toIndex).stream()
-                .map(candidate -> toCardResponse(candidate.row(), helpTopicsByMentor.getOrDefault(candidate.row().mentorUserId(), List.of())))
-                .toList();
-
-        long totalElements = rankedMentors.size();
-        int totalPages = requestedSize == 0 ? 0 : (int) Math.ceil((double) totalElements / requestedSize);
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
                 .content(content)
-                .page(requestedPage)
-                .size(requestedSize)
-                .totalElements(totalElements)
-                .totalPages(totalPages)
-                .last(requestedPage >= Math.max(totalPages - 1, 0))
+                .page(candidatePage.getNumber())
+                .size(candidatePage.getSize())
+                .totalElements(candidatePage.getTotalElements())
+                .totalPages(candidatePage.getTotalPages())
+                .last(candidatePage.isLast())
                 .build();
     }
 

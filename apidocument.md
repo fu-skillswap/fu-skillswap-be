@@ -674,6 +674,26 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 
 ## 14. Admin User Management
 
+### GET `/api/admin/users`
+- Auth: `bearerAuth`, role `ADMIN`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
+  - `keyword`
+  - `status`
+  - `roles`
+  - `isAlumni`
+- Mục đích: admin xem danh sách người dùng (chỉ `MENTEE` và `MENTOR`, không bao gồm `ADMIN`).
+- Response:
+  - `PageResponse<AdminUserListItemResponse>`
+  - Lưu ý: Response trả về có chứa thuộc tính `academicProfile` với các trường quan trọng phục vụ quản lý MSSV:
+    - `claimedStudentCode` `string`: MSSV người dùng đã khai báo.
+    - `verifiedStudentCode` `string`: MSSV đã được hệ thống xác thực.
+    - `studentCodeVerified` `boolean`: Trạng thái xác thực MSSV.
+    - `studentCodeConflict` `boolean`: `true` nếu có từ 2 người dùng trở lên khai báo cùng 1 MSSV chưa xác thực.
+
 ### POST `/api/admin/users/{userId}/ban`
 - Auth: `bearerAuth`, role `ADMIN`
 - Path param:

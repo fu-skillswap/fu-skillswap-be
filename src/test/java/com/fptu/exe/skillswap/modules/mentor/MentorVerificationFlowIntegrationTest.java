@@ -29,6 +29,8 @@ import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationServ
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -116,7 +118,7 @@ class MentorVerificationFlowIntegrationTest {
 
         studentProfileRepository.save(StudentProfile.builder()
                 .user(mentorUser)
-                .studentCode("SE123456")
+                .claimedStudentCode("SE123456")
                 .campus(campus)
                 .program(program)
                 .specialization(specialization)
@@ -266,6 +268,116 @@ class MentorVerificationFlowIntegrationTest {
         assertEquals(rejected.requestId(), latest.getPreviousRequest().getId());
     }
 
+    @Test
+    void approveVerification_shouldGrantMentorRoleAndKeepMenteeRole() {
+        UUID mentorId = mentorUser.getId();
+        mentorUser.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE);
+        userRepository.save(mentorUser);
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK");
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        assertTrue(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+        assertTrue(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE));
+    }
+
+    @Test
+    void approveVerification_whenUserAlreadyMentor_shouldNotDuplicateRole() {
+        UUID mentorId = mentorUser.getId();
+        mentorUser.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR);
+        userRepository.save(mentorUser);
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK");
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        long mentorRoleCount = updatedMentor.getRoles().stream()
+                .filter(r -> r == com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)
+                .count();
+        assertEquals(1, mentorRoleCount);
+    }
+
+    @Test
+    void approveVerification_whenUserIsAdmin_shouldThrowConflictAndNotChangeState() {
+        UUID mentorId = mentorUser.getId();
+        mentorUser.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN);
+        userRepository.save(mentorUser);
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        var exception = assertThrows(BaseException.class, () -> 
+            adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK")
+        );
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        assertFalse(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+        
+        var request = mentorVerificationRequestRepository.findById(pending.requestId()).orElseThrow();
+        assertEquals(VerificationStatus.PENDING_REVIEW, request.getStatus());
+        
+        var profile = mentorProfileRepository.findById(mentorId).orElseThrow();
+        assertNotEquals(MentorStatus.ACTIVE, profile.getStatus());
+    }
+
+    @Test
+    void approveVerification_whenUserIsSystemAdmin_shouldThrowConflictAndNotChangeState() {
+        UUID mentorId = mentorUser.getId();
+        mentorUser.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN);
+        userRepository.save(mentorUser);
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        var exception = assertThrows(BaseException.class, () -> 
+            adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK")
+        );
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        assertFalse(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+        
+        var request = mentorVerificationRequestRepository.findById(pending.requestId()).orElseThrow();
+        assertEquals(VerificationStatus.PENDING_REVIEW, request.getStatus());
+    }
+
+    @Test
+    void rejectVerification_shouldNotGrantMentorRole() {
+        UUID mentorId = mentorUser.getId();
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.reject(adminUser.getId(), pending.requestId(), "No");
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        assertFalse(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+    }
+
+    @Test
+    void needsRevision_shouldNotGrantMentorRole() {
+        UUID mentorId = mentorUser.getId();
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.requestRevision(adminUser.getId(), pending.requestId(), "Fix");
+
+        User updatedMentor = userRepository.findById(mentorId).orElseThrow();
+        assertFalse(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+    }
+
+    @Test
+    void approveVerification_shouldActivateMentorProfile() {
+        UUID mentorId = mentorUser.getId();
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK");
+
+        var profile = mentorProfileRepository.findById(mentorId).orElseThrow();
+        assertEquals(MentorStatus.ACTIVE, profile.getStatus());
+    }
+
     private MentorVerificationRequestResponse createSubmittedRequest(UUID mentorId) {
         mentorVerificationService.requestToBecomeMentor(mentorId);
 
@@ -275,7 +387,7 @@ class MentorVerificationFlowIntegrationTest {
 
         studentProfileRepository.save(StudentProfile.builder()
                 .user(mentorUser)
-                .studentCode("SE" + Math.abs(mentorId.hashCode()))
+                .claimedStudentCode("SE" + Math.abs(mentorId.hashCode()))
                 .campus(campus)
                 .program(program)
                 .specialization(specialization)

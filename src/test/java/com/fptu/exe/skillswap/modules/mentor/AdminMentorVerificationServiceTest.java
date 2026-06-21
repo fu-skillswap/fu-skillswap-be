@@ -111,12 +111,36 @@ class AdminMentorVerificationServiceTest {
         User admin = User.builder().id(adminId).email("admin@test.com").build();
 
         when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
-        when(mentorVerificationRequestRepository.findById(requestId)).thenReturn(Optional.empty());
+        when(mentorVerificationRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adminMentorVerificationService.getRequestDetail(adminId, requestId))
                 .isInstanceOfSatisfying(BaseException.class, ex -> {
                     assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.NOT_FOUND);
                     assertThat(ex.getMessage()).contains("Không tìm thấy hồ sơ xác thực mentor");
                 });
+    }
+
+    @Test
+    void approveRejectRequest_shouldUsePessimisticLock() {
+        UUID adminId = UUID.randomUUID();
+        UUID requestId = UUID.randomUUID();
+        User admin = User.builder().id(adminId).email("admin@test.com").build();
+        MentorVerificationRequest request = MentorVerificationRequest.builder()
+                .id(requestId)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .mentor(User.builder().id(UUID.randomUUID()).build())
+                .build();
+
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(mentorVerificationRequestRepository.findByIdForUpdate(requestId)).thenReturn(Optional.of(request));
+
+        try {
+            adminMentorVerificationService.approve(adminId, requestId, "OK");
+        } catch (BaseException ignored) {
+            // Expected to fail at assertReviewLockOwnership or missing profile, 
+            // but findByIdForUpdate should have been called first.
+        }
+
+        org.mockito.Mockito.verify(mentorVerificationRequestRepository).findByIdForUpdate(requestId);
     }
 }

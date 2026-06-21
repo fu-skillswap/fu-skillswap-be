@@ -178,7 +178,7 @@ class DevDemoDataSeederIntegrationTest {
 
                     StudentProfile studentProfile = new StudentProfile();
                     studentProfile.setUser(user);
-                    studentProfile.setStudentCode("SEEDCHECK001");
+                    studentProfile.setClaimedStudentCode("SEEDCHECK001");
                     studentProfile.setCampus(campusRepository.findByCode(CampusCode.HCM).orElseThrow());
                     studentProfile.setProgram(academicProgramRepository.findByCode("CNTT").orElseThrow());
                     studentProfile.setSpecialization(specializationRepository.findByCode("CNTT_KTPM").orElseThrow());

@@ -129,7 +129,11 @@ public class AdminMentorVerificationService {
     @Transactional
     public AdminMentorVerificationRequestResponse getRequestDetail(UUID adminUserId, UUID requestId) {
         User admin = getRequiredUser(adminUserId);
-        MentorVerificationRequest request = getRequiredRequest(requestId);
+        if (requestId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã hồ sơ xác thực không được để trống");
+        }
+        MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
         claimLockIfAvailable(request, admin);
         return mapDetail(request, adminUserId);
     }
@@ -194,6 +198,12 @@ public class AdminMentorVerificationService {
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
 
+        User mentor = request.getMentor();
+        if (mentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN) ||
+            mentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể duyệt quyền Mentor cho tài khoản quản trị viên");
+        }
+
         VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.APPROVED);
         request.setReviewNote(trimToNull(reviewNote));
@@ -213,6 +223,13 @@ public class AdminMentorVerificationService {
         );
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE, reviewer);
+
+        // Grant MENTOR role to user (preserving MENTEE and avoiding duplicates)
+        if (!mentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)) {
+            mentor.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR);
+            userRepository.save(mentor);
+        }
+
         return mapDetail(request, adminUserId);
     }
 
@@ -257,7 +274,11 @@ public class AdminMentorVerificationService {
     }
 
     private MentorVerificationRequest getPendingRequest(UUID requestId) {
-        MentorVerificationRequest request = getRequiredRequest(requestId);
+        if (requestId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã hồ sơ xác thực không được để trống");
+        }
+        MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
         if (request.getStatus() != VerificationStatus.PENDING_REVIEW) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ có thể review hồ sơ đang chờ duyệt");
         }

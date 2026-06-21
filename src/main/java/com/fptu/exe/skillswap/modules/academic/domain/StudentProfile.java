@@ -10,9 +10,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "student_profiles", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_student_profiles_code", columnNames = {"student_code"})
-}, indexes = {
+@Table(name = "student_profiles", indexes = {
     @Index(name = "idx_student_profiles_campus_id", columnList = "campus_id"),
     @Index(name = "idx_student_profiles_program_id", columnList = "program_id"),
     @Index(name = "idx_student_profiles_spec_id", columnList = "specialization_id")
@@ -34,7 +32,10 @@ public class StudentProfile {
     private User user;
 
     @Column(name = "student_code", length = 30)
-    private String studentCode;
+    private String claimedStudentCode;
+
+    @Column(name = "verified_student_code", length = 30, unique = true)
+    private String verifiedStudentCode;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campus_id", foreignKey = @ForeignKey(name = "fk_student_profiles_campus"))

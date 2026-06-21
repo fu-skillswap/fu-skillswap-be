@@ -195,7 +195,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         StudentProfile profile = studentProfileRepository.findWithDetailsByUserId(user.getId())
                 .orElseGet(StudentProfile::new);
         profile.setUser(user);
-        profile.setStudentCode(seed.studentCode());
+        profile.setClaimedStudentCode(seed.studentCode());
         profile.setCampus(campus);
         profile.setProgram(program);
         profile.setSpecialization(specialization);

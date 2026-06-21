@@ -70,6 +70,74 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
+    @Query("""
+            select mp.userId
+            from MentorProfile mp
+            join mp.user u
+            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join sp.campus campus
+            left join sp.program program
+            left join sp.specialization specialization
+            where mp.status = :mentorStatus
+              and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN not member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN not member of u.roles
+              and mp.isAvailable = true
+              and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
+              and mp.verifiedAt is not null
+              and mp.headline is not null and trim(mp.headline) <> ''
+              and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
+              and mp.teachingMode is not null
+              and mp.sessionDuration is not null
+              and exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+              )
+              and (:campusId is null or campus.id = :campusId)
+              and (:specializationId is null or specialization.id = :specializationId)
+              and (:teachingMode is null or mp.teachingMode = :teachingMode)
+              and (:hasTagFilter = false or exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+                      and mt.id.tagId in :tagIds
+              ))
+              and (:keywordPattern is null or (
+                   lower(u.fullName) like lower(:keywordPattern) or
+                   lower(mp.headline) like lower(:keywordPattern) or
+                   lower(mp.expertiseDescription) like lower(:keywordPattern) or
+                   lower(sp.bio) like lower(:keywordPattern) or
+                   lower(campus.name) like lower(:keywordPattern) or
+                   lower(program.nameVi) like lower(:keywordPattern) or
+                   lower(specialization.nameVi) like lower(:keywordPattern) or
+                   exists (
+                        select 1 from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt_search
+                        join com.fptu.exe.skillswap.modules.catalog.domain.Tag t on t.id = mt_search.id.tagId
+                        where mt_search.id.mentorUserId = mp.userId and
+                              (lower(t.nameVi) like lower(:keywordPattern) or lower(t.nameEn) like lower(:keywordPattern) or lower(t.code) like lower(:keywordPattern))
+                   ) or
+                   exists (
+                        select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
+                        where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
+                              (lower(ms_search.title) like lower(:keywordPattern) or lower(ms_search.description) like lower(:keywordPattern))
+                   )
+              ))
+            """)
+    Page<UUID> findDiscoverableCandidateIdsWithKeyword(
+            @Param("mentorStatus") MentorStatus mentorStatus,
+            @Param("helpTopicTagType") MentorTagType helpTopicTagType,
+            @Param("campusId") UUID campusId,
+            @Param("specializationId") UUID specializationId,
+            @Param("teachingMode") TeachingMode teachingMode,
+            @Param("hasTagFilter") boolean hasTagFilter,
+            @Param("tagIds") List<UUID> tagIds,
+            @Param("keywordPattern") String keywordPattern,
+            @Param("now") LocalDateTime now,
+            Pageable pageable);
 
 
     @Query("""

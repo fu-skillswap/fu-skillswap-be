@@ -27,6 +27,8 @@ public record SystemUserResponse(
         @Schema(description = "Thời điểm đăng nhập gần nhất")
         LocalDateTime lastLoginAt,
         @Schema(description = "Thời điểm tạo tài khoản")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        @Schema(description = "Hồ sơ học thuật và trạng thái xác thực mã số sinh viên")
+        AdminUserAcademicResponse academicProfile
 ) {
 }

@@ -66,6 +66,7 @@ public class MentorVerificationService {
     private final MentorProfileService mentorProfileService;
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
+    private final com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -354,9 +355,10 @@ public class MentorVerificationService {
         if (request.documentType() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
         }
-        if (!StringUtils.hasText(request.fileUrl()) || !isValidHttpUrl(request.fileUrl())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ");
+        if (!StringUtils.hasText(request.fileUrl())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
         }
+        validateDocumentUrl(request.fileUrl());
         if (!StringUtils.hasText(request.publicId()) || !isValidPublicId(request.publicId())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không hợp lệ");
         }
@@ -582,14 +584,39 @@ public class MentorVerificationService {
         return normalized;
     }
 
-    private boolean isValidHttpUrl(String fileUrl) {
+    private void validateDocumentUrl(String fileUrl) {
+        if (storageSecurityProperties.getAllowedUrlHosts() == null || storageSecurityProperties.getAllowedUrlHosts().isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Hệ thống chưa cấu hình danh sách domain lưu trữ hợp lệ");
+        }
         try {
             URI uri = new URI(fileUrl.trim());
+            if (!uri.isAbsolute()) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu sai định dạng");
+            }
             String scheme = uri.getScheme();
-            return StringUtils.hasText(uri.getHost())
-                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme));
+            String host = uri.getHost();
+
+            if (!"https".equalsIgnoreCase(scheme)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu phải sử dụng giao thức https an toàn");
+            }
+
+            if (!StringUtils.hasText(host)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ (thiếu host)");
+            }
+
+            String lowerHost = host.toLowerCase();
+            if (lowerHost.equals("localhost") || lowerHost.startsWith("127.") || lowerHost.startsWith("10.") || lowerHost.startsWith("192.168.") || lowerHost.equals("::1") || lowerHost.matches("^172\\.(1[6-9]|2[0-9]|3[0-1])\\..+")) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ (không hỗ trợ IP nội bộ)");
+            }
+
+            boolean isAllowed = storageSecurityProperties.getAllowedUrlHosts().stream()
+                    .anyMatch(allowedHost -> allowedHost.equalsIgnoreCase(host));
+
+            if (!isAllowed) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không thuộc danh sách các nguồn lưu trữ được phép");
+            }
         } catch (URISyntaxException ex) {
-            return false;
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu sai định dạng");
         }
     }
 

@@ -11,6 +11,9 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
 import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserAcademicResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -28,7 +31,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +46,7 @@ public class AdminUserService {
     private final UserSessionRepository userSessionRepository;
     private final AuditLogRepository auditLogRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StudentProfileRepository studentProfileRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminUserListItemResponse> getVisibleUsers(AdminUserListRequest request) {
@@ -59,8 +66,28 @@ public class AdminUserService {
                 buildPageable(safeRequest)
         );
 
+        List<User> users = page.getContent();
+        
+        // Bulk fetch profiles and compute conflicts
+        List<UUID> userIds = users.stream().map(User::getId).toList();
+        List<StudentProfile> profiles = studentProfileRepository.findByUserIdIn(userIds);
+        Map<UUID, StudentProfile> profileMap = profiles.stream()
+                .collect(Collectors.toMap(StudentProfile::getUserId, p -> p));
+
+        List<String> claimedCodes = profiles.stream()
+                .map(StudentProfile::getClaimedStudentCode)
+                .filter(code -> code != null && !code.isBlank())
+                .toList();
+
+        Set<String> conflictedCodes = Set.of();
+        if (!claimedCodes.isEmpty()) {
+            conflictedCodes = Set.copyOf(studentProfileRepository.findConflictingClaimedStudentCodes(claimedCodes));
+        }
+        
+        final Set<String> finalConflictedCodes = conflictedCodes;
+
         return PageResponse.<AdminUserListItemResponse>builder()
-                .content(page.getContent().stream().map(this::toAdminUserListItem).toList())
+                .content(users.stream().map(user -> toAdminUserListItem(user, profileMap.get(user.getId()), finalConflictedCodes)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -118,6 +145,12 @@ public class AdminUserService {
                 .build();
         auditLogRepository.save(auditLog);
 
+        StudentProfile profile = studentProfileRepository.findById(userId).orElse(null);
+        Set<String> finalConflictedCodes = Set.of();
+        if (profile != null && profile.getClaimedStudentCode() != null) {
+            finalConflictedCodes = Set.copyOf(studentProfileRepository.findConflictingClaimedStudentCodes(List.of(profile.getClaimedStudentCode())));
+        }
+
         return SystemUserResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -127,6 +160,7 @@ public class AdminUserService {
                 .roles(roles)
                 .lastLoginAt(user.getLastLoginAt())
                 .createdAt(user.getCreatedAt())
+                .academicProfile(buildAcademicResponse(profile, finalConflictedCodes))
                 .build();
     }
 
@@ -178,7 +212,7 @@ public class AdminUserService {
         }
     }
 
-    private AdminUserListItemResponse toAdminUserListItem(User user) {
+    private AdminUserListItemResponse toAdminUserListItem(User user, StudentProfile profile, Set<String> conflictedCodes) {
         List<RoleCode> visibleRoles = new ArrayList<>();
         if (user.getRoles() != null) {
             if (user.getRoles().contains(RoleCode.MENTEE)) {
@@ -188,6 +222,7 @@ public class AdminUserService {
                 visibleRoles.add(RoleCode.MENTOR);
             }
         }
+
         return AdminUserListItemResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
@@ -197,6 +232,22 @@ public class AdminUserService {
                 .roles(visibleRoles)
                 .lastLoginAt(user.getLastLoginAt())
                 .createdAt(user.getCreatedAt())
+                .academicProfile(buildAcademicResponse(profile, conflictedCodes))
+                .build();
+    }
+
+    private AdminUserAcademicResponse buildAcademicResponse(StudentProfile profile, Set<String> conflictedCodes) {
+        if (profile == null) {
+            return null;
+        }
+        String claimed = profile.getClaimedStudentCode();
+        String verified = profile.getVerifiedStudentCode();
+        boolean conflict = claimed != null && conflictedCodes.contains(claimed);
+        return AdminUserAcademicResponse.builder()
+                .claimedStudentCode(claimed)
+                .verifiedStudentCode(verified)
+                .studentCodeVerified(verified != null)
+                .studentCodeConflict(conflict)
                 .build();
     }
 }

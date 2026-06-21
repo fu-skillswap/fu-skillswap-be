@@ -36,6 +36,9 @@ server:
 application:
   upload:
     dir: ./uploads/files
+  storage:
+    security:
+      allowed-url-hosts: ${STORAGE_ALLOWED_HOSTS:res.cloudinary.com}
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}

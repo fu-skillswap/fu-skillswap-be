@@ -150,11 +150,8 @@ public class AcademicService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không thuộc ngành học đã chọn");
         }
 
-        // Validate unique student code
+        // Normalize student code
         String normalizedStudentCode = request.getStudentCode().trim().toUpperCase();
-        if (studentProfileRepository.existsByStudentCodeAndUserIdNot(normalizedStudentCode, userId)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã số sinh viên đã tồn tại trên hệ thống");
-        }
 
         // Update user fields if provided
         if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
@@ -173,7 +170,7 @@ public class AcademicService {
                     return studentProfile;
                 });
 
-        profile.setStudentCode(normalizedStudentCode);
+        profile.setClaimedStudentCode(normalizedStudentCode);
         profile.setCampus(campus);
         profile.setProgram(program);
         profile.setSpecialization(specialization);
@@ -201,7 +198,7 @@ public class AcademicService {
         return StudentProfileResponse.builder()
                 .userId(profile.getUserId())
                 .email(user.getEmail())
-                .studentCode(profile.getStudentCode())
+                .studentCode(profile.getClaimedStudentCode())
                 .displayName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
                 .campus(profile.getCampus() == null ? null : mapToCampusResponse(profile.getCampus()))
@@ -238,8 +235,8 @@ public class AcademicService {
                 || profile.getSpecialization() == null
                 || profile.getSemester() == null
                 || profile.getIntakeYear() == null
-                || profile.getStudentCode() == null
-                || profile.getStudentCode().isBlank()) {
+                || profile.getClaimedStudentCode() == null
+                || profile.getClaimedStudentCode().isBlank()) {
             return false;
         }
         return !profile.isAlumni() || profile.getGraduationYear() != null;
