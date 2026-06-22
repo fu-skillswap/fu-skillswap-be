@@ -90,7 +90,7 @@ public class MentorDiscoveryRepositoryTest {
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
-                null, LocalDateTime.now(), PageRequest.of(0, 10)
+                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -103,7 +103,7 @@ public class MentorDiscoveryRepositoryTest {
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
-                null, LocalDateTime.now(), PageRequest.of(0, 10)
+                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertEquals(1, result.getContent().size());
         assertEquals(user.getId(), result.getContent().get(0));
@@ -117,7 +117,7 @@ public class MentorDiscoveryRepositoryTest {
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
-                null, LocalDateTime.now(), PageRequest.of(0, 10)
+                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -130,7 +130,7 @@ public class MentorDiscoveryRepositoryTest {
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
-                null, LocalDateTime.now(), PageRequest.of(0, 10)
+                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -143,8 +143,54 @@ public class MentorDiscoveryRepositoryTest {
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
-                null, LocalDateTime.now(), PageRequest.of(0, 10)
+                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
+    }
+
+    @Test
+    void searchMentors_withoutKeyword_shouldNotReturnMenteeOnlyUser() {
+        User user = createTestUser("mentee-nokey@test.com", Set.of(RoleCode.MENTEE), UserStatus.ACTIVE);
+        createDiscoverableProfile(user, "Mentee Headline");
+        entityManager.flush();
+
+        Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
+                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
+                LocalDateTime.now(), PageRequest.of(0, 10)
+        );
+
+        assertTrue(result.getContent().isEmpty());
+    }
+
+    @Test
+    void searchMentors_withoutKeyword_shouldNotReturnAdmin() {
+        User user = createTestUser("admin-nokey@test.com", Set.of(RoleCode.ADMIN, RoleCode.MENTOR), UserStatus.ACTIVE);
+        createDiscoverableProfile(user, "Admin Headline");
+        entityManager.flush();
+
+        Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
+                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
+                LocalDateTime.now(), PageRequest.of(0, 10)
+        );
+
+        assertTrue(result.getContent().isEmpty());
+    }
+
+    @Test
+    void searchMentors_keywordShouldMatchVietnameseTextWithoutDiacritics() {
+        User user = createTestUser("accented@test.com", Set.of(RoleCode.MENTEE, RoleCode.MENTOR), UserStatus.ACTIVE);
+        createDiscoverableProfile(user, "Hướng dẫn môn học");
+        entityManager.flush();
+
+        Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
+                "%huong dan mon hoc%", "%huong dan mon hoc%",
+                "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
+                "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",
+                LocalDateTime.now(), PageRequest.of(0, 10)
+        );
+
+        assertEquals(1, result.getContent().size());
+        assertEquals(user.getId(), result.getContent().getFirst());
     }
 }

@@ -65,18 +65,14 @@ public class MentorDiscoveryService {
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final UUID EMPTY_TAG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
+    private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
     private static final BigDecimal SAME_PROGRAM_SCORE = decimal(40);
     private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(30);
     private static final BigDecimal SAME_CAMPUS_SCORE = decimal(10);
     private static final BigDecimal MENTOR_ALUMNI_SCORE = decimal(20);
     private static final BigDecimal MENTOR_HIGHER_SEMESTER_SCORE = decimal(15);
     private static final BigDecimal MENTOR_EQUAL_SEMESTER_SCORE = decimal(10);
-    private static final BigDecimal SEARCH_EXACT_PHRASE_SCORE = decimal(50);
-    private static final BigDecimal SEARCH_TOKEN_SCORE = decimal(8);
-    private static final BigDecimal SEARCH_TAG_SCORE = decimal(10);
-    private static final BigDecimal SEARCH_SERVICE_SCORE = decimal(12);
-    private static final BigDecimal SEARCH_BIO_SCORE = decimal(8);
-    private static final int SEARCH_CANDIDATE_CAP = 200;
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -95,10 +91,9 @@ public class MentorDiscoveryService {
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
 
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
-        String normalizedKeyword = normalizeKeyword(safeRequest.getKeyword());
-        List<String> keywordTokens = normalizeTokens(normalizedKeyword);
+        String keywordPattern = toLikePattern(safeRequest.getKeyword());
+        String normalizedKeywordPattern = toLikePattern(normalizeSearchText(safeRequest.getKeyword()));
 
-        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
         int requestedPage = Math.max(safeRequest.getPage(), 0);
         int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
         org.springframework.data.domain.Sort.Direction direction = safeRequest.getDirection() == org.springframework.data.domain.Sort.Direction.ASC ? org.springframework.data.domain.Sort.Direction.ASC : org.springframework.data.domain.Sort.Direction.DESC;
@@ -146,7 +141,10 @@ public class MentorDiscoveryService {
                         safeRequest.getTeachingMode(),
                         hasTagFilter(safeRequest.getTagIds()),
                         tagIds,
-                        "%" + normalizedKeyword + "%",
+                        keywordPattern,
+                        normalizedKeywordPattern,
+                        ACCENTED_CHARACTERS,
+                        PLAIN_CHARACTERS,
                         currentTime(),
                         searchPageable
                 )
@@ -178,9 +176,6 @@ public class MentorDiscoveryService {
         Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
                 candidateIds,
                 Set.of(MentorTagType.HELP_TOPIC)
-        );
-        Map<UUID, List<MentorServiceResponse>> servicesByMentor = loadServicesByMentor(
-                candidateIds
         );
 
         List<MentorDiscoveryCardResponse> content = rows.stream()
@@ -396,151 +391,6 @@ public class MentorDiscoveryService {
         return result;
     }
 
-    private Map<UUID, List<MentorServiceResponse>> loadServicesByMentor(Collection<UUID> mentorUserIds) {
-        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
-            return Map.of();
-        }
-
-        Map<UUID, List<MentorServiceResponse>> result = new HashMap<>();
-        mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(new ArrayList<>(mentorUserIds))
-                .forEach(service -> result.computeIfAbsent(
-                                service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId(),
-                                ignored -> new ArrayList<>())
-                        .add(toServiceResponse(service)));
-        result.remove(null);
-        return result;
-    }
-
-    private SearchRankedMentor rankSearchCandidate(
-            MentorDiscoveryQueryRow row,
-            List<MentorTagResponse> helpTopicTags,
-            List<MentorServiceResponse> services,
-            StudentProfile menteeProfile,
-            String normalizedKeyword,
-            List<String> keywordTokens,
-            boolean relevanceSort,
-            boolean keywordSearch
-    ) {
-        BigDecimal keywordScore = keywordSearch
-                ? calculateKeywordScore(row, helpTopicTags, services, normalizedKeyword, keywordTokens)
-                : ZERO;
-        BigDecimal profileScore = relevanceSort ? calculateMatchScore(row, menteeProfile, new ArrayList<>()) : ZERO;
-        return new SearchRankedMentor(row, helpTopicTags, services, keywordScore, profileScore);
-    }
-
-    private BigDecimal calculateKeywordScore(
-            MentorDiscoveryQueryRow row,
-            List<MentorTagResponse> helpTopicTags,
-            List<MentorServiceResponse> services,
-            String normalizedKeyword,
-            List<String> keywordTokens
-    ) {
-        if (normalizedKeyword == null || normalizedKeyword.isBlank()) {
-            return ZERO;
-        }
-
-        String fullText = normalizeSearchText(buildSearchCorpus(row, helpTopicTags, services));
-        if (fullText.isBlank()) {
-            return ZERO;
-        }
-
-        BigDecimal score = ZERO;
-        if (fullText.contains(normalizedKeyword)) {
-            score = score.add(SEARCH_EXACT_PHRASE_SCORE);
-        }
-
-        Set<String> normalizedTokenSet = keywordTokens == null ? Set.of() : new LinkedHashSet<>(keywordTokens);
-        int matchedTokens = 0;
-        for (String token : normalizedTokenSet) {
-            if (token.isBlank()) {
-                continue;
-            }
-            if (containsToken(fullText, token)) {
-                matchedTokens++;
-                score = score.add(SEARCH_TOKEN_SCORE);
-            }
-        }
-
-        for (MentorTagResponse tag : helpTopicTags) {
-            String tagText = normalizeSearchText((tag.nameVi() == null ? "" : tag.nameVi()) + " " + (tag.code() == null ? "" : tag.code()));
-            if (!tagText.isBlank() && containsAnyToken(tagText, normalizedTokenSet)) {
-                score = score.add(SEARCH_TAG_SCORE);
-            }
-        }
-
-        for (MentorServiceResponse service : services) {
-            String serviceText = normalizeSearchText((service.title() == null ? "" : service.title()) + " " + (service.description() == null ? "" : service.description()));
-            if (!serviceText.isBlank() && containsAnyToken(serviceText, normalizedTokenSet)) {
-                score = score.add(SEARCH_SERVICE_SCORE);
-            }
-        }
-
-        if (row.bio() != null && containsAnyToken(normalizeSearchText(row.bio()), normalizedTokenSet)) {
-            score = score.add(SEARCH_BIO_SCORE);
-        }
-
-        if (matchedTokens > 0 && !normalizedTokenSet.isEmpty()) {
-            BigDecimal coverageBonus = BigDecimal.valueOf((matchedTokens * 100L) / normalizedTokenSet.size())
-                    .divide(BigDecimal.valueOf(10), 2, RoundingMode.HALF_UP);
-            score = score.add(coverageBonus);
-        }
-
-        return score.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private boolean containsAnyToken(String text, Set<String> tokens) {
-        if (text == null || text.isBlank() || tokens == null || tokens.isEmpty()) {
-            return false;
-        }
-        for (String token : tokens) {
-            if (containsToken(text, token)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean containsToken(String text, String token) {
-        if (text == null || token == null || token.isBlank()) {
-            return false;
-        }
-        return text.contains(token) || text.startsWith(token);
-    }
-
-    private String buildSearchCorpus(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags, List<MentorServiceResponse> services) {
-        List<String> parts = new ArrayList<>();
-        addIfHasText(parts, row.displayName());
-        addIfHasText(parts, row.headline());
-        addIfHasText(parts, row.expertiseDescription());
-        addIfHasText(parts, row.supportingSubjects());
-        addIfHasText(parts, row.bio());
-        addIfHasText(parts, row.campusName());
-        addIfHasText(parts, row.programName());
-        addIfHasText(parts, row.specializationName());
-        helpTopicTags.forEach(tag -> {
-            addIfHasText(parts, tag.nameVi());
-            addIfHasText(parts, tag.nameEn());
-            addIfHasText(parts, tag.code());
-        });
-        services.forEach(service -> {
-            addIfHasText(parts, service.title());
-            addIfHasText(parts, service.description());
-            if (service.helpTopics() != null) {
-                service.helpTopics().forEach(tag -> {
-                    addIfHasText(parts, tag.nameVi());
-                    addIfHasText(parts, tag.code());
-                });
-            }
-        });
-        return String.join(" ", parts);
-    }
-
-    private void addIfHasText(List<String> parts, String value) {
-        if (value != null && !value.trim().isEmpty()) {
-            parts.add(value);
-        }
-    }
-
     private String normalizeSearchText(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -553,41 +403,6 @@ public class MentorDiscoveryService {
                 .replaceAll("\\s+", " ")
                 .trim();
         return normalized;
-    }
-
-    private List<String> normalizeTokens(String keyword) {
-        String normalizedKeyword = normalizeSearchText(keyword);
-        if (normalizedKeyword.isBlank()) {
-            return List.of();
-        }
-
-        Set<String> tokens = new LinkedHashSet<>();
-        for (String token : normalizedKeyword.split("\\s+")) {
-            if (!token.isBlank()) {
-                tokens.add(token);
-                tokens.addAll(expandSearchToken(token));
-            }
-        }
-        return tokens.stream().filter(token -> !token.isBlank()).toList();
-    }
-
-    private List<String> expandSearchToken(String token) {
-        return switch (token) {
-            case "cv", "resume" -> List.of("cv", "resume", "ho so");
-            case "interview" -> List.of("phong van");
-            case "project" -> List.of("do an");
-            case "study", "planning", "plan" -> List.of("ke hoach hoc tap");
-            default -> List.of();
-        };
-    }
-
-    private record SearchRankedMentor(
-            MentorDiscoveryQueryRow row,
-            List<MentorTagResponse> helpTopics,
-            List<MentorServiceResponse> services,
-            BigDecimal keywordScore,
-            BigDecimal profileScore
-    ) {
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
@@ -685,12 +500,18 @@ public class MentorDiscoveryService {
     private boolean isDiscoverableMentor(MentorProfile mentorProfile) {
         return mentorProfile != null
                 && mentorProfile.getStatus() == MentorStatus.ACTIVE
+                && mentorProfile.getUser() != null
+                && mentorProfile.getUser().getStatus() == com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+                && mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)
+                && !mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN)
+                && !mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN)
                 && mentorProfile.getVerifiedAt() != null
                 && hasText(mentorProfile.getHeadline())
                 && hasText(mentorProfile.getExpertiseDescription())
                 && mentorProfile.isAvailable()
                 && mentorProfile.getTeachingMode() != null
-                && mentorProfile.getSessionDuration() != null;
+                && mentorProfile.getSessionDuration() != null
+                && !isBookingSuspended(mentorProfile);
     }
 
     private boolean isBookingSuspended(MentorProfile mentorProfile) {
@@ -731,29 +552,6 @@ public class MentorDiscoveryService {
                 .toList();
     }
 
-    private Comparator<SearchRankedMentor> searchComparator(MentorDiscoverySearchRequest request) {
-        boolean ascending = request.getDirection() == Sort.Direction.ASC;
-        String sortBy = request.getSortBy() == null ? "relevance" : request.getSortBy().trim();
-
-        Comparator<SearchRankedMentor> primary = switch (sortBy) {
-            case "ratingAverage" -> Comparator.comparing(candidate -> defaultDecimal(candidate.row().ratingAverage()));
-            case "reviewCount" -> Comparator.comparing(candidate -> defaultInteger(candidate.row().reviewCount()));
-            case "completedSessions" -> Comparator.comparing(candidate -> defaultInteger(candidate.row().completedSessions()));
-            case "updatedAt" -> Comparator.comparing(
-                    candidate -> candidate.row().verifiedAt(),
-                    Comparator.nullsLast(Comparator.naturalOrder())
-            );
-            default -> Comparator.comparing(SearchRankedMentor::profileScore);
-        };
-        if (!ascending) {
-            primary = primary.reversed();
-        }
-        return primary
-                .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
-                .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
-                .thenComparing(candidate -> candidate.row().mentorUserId());
-    }
-
     private Pageable reviewPageable(BasePageRequest request) {
         int page = Math.max(request.getPage(), 0);
         int size = Math.min(Math.max(request.getSize(), 1), 20);
@@ -784,15 +582,12 @@ public class MentorDiscoveryService {
         return tagIds != null && !tagIds.isEmpty();
     }
 
-    private String normalizeKeyword(String keyword) {
-        if (keyword == null || keyword.trim().isEmpty()) {
+    private String toLikePattern(String value) {
+        String normalized = normalizeSearchText(value);
+        if (normalized.isBlank()) {
             return null;
         }
-        return keyword.trim();
-    }
-
-    private boolean isRelevanceSort(String sortBy) {
-        return sortBy == null || sortBy.isBlank() || "relevance".equalsIgnoreCase(sortBy.trim());
+        return "%" + normalized + "%";
     }
 
     private boolean sameUuid(UUID left, UUID right) {

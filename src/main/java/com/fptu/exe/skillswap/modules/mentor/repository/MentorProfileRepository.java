@@ -6,8 +6,10 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -33,6 +35,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             left join sp.specialization specialization
             where mp.status = :mentorStatus
               and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN not member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN not member of u.roles
               and mp.isAvailable = true
               and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
               and mp.verifiedAt is not null
@@ -69,6 +74,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             left join sp.specialization specialization
             where mp.status = :mentorStatus
               and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN not member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN not member of u.roles
               and mp.isAvailable = true
               and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
               and mp.verifiedAt is not null
@@ -104,7 +112,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
-    @Query("""
+    @Query(value = """
             select mp.userId
             from MentorProfile mp
             join mp.user u
@@ -140,24 +148,119 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       and mt.id.tagType = :helpTopicTagType
                       and mt.id.tagId in :tagIds
               ))
-              and (:keywordPattern is null or (
-                   lower(u.fullName) like lower(:keywordPattern) or
-                   lower(mp.headline) like lower(:keywordPattern) or
-                   lower(mp.expertiseDescription) like lower(:keywordPattern) or
-                   lower(sp.bio) like lower(:keywordPattern) or
-                   lower(campus.name) like lower(:keywordPattern) or
-                   lower(program.nameVi) like lower(:keywordPattern) or
-                   lower(specialization.nameVi) like lower(:keywordPattern) or
+              and (:keywordPattern is null or :normalizedKeywordPattern is null or (
+                   lower(coalesce(u.fullName, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(u.fullName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.headline, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.expertiseDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(sp.bio, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(campus.name, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(campus.name, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(program.nameVi, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(program.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(specialization.nameVi, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(specialization.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   exists (
+                         select 1 from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt_search
+                         join com.fptu.exe.skillswap.modules.catalog.domain.Tag t on t.id = mt_search.id.tagId
+                         where mt_search.id.mentorUserId = mp.userId and
+                               (
+                                   lower(coalesce(t.nameVi, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(t.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(t.nameEn, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(t.nameEn, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(t.code, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(t.code, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                               )
+                   ) or
+                   exists (
+                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
+                         where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
+                               (
+                                   lower(coalesce(ms_search.title, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ms_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(ms_search.description, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                               )
+                    )
+               ))
+            """,
+            countQuery = """
+            select count(mp.userId)
+            from MentorProfile mp
+            join mp.user u
+            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join sp.campus campus
+            left join sp.program program
+            left join sp.specialization specialization
+            where mp.status = :mentorStatus
+              and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN not member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN not member of u.roles
+              and mp.isAvailable = true
+              and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
+              and mp.verifiedAt is not null
+              and mp.headline is not null and trim(mp.headline) <> ''
+              and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
+              and mp.teachingMode is not null
+              and mp.sessionDuration is not null
+              and exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+              )
+              and (:campusId is null or campus.id = :campusId)
+              and (:specializationId is null or specialization.id = :specializationId)
+              and (:teachingMode is null or mp.teachingMode = :teachingMode)
+              and (:hasTagFilter = false or exists (
+                    select 1
+                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
+                    where mt.id.mentorUserId = mp.userId
+                      and mt.id.tagType = :helpTopicTagType
+                      and mt.id.tagId in :tagIds
+              ))
+              and (:keywordPattern is null or :normalizedKeywordPattern is null or (
+                   lower(coalesce(u.fullName, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(u.fullName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.headline, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.expertiseDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(sp.bio, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(campus.name, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(campus.name, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(program.nameVi, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(program.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(specialization.nameVi, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(specialization.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    exists (
                         select 1 from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt_search
                         join com.fptu.exe.skillswap.modules.catalog.domain.Tag t on t.id = mt_search.id.tagId
                         where mt_search.id.mentorUserId = mp.userId and
-                              (lower(t.nameVi) like lower(:keywordPattern) or lower(t.nameEn) like lower(:keywordPattern) or lower(t.code) like lower(:keywordPattern))
+                              (
+                                  lower(coalesce(t.nameVi, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(t.nameVi, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(t.nameEn, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(t.nameEn, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(t.code, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(t.code, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                              )
                    ) or
                    exists (
                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
                         where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
-                              (lower(ms_search.title) like lower(:keywordPattern) or lower(ms_search.description) like lower(:keywordPattern))
+                              (
+                                  lower(coalesce(ms_search.title, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ms_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(ms_search.description, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                              )
                    )
               ))
             """)
@@ -170,6 +273,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("hasTagFilter") boolean hasTagFilter,
             @Param("tagIds") List<UUID> tagIds,
             @Param("keywordPattern") String keywordPattern,
+            @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
+            @Param("accentedCharacters") String accentedCharacters,
+            @Param("plainCharacters") String plainCharacters,
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
@@ -224,6 +330,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             left join sp.specialization specialization
             where mp.status = :mentorStatus
               and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN not member of u.roles
+              and com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN not member of u.roles
               and mp.userId <> :excludedUserId
               and mp.isAvailable = true
               and (mp.bookingSuspendedUntil is null or mp.bookingSuspendedUntil <= :now)
@@ -296,4 +405,13 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     );
 
     List<MentorProfile> findByStatus(MentorStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select mp from MentorProfile mp where mp.userId = :userId")
+    Optional<MentorProfile> findByIdForUpdate(@Param("userId") UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"user"})
+    @Query("select mp from MentorProfile mp where mp.userId = :userId")
+    Optional<MentorProfile> findWithUserByUserIdForUpdate(@Param("userId") UUID userId);
 }
