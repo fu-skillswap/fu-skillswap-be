@@ -32,7 +32,7 @@ import java.util.UUID;
 @RequestMapping("/api/mentor/bookings")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Mentor Bookings", description = "Các API để mentor xử lý hàng đợi booking request và cập nhật thông tin buổi mentoring")
+@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorBookingController {
 

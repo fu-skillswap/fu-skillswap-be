@@ -26,7 +26,7 @@ import org.springframework.util.StringUtils;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Xác thực", description = "Các API đăng nhập, làm mới token và đăng xuất")
+@Tag(name = "Authentication", description = "Sign-in, token refresh, logout, and current user profile check")
 public class AuthController {
 
     private final IdentityService identityService;

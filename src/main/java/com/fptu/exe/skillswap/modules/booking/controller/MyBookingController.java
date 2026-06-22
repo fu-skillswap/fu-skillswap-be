@@ -32,7 +32,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/bookings")
 @RequiredArgsConstructor
-@Tag(name = "My Bookings", description = "Các API để người dùng đã đăng nhập xem và thao tác trên booking liên quan trực tiếp tới mình")
+@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
 @SecurityRequirement(name = "bearerAuth")
 public class MyBookingController {
 

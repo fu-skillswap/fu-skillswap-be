@@ -23,12 +23,15 @@ public class OpenApiConfig {
 
         return new OpenAPI()
                 .addServersItem(new Server()
-                        .url("/")
+                        .url("http://localhost:8080")
                         .description("🖥️ Local Development Server"))
+                .addServersItem(new Server()
+                        .url("https://api.skillswap.asia")
+                        .description("🌐 Production API Server"))
                 .info(new Info()
                         .title("SkillSwap API")
                         .description("""
-                            ## SkillSwap API Documentation - EXE101
+                            ## SkillSwap API Documentation - EXE201
                             
                             SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
                             Backend cung cấp REST API cho xác thực Google, hồ sơ học thuật, hồ sơ mentor,
@@ -63,8 +66,7 @@ public class OpenApiConfig {
                                 .name("Quang Tam")
                                 .email("quangtam2005.lttg@gmail.com"))
                         .license(new License()
-                                .name("Internal - EXE101 Project")))
-                .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
+                                .name("Internal - EXE201 Project")))
                 .components(new Components()
                         .addSecuritySchemes(securitySchemeName,
                                 new SecurityScheme()
@@ -75,17 +77,20 @@ public class OpenApiConfig {
                                         .bearerFormat("JWT")
                                         .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`")))
                 .tags(List.of(
-                        new Tag()
-                                .name("Xác thực")
-                                .description("Đăng nhập Google, làm mới token, đăng xuất và xem thông tin tài khoản hiện tại"),
-                        new Tag()
-                                .name("Hồ sơ học thuật")
-                                .description("Xem và cập nhật hồ sơ sinh viên FPT University (MSSV, cơ sở, ngành, chuyên ngành, ...)"),
-                        new Tag()
-                                .name("Danh mục học thuật")
-                                .description("Tra cứu danh sách cơ sở, ngành học và chuyên ngành – không yêu cầu đăng nhập"),
-                        new Tag()
-                                .name("Hệ thống")
-                                .description("Các API kiểm tra trạng thái hoạt động của server")));
+                        new Tag().name("Authentication").description("Sign-in, token refresh, logout, and current user profile check"),
+                        new Tag().name("Academic Profile").description("User FPT academic profile management (MSSV, campus, major, specialization)"),
+                        new Tag().name("Academic Catalog").description("Lookups for campus list, academic programs, specializations, and help topics"),
+                        new Tag().name("Mentor Verification").description("Flow for mentees submitting portfolios and documentation to become verified mentors"),
+                        new Tag().name("Mentor Profile").description("Mentor portfolio management (available slots, headline, expertise description, service offerings)"),
+                        new Tag().name("Mentor Discovery").description("Discovering mentors, listing availability slots, and browsing mentor public profiles"),
+                        new Tag().name("Booking & Session").description("Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links"),
+                        new Tag().name("Review & Rating").description("Mentee reviews and ratings for completed mentoring sessions"),
+                        new Tag().name("Notification").description("In-app notification center for booking updates and alert logs"),
+                        new Tag().name("Admin - Users").description("Admin user listing, status configuration (lock/unlock), and role assignment"),
+                        new Tag().name("Admin - Mentors").description("Admin list and details view for system mentors"),
+                        new Tag().name("Admin - Mentor Verification").description("Admin approval workflow for pending mentor verification requests"),
+                        new Tag().name("Admin - Bookings").description("System-wide operational monitoring of bookings and mentoring session records"),
+                        new Tag().name("System").description("Server health check and diagnostic tools")
+                ));
     }
 }

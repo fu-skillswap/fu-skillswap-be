@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/me/student-profile")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Hồ sơ học thuật", description = "Quản lý hồ sơ sinh viên FPT University của người dùng đang đăng nhập")
+@Tag(name = "Academic Profile", description = "User FPT academic profile management (MSSV, campus, major, specialization)")
 @SecurityRequirement(name = "bearerAuth")
 public class StudentProfileController {
 

@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/me/mentor-profile")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Hồ sơ mentor", description = "Quản lý onboarding hồ sơ mentor của người dùng đang đăng nhập")
+@Tag(name = "Mentor Profile", description = "Mentor portfolio management (available slots, headline, expertise description, service offerings)")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorProfileController {
 

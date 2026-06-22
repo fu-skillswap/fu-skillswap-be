@@ -35,7 +35,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/mentors")
 @RequiredArgsConstructor
-@Tag(name = "Mentor Discovery", description = "Các API discovery để mentee duyệt và nhận gợi ý mentor")
+@Tag(name = "Mentor Discovery", description = "Discovering mentors, listing availability slots, and browsing mentor public profiles")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorDiscoveryController {
 

@@ -26,14 +26,22 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
-@Tag(name = "Admin User Management", description = "API quản lý người dùng dành cho Admin")
+@Tag(name = "Admin - Users", description = "Admin user listing, status configuration (lock/unlock), and role assignment")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN','SYSTEM_ADMIN')")
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
 
-    @Operation(summary = "Lấy danh sách user thường dành cho admin", description = "Chỉ trả về user có role MENTEE hoặc MENTOR, loại bỏ hoàn toàn ADMIN và SYSTEM_ADMIN.")
+    @Operation(
+            summary = "Lấy danh sách user thường dành cho admin",
+            description = "Chỉ trả về user có role MENTEE hoặc MENTOR. Loại bỏ hoàn toàn ADMIN và SYSTEM_ADMIN. " +
+                    "Quy tắc lọc theo role:\n" +
+                    "- role=MENTEE: Trả về người dùng chỉ có vai trò MENTEE duy nhất (pure mentee), loại trừ người dùng có cả vai trò MENTOR.\n" +
+                    "- role=MENTOR: Trả về tất cả người dùng có khả năng làm mentor (bao gồm cả những người dùng có cả 2 vai trò MENTEE và MENTOR).\n" +
+                    "- Không truyền role: Trả về tất cả người dùng thuộc nhóm visible (không có quyền ADMIN/SYSTEM_ADMIN).\n\n" +
+                    "Hỗ trợ phân trang (page, size), tìm kiếm theo từ khóa (keyword), lọc theo trạng thái hoạt động (status) và sắp xếp (sortBy, direction)."
+    )
     @GetMapping
     public ApiResponse<PageResponse<AdminUserListItemResponse>> getUsers(
             @ParameterObject @ModelAttribute AdminUserListRequest request

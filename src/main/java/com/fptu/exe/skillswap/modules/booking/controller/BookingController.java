@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
-@Tag(name = "Booking", description = "Các API để mentee gửi booking request cho mentor. Booking mới tạo chỉ là yêu cầu chờ duyệt, chưa khóa slot ngay.")
+@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
 @SecurityRequirement(name = "bearerAuth")
 public class BookingController {
 

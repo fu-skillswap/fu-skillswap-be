@@ -459,6 +459,7 @@ class BookingConcurrencyIntegrationTest {
                 sessionFeedbackService.submitFeedback(reviewerId, bookingId, req);
                 return true;
             } catch (Exception e) {
+                e.printStackTrace();
                 return false;
             }
         };
@@ -472,6 +473,7 @@ class BookingConcurrencyIntegrationTest {
                 bookingService.cancelBookingByMentor(mentorId, bookingId, new com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest("Late cancellation"));
                 return true;
             } catch (Exception e) {
+                e.printStackTrace();
                 return false;
             }
         };

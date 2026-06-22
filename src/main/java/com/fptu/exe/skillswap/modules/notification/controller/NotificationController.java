@@ -24,7 +24,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "Các API hiển thị và quản lý thông báo trong ứng dụng của User hiện tại.")
+@Tag(name = "Notification", description = "In-app notification center for booking updates and alert logs")
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 

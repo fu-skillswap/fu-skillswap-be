@@ -87,6 +87,9 @@ class BookingServiceTest {
     @Mock
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private BookingService bookingService;
 

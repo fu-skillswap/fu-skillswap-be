@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class SessionFeedbackService {
     private final BookingRepository bookingRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final NotificationService notificationService;
+    private final EntityManager entityManager;
 
     @Transactional
     public SessionFeedbackResponse submitFeedback(UUID reviewerId, UUID bookingId, SubmitFeedbackRequest request) {
@@ -97,6 +99,7 @@ public class SessionFeedbackService {
     private void updateMentorRatingStats(UUID mentorUserId) {
         MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+        entityManager.refresh(lockedProfile);
         long count = sessionFeedbackRepository.countFeedbacksByRevieweeId(mentorUserId);
         Double avg = sessionFeedbackRepository.getAverageRatingByRevieweeId(mentorUserId);
 

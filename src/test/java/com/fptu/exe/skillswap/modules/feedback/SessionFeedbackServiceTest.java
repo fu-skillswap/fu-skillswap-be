@@ -50,6 +50,9 @@ class SessionFeedbackServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private SessionFeedbackService sessionFeedbackService;
 

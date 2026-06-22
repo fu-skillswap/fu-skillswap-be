@@ -23,7 +23,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/bookings")
 @RequiredArgsConstructor
-@Tag(name = "Admin Bookings", description = "API để admin theo dõi booking mentoring toàn hệ thống dưới góc nhìn vận hành")
+@Tag(name = "Admin - Bookings", description = "System-wide operational monitoring of bookings and mentoring session records")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminBookingController {

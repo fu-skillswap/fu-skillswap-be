@@ -26,7 +26,7 @@ import java.util.UUID;
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Session Feedback", description = "API để mentee gửi feedback công khai hoặc riêng tư sau khi buổi mentoring đã hoàn thành")
+@Tag(name = "Review & Rating", description = "Mentee reviews and ratings for completed mentoring sessions")
 @SecurityRequirement(name = "bearerAuth")
 public class SessionFeedbackController {
 

@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/system/users")
 @RequiredArgsConstructor
-@Tag(name = "System User Roles", description = "API quản trị quyền vận hành hệ thống dành cho System Admin")
+@Tag(name = "Admin - Users", description = "Admin user listing, status configuration (lock/unlock), and role assignment")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('SYSTEM_ADMIN')")
 public class SystemUserRoleController {

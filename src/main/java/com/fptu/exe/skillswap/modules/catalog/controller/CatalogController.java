@@ -16,7 +16,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/catalog")
 @RequiredArgsConstructor
-@Tag(name = "Danh mục", description = "Tra cứu dữ liệu danh mục dùng cho form và bộ lọc của SkillSwap")
+@Tag(name = "Academic Catalog", description = "Lookups for campus list, academic programs, specializations, and help topics")
 public class CatalogController {
 
     private final CatalogService catalogService;

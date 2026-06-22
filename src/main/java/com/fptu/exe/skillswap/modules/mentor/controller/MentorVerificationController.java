@@ -32,7 +32,7 @@ import java.util.UUID;
 @RequestMapping("/api/me/mentor-verification")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Xác thực mentor", description = "Luồng tạo hồ sơ xác thực mentor, tải minh chứng và nộp hồ sơ duyệt")
+@Tag(name = "Mentor Verification", description = "Flow for mentees submitting portfolios and documentation to become verified mentors")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorVerificationController {
 

@@ -34,7 +34,7 @@ import java.util.UUID;
 @RequestMapping("/api/me/mentor-services")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Dịch vụ mentor", description = "Quản lý các dịch vụ mentoring mentor chủ động đăng")
+@Tag(name = "Mentor Profile", description = "Mentor portfolio management (available slots, headline, expertise description, service offerings)")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('MENTOR')")
 public class MentorServiceController {

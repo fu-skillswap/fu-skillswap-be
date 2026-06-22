@@ -38,6 +38,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
@@ -66,6 +67,7 @@ public class BookingService {
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
+    private final EntityManager entityManager;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -317,6 +319,7 @@ public class BookingService {
         if (mentorProfile != null) {
             MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            entityManager.refresh(lockedProfile);
             lockedProfile.setTotalRejectedBookings(defaultInteger(lockedProfile.getTotalRejectedBookings()) + 1);
             mentorProfileRepository.save(lockedProfile);
         }
@@ -419,6 +422,7 @@ public class BookingService {
         if (mentorProfile != null) {
             MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            entityManager.refresh(lockedProfile);
             lockedProfile.setTotalCompletedSessions(defaultInteger(lockedProfile.getTotalCompletedSessions()) + 1);
             lockedProfile.setTotalSessions(defaultInteger(lockedProfile.getTotalSessions()) + 1);
             mentorProfileRepository.save(lockedProfile);
@@ -770,6 +774,7 @@ public class BookingService {
         if (mentorProfile != null) {
             MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            entityManager.refresh(lockedProfile);
             applyMentorCancellationPenalty(lockedProfile, minutesUntilStart, now);
             mentorProfileRepository.save(lockedProfile);
         }

@@ -34,7 +34,7 @@ import java.util.UUID;
 @RequestMapping("/api/mentor/availability-rules")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Mentor Availability", description = "Các API để mentor cấu hình rule lịch rảnh kiểu calendar. Rule sinh slot, còn booking request chỉ xếp hàng vào slot sinh ra.")
+@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorAvailabilityController {
 

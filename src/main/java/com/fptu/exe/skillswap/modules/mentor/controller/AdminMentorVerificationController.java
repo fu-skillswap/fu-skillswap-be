@@ -26,7 +26,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/mentor-verification/requests")
 @RequiredArgsConstructor
-@Tag(name = "Admin Mentor Verification", description = "API duyệt hồ sơ xác thực mentor dành cho admin")
+@Tag(name = "Admin - Mentor Verification", description = "Admin approval workflow for pending mentor verification requests")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminMentorVerificationController {

@@ -18,7 +18,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Tag(name = "Danh mục học thuật", description = "Tra cứu cơ sở, ngành học và chuyên ngành của FPT University")
+@Tag(name = "Academic Catalog", description = "Lookups for campus list, academic programs, specializations, and help topics")
 public class AcademicController {
 
     private final AcademicService academicService;
