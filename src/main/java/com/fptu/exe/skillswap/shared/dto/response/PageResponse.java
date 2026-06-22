@@ -9,7 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Data
 @Builder
-@Schema(description = "Standard pagination response wrapper")
+@Schema(description = "Standard pagination response wrapper. Used for list endpoints to support pagination.")
 public class PageResponse<T> {
     @Schema(description = "List of content items for the current page")
     private List<T> content;
@@ -17,16 +17,16 @@ public class PageResponse<T> {
     @Schema(description = "Current page index (0-based)", example = "0")
     private int page;
 
-    @Schema(description = "Page size (number of items per page)", example = "10")
+    @Schema(description = "Page size (number of items per page requested)", example = "10")
     private int size;
 
     @Schema(description = "Total number of elements matching the filter query across all pages", example = "101")
     private long totalElements;
 
-    @Schema(description = "Total number of pages", example = "11")
+    @Schema(description = "Total number of pages based on totalElements and size", example = "11")
     private int totalPages;
 
-    @Schema(description = "Flag indicating if this page is the last page", example = "false")
+    @Schema(description = "Flag indicating if this page is the last page (no more items available)", example = "false")
     private boolean last;
 }
 

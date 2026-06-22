@@ -12,6 +12,8 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,6 +44,11 @@ public class AdminUserController {
                     "- Không truyền role: Trả về tất cả người dùng thuộc nhóm visible (không có quyền ADMIN/SYSTEM_ADMIN).\n\n" +
                     "Hỗ trợ phân trang (page, size), tìm kiếm theo từ khóa (keyword), lọc theo trạng thái hoạt động (status) và sắp xếp (sortBy, direction)."
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách người dùng"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin")
+    })
     @GetMapping
     public ApiResponse<PageResponse<AdminUserListItemResponse>> getUsers(
             @ParameterObject @ModelAttribute AdminUserListRequest request
@@ -50,9 +57,15 @@ public class AdminUserController {
     }
 
     @Operation(summary = "Đình chỉ/Khóa tài khoản của người dùng (Banned)")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấm người dùng thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy người dùng")
+    })
     @PostMapping("/{userId}/ban")
     public ApiResponse<SystemUserResponse> banUser(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID userId,
             @Valid @RequestBody BanUserRequest request
     ) {
@@ -63,9 +76,15 @@ public class AdminUserController {
     }
 
     @Operation(summary = "Mở khóa/Kích hoạt lại tài khoản của người dùng (Active)")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Mở khóa người dùng thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy người dùng")
+    })
     @PostMapping("/{userId}/unban")
     public ApiResponse<SystemUserResponse> unbanUser(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID userId,
             @Valid @RequestBody UnbanUserRequest request
     ) {

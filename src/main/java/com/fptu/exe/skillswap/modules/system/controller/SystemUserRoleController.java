@@ -11,6 +11,8 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,9 +38,15 @@ public class SystemUserRoleController {
     private final SystemUserRoleService systemUserRoleService;
 
     @Operation(summary = "Cấp quyền ADMIN cho user theo email")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấp quyền thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền system admin"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy user")
+    })
     @PostMapping("/admin-role/grant")
     public ApiResponse<AdminUserResponse> grantAdminRole(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody AdminRoleChangeRequest request
     ) {
         if (principal == null) {
@@ -48,18 +56,34 @@ public class SystemUserRoleController {
     }
 
     @Operation(summary = "Thu hồi quyền ADMIN của user theo email")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Thu hồi quyền thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền system admin"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy user")
+    })
     @PostMapping("/admin-role/revoke")
     public ApiResponse<AdminUserResponse> revokeAdminRole(@Valid @RequestBody AdminRoleChangeRequest request) {
         return ApiResponse.success(systemUserRoleService.revokeAdminRole(request.email()));
     }
 
     @Operation(summary = "Xem danh sách user đang có quyền ADMIN")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền system admin")
+    })
     @GetMapping("/admins")
     public ApiResponse<PageResponse<AdminUserResponse>> getAdminUsers(@ParameterObject @ModelAttribute BasePageRequest pageRequest) {
         return ApiResponse.success(systemUserRoleService.getAdminUsers(pageRequest));
     }
 
     @Operation(summary = "Lấy danh sách toàn bộ user trong hệ thống")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền system admin")
+    })
     @GetMapping
     public ApiResponse<PageResponse<SystemUserResponse>> getAllUsers(@ParameterObject @ModelAttribute BasePageRequest pageRequest) {
         return ApiResponse.success(systemUserRoleService.getAllUsers(pageRequest));

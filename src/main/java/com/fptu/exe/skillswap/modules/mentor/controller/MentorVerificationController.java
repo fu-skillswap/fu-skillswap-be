@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -46,7 +47,7 @@ public class MentorVerificationController {
     })
     @PostMapping("/request")
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> requestToBecomeMentor(
-            @AuthenticationPrincipal UserPrincipal principal
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
     ) {
         ensureAuthenticated(principal);
         MentorVerificationRequestActionResult<MentorVerificationRequestResponse> result =
@@ -59,7 +60,7 @@ public class MentorVerificationController {
     @Operation(summary = "Xem hồ sơ xác thực mentor mới nhất, kể cả khi đã ở trạng thái cuối")
     @GetMapping
     public ApiResponse<MentorVerificationRequestResponse> getMyRequest(
-            @AuthenticationPrincipal UserPrincipal principal
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
@@ -73,7 +74,7 @@ public class MentorVerificationController {
     })
     @GetMapping("/timeline")
     public ApiResponse<List<MentorVerificationTimelineEventResponse>> getTimeline(
-            @AuthenticationPrincipal UserPrincipal principal
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorVerificationService.getTimeline(principal.getPublicId()));
@@ -88,7 +89,7 @@ public class MentorVerificationController {
     })
     @GetMapping("/documents/{documentId}")
     public ApiResponse<MentorVerificationDocumentResponse> getDocument(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable("documentId") UUID documentId
     ) {
         ensureAuthenticated(principal);
@@ -107,7 +108,7 @@ public class MentorVerificationController {
     })
     @PostMapping(path = "/documents", consumes = "application/json")
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody MentorVerificationDocumentUploadRequest request
     ) {
         ensureAuthenticated(principal);
@@ -131,7 +132,7 @@ public class MentorVerificationController {
     })
     @PostMapping("/submit")
     public ApiResponse<MentorVerificationRequestResponse> submit(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody MentorVerificationSubmitRequest request
     ) {
         ensureAuthenticated(principal);
@@ -147,7 +148,7 @@ public class MentorVerificationController {
     })
     @DeleteMapping("/documents/{documentId}")
     public ApiResponse<MentorVerificationRequestResponse> deleteDocument(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable("documentId") UUID documentId
     ) {
         ensureAuthenticated(principal);
@@ -163,7 +164,7 @@ public class MentorVerificationController {
     })
     @PostMapping("/withdraw")
     public ApiResponse<MentorVerificationRequestResponse> withdraw(
-            @AuthenticationPrincipal UserPrincipal principal
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorVerificationService.withdraw(principal.getPublicId()));

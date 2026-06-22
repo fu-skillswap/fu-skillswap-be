@@ -42,9 +42,13 @@ public class MentorDiscoveryController {
     private final MentorDiscoveryService mentorDiscoveryService;
 
     @Operation(summary = "Lấy danh sách gợi ý nhanh 12 mentor phù hợp nhất để hiển thị trên Dashboard")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách gợi ý mentor"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
     @GetMapping("/recommendations")
     public ApiResponse<List<MentorRecommendationResponse>> getRecommendations(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "12") int limit
     ) {
         ensureAuthenticated(principal);
@@ -52,9 +56,13 @@ public class MentorDiscoveryController {
     }
 
     @Operation(summary = "Tìm kiếm, lọc và xếp hạng mentor trên trang Khám phá theo relevance rồi smart matching")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @ParameterObject @ModelAttribute MentorDiscoverySearchRequest request
     ) {
         ensureAuthenticated(principal);
@@ -62,9 +70,14 @@ public class MentorDiscoveryController {
     }
 
     @Operation(summary = "Xem chi tiết một mentor đang hiển thị trên discovery")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Chi tiết mentor"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")
+    })
     @GetMapping("/{mentorUserId}")
     public ApiResponse<MentorDiscoveryDetailResponse> getMentorDetail(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId
     ) {
         ensureAuthenticated(principal);
@@ -106,9 +119,14 @@ public class MentorDiscoveryController {
     }
 
     @Operation(summary = "Xem các review công khai của mentor để hỗ trợ quyết định booking")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách review của mentor"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")
+    })
     @GetMapping("/{mentorUserId}/reviews")
     public ApiResponse<PageResponse<MentorReviewResponse>> getMentorReviews(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId,
             @ParameterObject @ModelAttribute BasePageRequest pageRequest
     ) {

@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,7 +38,7 @@ public class MentorProfileController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
     @GetMapping
-    public ApiResponse<MentorProfileResponse> getMyProfile(@AuthenticationPrincipal UserPrincipal principal) {
+    public ApiResponse<MentorProfileResponse> getMyProfile(@Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorProfileService.getMyProfile(principal.getPublicId()));
     }
@@ -53,7 +54,7 @@ public class MentorProfileController {
     })
     @PutMapping
     public ApiResponse<MentorProfileResponse> upsertProfile(
-            @AuthenticationPrincipal UserPrincipal principal,
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody MentorProfileUpsertRequest request
     ) {
         ensureAuthenticated(principal);

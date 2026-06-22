@@ -34,6 +34,11 @@ public class AdminMentorController {
                     "- Nếu truyền `status=DRAFT` rõ ràng: Sẽ trả về các mentor nháp.\n\n" +
                     "Hỗ trợ tìm kiếm theo từ khóa (tên, email), lọc theo trạng thái (status), phân trang (page, size) và sắp xếp."
     )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách mentor thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
+    })
     @GetMapping
     public ApiResponse<PageResponse<AdminMentorListItemResponse>> getMentors(
             @ParameterObject @ModelAttribute AdminMentorListRequest request
@@ -45,6 +50,12 @@ public class AdminMentorController {
             summary = "Xem chi tiết một mentor dành cho admin",
             description = "Yêu cầu quyền ADMIN. Trả về toàn bộ hồ sơ chi tiết của mentor bao gồm thông tin liên hệ, trạng thái tài khoản, thống kê dạy học, điểm trừ hủy lịch và các liên kết xã hội."
     )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy thông tin chi tiết mentor thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền truy cập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")
+    })
     @GetMapping("/{mentorUserId}")
     public ApiResponse<AdminMentorDetailResponse> getMentorDetail(
             @PathVariable UUID mentorUserId
