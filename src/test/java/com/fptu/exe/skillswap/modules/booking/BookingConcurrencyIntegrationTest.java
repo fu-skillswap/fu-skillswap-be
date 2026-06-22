@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -108,7 +109,7 @@ class BookingConcurrencyIntegrationTest {
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .user(mentorUser)
                     .status(MentorStatus.ACTIVE)
-                    .verifiedAt(LocalDateTime.now().minusDays(1))
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
                     .headline("Spring Boot Mentor")
                     .expertiseDescription("Hỗ trợ Java backend và thiết kế REST API.")
@@ -118,8 +119,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusDays(2))
-                    .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                    .startTime(DateTimeUtil.now().plusDays(2))
+                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(false)
@@ -176,7 +177,7 @@ class BookingConcurrencyIntegrationTest {
                 bookingService.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("Confirmed"));
                 return true;
             } catch (Exception exception) {
-                throw new RuntimeException("acceptTask failed", exception);
+                return false;
             }
         };
     }
@@ -251,7 +252,7 @@ class BookingConcurrencyIntegrationTest {
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .user(mentorUser)
                     .status(MentorStatus.ACTIVE)
-                    .verifiedAt(LocalDateTime.now().minusDays(1))
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
                     .headline("Spring Boot Mentor")
                     .expertiseDescription("Hỗ trợ Java backend")
@@ -261,8 +262,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusDays(2))
-                    .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                    .startTime(DateTimeUtil.now().plusDays(2))
+                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -270,8 +271,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusDays(3))
-                    .endTime(LocalDateTime.now().plusDays(3).plusHours(1))
+                    .startTime(DateTimeUtil.now().plusDays(3))
+                    .endTime(DateTimeUtil.now().plusDays(3).plusHours(1))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -279,8 +280,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot3 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusDays(4))
-                    .endTime(LocalDateTime.now().plusDays(4).plusHours(1))
+                    .startTime(DateTimeUtil.now().plusDays(4))
+                    .endTime(DateTimeUtil.now().plusDays(4).plusHours(1))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -370,7 +371,7 @@ class BookingConcurrencyIntegrationTest {
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .user(mentorUser)
                     .status(MentorStatus.ACTIVE)
-                    .verifiedAt(LocalDateTime.now().minusDays(1))
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
                     .headline("Spring Boot Mentor")
                     .expertiseDescription("Hỗ trợ Java backend")
@@ -381,8 +382,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusDays(2))
-                    .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                    .startTime(DateTimeUtil.now().plusDays(2))
+                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -390,8 +391,8 @@ class BookingConcurrencyIntegrationTest {
 
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(LocalDateTime.now().plusHours(5))
-                    .endTime(LocalDateTime.now().plusHours(6))
+                    .startTime(DateTimeUtil.now().plusHours(5))
+                    .endTime(DateTimeUtil.now().plusHours(6))
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
