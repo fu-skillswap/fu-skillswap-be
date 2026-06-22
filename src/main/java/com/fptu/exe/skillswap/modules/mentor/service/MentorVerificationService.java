@@ -225,16 +225,24 @@ public class MentorVerificationService {
     @Transactional
     public MentorVerificationRequestResponse withdraw(UUID userId) {
         requireUserId(userId);
-        MentorVerificationRequest request = findLatestRequest(userId)
+        getRequiredUserForUpdate(userId);
+        UUID latestRequestId = findLatestRequest(userId)
+                .map(MentorVerificationRequest::getId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
+        MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(latestRequestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor để rút"));
 
         if (request.getStatus() != VerificationStatus.DRAFT
                 && request.getStatus() != VerificationStatus.NEEDS_REVISION
                 && request.getStatus() != VerificationStatus.PENDING_REVIEW) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Hồ sơ hiện tại không cho phép rút");
         }
+        if (request.getStatus() == VerificationStatus.PENDING_REVIEW && hasActiveAdminLock(request)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Hồ sơ đang được admin xử lý, hiện chưa thể rút");
+        }
 
         VerificationStatus previousStatus = request.getStatus();
+        clearAdminLock(request);
         request.setStatus(VerificationStatus.WITHDRAWN);
         request.setWithdrawnAt(DateTimeUtil.now());
         mentorVerificationRequestRepository.save(request);
@@ -334,7 +342,10 @@ public class MentorVerificationService {
         }
         String fileUrl = trimToNull(request.fileUrl());
         String publicId = trimToNull(request.publicId());
-        String originalFilename = trimToNull(request.originalFilename());
+        // Strip path separators from the client-supplied filename to prevent path separator
+        // injection into the stored record (the file is never written to disk here, but we
+        // keep the persisted name clean for admin display and future use).
+        String originalFilename = sanitizeFilename(trimToNull(request.originalFilename()));
         String contentType = canonicalizeContentType(request.contentType());
         return storedFileRepository.save(StoredFile.builder()
                 .owner(user)
@@ -621,7 +632,36 @@ public class MentorVerificationService {
     }
 
     private boolean isValidPublicId(String publicId) {
-        return publicId != null && PUBLIC_ID_PATTERN.matcher(publicId.trim()).matches();
+        if (publicId == null) {
+            return false;
+        }
+        String trimmed = publicId.trim();
+        if (!PUBLIC_ID_PATTERN.matcher(trimmed).matches()) {
+            return false;
+        }
+        // Even though the regex allows '/' and '.', explicitly reject any path segment
+        // equal to ".." to prevent path-traversal sequences such as "../../admin".
+        for (String segment : trimmed.split("/", -1)) {
+            if ("..".equals(segment)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Strips Unix and Windows path separators from a client-supplied filename so that the
+     * value stored in the database is a plain filename with no directory components.
+     * The file is never written to local disk in this flow, but keeping the stored name clean
+     * makes admin review safer and avoids unexpected values if the field is later used for
+     * Content-Disposition headers.
+     */
+    private String sanitizeFilename(String filename) {
+        if (filename == null) {
+            return null;
+        }
+        // Replace both forward slash and backslash, then trim the result
+        return filename.replace("/", "").replace("\\", "").trim();
     }
 
     private void ensureMentorCanOpenVerificationRequest(MentorProfile mentorProfile) {
@@ -647,6 +687,18 @@ public class MentorVerificationService {
             return null;
         }
         return value.trim();
+    }
+
+    private boolean hasActiveAdminLock(MentorVerificationRequest request) {
+        return request.getLockedBy() != null
+                && request.getLockExpiresAt() != null
+                && request.getLockExpiresAt().isAfter(DateTimeUtil.now());
+    }
+
+    private void clearAdminLock(MentorVerificationRequest request) {
+        request.setLockedBy(null);
+        request.setLockedAt(null);
+        request.setLockExpiresAt(null);
     }
 }
 

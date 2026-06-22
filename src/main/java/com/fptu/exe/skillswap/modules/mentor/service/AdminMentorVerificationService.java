@@ -35,6 +35,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -55,6 +56,7 @@ import java.util.UUID;
 public class AdminMentorVerificationService {
 
     private static final int LOCK_TTL_MINUTES = 5;
+    private static final int MAX_REVIEW_NOTE_LENGTH = 2000;
     private static final List<String> ALLOWED_SORT_FIELDS = List.of(
             "submittedAt",
             "createdAt",
@@ -66,6 +68,15 @@ public class AdminMentorVerificationService {
     );
     private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
+
+    @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
+    private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
+
+    @Value("${application.mentor-verification.submit-requirements.student-profile-completed:true}")
+    private boolean requireCompletedStudentProfile = true;
+
+    @Value("${application.mentor-verification.submit-requirements.mentor-profile-completed:true}")
+    private boolean requireCompletedMentorProfile = true;
 
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
@@ -168,10 +179,7 @@ public class AdminMentorVerificationService {
         User reviewer = getRequiredUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
-        String normalizedNote = trimToNull(reviewNote);
-        if (normalizedNote == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung yêu cầu chỉnh sửa không được để trống");
-        }
+        String normalizedNote = normalizeRequiredReviewText(reviewNote, "Nội dung yêu cầu chỉnh sửa không được để trống");
 
         VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.NEEDS_REVISION);
@@ -208,6 +216,8 @@ public class AdminMentorVerificationService {
         User reviewer = getRequiredUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
+        ensureApprovalEligible(request);
+        String normalizedReviewNote = normalizeOptionalReviewText(reviewNote);
 
         User mentor = request.getMentor();
         if (mentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN) ||
@@ -217,7 +227,7 @@ public class AdminMentorVerificationService {
 
         VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.APPROVED);
-        request.setReviewNote(trimToNull(reviewNote));
+        request.setReviewNote(normalizedReviewNote);
         request.setRejectionReason(null);
         request.setReviewedBy(reviewer);
         request.setReviewedAt(DateTimeUtil.now());
@@ -257,10 +267,7 @@ public class AdminMentorVerificationService {
         User reviewer = getRequiredUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
-        String normalizedReason = trimToNull(rejectionReason);
-        if (normalizedReason == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Lý do từ chối không được để trống");
-        }
+        String normalizedReason = normalizeRequiredReviewText(rejectionReason, "Lý do từ chối không được để trống");
 
         VerificationStatus previousStatus = request.getStatus();
         request.setStatus(VerificationStatus.REJECTED);
@@ -514,6 +521,8 @@ public class AdminMentorVerificationService {
     private MentorVerificationChecklistResponse buildChecklist(UUID userId, List<MentorVerificationDocumentResponse> documents) {
         boolean hasAcademicProfile = academicService.hasCompletedStudentProfile(userId);
         boolean hasMentorProfile = mentorProfileService.hasCompletedMentorProfile(userId);
+        boolean studentProfileEligible = !requireCompletedStudentProfile || hasAcademicProfile;
+        boolean mentorProfileEligible = !requireCompletedMentorProfile || hasMentorProfile;
         boolean hasAffiliationProof = documents.stream()
                 .anyMatch(document -> document.isActive()
                         && document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF);
@@ -525,8 +534,42 @@ public class AdminMentorVerificationService {
                 .mentorProfileCompleted(hasMentorProfile)
                 .hasAffiliationProof(hasAffiliationProof)
                 .hasExpertiseProof(hasExpertiseProof)
-                .canSubmit(hasAcademicProfile && hasMentorProfile && hasAffiliationProof && hasExpertiseProof)
+                .canSubmit(studentProfileEligible && mentorProfileEligible && hasAffiliationProof && hasExpertiseProof)
                 .build();
+    }
+
+    private void ensureApprovalEligible(MentorVerificationRequest request) {
+        List<MentorVerificationDocumentResponse> documents = mentorVerificationDocumentRepository
+                .findByRequestIdOrderByUploadedAtAsc(request.getId())
+                .stream()
+                .map(this::mapDocumentResponse)
+                .toList();
+        MentorVerificationChecklistResponse checklist = buildChecklist(request.getMentor().getId(), documents);
+        if (requireCompletedStudentProfile && !checklist.academicProfileCompleted()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa hoàn tất hồ sơ học thuật");
+        }
+        if (requireCompletedMentorProfile && !checklist.mentorProfileCompleted()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa hoàn tất hồ sơ mentor");
+        }
+        if (!checklist.hasAffiliationProof()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi chưa có minh chứng FPTU");
+        }
+        if (!checklist.hasExpertiseProof()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi chưa có minh chứng năng lực mentoring");
+        }
+        if (request.getSubmittedAt() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ chưa được nộp chính thức");
+        }
+        if (!hasAcceptedCurrentTerms(request)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa xác nhận điều khoản mentor hiện hành");
+        }
+    }
+
+    private boolean hasAcceptedCurrentTerms(MentorVerificationRequest request) {
+        return request != null
+                && request.getTermsAcceptedAt() != null
+                && StringUtils.hasText(request.getTermsVersion())
+                && request.getTermsVersion().equals(mentorTermsVersion);
     }
 
     private MentorVerificationDocumentResponse mapDocumentResponse(MentorVerificationDocument document) {
@@ -553,6 +596,22 @@ public class AdminMentorVerificationService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeOptionalReviewText(String value) {
+        String normalized = trimToNull(value);
+        if (normalized != null && normalized.length() > MAX_REVIEW_NOTE_LENGTH) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung phản hồi không được vượt quá 2000 ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeRequiredReviewText(String value, String requiredMessage) {
+        String normalized = normalizeOptionalReviewText(value);
+        if (normalized == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, requiredMessage);
+        }
+        return normalized;
     }
 
     private String normalizeSearchText(String keyword) {

@@ -1,11 +1,16 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStorageKind;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
@@ -25,6 +30,7 @@ import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -157,6 +163,9 @@ class AdminMentorVerificationServiceTest {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@test.com").fullName("Admin").build();
         User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
         MentorVerificationRequest request = pendingLockedRequest(admin, mentor);
+        request.setSubmittedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsAcceptedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsVersion("SKILLSWAP_MENTOR_TERMS_V1");
         MentorProfile mentorProfile = MentorProfile.builder().userId(mentor.getId()).user(mentor).build();
 
         when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
@@ -166,15 +175,23 @@ class AdminMentorVerificationServiceTest {
         when(mentorProfileRepository.findWithUserByUserId(mentor.getId())).thenReturn(Optional.of(mentorProfile));
         when(mentorProfileRepository.save(any(MentorProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.save(mentor)).thenReturn(mentor);
-        when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(request.getId())).thenReturn(List.of());
+        when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(request.getId())).thenReturn(List.of(
+                verificationDocument(request, mentor, VerificationDocumentType.FPTU_AFFILIATION_PROOF),
+                verificationDocument(request, mentor, VerificationDocumentType.EXPERTISE_PROOF)
+        ));
         when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(request.getId())).thenReturn(List.of());
         when(mentorProfileService.getMyProfile(mentor.getId())).thenReturn(null);
-        when(academicService.hasCompletedStudentProfile(mentor.getId())).thenReturn(false);
-        when(mentorProfileService.hasCompletedMentorProfile(mentor.getId())).thenReturn(false);
+        when(academicService.hasCompletedStudentProfile(mentor.getId())).thenReturn(true);
+        when(mentorProfileService.hasCompletedMentorProfile(mentor.getId())).thenReturn(true);
         when(academicService.getStudentProfile(mentor.getId())).thenThrow(new ResourceNotFoundException("Not found"));
 
         adminMentorVerificationService.approve(admin.getId(), request.getId(), "OK");
+        ArgumentCaptor<MentorVerificationRequest> requestCaptor = ArgumentCaptor.forClass(MentorVerificationRequest.class);
 
+        verify(mentorVerificationRequestRepository).save(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.APPROVED);
+        assertThat(requestCaptor.getValue().getLockedBy()).isNull();
+        assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
         verify(notificationService).createNotification(
                 eq(mentor.getId()),
                 eq(NotificationType.MENTOR_VERIFICATION_APPROVED),
@@ -206,7 +223,12 @@ class AdminMentorVerificationServiceTest {
         when(academicService.getStudentProfile(mentor.getId())).thenThrow(new ResourceNotFoundException("Not found"));
 
         adminMentorVerificationService.reject(admin.getId(), request.getId(), "Missing proof");
+        ArgumentCaptor<MentorVerificationRequest> requestCaptor = ArgumentCaptor.forClass(MentorVerificationRequest.class);
 
+        verify(mentorVerificationRequestRepository).save(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.REJECTED);
+        assertThat(requestCaptor.getValue().getLockedBy()).isNull();
+        assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
         verify(notificationService).createNotification(
                 eq(mentor.getId()),
                 eq(NotificationType.MENTOR_VERIFICATION_REJECTED),
@@ -238,7 +260,12 @@ class AdminMentorVerificationServiceTest {
         when(academicService.getStudentProfile(mentor.getId())).thenThrow(new ResourceNotFoundException("Not found"));
 
         adminMentorVerificationService.requestRevision(admin.getId(), request.getId(), "Need more info");
+        ArgumentCaptor<MentorVerificationRequest> requestCaptor = ArgumentCaptor.forClass(MentorVerificationRequest.class);
 
+        verify(mentorVerificationRequestRepository).save(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.NEEDS_REVISION);
+        assertThat(requestCaptor.getValue().getLockedBy()).isNull();
+        assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
         verify(notificationService).createNotification(
                 eq(mentor.getId()),
                 eq(NotificationType.MENTOR_VERIFICATION_NEEDS_REVISION),
@@ -268,6 +295,53 @@ class AdminMentorVerificationServiceTest {
         verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    void refreshLock_nonOwner_shouldThrowConflict() {
+        User ownerAdmin = User.builder().id(UUID.randomUUID()).email("owner@test.com").fullName("Owner").build();
+        User anotherAdmin = User.builder().id(UUID.randomUUID()).email("another@test.com").fullName("Another").build();
+        User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
+        MentorVerificationRequest request = pendingLockedRequest(ownerAdmin, mentor);
+
+        when(userRepository.findById(anotherAdmin.getId())).thenReturn(Optional.of(anotherAdmin));
+        when(mentorVerificationRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> adminMentorVerificationService.refreshLock(anotherAdmin.getId(), request.getId()))
+                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.RESOURCE_CONFLICT));
+    }
+
+    @Test
+    void getRequestDetail_expiredLock_shouldClaimForCurrentAdmin() {
+        User previousAdmin = User.builder().id(UUID.randomUUID()).email("old-admin@test.com").fullName("Old Admin").build();
+        User currentAdmin = User.builder().id(UUID.randomUUID()).email("admin@test.com").fullName("Admin").build();
+        User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
+        MentorVerificationRequest request = MentorVerificationRequest.builder()
+                .id(UUID.randomUUID())
+                .mentor(mentor)
+                .status(VerificationStatus.PENDING_REVIEW)
+                .method(VerificationMethod.MANUAL)
+                .lockedBy(previousAdmin)
+                .lockedAt(DateTimeUtil.now().minusMinutes(10))
+                .lockExpiresAt(DateTimeUtil.now().minusMinutes(1))
+                .build();
+
+        when(userRepository.findById(currentAdmin.getId())).thenReturn(Optional.of(currentAdmin));
+        when(mentorVerificationRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(mentorVerificationRequestRepository.save(any(MentorVerificationRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(request.getId())).thenReturn(List.of());
+        when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(request.getId())).thenReturn(List.of());
+        when(mentorProfileService.getMyProfile(mentor.getId())).thenReturn(null);
+        when(academicService.hasCompletedStudentProfile(mentor.getId())).thenReturn(false);
+        when(mentorProfileService.hasCompletedMentorProfile(mentor.getId())).thenReturn(false);
+        when(academicService.getStudentProfile(mentor.getId())).thenThrow(new ResourceNotFoundException("Not found"));
+
+        adminMentorVerificationService.getRequestDetail(currentAdmin.getId(), request.getId());
+
+        ArgumentCaptor<MentorVerificationRequest> requestCaptor = ArgumentCaptor.forClass(MentorVerificationRequest.class);
+        verify(mentorVerificationRequestRepository).save(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().getLockedBy()).isEqualTo(currentAdmin);
+        assertThat(requestCaptor.getValue().getLockExpiresAt()).isAfter(DateTimeUtil.now());
+    }
+
     private MentorVerificationRequest pendingLockedRequest(User admin, User mentor) {
         return MentorVerificationRequest.builder()
                 .id(UUID.randomUUID())
@@ -277,6 +351,30 @@ class AdminMentorVerificationServiceTest {
                 .lockedBy(admin)
                 // Use a very large TTL (e.g. 1 day) to completely avoid Flaky Tests on slow CI runners
                 .lockExpiresAt(DateTimeUtil.now().plusDays(1))
+                .build();
+    }
+
+    private MentorVerificationDocument verificationDocument(
+            MentorVerificationRequest request,
+            User mentor,
+            VerificationDocumentType documentType
+    ) {
+        StoredFile storedFile = StoredFile.builder()
+                .originalName(documentType.name().toLowerCase() + ".png")
+                .publicUrl("https://res.cloudinary.com/demo/image/upload/v1/" + documentType.name().toLowerCase() + ".png")
+                .mimeType("image/png")
+                .sizeBytes(1024L)
+                .build();
+        return MentorVerificationDocument.builder()
+                .id(UUID.randomUUID())
+                .request(request)
+                .documentType(documentType)
+                .status(VerificationDocumentStatus.UPLOADED)
+                .storageKind(VerificationStorageKind.IMAGE)
+                .storedFile(storedFile)
+                .isActive(true)
+                .version(1)
+                .uploadedBy(mentor)
                 .build();
     }
 }

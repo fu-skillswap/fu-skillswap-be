@@ -94,7 +94,7 @@ public class AdminMentorVerificationController {
     public ApiResponse<AdminMentorVerificationRequestResponse> approve(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,
-            @RequestBody(required = false) AdminMentorVerificationReviewRequest request
+            @Valid @RequestBody(required = false) AdminMentorVerificationReviewRequest request
     ) {
         return ApiResponse.success(adminMentorVerificationService.approve(
                 principal.getPublicId(),

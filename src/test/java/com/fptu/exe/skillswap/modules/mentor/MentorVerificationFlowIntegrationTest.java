@@ -31,6 +31,8 @@ import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,8 +83,13 @@ class MentorVerificationFlowIntegrationTest {
     @Autowired
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository mentorVerificationRequestRepository;
 
+    @Autowired
+    private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+
     private User mentorUser;
+    private User otherUser;
     private User adminUser;
+    private User secondAdminUser;
 
     @BeforeEach
     void setUp() {
@@ -96,6 +103,18 @@ class MentorVerificationFlowIntegrationTest {
         mentorUser = userRepository.save(User.builder()
                 .email("mentor-flow@test.com")
                 .fullName("Mentor Candidate")
+                .status(UserStatus.ACTIVE)
+                .build());
+
+        otherUser = userRepository.save(User.builder()
+                .email("other-mentor-flow@test.com")
+                .fullName("Other Mentor Candidate")
+                .status(UserStatus.ACTIVE)
+                .build());
+
+        secondAdminUser = userRepository.save(User.builder()
+                .email("second-admin-flow@test.com")
+                .fullName("Second Admin")
                 .status(UserStatus.ACTIVE)
                 .build());
     }
@@ -378,7 +397,143 @@ class MentorVerificationFlowIntegrationTest {
         assertEquals(MentorStatus.ACTIVE, profile.getStatus());
     }
 
+    @Test
+    void withdraw_afterApproved_shouldBeRejected() {
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorUser.getId());
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+        adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK");
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.withdraw(mentorUser.getId()));
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+    }
+
+    @Test
+    void getDocument_otherUserShouldNotSeeAnotherUsersDocument() {
+        MentorVerificationRequestResponse mentorRequest = createSubmittedRequest(mentorUser.getId());
+        createDraftRequest(otherUser.getId());
+        UUID documentId = mentorRequest.documents().getFirst().id();
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.getDocument(otherUser.getId(), documentId));
+
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void deleteDocument_otherUserShouldNotDeleteAnotherUsersDocument() {
+        MentorVerificationRequestResponse mentorRequest = createDraftRequest(mentorUser.getId());
+        createDraftRequest(otherUser.getId());
+        UUID documentId = mentorRequest.documents().getFirst().id();
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.deleteDocument(otherUser.getId(), documentId));
+
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void submit_otherUserShouldNotSubmitAnotherUsersRequest() {
+        createDraftRequest(mentorUser.getId());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.submit(otherUser.getId(), new MentorVerificationSubmitRequest("x", true)));
+
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void withdraw_otherUserShouldNotWithdrawAnotherUsersRequest() {
+        createDraftRequest(mentorUser.getId());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.withdraw(otherUser.getId()));
+
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void deleteDocument_afterSubmit_shouldBeRejected() {
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorUser.getId());
+        UUID documentId = pending.documents().getFirst().id();
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.deleteDocument(mentorUser.getId(), documentId));
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+    }
+
+    @Test
+    void withdraw_pendingReviewLockedByAdmin_shouldBeRejected() {
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorUser.getId());
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> mentorVerificationService.withdraw(mentorUser.getId()));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    @Test
+    void approve_missingRequiredDocuments_shouldBeRejected() {
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorUser.getId());
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        var expertiseDocument = mentorVerificationDocumentRepository
+                .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(
+                        pending.requestId(),
+                        VerificationDocumentType.EXPERTISE_PROOF
+                ).stream().findFirst().orElseThrow();
+        expertiseDocument.setActive(false);
+        expertiseDocument.setStatus(VerificationDocumentStatus.REMOVED);
+        mentorVerificationDocumentRepository.save(expertiseDocument);
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> adminMentorVerificationService.approve(adminUser.getId(), pending.requestId(), "OK"));
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+    }
+
+    @Test
+    void approve_lockedByAnotherAdmin_shouldBeRejected() {
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorUser.getId());
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> adminMentorVerificationService.approve(secondAdminUser.getId(), pending.requestId(), "OK"));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
+    private MentorVerificationRequestResponse createDraftRequest(UUID mentorId) {
+        mentorVerificationService.requestToBecomeMentor(mentorId);
+        mentorVerificationService.uploadDocument(
+                mentorId,
+                new MentorVerificationDocumentUploadRequest(
+                        VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                        "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
+                        "mentor-verification/integration/" + mentorId + "/fptu-proof",
+                        "proof.png",
+                        "image/png",
+                        1024L
+                )
+        );
+        return mentorVerificationService.uploadDocument(
+                mentorId,
+                new MentorVerificationDocumentUploadRequest(
+                        VerificationDocumentType.EXPERTISE_PROOF,
+                        "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
+                        "mentor-verification/integration/" + mentorId + "/expertise-proof",
+                        "expertise-proof.png",
+                        "image/png",
+                        2048L
+                )
+        );
+    }
+
     private MentorVerificationRequestResponse createSubmittedRequest(UUID mentorId) {
+        User candidate = userRepository.findById(mentorId).orElseThrow();
         mentorVerificationService.requestToBecomeMentor(mentorId);
 
         Campus campus = campusRepository.findAll().stream().findFirst().orElseThrow();
@@ -386,7 +541,7 @@ class MentorVerificationFlowIntegrationTest {
         Specialization specialization = specializationRepository.findAll().stream().findFirst().orElseThrow();
 
         studentProfileRepository.save(StudentProfile.builder()
-                .user(mentorUser)
+                .user(candidate)
                 .claimedStudentCode("SE" + Math.abs(mentorId.hashCode()))
                 .campus(campus)
                 .program(program)
