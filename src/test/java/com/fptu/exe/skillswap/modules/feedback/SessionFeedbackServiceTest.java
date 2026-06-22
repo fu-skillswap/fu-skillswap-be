@@ -94,7 +94,7 @@ class SessionFeedbackServiceTest {
     @Test
     void submitFeedback_bookingNotCompleted_shouldThrowConflict() {
         booking.setStatus(BookingStatus.ACCEPTED);
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request())
@@ -105,7 +105,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_mentorReviewer_shouldThrowAccessDenied() {
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(mentorId, booking.getId(), request())
@@ -116,7 +116,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_duplicateReview_shouldThrowConflict() {
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () ->
@@ -128,13 +128,14 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_success_shouldDefaultPublicAndUpdateMentorStats() {
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(false);
         when(sessionFeedbackRepository.saveAndFlush(any(SessionFeedback.class))).thenAnswer(invocation -> {
             SessionFeedback feedback = invocation.getArgument(0);
             feedback.setId(UUID.randomUUID());
             return feedback;
         });
+        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(sessionFeedbackRepository.countFeedbacksByRevieweeId(mentorId)).thenReturn(3L);
         when(sessionFeedbackRepository.getAverageRatingByRevieweeId(mentorId)).thenReturn(4.666);
 
@@ -162,7 +163,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_nonParticipant_shouldThrowAccessDenied() {
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(UUID.randomUUID(), booking.getId(), request())
@@ -174,7 +175,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_failedDuplicate_shouldNotCreateNotification() {
-        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(true);
 
         assertThrows(BaseException.class, () ->

@@ -91,7 +91,7 @@ public class MentorProfileService {
 
     private MentorProfile getOrCreateProfile(UUID userId) {
         requireUserId(userId);
-        return mentorProfileRepository.findWithUserByUserId(userId)
+        return mentorProfileRepository.findWithUserByUserIdForUpdate(userId)
                 .orElseGet(() -> {
                     User user = userRepository.findById(userId)
                             .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));

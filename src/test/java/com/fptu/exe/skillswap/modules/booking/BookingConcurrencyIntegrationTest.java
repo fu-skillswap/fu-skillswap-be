@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -74,6 +75,12 @@ class BookingConcurrencyIntegrationTest {
 
     @Autowired
     private TransactionTemplate transactionTemplate;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService sessionFeedbackService;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository sessionFeedbackRepository;
 
     @Test
     void mentorAccept_concurrentAcceptSameSlot_onlyOneSucceeds() throws Exception {
@@ -212,6 +219,265 @@ class BookingConcurrencyIntegrationTest {
         return value.substring(0, Math.min(6, value.length()));
     }
 
-    private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId) {
+    @Test
+    void concurrentFeedbackSubmissions_updatesRatingCorrectly() throws Exception {
+        SetupFeedbackData setupData = transactionTemplate.execute(status -> {
+            User mentorUser = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentor-fb"))
+                    .fullName("Phan Hoang Minh Feedback")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            User mentee1 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-1"))
+                    .fullName("Nguyen Quoc An 1")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+            User mentee2 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-2"))
+                    .fullName("Tran Gia Bao 2")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+            User mentee3 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-3"))
+                    .fullName("Tran Gia Bao 3")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            completeAcademicProfile(mentee1.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee2.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee3.getId(), "SE" + randomSixDigits());
+
+            MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
+                    .user(mentorUser)
+                    .status(MentorStatus.ACTIVE)
+                    .verifiedAt(LocalDateTime.now().minusDays(1))
+                    .isAvailable(true)
+                    .headline("Spring Boot Mentor")
+                    .expertiseDescription("Hỗ trợ Java backend")
+                    .teachingMode(TeachingMode.ONLINE)
+                    .sessionDuration(60)
+                    .build());
+
+            MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile)
+                    .startTime(LocalDateTime.now().plusDays(2))
+                    .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(true)
+                    .build());
+
+            MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile)
+                    .startTime(LocalDateTime.now().plusDays(3))
+                    .endTime(LocalDateTime.now().plusDays(3).plusHours(1))
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(true)
+                    .build());
+
+            MentorAvailabilitySlot slot3 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile)
+                    .startTime(LocalDateTime.now().plusDays(4))
+                    .endTime(LocalDateTime.now().plusDays(4).plusHours(1))
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(true)
+                    .build());
+
+            com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                    .mentee(mentee1)
+                    .mentorProfile(mentorProfile)
+                    .slot(slot1)
+                    .learningGoalTitle("Goal 1")
+                    .status(BookingStatus.COMPLETED)
+                    .requestedStartTime(slot1.getStartTime())
+                    .requestedEndTime(slot1.getEndTime())
+                    .build());
+
+            com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                    .mentee(mentee2)
+                    .mentorProfile(mentorProfile)
+                    .slot(slot2)
+                    .learningGoalTitle("Goal 2")
+                    .status(BookingStatus.COMPLETED)
+                    .requestedStartTime(slot2.getStartTime())
+                    .requestedEndTime(slot2.getEndTime())
+                    .build());
+
+            com.fptu.exe.skillswap.modules.booking.domain.Booking booking3 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                    .mentee(mentee3)
+                    .mentorProfile(mentorProfile)
+                    .slot(slot3)
+                    .learningGoalTitle("Goal 3")
+                    .status(BookingStatus.COMPLETED)
+                    .requestedStartTime(slot3.getStartTime())
+                    .requestedEndTime(slot3.getEndTime())
+                    .build());
+
+            return new SetupFeedbackData(mentorUser.getId(), booking1.getId(), booking2.getId(), booking3.getId(), mentee1.getId(), mentee2.getId(), mentee3.getId());
+        });
+        assertNotNull(setupData);
+
+        CountDownLatch readyLatch = new CountDownLatch(3);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executorService = Executors.newFixedThreadPool(3);
+
+        try {
+            Future<Boolean> f1 = executorService.submit(submitFeedbackTask(setupData.mentee1Id(), setupData.booking1Id(), 5, readyLatch, startLatch));
+            Future<Boolean> f2 = executorService.submit(submitFeedbackTask(setupData.mentee2Id(), setupData.booking2Id(), 4, readyLatch, startLatch));
+            Future<Boolean> f3 = executorService.submit(submitFeedbackTask(setupData.mentee3Id(), setupData.booking3Id(), 3, readyLatch, startLatch));
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startLatch.countDown();
+
+            assertTrue(f1.get(10, TimeUnit.SECONDS));
+            assertTrue(f2.get(10, TimeUnit.SECONDS));
+            assertTrue(f3.get(10, TimeUnit.SECONDS));
+
+            MentorProfile updatedProfile = mentorProfileRepository.findById(setupData.mentorId()).orElseThrow();
+            assertEquals(3, updatedProfile.getTotalReviews());
+            assertEquals(0, BigDecimal.valueOf(4.00).setScale(2).compareTo(updatedProfile.getAverageRating()));
+        } finally {
+            executorService.shutdownNow();
+        }
     }
+
+    @Test
+    void concurrentFeedbackAndCancellationPenalty_updatesBothCorrectly() throws Exception {
+        SetupFeedbackAndCancelData setupData = transactionTemplate.execute(status -> {
+            User mentorUser = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentor-fc"))
+                    .fullName("Mentor Feedback Cancel")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            User mentee1 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-fc1"))
+                    .fullName("Mentee FC 1")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+            User mentee2 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-fc2"))
+                    .fullName("Mentee FC 2")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            completeAcademicProfile(mentee1.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee2.getId(), "SE" + randomSixDigits());
+
+            MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
+                    .user(mentorUser)
+                    .status(MentorStatus.ACTIVE)
+                    .verifiedAt(LocalDateTime.now().minusDays(1))
+                    .isAvailable(true)
+                    .headline("Spring Boot Mentor")
+                    .expertiseDescription("Hỗ trợ Java backend")
+                    .teachingMode(TeachingMode.ONLINE)
+                    .sessionDuration(60)
+                    .lateCancellationPenaltyPoints(BigDecimal.valueOf(1.00))
+                    .build());
+
+            MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile)
+                    .startTime(LocalDateTime.now().plusDays(2))
+                    .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(true)
+                    .build());
+
+            MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile)
+                    .startTime(LocalDateTime.now().plusHours(5))
+                    .endTime(LocalDateTime.now().plusHours(6))
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(true)
+                    .build());
+
+            com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                    .mentee(mentee1)
+                    .mentorProfile(mentorProfile)
+                    .slot(slot1)
+                    .learningGoalTitle("Completed Booking")
+                    .status(BookingStatus.COMPLETED)
+                    .requestedStartTime(slot1.getStartTime())
+                    .requestedEndTime(slot1.getEndTime())
+                    .build());
+
+            com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                    .mentee(mentee2)
+                    .mentorProfile(mentorProfile)
+                    .slot(slot2)
+                    .learningGoalTitle("Accepted Booking")
+                    .status(BookingStatus.ACCEPTED)
+                    .requestedStartTime(slot2.getStartTime())
+                    .requestedEndTime(slot2.getEndTime())
+                    .build());
+
+            return new SetupFeedbackAndCancelData(mentorUser.getId(), booking1.getId(), booking2.getId(), mentee1.getId());
+        });
+        assertNotNull(setupData);
+
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Boolean> feedbackFuture = executorService.submit(submitFeedbackTask(setupData.menteeId(), setupData.bookingCompletedId(), 5, readyLatch, startLatch));
+            Future<Boolean> cancelFuture = executorService.submit(cancelBookingTask(setupData.mentorId(), setupData.bookingAcceptedId(), readyLatch, startLatch));
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startLatch.countDown();
+
+            assertTrue(feedbackFuture.get(10, TimeUnit.SECONDS));
+            assertTrue(cancelFuture.get(10, TimeUnit.SECONDS));
+
+            MentorProfile updatedProfile = mentorProfileRepository.findById(setupData.mentorId()).orElseThrow();
+            assertEquals(1, updatedProfile.getTotalReviews());
+            assertEquals(0, BigDecimal.valueOf(5.00).setScale(2).compareTo(updatedProfile.getAverageRating()));
+            assertNotNull(updatedProfile.getBookingSuspendedUntil());
+            assertEquals(0, BigDecimal.valueOf(1.00).setScale(2).compareTo(updatedProfile.getLateCancellationPenaltyPoints()));
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private Callable<Boolean> submitFeedbackTask(UUID reviewerId, UUID bookingId, int rating, CountDownLatch readyLatch, CountDownLatch startLatch) {
+        return () -> {
+            readyLatch.countDown();
+            assertTrue(startLatch.await(5, TimeUnit.SECONDS));
+            try {
+                com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest req = new com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest();
+                req.setRating(rating);
+                req.setSatisfactionLevel(rating);
+                req.setComment("Comment " + rating);
+                req.setWouldRecommend(true);
+                req.setIsPublic(true);
+                sessionFeedbackService.submitFeedback(reviewerId, bookingId, req);
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        };
+    }
+
+    private Callable<Boolean> cancelBookingTask(UUID mentorId, UUID bookingId, CountDownLatch readyLatch, CountDownLatch startLatch) {
+        return () -> {
+            readyLatch.countDown();
+            assertTrue(startLatch.await(5, TimeUnit.SECONDS));
+            try {
+                bookingService.cancelBookingByMentor(mentorId, bookingId, new com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest("Late cancellation"));
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
+        };
+    }
+
+    private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId) {}
+    private record SetupFeedbackData(UUID mentorId, UUID booking1Id, UUID booking2Id, UUID booking3Id, UUID mentee1Id, UUID mentee2Id, UUID mentee3Id) {}
+    private record SetupFeedbackAndCancelData(UUID mentorId, UUID bookingCompletedId, UUID bookingAcceptedId, UUID menteeId) {}
 }

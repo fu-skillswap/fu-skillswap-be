@@ -47,7 +47,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
                     or lower(u.email) like :keywordPattern
                     or lower(u.fullName) like :keywordPattern)
               and (:status is null or u.status = :status)
-              and (:targetRole is null or :targetRole member of u.roles)
+              and (:targetRole is null
+                   or (:targetRole = :menteeRole and :menteeRole member of u.roles and :mentorRole not member of u.roles)
+                   or (:targetRole = :mentorRole and :mentorRole member of u.roles))
               and (:menteeRole member of u.roles or :mentorRole member of u.roles)
               and :adminRole not member of u.roles
               and :systemAdminRole not member of u.roles

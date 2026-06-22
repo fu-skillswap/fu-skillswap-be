@@ -37,7 +37,8 @@ public class SessionFeedbackService {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
 
-        Booking booking = bookingRepository.findById(bookingId)
+        // Lock the booking and associated mentor profile early to establish lock order and avoid deadlock
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
         if (booking.getStatus() != BookingStatus.COMPLETED) {
@@ -78,7 +79,7 @@ public class SessionFeedbackService {
 
         // If the reviewee is a Mentor, recalculate and update their MentorProfile stats
         if (reviewee.getId().equals(mentor.getId())) {
-            updateMentorRatingStats(mentorProfile);
+            updateMentorRatingStats(mentorProfile.getUserId());
         }
 
         notificationService.createNotification(
@@ -93,14 +94,15 @@ public class SessionFeedbackService {
         return toResponse(feedback);
     }
 
-    private void updateMentorRatingStats(MentorProfile mentorProfile) {
-        UUID mentorUserId = mentorProfile.getUserId();
+    private void updateMentorRatingStats(UUID mentorUserId) {
+        MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
         long count = sessionFeedbackRepository.countFeedbacksByRevieweeId(mentorUserId);
         Double avg = sessionFeedbackRepository.getAverageRatingByRevieweeId(mentorUserId);
 
-        mentorProfile.setTotalReviews((int) count);
-        mentorProfile.setAverageRating(avg == null ? BigDecimal.ZERO : BigDecimal.valueOf(avg).setScale(2, RoundingMode.HALF_UP));
-        mentorProfileRepository.save(mentorProfile);
+        lockedProfile.setTotalReviews((int) count);
+        lockedProfile.setAverageRating(avg == null ? BigDecimal.ZERO : BigDecimal.valueOf(avg).setScale(2, RoundingMode.HALF_UP));
+        mentorProfileRepository.save(lockedProfile);
     }
 
     private SessionFeedbackResponse toResponse(SessionFeedback feedback) {

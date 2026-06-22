@@ -104,6 +104,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
 
+    @Query("select booking.slot.id from Booking booking where booking.id = :bookingId")
+    Optional<UUID> findSlotIdByBookingId(@Param("bookingId") UUID bookingId);
+
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -117,6 +120,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             left join fetch booking.slot slot
             where booking.slot.id = :slotId
               and booking.status = :status
+            order by booking.id asc
             """)
     List<Booking> findBySlotIdAndStatusForUpdate(
             @Param("slotId") UUID slotId,

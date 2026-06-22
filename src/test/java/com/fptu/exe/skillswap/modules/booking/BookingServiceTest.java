@@ -84,6 +84,9 @@ class BookingServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -126,6 +129,10 @@ class BookingServiceTest {
         slot.setEndTime(testNow().plusDays(2).plusHours(1));
         slot.setActive(true);
         slot.setBooked(false);
+        org.mockito.Mockito.lenient().when(mentorProfileRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(mentorProfile));
+        org.mockito.Mockito.lenient().when(bookingRepository.findSlotIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(slot.getId()));
     }
 
     @Test

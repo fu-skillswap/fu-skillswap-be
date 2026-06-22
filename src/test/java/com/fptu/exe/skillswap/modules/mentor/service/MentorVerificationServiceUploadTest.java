@@ -340,6 +340,55 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
+    void uploadWithPathTraversalPublicId_shouldBeRejected() {
+        // publicId containing ".." segments must be rejected even though the regex
+        // [A-Za-z0-9_./-]+ would otherwise match (it allows '.' and '/').
+        String[] badPublicIds = {
+                "mentor-verification/../admin/secret",
+                "../../etc/passwd",
+                "mentor-verification/user-123/../.."
+        };
+        for (String badId : badPublicIds) {
+            MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                    VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                    "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                    badId,
+                    "proof.jpg",
+                    "image/jpeg",
+                    123L
+            );
+            assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
+                    .isInstanceOfSatisfying(BaseException.class,
+                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+        }
+        verify(storedFileRepository, never()).save(any());
+    }
+
+    @Test
+    void uploadWithPathSeparatorInFilename_shouldSanitizeFilename() {
+        // originalFilename containing path separators must be stripped before persistence
+        // to keep the stored name a plain filename (no directory components).
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
+                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
+                "mentor-verification/user-123/proof-jpg",
+                "../../etc/proof.jpg",
+                "image/jpeg",
+                123L
+        );
+
+        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
+
+        ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
+        verify(storedFileRepository).save(fileCaptor.capture());
+        // Path separators must be stripped; only the leaf filename remains
+        String storedName = fileCaptor.getValue().getOriginalName();
+        assertThat(storedName).doesNotContain("/");
+        assertThat(storedName).doesNotContain("\\");
+        assertThat(storedName).isEqualTo("....etcproof.jpg");
+    }
+
+    @Test
     void uploadAffiliationProofBeyondQuota_shouldBeRejected() {
         when(mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
                 request.getId(),

@@ -65,6 +65,7 @@ public class BookingService {
     private final AcademicService academicService;
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -209,11 +210,31 @@ public class BookingService {
 
     @Transactional
     public BookingResponse acceptBooking(UUID mentorUserId, UUID bookingId, AcceptBookingRequest request) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+
+        // 1. Load the slot ID without loading the whole booking entity to prevent session caching issues
+        UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với khung giờ mentoring"));
+
+        // 2. Lock MentorAvailabilitySlot first
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
+
+        // 3. Lock the target booking after slot lock
         Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
+
+        // 4. Revalidate after locks are acquired
+        if (booking.getSlot() == null || !booking.getSlot().getId().equals(slotId)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ của booking đã thay đổi");
+        }
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể chấp nhận booking đang chờ phản hồi");
         }
-        MentorAvailabilitySlot slot = requireLockedSlotForDecision(booking);
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
         }
@@ -222,6 +243,8 @@ public class BookingService {
         }
 
         LocalDateTime now = DateTimeUtil.now();
+        
+        // 5. Lock sibling pending bookings for the same slot in deterministic order
         List<Booking> pendingBookings = bookingRepository.findBySlotIdAndStatusForUpdate(slot.getId(), BookingStatus.PENDING);
 
         booking.setStatus(BookingStatus.ACCEPTED);
@@ -292,7 +315,10 @@ public class BookingService {
 
         MentorProfile mentorProfile = booking.getMentorProfile();
         if (mentorProfile != null) {
-            mentorProfile.setTotalRejectedBookings(defaultInteger(mentorProfile.getTotalRejectedBookings()) + 1);
+            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            lockedProfile.setTotalRejectedBookings(defaultInteger(lockedProfile.getTotalRejectedBookings()) + 1);
+            mentorProfileRepository.save(lockedProfile);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -391,8 +417,11 @@ public class BookingService {
 
         MentorProfile mentorProfile = booking.getMentorProfile();
         if (mentorProfile != null) {
-            mentorProfile.setTotalCompletedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()) + 1);
-            mentorProfile.setTotalSessions(defaultInteger(mentorProfile.getTotalSessions()) + 1);
+            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            lockedProfile.setTotalCompletedSessions(defaultInteger(lockedProfile.getTotalCompletedSessions()) + 1);
+            lockedProfile.setTotalSessions(defaultInteger(lockedProfile.getTotalSessions()) + 1);
+            mentorProfileRepository.save(lockedProfile);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -706,6 +735,14 @@ public class BookingService {
 
     @Transactional
     public BookingResponse cancelBookingByMentor(UUID mentorUserId, UUID bookingId, CancelBookingRequest request) {
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+        UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId).orElse(null);
+        if (slotId != null) {
+            mentorAvailabilitySlotRepository.findByIdForUpdate(slotId);
+        }
+
         Booking booking = getBookingForCancellation(bookingId);
         if (!isMentorOfBooking(booking, mentorUserId)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
@@ -731,7 +768,10 @@ public class BookingService {
 
         MentorProfile mentorProfile = booking.getMentorProfile();
         if (mentorProfile != null) {
-            applyMentorCancellationPenalty(mentorProfile, minutesUntilStart, now);
+            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            applyMentorCancellationPenalty(lockedProfile, minutesUntilStart, now);
+            mentorProfileRepository.save(lockedProfile);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -762,6 +802,14 @@ public class BookingService {
 
     @Transactional
     public BookingResponse cancelBookingByMentee(UUID menteeId, UUID bookingId, CancelBookingRequest request) {
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+        UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId).orElse(null);
+        if (slotId != null) {
+            mentorAvailabilitySlotRepository.findByIdForUpdate(slotId);
+        }
+
         Booking booking = getBookingForCancellation(bookingId);
         if (menteeId == null || booking.getMentee() == null || !menteeId.equals(booking.getMentee().getId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");

@@ -4,7 +4,9 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorListRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -16,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
 import java.util.Locale;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,11 +28,12 @@ public class AdminMentorService {
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
     private final MentorProfileRepository mentorProfileRepository;
+    private final StudentProfileRepository studentProfileRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorListItemResponse> getMentors(AdminMentorListRequest request) {
         AdminMentorListRequest safeRequest = request == null ? new AdminMentorListRequest() : request;
-        Page<MentorProfile> page = mentorProfileRepository.searchForAdmin(
+        Page<AdminMentorListItemResponse> page = mentorProfileRepository.searchForAdmin(
                 buildKeywordPattern(safeRequest.getKeyword()),
                 buildNormalizedKeywordPattern(safeRequest.getKeyword()),
                 ACCENTED_CHARACTERS,
@@ -40,7 +44,7 @@ public class AdminMentorService {
         );
 
         return PageResponse.<AdminMentorListItemResponse>builder()
-                .content(page.getContent().stream().map(this::toListItem).toList())
+                .content(page.getContent())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -49,18 +53,32 @@ public class AdminMentorService {
                 .build();
     }
 
-    private AdminMentorListItemResponse toListItem(MentorProfile profile) {
+    @Transactional(readOnly = true)
+    public AdminMentorDetailResponse getMentorDetail(UUID mentorUserId) {
+        MentorProfile profile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
+                .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(
+                        com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND,
+                        "Không tìm thấy thông tin mentor"
+                ));
+
         User user = profile.getUser();
-        return AdminMentorListItemResponse.builder()
+        String primaryLabel = studentProfileRepository.findWithDetailsByUserId(mentorUserId)
+                .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
+                .orElse(null);
+
+        return AdminMentorDetailResponse.builder()
                 .mentorUserId(profile.getUserId())
                 .email(user == null ? null : user.getEmail())
                 .displayName(user == null ? null : user.getFullName())
                 .avatarUrl(user == null ? null : user.getAvatarUrl())
+                .phoneNumber(profile.getPhoneNumber())
                 .userStatus(user == null ? null : user.getStatus())
                 .mentorStatus(profile.getStatus())
                 .isAvailable(profile.isAvailable())
                 .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
                 .headline(profile.getHeadline())
+                .expertiseDescription(profile.getExpertiseDescription())
+                .supportingSubjects(profile.getSupportingSubjects())
                 .teachingMode(profile.getTeachingMode())
                 .sessionDuration(profile.getSessionDuration())
                 .ratingAverage(profile.getAverageRating())
@@ -68,6 +86,10 @@ public class AdminMentorService {
                 .completedSessions(profile.getTotalCompletedSessions())
                 .rejectedBookings(profile.getTotalRejectedBookings())
                 .lateCancellationPenaltyPoints(profile.getLateCancellationPenaltyPoints())
+                .portfolioUrl(profile.getPortfolioUrl())
+                .linkedinUrl(profile.getLinkedinUrl())
+                .githubUrl(profile.getGithubUrl())
+                .primaryLabel(primaryLabel)
                 .verifiedAt(profile.getVerifiedAt())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())

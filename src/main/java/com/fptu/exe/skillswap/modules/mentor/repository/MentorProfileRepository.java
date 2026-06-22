@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -367,10 +368,23 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     List<UUID> findActiveMentorUserIds(@Param("mentorStatus") MentorStatus mentorStatus);
 
     @Query(value = """
-            select mp
+            select new com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse(
+                mp.userId,
+                u.fullName,
+                u.email,
+                u.avatarUrl,
+                program.code,
+                mp.totalCompletedSessions,
+                mp.averageRating,
+                mp.status,
+                mp.createdAt
+            )
             from MentorProfile mp
             join mp.user u
-            where (:status is null or mp.status = :status)
+            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join sp.program program
+            where ((:status is not null and mp.status = :status)
+                or (:status is null and mp.status <> com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT))
               and (:isAvailable is null or mp.isAvailable = :isAvailable)
               and (:keywordPattern is null
                     or lower(u.email) like :keywordPattern
@@ -383,7 +397,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             select count(mp.userId)
             from MentorProfile mp
             join mp.user u
-            where (:status is null or mp.status = :status)
+            where ((:status is not null and mp.status = :status)
+                or (:status is null and mp.status <> com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT))
               and (:isAvailable is null or mp.isAvailable = :isAvailable)
               and (:keywordPattern is null
                     or lower(u.email) like :keywordPattern
@@ -393,8 +408,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                     or function('translate', lower(u.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                     or function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern)
             """)
-    @EntityGraph(attributePaths = {"user"})
-    Page<MentorProfile> searchForAdmin(
+    Page<AdminMentorListItemResponse> searchForAdmin(
             @Param("keywordPattern") String keywordPattern,
             @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
             @Param("accentedCharacters") String accentedCharacters,

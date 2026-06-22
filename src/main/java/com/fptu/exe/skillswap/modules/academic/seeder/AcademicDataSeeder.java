@@ -68,7 +68,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
     private void seedAcademicProgramsAndSpecializations() {
         // 1. CNTT
-        AcademicProgram cntt = seedProgram("CNTT", "Khối ngành Công nghệ thông tin", "Information Technology");
+        AcademicProgram cntt = seedProgram("CNTT", "Công nghệ thông tin", "Information Technology");
         seedSpecialization(cntt, "CNTT_KTPM", "Kỹ thuật phần mềm", "Software Engineering");
         seedSpecialization(cntt, "CNTT_TTNT", "Trí tuệ nhân tạo", "Artificial Intelligence");
         seedSpecialization(cntt, "CNTT_ATTT", "An toàn thông tin", "Information Assurance");
@@ -79,26 +79,26 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(cntt, "CNTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 2. CTTT
-        AcademicProgram cttt = seedProgram("CTTT", "Khối ngành Công nghệ truyền thông", "Communication Technology");
+        AcademicProgram cttt = seedProgram("CTTT", "Công nghệ truyền thông", "Communication Technology");
         seedSpecialization(cttt, "CTTT_TTDPM", "Truyền thông đa phương tiện", "Multimedia Communications");
         seedSpecialization(cttt, "CTTT_QHCC", "Quan hệ công chúng", "Public Relations");
         seedSpecialization(cttt, "CTTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 3. NN
-        AcademicProgram nn = seedProgram("NN", "Khối ngành Ngôn ngữ", "Languages");
+        AcademicProgram nn = seedProgram("NN", "Ngôn ngữ", "Languages");
         seedSpecialization(nn, "NN_NNA", "Ngôn ngữ Anh", "English Linguistics");
         seedSpecialization(nn, "NN_NNHQ", "Ngôn ngữ Hàn Quốc", "Korean Linguistics");
         seedSpecialization(nn, "NN_NNTQ", "Ngôn ngữ Trung Quốc", "Chinese Linguistics");
         seedSpecialization(nn, "NN_OTHER", "Chuyên ngành khác", "Other");
 
         // 4. LUAT
-        AcademicProgram luat = seedProgram("LUAT", "Khối ngành Luật", "Law");
+        AcademicProgram luat = seedProgram("LUAT", "Luật", "Law");
         seedSpecialization(luat, "LUAT_L", "Luật", "Law");
         seedSpecialization(luat, "LUAT_LKT", "Luật Kinh tế", "Economic Law");
         seedSpecialization(luat, "LUAT_OTHER", "Chuyên ngành khác", "Other");
 
         // 5. QTKD
-        AcademicProgram qtkd = seedProgram("QTKD", "Khối ngành Quản trị kinh doanh", "Business Administration");
+        AcademicProgram qtkd = seedProgram("QTKD", "Quản trị kinh doanh", "Business Administration");
         seedSpecialization(qtkd, "QTKD_MKT", "Digital Marketing", "Digital Marketing");
         seedSpecialization(qtkd, "QTKD_KDQT", "Kinh doanh quốc tế", "International Business");
         seedSpecialization(qtkd, "QTKD_TMDT", "Thương mại điện tử", "E-Commerce");
