@@ -176,7 +176,7 @@ class BookingConcurrencyIntegrationTest {
                 bookingService.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("Confirmed"));
                 return true;
             } catch (Exception exception) {
-                return false;
+                throw new RuntimeException("acceptTask failed", exception);
             }
         };
     }
@@ -459,8 +459,7 @@ class BookingConcurrencyIntegrationTest {
                 sessionFeedbackService.submitFeedback(reviewerId, bookingId, req);
                 return true;
             } catch (Exception e) {
-                e.printStackTrace();
-                return false;
+                throw new RuntimeException("submitFeedbackTask failed", e);
             }
         };
     }
@@ -473,8 +472,7 @@ class BookingConcurrencyIntegrationTest {
                 bookingService.cancelBookingByMentor(mentorId, bookingId, new com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest("Late cancellation"));
                 return true;
             } catch (Exception e) {
-                e.printStackTrace();
-                return false;
+                throw new RuntimeException("cancelBookingTask failed", e);
             }
         };
     }
