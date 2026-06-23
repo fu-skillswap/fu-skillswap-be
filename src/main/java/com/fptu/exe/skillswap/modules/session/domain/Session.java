@@ -28,8 +28,8 @@ public class Session {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_sessions_service"))
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "service_id", nullable = true, foreignKey = @ForeignKey(name = "fk_sessions_service"))
     private MentorService service;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

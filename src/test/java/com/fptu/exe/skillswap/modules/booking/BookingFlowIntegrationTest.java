@@ -71,9 +71,13 @@ class BookingFlowIntegrationTest {
     @Autowired
     private BookingService bookingService;
 
+    @Autowired
+    private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
+
     private User menteeUser;
     private User mentorUser;
     private MentorProfile mentorProfile;
+    private com.fptu.exe.skillswap.modules.mentor.domain.MentorService mentorService;
 
     @BeforeEach
     void setUp() {
@@ -102,6 +106,18 @@ class BookingFlowIntegrationTest {
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());
+
+        mentorService = mentorServiceRepository.save(
+                com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                        .mentorProfile(mentorProfile)
+                        .title("Java Programming")
+                        .description("Java basics")
+                        .durationMinutes(60)
+                        .isFree(true)
+                        .priceAmount(java.math.BigDecimal.ZERO)
+                        .isActive(true)
+                        .build()
+        );
     }
 
     @Test
@@ -113,7 +129,7 @@ class BookingFlowIntegrationTest {
         LocalDate effectiveDate = LocalDate.now().plusDays(1);
         var ruleRequest = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
-                java.util.UUID.randomUUID(),
+                mentorService.getId(),
                 AvailabilityRepeatType.DAILY,
                 null,
                 effectiveDate,
@@ -140,7 +156,7 @@ class BookingFlowIntegrationTest {
         CreateBookingRequest createRequest = new CreateBookingRequest(
                 mentorId,
                 slotToBook.getId(),
-                null,
+                mentorService.getId(),
                 "Need help with Java generics",
                 "Wildcard boundaries explain"
         );

@@ -159,7 +159,7 @@ public class BookingService {
 
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
         
-        if (slot.getService() == null || !slot.getService().getId().equals(mentorService.getId())) {
+        if (slot.getService() != null && (mentorService == null || !slot.getService().getId().equals(mentorService.getId()))) {
              throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ này không thuộc dịch vụ đã chọn");
         }
 

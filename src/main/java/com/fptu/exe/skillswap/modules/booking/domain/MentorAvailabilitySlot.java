@@ -34,8 +34,8 @@ public class MentorAvailabilitySlot {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_mentor"))
     private MentorProfile mentorProfile;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_service"))
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "service_id", nullable = true, foreignKey = @ForeignKey(name = "fk_availability_service"))
     private MentorService service;
 
     @Column(name = "start_time", nullable = false)

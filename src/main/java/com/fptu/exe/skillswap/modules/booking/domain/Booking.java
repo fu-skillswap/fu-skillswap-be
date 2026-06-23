@@ -42,8 +42,8 @@ public class Booking {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentor"))
     private MentorProfile mentorProfile;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_service"))
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "service_id", nullable = true, foreignKey = @ForeignKey(name = "fk_bookings_service"))
     private MentorService service;
 
     @ManyToOne(fetch = FetchType.LAZY)
