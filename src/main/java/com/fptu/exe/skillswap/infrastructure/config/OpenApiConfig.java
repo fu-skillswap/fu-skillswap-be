@@ -23,6 +23,9 @@ public class OpenApiConfig {
 
         return new OpenAPI()
                 .addServersItem(new Server()
+                        .url("/")
+                        .description("Default Server (Current Environment)"))
+                .addServersItem(new Server()
                         .url("http://localhost:8080")
                         .description("🖥️ Local Development Server"))
                 .addServersItem(new Server()
