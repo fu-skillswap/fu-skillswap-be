@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -144,5 +145,36 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("startTime") java.time.LocalDateTime startTime,
             @Param("endTime") java.time.LocalDateTime endTime,
             @Param("excludeBookingId") UUID excludeBookingId
+    );
+
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.mentee.id = :menteeId
+              and b.status = 'ACCEPTED'
+              and b.requestedStartTime < :endTime
+              and b.requestedEndTime > :startTime
+            """)
+    boolean hasOverlappingAcceptedBooking(
+            @Param("menteeId") UUID menteeId,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Booking b
+            set b.status = :rejectedStatus,
+                b.rejectedAt = :now,
+                b.rejectReason = :reason,
+                b.updatedAt = :now
+            where b.status = :pendingStatus
+              and b.requestedStartTime < :now
+            """)
+    int bulkExpireStalePendingBookings(
+            @Param("pendingStatus") BookingStatus pendingStatus,
+            @Param("rejectedStatus") BookingStatus rejectedStatus,
+            @Param("now") java.time.LocalDateTime now,
+            @Param("reason") String reason
     );
 }

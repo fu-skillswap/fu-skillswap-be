@@ -304,10 +304,17 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
     private void upsertAvailabilityPlan(MentorProfile mentorProfile) {
         UUID mentorUserId = mentorProfile.getUserId();
+        List<MentorService> services = mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorUserId);
+        if (services.isEmpty()) {
+            return;
+        }
+        MentorService service = services.get(0);
+
         List<MentorAvailabilityRule> rules = mentorAvailabilityRuleRepository.findByMentorProfileUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(mentorUserId);
         if (rules.isEmpty()) {
             MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
                     .mentorProfile(mentorProfile)
+                    .service(service)
                     .ruleType(AvailabilityRuleType.OPEN)
                     .repeatType(AvailabilityRepeatType.WEEKLY)
                     .daysOfWeek("MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY,SUNDAY")
@@ -341,6 +348,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
             MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
+                    .service(service)
                     .startTime(start)
                     .endTime(end)
                     .timezone(DEFAULT_TIMEZONE)

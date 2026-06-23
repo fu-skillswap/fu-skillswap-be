@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.domain;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,6 +33,10 @@ public class MentorAvailabilitySlot {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_mentor"))
     private MentorProfile mentorProfile;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_service"))
+    private MentorService service;
 
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;

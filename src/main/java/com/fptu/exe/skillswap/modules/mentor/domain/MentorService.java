@@ -59,6 +59,10 @@ public class MentorService {
     @Builder.Default
     private boolean isActive = true;
 
+    @Column(name = "is_legacy", nullable = false)
+    @Builder.Default
+    private boolean isLegacy = false;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "mentor_service_help_topics",

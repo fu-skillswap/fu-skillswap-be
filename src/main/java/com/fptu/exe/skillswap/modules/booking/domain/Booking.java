@@ -19,7 +19,9 @@ import java.util.UUID;
     @Index(name = "idx_bookings_status", columnList = "status"),
     @Index(name = "idx_bookings_start_time", columnList = "requested_start_time"),
     @Index(name = "idx_bookings_mentee_status_time", columnList = "mentee_user_id, status, requested_start_time"),
-    @Index(name = "idx_bookings_mentor_status_time", columnList = "mentor_user_id, status, requested_start_time")
+    @Index(name = "idx_bookings_mentor_status_time", columnList = "mentor_user_id, status, requested_start_time"),
+    @Index(name = "idx_bookings_status_requested_start_time", columnList = "status, requested_start_time"),
+    @Index(name = "idx_bookings_mentee_status_requested_time", columnList = "mentee_user_id, status, requested_start_time, requested_end_time")
 })
 @Getter
 @Setter
@@ -40,8 +42,8 @@ public class Booking {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentor"))
     private MentorProfile mentorProfile;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "service_id", foreignKey = @ForeignKey(name = "fk_bookings_service"))
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_service"))
     private MentorService service;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -86,19 +88,24 @@ public class Booking {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Deprecated
     @Enumerated(EnumType.STRING)
     @Column(name = "meeting_platform")
     private MeetingPlatform meetingPlatform;
 
+    @Deprecated
     @Column(name = "meeting_link", columnDefinition = "TEXT")
     private String meetingLink;
 
+    @Deprecated
     @Column(columnDefinition = "TEXT")
     private String location;
 
+    @Deprecated
     @Column(name = "actual_start_time")
     private LocalDateTime actualStartTime;
 
+    @Deprecated
     @Column(name = "actual_end_time")
     private LocalDateTime actualEndTime;
 

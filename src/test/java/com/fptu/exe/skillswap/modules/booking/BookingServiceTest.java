@@ -90,11 +90,18 @@ class BookingServiceTest {
     @Mock
     private jakarta.persistence.EntityManager entityManager;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
+
+    @Mock
+    private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+
     @InjectMocks
     private BookingService bookingService;
 
     private UUID menteeId;
     private UUID mentorId;
+    private UUID serviceId;
     private User mentee;
     private User mentorUser;
     private MentorProfile mentorProfile;
@@ -104,6 +111,7 @@ class BookingServiceTest {
     void setUp() {
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
+        serviceId = UUID.randomUUID();
 
         mentee = buildUser(menteeId, "mentee@test.com", "Mentee User", UserStatus.ACTIVE);
         mentorUser = buildUser(mentorId, "mentor@test.com", "Mentor User", UserStatus.ACTIVE);
@@ -132,6 +140,25 @@ class BookingServiceTest {
         slot.setEndTime(testNow().plusDays(2).plusHours(1));
         slot.setActive(true);
         slot.setBooked(false);
+
+        MentorService service = MentorService.builder()
+                .id(serviceId)
+                .mentorProfile(mentorProfile)
+                .title("Mock Service")
+                .durationMinutes(60)
+                .isActive(true)
+                .build();
+        slot.setService(service);
+
+        org.mockito.Mockito.lenient().when(mentorServiceRepository.findByIdAndMentorProfileUserIdAndIsActiveTrue(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(service));
+
+        org.mockito.Mockito.lenient().when(sessionService.findByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(new com.fptu.exe.skillswap.modules.session.domain.Session());
+
+        org.mockito.Mockito.lenient().when(sessionService.createForAcceptedBooking(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.fptu.exe.skillswap.modules.session.domain.Session());
+
         org.mockito.Mockito.lenient().when(mentorProfileRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(mentorProfile));
         org.mockito.Mockito.lenient().when(bookingRepository.findSlotIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
@@ -143,7 +170,7 @@ class BookingServiceTest {
         CreateBookingRequest request = new CreateBookingRequest(
                 mentorId,
                 slot.getId(),
-                null,
+                serviceId,
                 "Learn Spring Modulith",
                 "Understand module dependencies"
         );
@@ -186,7 +213,7 @@ class BookingServiceTest {
         CreateBookingRequest request = new CreateBookingRequest(
                 mentorId,
                 slot.getId(),
-                null,
+                serviceId,
                 "Need support",
                 null
         );
@@ -202,7 +229,7 @@ class BookingServiceTest {
 
     @Test
     void createBooking_withoutCompletedAcademicProfile_shouldThrowConflict() {
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(false);
 
@@ -214,7 +241,7 @@ class BookingServiceTest {
     @Test
     void createBooking_adminAccount_shouldThrowAccessDenied() {
         mentee.setRoles(Set.of(RoleCode.ADMIN));
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
@@ -225,7 +252,7 @@ class BookingServiceTest {
     @Test
     void createBooking_systemAdminAccount_shouldThrowAccessDenied() {
         mentee.setRoles(Set.of(RoleCode.SYSTEM_ADMIN));
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
@@ -237,7 +264,7 @@ class BookingServiceTest {
     void createBooking_mentorUserBookingAnotherMentor_shouldSucceed() {
         User mentorBooker = buildUser(UUID.randomUUID(), "mentor-booker@test.com", "Mentor Booker", UserStatus.ACTIVE);
         mentorBooker.setRoles(Set.of(RoleCode.MENTOR));
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Need architecture advice", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Need architecture advice", null);
 
         when(userRepository.findById(mentorBooker.getId())).thenReturn(Optional.of(mentorBooker));
         when(academicService.hasCompletedStudentProfile(mentorBooker.getId())).thenReturn(true);
@@ -268,7 +295,7 @@ class BookingServiceTest {
 
     @Test
     void createBooking_allowsUpToThreePendingRequestsForSameSlot() {
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
@@ -285,7 +312,7 @@ class BookingServiceTest {
 
     @Test
     void createBooking_fourthPendingRequestForSameSlot_shouldFail() {
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
@@ -299,7 +326,7 @@ class BookingServiceTest {
 
     @Test
     void createBooking_shouldFailIfSlotAlreadyHasAcceptedBooking() {
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
@@ -312,7 +339,7 @@ class BookingServiceTest {
 
     @Test
     void createBooking_sameMenteeSameSlotPendingOrAccepted_shouldFail() {
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
@@ -328,7 +355,7 @@ class BookingServiceTest {
     @Test
     void createBooking_inactiveMentee_shouldThrowUserInactive() {
         mentee.setStatus(UserStatus.BANNED);
-        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), null, "Goal", null);
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
@@ -691,8 +718,7 @@ class BookingServiceTest {
         for (BookingStatus status : List.of(
                 BookingStatus.REJECTED,
                 BookingStatus.CANCELLED_BY_MENTEE,
-                BookingStatus.CANCELLED_BY_MENTOR,
-                BookingStatus.COMPLETED
+                BookingStatus.CANCELLED_BY_MENTOR
         )) {
             Booking mentorDecisionBooking = bookingForDecision(status);
             when(bookingRepository.findByIdForMentorDecision(mentorDecisionBooking.getId())).thenReturn(Optional.of(mentorDecisionBooking));
@@ -751,6 +777,104 @@ class BookingServiceTest {
         bookingService.cancelBookingByMentee(menteeId, cancelledBooking.getId(), new CancelBookingRequest("Cancel reason"));
         assertEquals("Cancel reason", cancelledBooking.getCancelReason());
         assertNull(cancelledBooking.getRejectReason());
+        verify(sessionService).cancelForBooking(cancelledBooking.getId());
+    }
+
+    @Test
+    void completeBooking_doubleSidedNotes_successful() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        booking.setRequestedStartTime(testNow().minusHours(2));
+        booking.setRequestedEndTime(testNow().minusHours(1));
+
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // 1. Mentor completes first
+        BookingResponse response1 = bookingService.completeBooking(mentorId, booking.getId(), new CompleteBookingRequest("Mentor completion note"));
+        assertNotNull(response1);
+        assertEquals(BookingStatus.COMPLETED, booking.getStatus());
+        assertEquals("Mentor completion note", booking.getMentorNote());
+        assertNull(booking.getMenteeNote());
+
+        // 2. Mentee completes second
+        BookingResponse response2 = bookingService.completeBooking(menteeId, booking.getId(), new CompleteBookingRequest("Mentee completion note"));
+        assertNotNull(response2);
+        assertEquals(BookingStatus.COMPLETED, booking.getStatus());
+        assertEquals("Mentor completion note", booking.getMentorNote());
+        assertEquals("Mentee completion note", booking.getMenteeNote());
+
+        // 3. Mentor tries to write note again -> fails
+        assertThrows(BaseException.class, () -> bookingService.completeBooking(mentorId, booking.getId(), new CompleteBookingRequest("Try again")));
+
+        // 4. Non-participant tries to complete -> fails
+        assertThrows(BaseException.class, () -> bookingService.completeBooking(UUID.randomUUID(), booking.getId(), new CompleteBookingRequest("Impoverished")));
+    }
+
+    @Test
+    void completeBooking_invalidStates_throwsConflict() {
+        for (BookingStatus status : List.of(BookingStatus.PENDING, BookingStatus.REJECTED, BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)) {
+            Booking booking = bookingForDecision(status);
+            when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+            assertThrows(BaseException.class, () -> bookingService.completeBooking(mentorId, booking.getId(), new CompleteBookingRequest("Note")));
+        }
+    }
+
+    @Test
+    void cancelBookingByMentor_shouldCancelSession() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        bookingService.cancelBookingByMentor(mentorId, booking.getId(), new CancelBookingRequest("Mentor change plans"));
+
+        assertEquals(BookingStatus.CANCELLED_BY_MENTOR, booking.getStatus());
+        verify(sessionService).cancelForBooking(booking.getId());
+    }
+
+    @Test
+    void expireStalePendingBookings_shouldCallBulkUpdateAndReturnCount() {
+        when(bookingRepository.bulkExpireStalePendingBookings(
+                eq(BookingStatus.PENDING),
+                eq(BookingStatus.REJECTED),
+                any(LocalDateTime.class),
+                eq("Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.")
+        )).thenReturn(5);
+
+        int expiredCount = bookingService.expireStalePendingBookings();
+
+        assertEquals(5, expiredCount);
+        verify(bookingRepository).bulkExpireStalePendingBookings(
+                eq(BookingStatus.PENDING),
+                eq(BookingStatus.REJECTED),
+                any(LocalDateTime.class),
+                eq("Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.")
+        );
+    }
+
+    @Test
+    void createBooking_pendingLimitExceeded_shouldThrowConflict() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(bookingRepository.countByMenteeIdAndStatus(menteeId, BookingStatus.PENDING)).thenReturn((long) BookingQueueConstants.MAX_PENDING_BOOKINGS_PER_MENTEE);
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertTrue(exception.getMessage().contains("tối đa 5 yêu cầu"));
+    }
+
+    @Test
+    void createBooking_overlappingAcceptedBooking_shouldThrowConflict() {
+        CreateBookingRequest request = new CreateBookingRequest(mentorId, slot.getId(), serviceId, "Goal", null);
+        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
+        when(bookingRepository.countByMenteeIdAndStatus(menteeId, BookingStatus.PENDING)).thenReturn(0L);
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        when(bookingRepository.hasOverlappingAcceptedBooking(eq(menteeId), any(), any())).thenReturn(true);
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertTrue(exception.getMessage().contains("trùng với khung giờ này"));
     }
 
     private Booking bookingForDecision(BookingStatus status) {

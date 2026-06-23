@@ -58,6 +58,9 @@ class MentorAvailabilityServiceTest {
     @Mock
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
+
     @InjectMocks
     private MentorAvailabilityService mentorAvailabilityService;
 
@@ -101,6 +104,7 @@ class MentorAvailabilityServiceTest {
     void createRule_successful_resetsFutureSlots() {
         UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
+                java.util.UUID.randomUUID(),
                 AvailabilityRepeatType.DAILY,
                 null,
                 LocalDate.now(),
@@ -111,6 +115,8 @@ class MentorAvailabilityServiceTest {
         );
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorServiceRepository.findByIdAndMentorProfileUserIdAndIsActiveTrue(any(), eq(mentorUserId)))
+                .thenReturn(Optional.of(new com.fptu.exe.skillswap.modules.mentor.domain.MentorService()));
         when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -124,6 +130,7 @@ class MentorAvailabilityServiceTest {
     void createRule_weeklyWithoutDays_shouldThrowBadRequest() {
         UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
+                java.util.UUID.randomUUID(),
                 AvailabilityRepeatType.WEEKLY,
                 List.of(),
                 LocalDate.now(),
@@ -144,6 +151,7 @@ class MentorAvailabilityServiceTest {
     void createRule_nonWeeklyWithDays_shouldThrowBadRequest() {
         UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
+                java.util.UUID.randomUUID(),
                 AvailabilityRepeatType.DAILY,
                 List.of(DayOfWeek.MONDAY),
                 LocalDate.now(),
@@ -165,6 +173,7 @@ class MentorAvailabilityServiceTest {
         mentorProfile.setVerifiedAt(null);
         UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
+                java.util.UUID.randomUUID(),
                 AvailabilityRepeatType.DAILY,
                 null,
                 LocalDate.now(),

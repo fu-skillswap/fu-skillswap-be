@@ -68,6 +68,8 @@ public class BookingService {
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
     private final EntityManager entityManager;
+    private final com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
+    private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -81,6 +83,12 @@ public class BookingService {
         User mentee = userRepository.findById(menteeUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
         validateBookerEligibility(mentee);
+
+        long menteePendingCount = bookingRepository.countByMenteeIdAndStatus(menteeUserId, BookingStatus.PENDING);
+        if (menteePendingCount >= BookingQueueConstants.MAX_PENDING_BOOKINGS_PER_MENTEE) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Bạn đang có tối đa 5 yêu cầu đặt lịch đang chờ phản hồi. Vui lòng chờ mentor phản hồi hoặc hủy bớt yêu cầu đang chờ để đặt lịch mới.");
+        }
 
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(request.availabilitySlotId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
@@ -123,6 +131,17 @@ public class BookingService {
         if (!slot.getStartTime().isAfter(now)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bắt đầu hoặc đã trôi qua");
         }
+
+        boolean hasOverlap = bookingRepository.hasOverlappingAcceptedBooking(
+                menteeUserId,
+                slot.getStartTime(),
+                slot.getEndTime()
+        );
+        if (hasOverlap) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ này.");
+        }
+
         if (bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã được chấp nhận cho một booking khác");
         }
@@ -139,6 +158,10 @@ public class BookingService {
         }
 
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
+        
+        if (slot.getService() == null || !slot.getService().getId().equals(mentorService.getId())) {
+             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ này không thuộc dịch vụ đã chọn");
+        }
 
         Booking savedBooking = bookingRepository.save(Booking.builder()
                 .mentee(mentee)
@@ -266,6 +289,9 @@ public class BookingService {
         bookingRepository.saveAll(pendingBookings);
         Booking savedBooking = bookingRepository.save(booking);
 
+        sessionService.createForAcceptedBooking(savedBooking);
+        conversationService.createDirectForAcceptedBooking(savedBooking);
+
         notificationService.createNotification(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
@@ -360,8 +386,14 @@ public class BookingService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được chấp nhận");
         }
 
-        booking.setMeetingPlatform(request.meetingPlatform());
-        booking.setMeetingLink(cleanMeetingLink(request.meetingLink()));
+        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
+        if (session == null) {
+            session = sessionService.createForAcceptedBooking(booking);
+        }
+        session.setMeetingPlatform(request.meetingPlatform());
+        session.setMeetingLink(cleanMeetingLink(request.meetingLink()));
+        // Note: location should be added to Session if needed. Leaving it here for backward compatibility or ignoring it if Session doesn't have it.
+        // Wait, I didn't add location to Session. I will leave it to booking.setLocation.
         booking.setLocation(trimToNull(request.location()));
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -391,9 +423,29 @@ public class BookingService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
 
-        if (booking.getStatus() != BookingStatus.ACCEPTED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hoàn tất booking đã được chấp nhận");
+        if (booking.getStatus() != BookingStatus.ACCEPTED && booking.getStatus() != BookingStatus.COMPLETED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hoàn tất booking đã được chấp nhận hoặc đã hoàn thành");
         }
+
+        String completionNote = trimToNull(request == null ? null : request.completionNote());
+        boolean isMentor = isMentorOfBooking(booking, currentUserId);
+
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
+            if (isMentor) {
+                if (booking.getMentorNote() != null && !booking.getMentorNote().isBlank()) {
+                    throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã ghi nhận ghi chú hoàn thành cho buổi học này rồi");
+                }
+                booking.setMentorNote(completionNote);
+            } else {
+                if (booking.getMenteeNote() != null && !booking.getMenteeNote().isBlank()) {
+                    throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã ghi nhận ghi chú hoàn thành cho buổi học này rồi");
+                }
+                booking.setMenteeNote(completionNote);
+            }
+            Booking savedBooking = bookingRepository.save(booking);
+            return toBookingResponse(savedBooking);
+        }
+
         LocalDateTime now = DateTimeUtil.now();
         if (booking.getRequestedStartTime() == null || booking.getRequestedEndTime() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian booking không hợp lệ");
@@ -402,8 +454,7 @@ public class BookingService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chưa thể hoàn tất booking trước thời gian bắt đầu");
         }
 
-        String completionNote = trimToNull(request == null ? null : request.completionNote());
-        if (isMentorOfBooking(booking, currentUserId)) {
+        if (isMentor) {
             booking.setMentorNote(completionNote);
         } else {
             booking.setMenteeNote(completionNote);
@@ -416,6 +467,17 @@ public class BookingService {
         }
         if (booking.getActualEndTime() == null) {
             booking.setActualEndTime(booking.getRequestedEndTime());
+        }
+
+        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
+        if (session != null) {
+            session.setStatus(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED);
+            if (session.getActualStartTime() == null) {
+                session.setActualStartTime(booking.getRequestedStartTime());
+            }
+            if (session.getActualEndTime() == null) {
+                session.setActualEndTime(booking.getRequestedEndTime());
+            }
         }
 
         MentorProfile mentorProfile = booking.getMentorProfile();
@@ -536,6 +598,13 @@ public class BookingService {
         MentorService mentorService = booking.getService();
         MentorAvailabilitySlot slot = booking.getSlot();
 
+        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService != null ? sessionService.findByBookingId(booking.getId()) : null;
+
+        MeetingPlatform platform = session != null ? session.getMeetingPlatform() : booking.getMeetingPlatform();
+        String link = session != null ? session.getMeetingLink() : booking.getMeetingLink();
+        LocalDateTime actualStart = session != null ? session.getActualStartTime() : booking.getActualStartTime();
+        LocalDateTime actualEnd = session != null ? session.getActualEndTime() : booking.getActualEndTime();
+
         return BookingResponse.builder()
                 .bookingId(booking.getId())
                 .sessionId(booking.getId())
@@ -555,13 +624,13 @@ public class BookingService {
                 .mentorResponseNote(booking.getMentorResponseNote())
                 .rejectReason(booking.getRejectReason())
                 .cancelReason(booking.getCancelReason())
-                .meetingPlatform(booking.getMeetingPlatform())
-                .meetingLink(booking.getMeetingLink())
+                .meetingPlatform(platform)
+                .meetingLink(link)
                 .location(booking.getLocation())
                 .requestedStartTime(booking.getRequestedStartTime())
                 .requestedEndTime(booking.getRequestedEndTime())
-                .actualStartTime(booking.getActualStartTime())
-                .actualEndTime(booking.getActualEndTime())
+                .actualStartTime(actualStart)
+                .actualEndTime(actualEnd)
                 .acceptedAt(booking.getAcceptedAt())
                 .rejectedAt(booking.getRejectedAt())
                 .cancelledAt(booking.getCancelledAt())
@@ -781,6 +850,8 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
 
+        sessionService.cancelForBooking(bookingId);
+
         notificationService.createNotification(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTOR,
@@ -844,6 +915,8 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
 
+        sessionService.cancelForBooking(bookingId);
+
         notificationService.createNotification(
                 savedBooking.getMentorProfile().getUserId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTEE,
@@ -866,6 +939,17 @@ public class BookingService {
                 .build());
 
         return toBookingResponse(savedBooking);
+    }
+
+    @Transactional
+    public int expireStalePendingBookings() {
+        LocalDateTime now = DateTimeUtil.now();
+        return bookingRepository.bulkExpireStalePendingBookings(
+                BookingStatus.PENDING,
+                BookingStatus.REJECTED,
+                now,
+                "Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu."
+        );
     }
 }
 

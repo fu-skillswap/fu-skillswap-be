@@ -55,6 +55,7 @@ public class MentorAvailabilityService {
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
 
     @Transactional(readOnly = true)
     public List<AvailabilityRuleResponse> getMyRules(UUID mentorUserId) {
@@ -71,8 +72,12 @@ public class MentorAvailabilityService {
         MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
         UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
 
+        com.fptu.exe.skillswap.modules.mentor.domain.MentorService service = mentorServiceRepository.findByIdAndMentorProfileUserIdAndIsActiveTrue(safeRequest.serviceId(), mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn không tồn tại hoặc không thuộc mentor này"));
+
         MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
                 .mentorProfile(mentorProfile)
+                .service(service)
                 .ruleType(safeRequest.ruleType())
                 .repeatType(safeRequest.repeatType())
                 .daysOfWeek(encodeDays(safeRequest.daysOfWeek()))
@@ -101,6 +106,10 @@ public class MentorAvailabilityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy rule lịch rảnh"));
         UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
 
+        com.fptu.exe.skillswap.modules.mentor.domain.MentorService service = mentorServiceRepository.findByIdAndMentorProfileUserIdAndIsActiveTrue(safeRequest.serviceId(), mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn không tồn tại hoặc không thuộc mentor này"));
+
+        rule.setService(service);
         rule.setRuleType(safeRequest.ruleType());
         rule.setRepeatType(safeRequest.repeatType());
         rule.setDaysOfWeek(encodeDays(safeRequest.daysOfWeek()));
@@ -209,6 +218,7 @@ public class MentorAvailabilityService {
                 try {
                     mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                             .mentorProfile(mentorProfile)
+                            .service(openRule.getService())
                             .startTime(start)
                             .endTime(end)
                             .timezone(APP_TIMEZONE)
@@ -297,8 +307,8 @@ public class MentorAvailabilityService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu lịch rảnh không được để trống");
         }
-        if (request.ruleType() == null || request.repeatType() == null || request.effectiveFrom() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "ruleType, repeatType và effectiveFrom là bắt buộc");
+        if (request.ruleType() == null || request.repeatType() == null || request.effectiveFrom() == null || request.serviceId() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "ruleType, repeatType, effectiveFrom và serviceId là bắt buộc");
         }
         if (request.effectiveTo() != null && request.effectiveTo().isBefore(request.effectiveFrom())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "effectiveTo phải lớn hơn hoặc bằng effectiveFrom");

@@ -49,6 +49,10 @@ public class MentorAvailabilityRule {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rules_mentor"))
     private MentorProfile mentorProfile;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rules_service"))
+    private com.fptu.exe.skillswap.modules.mentor.domain.MentorService service;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "rule_type", nullable = false, length = 20)
     private AvailabilityRuleType ruleType;

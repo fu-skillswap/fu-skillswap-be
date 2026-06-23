@@ -17,7 +17,8 @@ public record CreateBookingRequest(
         @NotNull(message = "availabilitySlotId là bắt buộc")
         UUID availabilitySlotId,
 
-        @Schema(description = "serviceId nếu mentee chọn một mentor service cụ thể. Có thể null nếu booking trực tiếp theo hồ sơ mentor.", nullable = true, example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
+        @Schema(description = "serviceId bắt buộc phải có cho booking mới.", example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
+        @NotNull(message = "serviceId là bắt buộc")
         UUID serviceId,
 
         @Schema(description = "Tiêu đề mục tiêu học tập ngắn gọn để mentor nhìn nhanh", example = "Review lộ trình học Spring Boot và chuẩn bị phỏng vấn intern")

@@ -1,0 +1,34 @@
+package com.fptu.exe.skillswap.modules.conversation.event;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
+
+import java.util.UUID;
+
+@Component
+@RequiredArgsConstructor
+@Slf4j
+public class ChatMessageWebSocketPublisher {
+
+    private final SimpMessagingTemplate messagingTemplate;
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = false)
+    public void handleChatMessageSaved(ChatMessageSavedEvent event) {
+        log.info("Publishing ChatMessageEvent to WebSockets after transaction commit for message: {}", event.getEvent().messageId());
+        for (UUID recipientId : event.getRecipientUserIds()) {
+            try {
+                messagingTemplate.convertAndSendToUser(
+                        recipientId.toString(),
+                        "/queue/messages",
+                        event.getEvent()
+                );
+            } catch (Exception ex) {
+                log.error("Failed to send WebSocket message to user: {}", recipientId, ex);
+            }
+        }
+    }
+}

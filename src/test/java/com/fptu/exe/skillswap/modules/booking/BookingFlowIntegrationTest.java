@@ -113,6 +113,7 @@ class BookingFlowIntegrationTest {
         LocalDate effectiveDate = LocalDate.now().plusDays(1);
         var ruleRequest = new UpsertAvailabilityRuleRequest(
                 AvailabilityRuleType.OPEN,
+                java.util.UUID.randomUUID(),
                 AvailabilityRepeatType.DAILY,
                 null,
                 effectiveDate,
