@@ -34,15 +34,15 @@ import java.util.UUID;
 @RequestMapping("/api/mentor/availability-rules")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
+@Tag(name = "Mentor Availability", description = "Nhóm API để mentor quản lý availability rules và để mentee đọc các slot còn hiển thị có thể booking. FE dùng sau khi mentor đã có service và trước khi tạo booking request.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorAvailabilityController {
 
     private final MentorAvailabilityService mentorAvailabilityService;
 
     @Operation(
-            summary = "Xem các rule lịch rảnh hiện tại của mentor",
-            description = "Trả về toàn bộ availability rule đang thuộc mentor hiện tại, bao gồm rule mở lịch và rule đóng lịch."
+            summary = "Lấy danh sách availability rules của tôi",
+            description = "Trả về các availability rules thuộc về mentor hiện tại, bao gồm cả rule mở lịch và rule đóng lịch. FE dùng ở màn quản lý lịch của mentor trước khi sửa hoặc tạo rule mới."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách rule thành công"),
@@ -60,10 +60,9 @@ public class MentorAvailabilityController {
     @Operation(
             summary = "Tạo availability rule",
             description = """
-                    Tạo rule mở lịch hoặc đóng lịch theo ngày, khoảng ngày hoặc lặp theo thứ trong tuần.
-                    Lưu ý:
-                    - Rule chỉ định nghĩa nguồn sinh slot, không phải booking thật.
-                    - Các slot đã có booking trước đó sẽ không bị mất chỉ vì mentor thay đổi rule sau này.
+                    Tạo một availability rule kiểu OPEN hoặc CLOSED cho mentor hiện tại.
+                    FE dùng để khai báo khi nào hệ thống nên sinh ra các slot hiển thị cho booking trong tương lai.
+                    Availability rule chỉ định nghĩa logic sinh slot chứ không tạo booking thật, và việc đổi rule không xóa các booking đã tồn tại.
                     """
     )
     @ApiResponses({
@@ -85,7 +84,7 @@ public class MentorAvailabilityController {
 
     @Operation(
             summary = "Cập nhật availability rule",
-            description = "Cập nhật một rule hiện có của mentor. Chỉ rule thuộc mentor hiện tại mới được sửa."
+            description = "Cập nhật một availability rule hiện có của mentor hiện tại. FE dùng khi mentor muốn thay đổi logic lịch trong tương lai như ngày hiệu lực, kiểu lặp hoặc service gắn với rule."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cập nhật rule thành công"),
@@ -107,7 +106,7 @@ public class MentorAvailabilityController {
 
     @Operation(
             summary = "Tắt availability rule",
-            description = "Xóa mềm một rule lịch rảnh. Các booking đã tạo hoặc đã được accept trước đó vẫn được giữ nguyên."
+            description = "Tắt mềm một availability rule của mentor hiện tại. FE dùng khi mentor không muốn tiếp tục sinh slot từ rule đó nhưng vẫn cần giữ nguyên dữ liệu booking lịch sử."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tắt rule thành công"),

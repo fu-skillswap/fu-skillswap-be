@@ -32,18 +32,18 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/bookings")
 @RequiredArgsConstructor
-@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
+@Tag(name = "Mentor Booking", description = "Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot.")
 @SecurityRequirement(name = "bearerAuth")
 public class MyBookingController {
 
     private final BookingService bookingService;
 
     @Operation(
-            summary = "Xem danh sách booking của tôi",
+            summary = "Lấy danh sách booking của tôi",
             description = """
-                    Trả danh sách booking theo góc nhìn của chính người dùng hiện tại.
-                    - role=MENTEE: chỉ trả các booking do tôi tạo
-                    - role=MENTOR: chỉ trả các booking được gửi tới tôi với tư cách mentor
+                    Trả về danh sách booking theo góc nhìn của user hiện tại.
+                    FE dùng role=MENTEE để hiển thị các request do tôi tạo, hoặc role=MENTOR để hiển thị các request được gửi tới tôi với tư cách mentor.
+                    Đây là API danh sách chính cho lịch sử booking, màn pending actions và màn theo dõi trạng thái booking.
                     """
     )
     @ApiResponses({
@@ -60,8 +60,8 @@ public class MyBookingController {
     }
 
     @Operation(
-            summary = "Xem chi tiết một booking thuộc về tôi",
-            description = "Chỉ trả dữ liệu nếu booking này thuộc về chính người dùng hiện tại với vai trò mentee hoặc mentor."
+            summary = "Lấy chi tiết booking của tôi",
+            description = "Trả về chi tiết một booking khi user hiện tại là mentee hoặc mentor của booking đó. FE dùng ở màn booking detail trước khi hiển thị các action như accept, reject, cancel, complete hoặc review."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy chi tiết booking thành công"),
@@ -79,11 +79,11 @@ public class MyBookingController {
     }
 
     @Operation(
-            summary = "Mentee hủy booking của chính mình",
+            summary = "Hủy booking của tôi",
             description = """
-                    Mentee chỉ được hủy booking của mình ở các trạng thái backend cho phép.
-                    Business rule hiện tại yêu cầu phải gửi cancelReason.
-                    Các ngưỡng phạt hoặc giới hạn sát giờ sẽ do backend tự tính theo timezone Asia/Ho_Chi_Minh.
+                    Hủy một booking thuộc về mentee hiện tại.
+                    FE dùng khi mentee không muốn tiếp tục một request đang PENDING hoặc một buổi đã ACCEPTED và phải gửi kèm lý do hủy.
+                    Backend có hành vi khác nhau khi hủy booking PENDING và khi hủy booking ACCEPTED, nên FE cần handle response theo trạng thái thực tế.
                     """
     )
     @ApiResponses({
@@ -105,11 +105,11 @@ public class MyBookingController {
     }
 
     @Operation(
-            summary = "Đánh dấu booking đã hoàn thành",
+            summary = "Hoàn thành booking của tôi",
             description = """
-                    Dùng cho mentee hoặc mentor đánh dấu buổi mentoring đã hoàn thành.
-                    Backend chỉ cho phép khi booking đã được ACCEPTED và đã tới thời điểm phù hợp để complete.
-                    completionNote là tùy chọn, dùng để lưu ghi chú ngắn sau buổi học.
+                    Đánh dấu booking đã hoàn thành cho participant hiện tại.
+                    FE dùng sau khi buổi mentoring kết thúc và booking đang ở trạng thái backend cho phép complete.
+                    Khi complete thành công, mentee sẽ đủ điều kiện đi tiếp sang luồng gửi review/feedback.
                     """
     )
     @ApiResponses({

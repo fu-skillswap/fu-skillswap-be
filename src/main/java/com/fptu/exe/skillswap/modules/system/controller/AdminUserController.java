@@ -28,7 +28,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Users", description = "Admin user listing, status configuration (lock/unlock), and role assignment")
+@Tag(name = "Admin - Users", description = "Nhóm API vận hành nội bộ để xem danh sách user visible và thay đổi trạng thái tài khoản như ban hoặc unban. FE admin dùng trong các màn moderation user.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN','SYSTEM_ADMIN')")
 public class AdminUserController {
@@ -36,13 +36,8 @@ public class AdminUserController {
     private final AdminUserService adminUserService;
 
     @Operation(
-            summary = "Lấy danh sách user thường dành cho admin",
-            description = "Chỉ trả về user có role MENTEE hoặc MENTOR. Loại bỏ hoàn toàn ADMIN và SYSTEM_ADMIN. " +
-                    "Quy tắc lọc theo role:\n" +
-                    "- role=MENTEE: Trả về người dùng chỉ có vai trò MENTEE duy nhất (pure mentee), loại trừ người dùng có cả vai trò MENTOR.\n" +
-                    "- role=MENTOR: Trả về tất cả người dùng có khả năng làm mentor (bao gồm cả những người dùng có cả 2 vai trò MENTEE và MENTOR).\n" +
-                    "- Không truyền role: Trả về tất cả người dùng thuộc nhóm visible (không có quyền ADMIN/SYSTEM_ADMIN).\n\n" +
-                    "Hỗ trợ phân trang (page, size), tìm kiếm theo từ khóa (keyword), lọc theo trạng thái hoạt động (status) và sắp xếp (sortBy, direction)."
+            summary = "Lấy danh sách visible users",
+            description = "Trả về danh sách user không phải admin mà admin vận hành được phép nhìn thấy. FE admin dùng cho các màn moderation với keyword, role, status, pagination và sorting; tài khoản ADMIN và SYSTEM_ADMIN được loại khỏi danh sách này theo thiết kế."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách người dùng"),
@@ -56,7 +51,7 @@ public class AdminUserController {
         return ApiResponse.success(adminUserService.getVisibleUsers(request));
     }
 
-    @Operation(summary = "Đình chỉ/Khóa tài khoản của người dùng (Banned)")
+    @Operation(summary = "Khóa user", description = "Chuyển trạng thái tài khoản của một visible user sang banned. FE admin dùng trong flow moderation khi cần chặn user sử dụng hệ thống và phải lưu lại lý do thao tác.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấm người dùng thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -75,7 +70,7 @@ public class AdminUserController {
         return ApiResponse.success(adminUserService.changeUserStatus(principal.getPublicId(), userId, true, request.getReason()));
     }
 
-    @Operation(summary = "Mở khóa/Kích hoạt lại tài khoản của người dùng (Active)")
+    @Operation(summary = "Mở khóa user", description = "Khôi phục một tài khoản banned về trạng thái active. FE admin dùng trong flow moderation khi quyết định cho user truy cập hệ thống trở lại và phải lưu lại lý do mở khóa.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Mở khóa người dùng thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),

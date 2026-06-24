@@ -25,26 +25,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/bookings")
 @RequiredArgsConstructor
-@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
+@Tag(name = "Mentor Booking", description = "Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot.")
 @SecurityRequirement(name = "bearerAuth")
 public class BookingController {
 
     private final BookingService bookingService;
 
     @Operation(
-            summary = "Tạo booking request từ mentee tới mentor",
+            summary = "Tạo booking request",
             description = """
-                    Tạo một yêu cầu booking mới vào slot còn hiển thị trên discovery.
+                    Tạo một booking request mới ở trạng thái PENDING cho mentor service và availability slot mà mentee đã chọn.
                     
-                    Luồng queue hiện tại:
-                    - Tạo request mới chỉ đưa booking vào trạng thái PENDING, chưa giữ chỗ độc quyền cho mentee.
-                    - Mỗi slot cho phép tối đa 3 request PENDING cùng lúc.
-                    - Khi mentor ACCEPTED một request trong slot, các request PENDING còn lại của cùng slot sẽ tự động chuyển REJECTED.
+                    FE dùng API này sau khi mentee chọn mentor, chọn slot còn hiển thị và nhập learning goal. Slot chưa được giữ chính thức cho mentee cho đến khi mentor accept request.
                     
-                    Các trường hợp thường bị từ chối:
-                    - slot đã bị ẩn vì quá khứ, inactive, đã được ACCEPTED, hoặc đã đủ 3 request PENDING
-                    - mentee đã có 3 booking PENDING tổng cộng trong hệ thống
-                    - mentor không còn ở trạng thái sẵn sàng nhận lịch
+                    FE cần handle các trường hợp conflict khi slot không còn hiển thị, mentor không còn discoverable, service không thuộc mentor, mentee vượt quota pending hoặc slot đã đầy hàng chờ pending.
                     """
     )
     @ApiResponses({

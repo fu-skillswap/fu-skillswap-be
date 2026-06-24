@@ -26,15 +26,12 @@ import org.springframework.util.StringUtils;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@Tag(name = "Authentication", description = "Sign-in, token refresh, logout, and current user profile check")
+@Tag(name = "Authentication", description = "Nhóm API dùng cho đăng nhập Google, làm mới token, đăng xuất và lấy thông tin user hiện tại. FE dùng nhóm này ở đầu luồng onboarding và khi cần khôi phục phiên đăng nhập.")
 public class AuthController {
 
     private final IdentityService identityService;
 
-    @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực người dùng thông qua Google ID Token. " +
-            "Nếu tài khoản chưa tồn tại, hệ thống sẽ tự động tạo mới với vai trò MENTEE. " +
-            "Nếu email nằm trong cấu hình SYSTEM_ADMIN_EMAILS, access token trả về sẽ có thêm vai trò SYSTEM_ADMIN. " +
-            "Refresh token sẽ được trả về qua HttpOnly cookie, còn body chỉ chứa access token.")
+    @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực user bằng Google ID token và phát hành token riêng của SkillSwap để gọi các API phía sau. FE dùng đây là API đầu tiên trong luồng authentication trước khi gọi API lấy current user. Nếu là lần đăng nhập đầu, backend có thể tự tạo account mới; refresh token được trả qua HttpOnly cookie còn body giữ access token.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng nhập thành công, trả về token"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID Token Google không hợp lệ"),
@@ -51,9 +48,7 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Làm mới Access Token", description = "Sử dụng Refresh Token còn hiệu lực để cấp lại Access Token mới. "
-            +
-            "Refresh Token cũ sẽ bị thu hồi ngay sau khi token mới được phát hành (Refresh Token Rotation).")
+    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token còn hiệu lực. FE dùng khi access token hết hạn và cần gia hạn phiên đăng nhập mà không bắt user đăng nhập lại. Refresh token có thể được lấy từ request body hoặc từ HttpOnly cookie theo flow backend hiện tại, và token refresh cũ sẽ bị rotate khi thành công.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Làm mới token thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Refresh Token đã hết hạn hoặc bị thu hồi")
@@ -71,9 +66,7 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Đăng xuất", description = "Thu hồi Refresh Token hiện tại, kết thúc phiên đăng nhập của người dùng. "
-            +
-            "Access Token sẽ vẫn còn hiệu lực cho đến khi hết hạn tự nhiên.")
+    @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. FE dùng khi user logout khỏi thiết bị hoặc browser hiện tại. Access token đang có vẫn hết hạn theo lifetime tự nhiên của nó.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng xuất thành công")
     })
@@ -89,10 +82,7 @@ public class AuthController {
         return ApiResponse.success("Đăng xuất thành công");
     }
 
-    @Operation(summary = "Lấy thông tin người dùng hiện tại", description = "Trả về thông tin của người dùng đang đăng nhập dựa trên JWT token, "
-            +
-            "bao gồm trạng thái hoàn thành hồ sơ học thuật (`profileCompleted`, `hasStudentProfile`). " +
-            "FE dùng response này để quyết định chuyển hướng vào dashboard hay trang điền hồ sơ.")
+    @Operation(summary = "Lấy thông tin user hiện tại", description = "Trả về thông tin user hiện tại dựa trên access token. FE dùng ngay sau khi sign-in hoặc refresh để biết roles, các cờ profile và quyết định nên tiếp tục onboarding hay cho user vào trải nghiệm chính của hệ thống.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy thông tin thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc token hết hạn")

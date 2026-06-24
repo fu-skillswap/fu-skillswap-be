@@ -16,15 +16,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/catalog")
 @RequiredArgsConstructor
-@Tag(name = "Academic Catalog", description = "Lookups for campus list, academic programs, specializations, and help topics")
+@Tag(name = "Help Topic Catalog", description = "Nhóm API trả help topics dùng trong mentor profile, mentor services và bộ lọc discovery. FE dùng khi cần danh sách chủ đề hỗ trợ để hiển thị dưới dạng dropdown hoặc chips.")
 public class CatalogController {
 
     private final CatalogService catalogService;
 
     @Operation(
             summary = "Lấy danh sách help topics",
-            description = "Trả về toàn bộ help topic đang hoạt động để FE hiển thị dropdown/chips khi mentor chọn chủ đề hỗ trợ. "
-                    + "Danh sách được sắp theo độ ưu tiên của hệ thống và chỉ gồm các mục có thể chọn."
+            description = "Trả về danh sách help topics đang hoạt động mà mentor có thể chọn trong mentor profile hoặc mentor service. FE dùng API này khi cần đổ dropdown/chips cho form onboarding mentor hoặc bộ lọc discovery."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách help topics")

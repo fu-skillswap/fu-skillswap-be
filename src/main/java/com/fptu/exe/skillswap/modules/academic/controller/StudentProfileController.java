@@ -21,16 +21,13 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/me/student-profile")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Academic Profile", description = "User FPT academic profile management (MSSV, campus, major, specialization)")
+@Tag(name = "Academic Profile", description = "Nhóm API tạo và cập nhật hồ sơ học thuật của user hiện tại. FE dùng ở bước onboarding và ở những luồng mà việc hoàn thành profile ảnh hưởng đến quyền sử dụng tính năng.")
 @SecurityRequirement(name = "bearerAuth")
 public class StudentProfileController {
 
     private final AcademicService academicService;
 
-    @Operation(summary = "Xem hồ sơ học thuật của tôi", description = "Trả về hồ sơ học thuật đầy đủ của người dùng đang đăng nhập, "
-            +
-            "bao gồm mã số sinh viên, cơ sở, ngành học, chuyên ngành, học kỳ, khóa nhập học và tiểu sử. " +
-            "Trả về 404 nếu người dùng chưa điền hồ sơ.")
+    @Operation(summary = "Lấy hồ sơ học thuật của tôi", description = "Trả về hồ sơ học thuật của user hiện tại. FE dùng sau bước authentication khi cần hiển thị dữ liệu profile hoặc kiểm tra xem user đã có dữ liệu onboarding hay chưa.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy hồ sơ thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -45,12 +42,7 @@ public class StudentProfileController {
         return ApiResponse.success(response);
     }
 
-    @Operation(summary = "Tạo hoặc cập nhật hồ sơ học thuật", description = "Tạo mới hoặc cập nhật hồ sơ học thuật của người dùng đang đăng nhập. "
-            +
-            "**Bắt buộc điền lần đầu** sau khi đăng nhập Google để được vào dashboard.\n\n" +
-            "**Quy tắc mã số sinh viên:** Format `{H|S|D|Q|C}{E|S|A}` + khóa (01–22) + 4 chữ số. Ví dụ: `SE192621`, `HA221234`.\n\n"
-            +
-            "**Ràng buộc:** Chuyên ngành phải thuộc ngành học đã chọn.")
+    @Operation(summary = "Lưu hồ sơ học thuật của tôi", description = "Tạo mới hoặc cập nhật hồ sơ học thuật của user hiện tại. FE dùng trong onboarding trước khi cho user vào dashboard chính, hoặc khi cần cập nhật lại dữ liệu academic ảnh hưởng tới eligibility của các tính năng. Các rule validate như student code và quan hệ program/specialization sẽ do backend kiểm tra.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ: sai format MSSV hoặc chuyên ngành không thuộc ngành"),

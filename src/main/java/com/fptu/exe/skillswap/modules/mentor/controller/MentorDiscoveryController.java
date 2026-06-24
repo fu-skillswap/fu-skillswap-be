@@ -35,13 +35,16 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/mentors")
 @RequiredArgsConstructor
-@Tag(name = "Mentor Discovery", description = "Discovering mentors, listing availability slots, and browsing mentor public profiles")
+@Tag(name = "Mentor Discovery", description = "Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorDiscoveryController {
 
     private final MentorDiscoveryService mentorDiscoveryService;
 
-    @Operation(summary = "Lấy danh sách gợi ý nhanh 12 mentor phù hợp nhất để hiển thị trên Dashboard")
+    @Operation(
+            summary = "Lấy danh sách mentor gợi ý",
+            description = "Trả về danh sách mentor gợi ý ngắn cho user hiện tại. FE dùng ở dashboard khi cần hiển thị nhanh các mentor phù hợp trước khi user mở trang discovery đầy đủ."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách gợi ý mentor"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
@@ -55,7 +58,10 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getRecommendations(principal.getPublicId(), limit));
     }
 
-    @Operation(summary = "Tìm kiếm, lọc và xếp hạng mentor trên trang Khám phá theo relevance rồi smart matching")
+    @Operation(
+            summary = "Tìm kiếm mentor",
+            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng cùng keyword, help topics, campus, specialization, teaching mode và các sort options hợp lệ để dựng trải nghiệm browse/filter mentor."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
@@ -69,7 +75,10 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.searchMentors(principal.getPublicId(), request));
     }
 
-    @Operation(summary = "Xem chi tiết một mentor đang hiển thị trên discovery")
+    @Operation(
+            summary = "Lấy chi tiết mentor",
+            description = "Trả về thông tin public chi tiết của một mentor đang ở trạng thái discoverable. FE dùng sau khi user chọn một mentor card và cần xem profile, services và review trước khi chọn slot."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Chi tiết mentor"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -85,22 +94,14 @@ public class MentorDiscoveryController {
     }
 
     @Operation(
-            summary = "Xem các slot còn hiển thị của mentor để chuẩn bị booking",
+            summary = "Lấy danh sách slot còn hiển thị",
             description = """
-                    Chỉ trả về các slot còn hiển thị trên discovery tại thời điểm gọi API.
+                    Trả về các availability slot còn hiển thị mà FE có thể show trước khi tạo booking request.
+                    FE dùng sau khi mentee mở trang mentor detail và cần danh sách slot để chọn lịch.
                     
-                    Slot sẽ không xuất hiện nếu:
-                    - đã ở quá khứ
-                    - inactive
-                    - đã có một booking được ACCEPTED
-                    - số request PENDING đã đạt giới hạn hệ thống
+                    Backend sẽ ẩn các slot đã ở quá khứ, inactive, đã đầy hàng chờ hoặc đã được accept bởi booking khác. Khoảng ngày được phép xem cũng bị giới hạn theo rule backend, bao gồm mốc tối đa 31 ngày hiện tại.
                     
-                    Queue metadata trong từng slot:
-                    - pendingRequestCount: số request PENDING hiện tại
-                    - maxPendingRequests: giới hạn tối đa request PENDING cho mỗi slot
-                    - remainingRequestSlots: số suất request còn có thể nhận thêm
-                    
-                    Lưu ý: còn xuất hiện trong availability không có nghĩa mentee chắc chắn giữ được chỗ. Chỉ khi mentor ACCEPTED thì slot mới thuộc về một booking cụ thể.
+                    Một slot đang hiển thị vẫn chưa được giữ chỗ cho mentee cho đến khi mentor accept booking request.
                     """
     )
     @ApiResponses({
@@ -118,7 +119,10 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
     }
 
-    @Operation(summary = "Xem các review công khai của mentor để hỗ trợ quyết định booking")
+    @Operation(
+            summary = "Lấy danh sách review của mentor",
+            description = "Trả về các review công khai của một mentor đang discoverable. FE dùng ở màn mentor detail khi user cần thêm tín hiệu đánh giá trước khi tạo booking request."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách review của mentor"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),

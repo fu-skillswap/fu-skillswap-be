@@ -34,21 +34,27 @@ import java.util.UUID;
 @RequestMapping("/api/me/mentor-services")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Mentor Profile", description = "Mentor portfolio management (available slots, headline, expertise description, service offerings)")
+@Tag(name = "Mentor Services", description = "Nhóm API để mentor tạo, cập nhật, bật tắt hoặc lưu trữ các dịch vụ mentoring cụ thể. FE dùng nhóm này để quản lý các gói mà mentee sẽ chọn khi booking.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('MENTOR')")
 public class MentorServiceController {
 
     private final MentorServiceManagementService mentorServiceManagementService;
 
-    @Operation(summary = "Xem danh sách dịch vụ mentoring của tôi")
+    @Operation(
+            summary = "Lấy danh sách mentor services của tôi",
+            description = "Trả về danh sách dịch vụ mentoring thuộc về mentor hiện tại. FE dùng ở màn quản lý dịch vụ sau khi user đã có quyền truy cập các tính năng mentor."
+    )
     @GetMapping
     public ApiResponse<List<MentorServiceResponse>> getMyServices(@AuthenticationPrincipal UserPrincipal principal) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorServiceManagementService.getMyServices(principal.getPublicId()));
     }
 
-    @Operation(summary = "Xem chi tiết một dịch vụ mentoring của tôi")
+    @Operation(
+            summary = "Lấy chi tiết mentor service của tôi",
+            description = "Trả về chi tiết một dịch vụ mentoring thuộc về mentor hiện tại. FE dùng trước khi mở màn sửa dịch vụ hoặc khi cần hiển thị thông tin đầy đủ của một service."
+    )
     @GetMapping("/{serviceId}")
     public ApiResponse<MentorServiceResponse> getMyServiceDetail(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -58,7 +64,10 @@ public class MentorServiceController {
         return ApiResponse.success(mentorServiceManagementService.getMyServiceDetail(principal.getPublicId(), serviceId));
     }
 
-    @Operation(summary = "Tạo dịch vụ mentoring mới")
+    @Operation(
+            summary = "Tạo mentor service",
+            description = "Tạo một dịch vụ mentoring mới cho mentor hiện tại. FE dùng sau khi mentor đã nhập tiêu đề, mô tả, thời lượng, hình thức giá và các help topics mà dịch vụ hỗ trợ."
+    )
     @PostMapping
     public ApiResponse<MentorServiceResponse> createService(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -68,7 +77,10 @@ public class MentorServiceController {
         return ApiResponse.success(mentorServiceManagementService.createService(principal.getPublicId(), request));
     }
 
-    @Operation(summary = "Cập nhật dịch vụ mentoring")
+    @Operation(
+            summary = "Cập nhật mentor service",
+            description = "Cập nhật một dịch vụ mentoring hiện có của mentor. FE dùng khi mentor muốn thay đổi nội dung dịch vụ hoặc phạm vi help topics trước các booking trong tương lai."
+    )
     @PutMapping("/{serviceId}")
     public ApiResponse<MentorServiceResponse> updateService(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -79,7 +91,10 @@ public class MentorServiceController {
         return ApiResponse.success(mentorServiceManagementService.updateService(principal.getPublicId(), serviceId, request));
     }
 
-    @Operation(summary = "Bật hoặc tắt dịch vụ mentoring")
+    @Operation(
+            summary = "Đổi trạng thái active của service",
+            description = "Bật hoặc tắt một dịch vụ mentoring của mentor hiện tại. FE dùng khi mentor muốn tạm dừng hoặc mở lại dịch vụ mà không xóa hẳn dữ liệu service."
+    )
     @PatchMapping("/{serviceId}/active")
     public ApiResponse<MentorServiceResponse> changeActiveStatus(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -90,7 +105,10 @@ public class MentorServiceController {
         return ApiResponse.success(mentorServiceManagementService.changeActiveStatus(principal.getPublicId(), serviceId, request.active()));
     }
 
-    @Operation(summary = "Xóa mềm dịch vụ mentoring")
+    @Operation(
+            summary = "Lưu trữ mentor service",
+            description = "Xóa mềm một dịch vụ mentoring của mentor hiện tại. FE dùng khi mentor không muốn cung cấp dịch vụ đó nữa nhưng backend vẫn cần giữ dữ liệu lịch sử liên quan."
+    )
     @DeleteMapping("/{serviceId}")
     public ApiResponse<MentorServiceResponse> deleteService(
             @AuthenticationPrincipal UserPrincipal principal,

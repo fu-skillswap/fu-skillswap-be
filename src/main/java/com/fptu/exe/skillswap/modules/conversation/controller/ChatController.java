@@ -10,6 +10,8 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -24,7 +26,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/conversations")
 @RequiredArgsConstructor
-@Tag(name = "Chat & Conversation", description = "API quản lý hộp thư và tin nhắn của user")
+@Tag(name = "Conversation", description = "Nhóm API lấy danh sách conversation và gửi/đọc tin nhắn gắn với booking đã được accept. FE dùng sau khi hệ thống đã tự tạo conversation cho booking hợp lệ.")
+@SecurityRequirement(name = "bearerAuth")
 public class ChatController {
 
     private final ConversationService conversationService;
@@ -32,7 +35,14 @@ public class ChatController {
     private final UserRepository userRepository;
 
     @GetMapping
-    @Operation(summary = "Lấy danh sách các cuộc hội thoại của tôi")
+    @Operation(
+            summary = "Lấy danh sách conversation của tôi",
+            description = "Trả về danh sách conversation của user hiện tại. Trong flow hiện tại, conversation được tạo tự động sau khi booking được accept, nên FE phải dùng API này để dựng inbox thay vì cố tạo conversation thủ công."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversations loaded successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated")
+    })
     public ApiResponse<PageResponse<ConversationResponse>> getMyConversations(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @ParameterObject @ModelAttribute BasePageRequest pageRequest) {
@@ -49,7 +59,16 @@ public class ChatController {
     }
 
     @GetMapping("/{conversationId}/messages")
-    @Operation(summary = "Lấy danh sách tin nhắn trong một cuộc hội thoại")
+    @Operation(
+            summary = "Lấy danh sách tin nhắn của conversation",
+            description = "Trả về danh sách tin nhắn của một conversation khi user hiện tại là participant của conversation đó. FE dùng sau khi user mở một thread chat; thứ tự tin nhắn hiện tại là mới nhất trước."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Messages loaded successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+    })
     public ApiResponse<PageResponse<MessageResponse>> getMessages(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,
@@ -67,7 +86,16 @@ public class ChatController {
     }
 
     @PostMapping("/{conversationId}/messages")
-    @Operation(summary = "Gửi tin nhắn")
+    @Operation(
+            summary = "Gửi tin nhắn trong conversation",
+            description = "Gửi một tin nhắn text vào conversation hiện có mà user hiện tại đang tham gia. FE chỉ dùng API này sau khi booking liên quan đã tạo conversation thông qua flow accept booking."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Message sent successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+    })
     public ApiResponse<MessageResponse> sendMessage(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,

@@ -23,7 +23,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/bookings")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Bookings", description = "System-wide operational monitoring of bookings and mentoring session records")
+@Tag(name = "Admin - Bookings", description = "Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminBookingController {
@@ -31,8 +31,8 @@ public class AdminBookingController {
     private final BookingService bookingService;
 
     @Operation(
-            summary = "Xem danh sách booking toàn hệ thống",
-            description = "Admin có thể filter theo status, mentorUserId, menteeUserId và phân trang để theo dõi vận hành."
+            summary = "Lấy danh sách system bookings",
+            description = "Trả về danh sách booking trên toàn hệ thống phục vụ vận hành nội bộ. FE admin dùng ở các màn operation khi cần filter theo status, mentor, mentee và phân trang."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách booking thành công"),
@@ -47,8 +47,8 @@ public class AdminBookingController {
     }
 
     @Operation(
-            summary = "Xem chi tiết một booking dành cho admin",
-            description = "Dùng khi admin cần kiểm tra đầy đủ trạng thái, thời gian, mentor/mentee và meeting info của một booking cụ thể."
+            summary = "Lấy chi tiết booking cho admin",
+            description = "Trả về chi tiết một booking phục vụ vận hành nội bộ. FE admin dùng khi cần toàn bộ context của booking, bao gồm participant, thời gian, trạng thái và thông tin meeting."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy chi tiết booking thành công"),

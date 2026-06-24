@@ -26,13 +26,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/me/mentor-profile")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Mentor Profile", description = "Mentor portfolio management (available slots, headline, expertise description, service offerings)")
+@Tag(name = "Mentor Profile", description = "Nhóm API tạo và duy trì hồ sơ mentor nền tảng, quyết định mentor đã đủ dữ liệu để verification hoặc xuất hiện trên discovery hay chưa. FE dùng trước khi user nộp mentor verification hoặc trước khi hiển thị mentor public.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorProfileController {
 
     private final MentorProfileService mentorProfileService;
 
-    @Operation(summary = "Xem hồ sơ mentor của tôi", description = "Trả về hồ sơ mentor hiện tại. Nếu chưa tạo, data.exists=false để FE hiển thị onboarding.")
+    @Operation(summary = "Lấy hồ sơ mentor của tôi", description = "Trả về hồ sơ mentor hiện tại của user đã đăng nhập. FE dùng trong màn onboarding mentor hoặc settings; nếu hồ sơ chưa tồn tại thì response vẫn trả `data.exists=false` để FE hiển thị flow tạo mới thay vì coi đó là lỗi.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy hồ sơ mentor thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
@@ -44,8 +44,8 @@ public class MentorProfileController {
     }
 
     @Operation(
-            summary = "Tạo hoặc cập nhật hồ sơ mentor",
-            description = "Lưu toàn bộ hồ sơ mentor trong một lần: headline, expertiseDescription, phoneNumber, supportingSubjects, help topics, hình thức mentoring, thời lượng tối đa và trạng thái sẵn sàng. Bio tiếp tục dùng từ StudentProfile để tránh trùng dữ liệu."
+            summary = "Lưu hồ sơ mentor của tôi",
+            description = "Tạo mới hoặc cập nhật hồ sơ mentor của user hiện tại. FE dùng trước khi user nộp mentor verification và trước khi mentor đủ điều kiện xuất hiện trên discovery để booking. Request này chứa các field hồ sơ mentor như headline, expertise, help topics, teaching mode, session duration, phone number và trạng thái sẵn sàng nhận mentee."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ mentor thành công"),

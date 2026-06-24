@@ -24,13 +24,16 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "In-app notification center for booking updates and alert logs")
+@Tag(name = "Notification", description = "Nhóm API đọc danh sách thông báo, unread count và cập nhật trạng thái đã đọc của user hiện tại. FE dùng để dựng badge, dropdown và trang notification history.")
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 
     private final NotificationService notificationService;
 
-    @Operation(summary = "Lấy danh sách thông báo của user hiện tại")
+    @Operation(
+            summary = "Lấy danh sách notification của tôi",
+            description = "Trả về danh sách thông báo của user hiện tại. FE dùng cho trang notifications hoặc dropdown thông báo, và có thể bật filter unreadOnly khi chỉ muốn lấy các item chưa đọc."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<NotificationResponse>>> getMyNotifications(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -41,7 +44,10 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @Operation(summary = "Lấy số lượng thông báo chưa đọc")
+    @Operation(
+            summary = "Lấy số lượng notification chưa đọc",
+            description = "Trả về số lượng thông báo chưa đọc của user hiện tại. FE dùng để hiển thị badge mà không cần load toàn bộ danh sách notification."
+    )
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<UnreadCountResponse>> getMyUnreadCount(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {
@@ -50,7 +56,10 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success(new UnreadCountResponse(count)));
     }
 
-    @Operation(summary = "Đánh dấu một thông báo là đã đọc")
+    @Operation(
+            summary = "Đánh dấu notification đã đọc",
+            description = "Đánh dấu một notification là đã đọc cho user hiện tại. FE dùng sau khi user mở hoặc xác nhận một thông báo cụ thể."
+    )
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -60,7 +69,10 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(java.time.LocalDateTime.now()).status(200).code("SUCCESS").message("Đánh dấu đã đọc thành công").build());
     }
 
-    @Operation(summary = "Đánh dấu tất cả thông báo là đã đọc")
+    @Operation(
+            summary = "Đánh dấu tất cả notification đã đọc",
+            description = "Đánh dấu tất cả notification là đã đọc cho user hiện tại. FE dùng khi có action đọc hết trong notification center."
+    )
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {

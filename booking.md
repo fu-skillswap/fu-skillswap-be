@@ -550,3 +550,25 @@ Cấu hình các dịch vụ mentoring trước khi mở lịch rảnh.
 *   **Instant Session**: Chưa hỗ trợ kết nối dạy học tức thì không qua đặt lịch trước.
 *   **ClassOffering**: Chưa có lớp học nhiều người tham gia.
 *   **Thanh toán / Ví tiền (Payment / Wallet)**: Toàn bộ hệ thống Beta V1.0 chạy theo cơ chế cam kết trao đổi kỹ năng không dùng tiền mặt.
+
+---
+
+## 10. Cơ sở dữ liệu & Tối ưu hóa chỉ mục (Database & Indexing)
+
+Để đảm bảo hiệu năng tối ưu trên môi trường VPS có tài nguyên giới hạn và tính chính xác của dữ liệu trong các luồng nghiệp vụ đồng thời của bản Beta V1.0, cấu trúc database đã được tinh chỉnh như sau:
+
+### A. Tương thích ngược và Null-Safety trong kiểm thử (JPA Level)
+*   Do tích hợp mô hình Service-Centric, các cột `service_id` đã được bổ sung vào các bảng `mentor_availability_slots`, `bookings`, và `sessions`.
+*   Để không làm hỏng (break) các integration test di sản (vốn khởi tạo dữ liệu không có gói dịch vụ), quan hệ `service` trong các thực thể [Booking.java](file:///e:/FPTU/SU26/EXE201/project/src/main/java/com/fptu/exe/skillswap/modules/booking/domain/Booking.java), [MentorAvailabilitySlot.java](file:///e:/FPTU/SU26/EXE201/project/src/main/java/com/fptu/exe/skillswap/modules/booking/domain/MentorAvailabilitySlot.java) và [Session.java](file:///e:/FPTU/SU26/EXE201/project/src/main/java/com/fptu/exe/skillswap/modules/session/domain/Session.java) được định nghĩa là `optional = true` và `nullable = true` ở mức độ Mapping JPA/Hibernate.
+*   *Lưu ý*: Mọi API tạo mới Booking hoặc Slot từ Frontend gửi lên đều được kiểm tra nghiệp vụ nghiêm ngặt ở tầng Service, đảm bảo `serviceId` luôn hợp lệ và thuộc sở hữu của Mentor.
+
+### B. Chỉ mục tối ưu hóa hiệu năng (Flyway Migrations)
+1.  **Dọn dẹp Booking quá hạn (Scheduler)**:
+    *   **Migration**: `V15__add_booking_expiry_indexes.sql`
+    *   **Index 1**: `idx_bookings_status_requested_start_time` trên `bookings (status, requested_start_time)`. Giúp câu lệnh Bulk Update của `BookingCleanupScheduler` định kỳ 30 phút xác định nhanh các pending booking quá hạn mà không cần table scan toàn bộ bảng bookings.
+    *   **Index 2**: `idx_bookings_mentee_status_requested_time` trên `bookings (mentee_user_id, status, requested_start_time, requested_end_time)`. Hỗ trợ tối ưu hóa kiểm tra trùng lặp thời gian học khi Mentee tạo yêu cầu đặt lịch mới.
+2.  **Hộp thư và Lịch sử Chat (Conversations & Messages)**:
+    *   **Migration**: `V16__add_chat_message_indexes.sql`
+    *   **Index 1**: `idx_messages_conversation_created_at` trên `messages (conversation_id, created_at DESC)`. Tăng tốc truy vấn phân trang tin nhắn của một cuộc hội thoại từ cũ đến mới.
+    *   **Index 2**: `idx_conversations_last_message_at` trên `conversations (last_message_at DESC)`. Tăng tốc truy vấn lấy danh sách hộp thư thoại của người dùng, sắp xếp các cuộc trò chuyện có tương tác gần nhất lên trên đầu giao diện.
+*   *Lưu ý*: Các chỉ mục này đã được cập nhật đồng bộ trong annotations `@Table(indexes = ...)` của các thực thể Java tương ứng (bỏ qua từ khóa `DESC` trong annotation để đảm bảo tính di động/database-agnostic, SQL migration của Flyway chịu trách nhiệm thực thi index chính xác trên PostgreSQL).

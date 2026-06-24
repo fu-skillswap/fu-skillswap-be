@@ -181,8 +181,16 @@ Dùng cho Maven tests.
 Dùng cho môi trường deploy.
 
 - Đọc database config từ environment variables
-- `HIBERNATE_DDL_AUTO` default hiện tại là `update` trong giai đoạn MVP
-- Flyway mặc định disabled cho tới khi có migration đầy đủ
+- `HIBERNATE_DDL_AUTO` default hiện tại là `update` trong giai đoạn MVP.
+- Dự án đã tích hợp sẵn các SQL Migration (`V1` đến `V16`) tại `src/main/resources/db/migration`. Flyway được khuyến nghị bật khi deploy Beta/Production (`FLYWAY_ENABLED=true`) để đảm bảo các index được khởi tạo đầy đủ.
+
+Các bản cập nhật Migration gần đây giúp tối ưu hóa hiệu năng và tránh Lost Update cho Beta V1.0:
+- **`V15__add_booking_expiry_indexes.sql`**: Thêm composite index cho bảng `bookings` để hỗ trợ scheduler quét và bulk update các pending booking quá hạn:
+  - `(status, requested_start_time)`
+  - `(mentee_user_id, status, requested_start_time, requested_end_time)`
+- **`V16__add_chat_message_indexes.sql`**: Thêm composite index cho bảng chat để tối ưu hóa tốc độ tải lịch sử tin nhắn và sắp xếp hộp thư thoại:
+  - `messages(conversation_id, created_at DESC)`
+  - `conversations(last_message_at DESC)`
 
 Khi chuyển sang production ổn định:
 

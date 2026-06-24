@@ -630,7 +630,81 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Status:
   - `201 Created`
 
-## 13. System Admin
+## 13. Chat & Conversation
+
+### GET `/api/me/conversations`
+- Auth: `bearerAuth`
+- Mục đích: lấy danh sách các cuộc hội thoại (conversations) của người dùng hiện tại, được sắp xếp theo thời điểm có tin nhắn mới nhất giảm dần (`lastMessageAt DESC`). Trả về thông tin của đối phương (`otherUserId`, `otherUserName`, `otherUserAvatarUrl`).
+- Query params:
+  - `page` `integer` nullable
+  - `size` `integer` nullable
+  - `sortBy` `string` nullable
+  - `direction` `string` nullable
+- Response:
+  - `PageResponse<ConversationResponse>`
+    - `id` `UUID`
+    - `sourceType` `string` (ví dụ: `BOOKING`)
+    - `sourceId` `UUID`
+    - `type` `string` (DIRECT)
+    - `status` `string` (ACTIVE)
+    - `otherUserId` `UUID`
+    - `otherUserName` `string`
+    - `otherUserAvatarUrl` `string` nullable
+    - `lastMessageContent` `string` nullable
+    - `lastMessageAt` `LocalDateTime` nullable
+    - `createdAt` `LocalDateTime`
+
+### GET `/api/me/conversations/{conversationId}/messages`
+- Auth: `bearerAuth`
+- Path param:
+  - `conversationId` `UUID`
+- Query params:
+  - `page` `integer` nullable
+  - `size` `integer` nullable
+  - `sortBy` `string` nullable
+  - `direction` `string` nullable
+- Mục đích: lấy danh sách lịch sử tin nhắn của một cuộc hội thoại, sắp xếp theo thời gian tạo giảm dần (`createdAt DESC` - Mới nhất ở đầu).
+- Response:
+  - `PageResponse<MessageResponse>`
+    - `id` `UUID`
+    - `conversationId` `UUID`
+    - `senderId` `UUID` nullable (null đối với tin nhắn hệ thống)
+    - `senderName` `string` (trả về "Hệ thống" nếu senderId null)
+    - `messageType` `string` (TEXT)
+    - `content` `string`
+    - `createdAt` `LocalDateTime`
+    - `isMine` `boolean` (xác định tin nhắn có phải do người dùng hiện tại gửi hay không)
+
+### POST `/api/me/conversations/{conversationId}/messages`
+- Auth: `bearerAuth`
+- Path param:
+  - `conversationId` `UUID`
+- Request body:
+  - `SendMessageRequest`
+    - `content` `string` (nội dung tin nhắn chat, tối đa 2000 ký tự)
+- Mục đích: gửi tin nhắn văn bản vào cuộc hội thoại (REST API - Source of Truth). Tin nhắn lưu thành công sẽ tự động kích hoạt gửi tin realtime qua WebSocket.
+- Response:
+  - `MessageResponse`
+- Status:
+  - `201 Created`
+  - `400 Bad Request` (nội dung rỗng hoặc vượt quá 2000 ký tự)
+  - `403 Forbidden` (người dùng không tham gia cuộc hội thoại này)
+
+### WebSocket Realtime Push
+- Endpoint handshake: `/ws` (Hỗ trợ SockJS fallback)
+- Query param (handshake): `token` (JWT Access Token)
+- Subscribe Destination: `/user/queue/messages`
+- Định dạng event đẩy về: `ChatMessageEvent`
+  - `conversationId` `UUID`
+  - `messageId` `UUID`
+  - `senderId` `UUID`
+  - `senderName` `string`
+  - `messageType` `string` (TEXT)
+  - `content` `string`
+  - `createdAt` `LocalDateTime`
+- Lưu ý cho FE: Kênh WebSocket chỉ nhận tin (Push-only), không gửi tin ngược lên. FE cần so khớp `senderId` với current user ID để phân biệt vị trí hiển thị bong bóng chat.
+
+## 14. System Admin
 
 ### POST `/api/system/users/admin-role/grant`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
@@ -640,7 +714,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
     - `email` `string`
 - Response:
   - `AdminUserResponse`
-
+ 
 ### POST `/api/system/users/admin-role/revoke`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
 - Mục đích: thu hồi quyền `ADMIN` theo email.
@@ -649,7 +723,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
     - `email` `string`
 - Response:
   - `AdminUserResponse`
-
+ 
 ### GET `/api/system/users/admins`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
 - Query params:
@@ -660,7 +734,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Mục đích: xem danh sách user đang có quyền `ADMIN`.
 - Response:
   - `PageResponse<AdminUserResponse>`
-
+ 
 ### GET `/api/system/users`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
 - Query params:
@@ -671,8 +745,8 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Mục đích: xem toàn bộ user trong hệ thống.
 - Response:
   - `PageResponse<SystemUserResponse>`
-
-## 14. Admin User Management
+ 
+## 15. Admin User Management
 
 ### GET `/api/admin/users`
 - Auth: `bearerAuth`, role `ADMIN`
@@ -693,7 +767,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
     - `verifiedStudentCode` `string`: MSSV đã được hệ thống xác thực.
     - `studentCodeVerified` `boolean`: Trạng thái xác thực MSSV.
     - `studentCodeConflict` `boolean`: `true` nếu có từ 2 người dùng trở lên khai báo cùng 1 MSSV chưa xác thực.
-
+ 
 ### POST `/api/admin/users/{userId}/ban`
 - Auth: `bearerAuth`, role `ADMIN`
 - Path param:
@@ -704,7 +778,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Mục đích: khóa tài khoản user.
 - Response:
   - `SystemUserResponse`
-
+ 
 ### POST `/api/admin/users/{userId}/unban`
 - Auth: `bearerAuth`, role `ADMIN`
 - Path param:
@@ -715,9 +789,9 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Mục đích: mở khóa tài khoản user.
 - Response:
   - `SystemUserResponse`
-
-## 15. Ghi chú cho FE
-
+ 
+## 16. Ghi chú cho FE
+ 
 - `GET /api/auth/me` nên gọi ngay sau login để xác định:
   - user đã login thành công chưa,
   - đã hoàn thành `StudentProfile` chưa,
@@ -729,4 +803,10 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
   - `recommendations` để render gợi ý ban đầu,
   - `GET /api/mentors` để search/filter/ranking,
   - `GET /api/mentors/{mentorUserId}/availability` để chuẩn bị booking.
+- Chat & Conversation:
+  - `GET /api/me/conversations` để tải danh sách hộp thư chat.
+  - `GET /api/me/conversations/{id}/messages` để xem lịch sử chat. Chú ý mảng tin trả về dạng `DESC` (Mới nhất ở đầu), FE cần đảo ngược (reverse) mảng khi hiển thị.
+  - Gửi tin nhắn dùng `POST /api/me/conversations/{id}/messages` (REST).
+  - Lắng nghe realtime từ WebSocket qua destination `/user/queue/messages`. So sánh `senderId` trong Event với current user ID để đặt bong bóng chat phù hợp.
+  - Khi WebSocket mất kết nối và reconnect thành công, FE cần gọi lại REST API lấy lịch sử tin để đồng bộ tránh mất mát tin trong lúc offline.
 

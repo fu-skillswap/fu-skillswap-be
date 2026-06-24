@@ -18,14 +18,12 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Tag(name = "Academic Catalog", description = "Lookups for campus list, academic programs, specializations, and help topics")
+@Tag(name = "Academic Catalog", description = "Nhóm API trả dữ liệu danh mục campus, program và specialization để điền form onboarding hoặc form cập nhật hồ sơ học thuật. FE dùng các API này để đổ dropdown trước khi lưu Academic Profile.")
 public class AcademicController {
 
     private final AcademicService academicService;
 
-    @Operation(summary = "Lấy danh sách cơ sở", description = "Trả về tất cả cơ sở đang hoạt động của FPT University (Hà Nội, HCM, Đà Nẵng, Cần Thơ, Quy Nhơn). "
-            +
-            "Dùng để hiển thị dropdown chọn cơ sở khi điền hồ sơ học thuật.")
+    @Operation(summary = "Lấy danh sách campus", description = "Trả về danh sách campus đang hoạt động của FPT University dùng trong form hồ sơ học thuật. FE dùng để đổ dropdown chọn campus ở bước onboarding hoặc màn cập nhật profile.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách cơ sở")
     })
@@ -35,9 +33,7 @@ public class AcademicController {
         return ApiResponse.success(campuses);
     }
 
-    @Operation(summary = "Lấy danh sách ngành học", description = "Trả về tất cả ngành học đang hoạt động (ví dụ: Công nghệ thông tin, Ngôn ngữ, Luật, ...). "
-            +
-            "Dùng để hiển thị dropdown chọn ngành khi điền hồ sơ học thuật.")
+    @Operation(summary = "Lấy danh sách academic programs", description = "Trả về danh sách academic programs đang hoạt động dùng trong form hồ sơ học thuật. FE dùng để đổ dropdown chọn program trước khi user chọn specialization.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách ngành học")
     })
@@ -47,9 +43,7 @@ public class AcademicController {
         return ApiResponse.success(programs);
     }
 
-    @Operation(summary = "Lấy tất cả chuyên ngành", description = "Trả về toàn bộ chuyên ngành đang hoạt động của tất cả ngành học. "
-            +
-            "Nếu chỉ cần chuyên ngành theo ngành cụ thể, hãy dùng API `/academic-programs/{programId}/specializations`.")
+    @Operation(summary = "Lấy toàn bộ specialization", description = "Trả về toàn bộ specialization đang hoạt động của tất cả program. FE chỉ nên dùng khi cần full dataset specialization thay vì danh sách theo từng program cụ thể.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách chuyên ngành")
     })
@@ -59,9 +53,7 @@ public class AcademicController {
         return ApiResponse.success(specs);
     }
 
-    @Operation(summary = "Lấy chuyên ngành theo ngành học", description = "Trả về danh sách chuyên ngành thuộc một ngành học cụ thể. "
-            +
-            "Dùng để lọc chuyên ngành sau khi người dùng đã chọn ngành học.")
+    @Operation(summary = "Lấy specialization theo program", description = "Trả về danh sách specialization đang hoạt động thuộc về một academic program cụ thể. FE dùng sau khi user chọn program trong onboarding hoặc màn sửa academic profile.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách chuyên ngành"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy ngành học với ID đã cho")

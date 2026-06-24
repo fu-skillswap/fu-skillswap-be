@@ -33,13 +33,13 @@ import java.util.UUID;
 @RequestMapping("/api/me/mentor-verification")
 @RequiredArgsConstructor
 @Validated
-@Tag(name = "Mentor Verification", description = "Flow for mentees submitting portfolios and documentation to become verified mentors")
+@Tag(name = "Mentor Verification", description = "Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorVerificationController {
 
     private final MentorVerificationService mentorVerificationService;
 
-    @Operation(summary = "Khởi tạo hoặc lấy hồ sơ xác thực mentor đang hoạt động")
+    @Operation(summary = "Mở mentor verification request", description = "Tạo một mentor verification request mới có thể chỉnh sửa hoặc trả về request active hiện tại nếu đã tồn tại. FE dùng đây là bước đầu tiên của wizard xác thực mentor trước khi upload minh chứng và submit.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy hồ sơ xác thực mentor thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Tạo hồ sơ xác thực mentor thành công"),
@@ -57,7 +57,7 @@ public class MentorVerificationController {
                 : ResponseEntity.ok(ApiResponse.success(result.data()));
     }
 
-    @Operation(summary = "Xem hồ sơ xác thực mentor mới nhất, kể cả khi đã ở trạng thái cuối")
+    @Operation(summary = "Lấy mentor verification mới nhất", description = "Trả về mentor verification request mới nhất của user hiện tại, bao gồm cả các request đã kết thúc. FE dùng khi cần khôi phục tiến độ wizard, trạng thái cuối, checklist và danh sách document đã upload.")
     @GetMapping
     public ApiResponse<MentorVerificationRequestResponse> getMyRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
@@ -66,7 +66,7 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
     }
 
-    @Operation(summary = "Xem timeline của hồ sơ xác thực mentor mới nhất, kể cả khi đã ở trạng thái cuối")
+    @Operation(summary = "Lấy verification timeline", description = "Trả về timeline sự kiện của mentor verification request mới nhất. FE dùng để hiển thị lịch sử tiến độ xác thực như submit, request revision, approve, reject hoặc withdraw.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy timeline thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -80,7 +80,7 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.getTimeline(principal.getPublicId()));
     }
 
-    @Operation(summary = "Xem chi tiết một tài liệu xác thực mentor")
+    @Operation(summary = "Lấy chi tiết verification document", description = "Trả về metadata của một verification document thuộc request mới nhất của user hiện tại. FE dùng khi cần xem chi tiết document, review note hoặc thông tin phục vụ màn wizard verification.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy tài liệu thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Mã tài liệu không hợp lệ"),
@@ -97,8 +97,8 @@ public class MentorVerificationController {
     }
 
     @Operation(
-            summary = "Lưu minh chứng xác thực mentor đã upload sẵn",
-            description = "FE upload file lên dịch vụ lưu trữ ngoài trước, sau đó gửi metadata JSON về BE để lưu. Chỉ hỗ trợ JPG, PNG hoặc PDF; kích thước tối đa 4MB; BE vẫn kiểm tra lại type, size và quota."
+            summary = "Gắn metadata verification document",
+            description = "Lưu metadata của verification document vào request hiện tại sau khi FE đã upload file thật lên dịch vụ lưu trữ ngoài được backend chấp nhận. API này nhận JSON metadata chứ không phải multipart upload trực tiếp, và backend vẫn kiểm tra content type, file size, host nguồn và quota theo từng loại document."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
@@ -120,10 +120,8 @@ public class MentorVerificationController {
     }
 
     @Operation(
-            summary = "Nộp hồ sơ xác thực mentor để admin duyệt",
-            description = "Chỉ cho phép nộp khi người dùng đã hoàn tất hồ sơ học thuật và hồ sơ mentor, "
-                    + "đồng thời đã hoàn tất mentor profile, tải đủ minh chứng FPTU và minh chứng năng lực mentoring, "
-                    + "và đã đồng ý điều khoản mentor của SkillSwap."
+            summary = "Nộp mentor verification request",
+            description = "Nộp mentor verification request hiện tại để admin review. FE dùng sau khi user đã hoàn thành các bước profile bắt buộc, upload đủ minh chứng cần thiết và đồng ý điều khoản mentor hiện tại. Backend sẽ từ chối submit nếu checklist chưa đủ điều kiện."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Nộp hồ sơ thành công"),
@@ -139,7 +137,7 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.submit(principal.getPublicId(), request));
     }
 
-    @Operation(summary = "Xóa mềm một tài liệu xác thực mentor")
+    @Operation(summary = "Xóa verification document", description = "Xóa mềm một verification document khỏi request hiện tại còn cho phép chỉnh sửa. FE dùng ở trạng thái draft hoặc revision khi user muốn thay thế hoặc bỏ một minh chứng trước khi submit lại.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Xóa tài liệu thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Hồ sơ hiện tại không cho phép xóa tài liệu"),
@@ -155,7 +153,7 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.deleteDocument(principal.getPublicId(), documentId));
     }
 
-    @Operation(summary = "Rút hồ sơ xác thực mentor hiện tại")
+    @Operation(summary = "Rút mentor verification request", description = "Rút mentor verification request mới nhất khi trạng thái hiện tại còn cho phép dừng flow. FE dùng khi user không muốn tiếp tục xác thực nữa; nếu request đang bị admin lock hợp lệ thì backend có thể chặn thao tác này.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Rút hồ sơ thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Trạng thái hồ sơ hiện tại không cho phép rút"),

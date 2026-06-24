@@ -32,19 +32,18 @@ import java.util.UUID;
 @RequestMapping("/api/mentor/bookings")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Booking & Session", description = "Requesting mentoring slots, managing booking queue, tracking sessions, and meeting links")
+@Tag(name = "Mentor Booking", description = "Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorBookingController {
 
     private final BookingService bookingService;
 
     @Operation(
-            summary = "Mentor chấp nhận một booking đang chờ phản hồi",
+            summary = "Chấp nhận booking request",
             description = """
-                    Chỉ dùng cho booking ở trạng thái PENDING và thuộc về mentor hiện tại.
-                    Khi một booking trong slot được ACCEPTED:
-                    - slot sẽ được xem là đã có lịch chính thức
-                    - các booking PENDING còn lại của cùng slot sẽ tự động chuyển REJECTED với lý do hệ thống
+                    Chấp nhận một booking request đang PENDING thuộc về mentor hiện tại.
+                    FE dùng khi mentor quyết định xác nhận một mentee cho slot đã chọn.
+                    Khi accept thành công, slot sẽ được chốt, các request pending khác cùng slot sẽ bị auto reject, hệ thống đồng thời tạo session, tạo conversation và gửi notification cho các user liên quan.
                     """
     )
     @ApiResponses({
@@ -65,8 +64,8 @@ public class MentorBookingController {
     }
 
     @Operation(
-            summary = "Mentor từ chối booking đang chờ phản hồi",
-            description = "Mentor phải gửi rejectReason rõ ràng. Chỉ từ chối được booking PENDING thuộc về mình."
+            summary = "Từ chối booking request",
+            description = "Từ chối một booking request đang PENDING thuộc về mentor hiện tại. FE dùng khi mentor không thể nhận buổi mentoring đó và muốn gửi lý do từ chối rõ ràng cho mentee."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Từ chối booking thành công"),
@@ -87,10 +86,11 @@ public class MentorBookingController {
     }
 
     @Operation(
-            summary = "Mentor hủy booking đã chấp nhận",
+            summary = "Hủy booking đã chấp nhận",
             description = """
-                    Mentor chỉ hủy các booking thuộc về mình và phải gửi cancelReason.
-                    Backend tự áp business rule phạt khi hủy sát giờ theo timezone Asia/Ho_Chi_Minh.
+                    Hủy một booking đã ACCEPTED thuộc về mentor hiện tại.
+                    FE chỉ dùng API này sau khi booking đã được accept nhưng mentor cần dừng buổi mentoring đó.
+                    Backend sẽ tự áp dụng penalty hoặc suspension tạm thời nếu mentor hủy quá sát giờ bắt đầu của lịch hẹn.
                     """
     )
     @ApiResponses({
@@ -112,8 +112,8 @@ public class MentorBookingController {
     }
 
     @Operation(
-            summary = "Mentor lưu hoặc cập nhật meeting link",
-            description = "Chỉ áp dụng cho booking đã được ACCEPTED và thuộc về mentor hiện tại. FE nên gọi lại detail sau khi cập nhật để đồng bộ meetingPlatform, meetingLink và location."
+            summary = "Lưu meeting link",
+            description = "Lưu hoặc cập nhật thông tin meeting cho một booking đã ACCEPTED thuộc về mentor hiện tại. FE dùng sau khi booking đã được xác nhận để mentee có thể tham gia đúng platform, meeting link hoặc địa điểm offline."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu meeting link thành công"),

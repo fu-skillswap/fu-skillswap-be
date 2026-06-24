@@ -30,14 +30,17 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/system/users")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Users", description = "Admin user listing, status configuration (lock/unlock), and role assignment")
+@Tag(name = "System Admin - Roles", description = "Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('SYSTEM_ADMIN')")
 public class SystemUserRoleController {
 
     private final SystemUserRoleService systemUserRoleService;
 
-    @Operation(summary = "Cấp quyền ADMIN cho user theo email")
+    @Operation(
+            summary = "Cấp quyền admin",
+            description = "Cấp quyền ADMIN cho một user đã tồn tại theo email. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần nâng quyền vận hành cho một tài khoản."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấp quyền thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -55,7 +58,10 @@ public class SystemUserRoleController {
         return ApiResponse.success(systemUserRoleService.grantAdminRole(principal.getPublicId(), request.email()));
     }
 
-    @Operation(summary = "Thu hồi quyền ADMIN của user theo email")
+    @Operation(
+            summary = "Thu hồi quyền admin",
+            description = "Thu hồi quyền ADMIN của một user đã tồn tại theo email. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần gỡ quyền vận hành của một tài khoản."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Thu hồi quyền thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -67,7 +73,10 @@ public class SystemUserRoleController {
         return ApiResponse.success(systemUserRoleService.revokeAdminRole(request.email()));
     }
 
-    @Operation(summary = "Xem danh sách user đang có quyền ADMIN")
+    @Operation(
+            summary = "Lấy danh sách admin users",
+            description = "Trả về danh sách user hiện đang có quyền ADMIN. FE dùng để hiển thị danh sách tài khoản admin nội bộ và kiểm tra lại kết quả sau khi grant/revoke role."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -78,7 +87,10 @@ public class SystemUserRoleController {
         return ApiResponse.success(systemUserRoleService.getAdminUsers(pageRequest));
     }
 
-    @Operation(summary = "Lấy danh sách toàn bộ user trong hệ thống")
+    @Operation(
+            summary = "Lấy danh sách toàn bộ system users",
+            description = "Trả về toàn bộ user trong hệ thống phục vụ quản lý role ở cấp system. FE dùng trong các màn hình SYSTEM_ADMIN khi cần phạm vi dữ liệu rộng hơn danh sách visible users của admin vận hành."
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
