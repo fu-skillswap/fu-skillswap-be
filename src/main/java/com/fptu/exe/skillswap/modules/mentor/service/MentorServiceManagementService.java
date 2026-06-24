@@ -32,6 +32,9 @@ import java.util.UUID;
 public class MentorServiceManagementService {
 
     private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 30, 60, 90);
+    private static final String ACTIVE_FILTER_ALL = "all";
+    private static final String ACTIVE_FILTER_TRUE = "true";
+    private static final String ACTIVE_FILTER_FALSE = "false";
 
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
@@ -39,9 +42,15 @@ public class MentorServiceManagementService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    public List<MentorServiceResponse> getMyServices(UUID mentorUserId) {
+    public List<MentorServiceResponse> getMyServices(UUID mentorUserId, String activeFilter) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
-        return mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorProfile.getUserId())
+        ActiveFilterMode filterMode = resolveActiveFilter(activeFilter);
+        List<MentorService> services = switch (filterMode) {
+            case ALL -> mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorProfile.getUserId());
+            case ACTIVE -> mentorServiceRepository.findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(mentorProfile.getUserId(), true);
+            case INACTIVE -> mentorServiceRepository.findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(mentorProfile.getUserId(), false);
+        };
+        return services
                 .stream()
                 .map(this::toResponse)
                 .toList();
@@ -247,5 +256,24 @@ public class MentorServiceManagementService {
 
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private ActiveFilterMode resolveActiveFilter(String activeFilter) {
+        String normalized = activeFilter == null ? ACTIVE_FILTER_ALL : activeFilter.trim().toLowerCase();
+        return switch (normalized) {
+            case "", ACTIVE_FILTER_ALL -> ActiveFilterMode.ALL;
+            case ACTIVE_FILTER_TRUE -> ActiveFilterMode.ACTIVE;
+            case ACTIVE_FILTER_FALSE -> ActiveFilterMode.INACTIVE;
+            default -> throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Query param active chỉ chấp nhận true, false hoặc all"
+            );
+        };
+    }
+
+    private enum ActiveFilterMode {
+        ALL,
+        ACTIVE,
+        INACTIVE
     }
 }

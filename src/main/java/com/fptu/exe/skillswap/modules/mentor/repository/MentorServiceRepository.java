@@ -16,6 +16,9 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
     List<MentorService> findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(UUID mentorUserId);
 
     @EntityGraph(attributePaths = {"helpTopics"})
+    List<MentorService> findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(UUID mentorUserId, boolean isActive);
+
+    @EntityGraph(attributePaths = {"helpTopics"})
     List<MentorService> findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(List<UUID> mentorUserIds);
 
     @EntityGraph(attributePaths = {"helpTopics"})

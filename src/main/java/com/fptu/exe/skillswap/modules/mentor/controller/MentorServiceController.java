@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -43,12 +44,15 @@ public class MentorServiceController {
 
     @Operation(
             summary = "Lấy danh sách mentor services của tôi",
-            description = "Trả về danh sách dịch vụ mentoring thuộc về mentor hiện tại. FE dùng ở màn quản lý dịch vụ sau khi user đã có quyền truy cập các tính năng mentor."
+            description = "Trả về danh sách dịch vụ mentoring thuộc về mentor hiện tại. Có thể lọc theo query param `active=true|false|all`, mặc định là `all` để FE quản lý cả service đang bật và đã xóa mềm."
     )
     @GetMapping
-    public ApiResponse<List<MentorServiceResponse>> getMyServices(@AuthenticationPrincipal UserPrincipal principal) {
+    public ApiResponse<List<MentorServiceResponse>> getMyServices(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "all") String active
+    ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorServiceManagementService.getMyServices(principal.getPublicId()));
+        return ApiResponse.success(mentorServiceManagementService.getMyServices(principal.getPublicId(), active));
     }
 
     @Operation(
