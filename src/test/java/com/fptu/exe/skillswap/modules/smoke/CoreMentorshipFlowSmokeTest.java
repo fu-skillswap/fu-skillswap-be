@@ -38,6 +38,7 @@ import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemRespo
 import com.fptu.exe.skillswap.modules.system.service.AdminUserService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -341,7 +342,7 @@ class CoreMentorshipFlowSmokeTest {
         MentorProfile mp = mentorProfileRepository.findById(mentor.getId()).orElseThrow();
         mp.setStatus(MentorStatus.ACTIVE);
         mp.setAvailable(true);
-        mp.setVerifiedAt(LocalDateTime.now());
+        mp.setVerifiedAt(DateTimeUtil.now());
         mentorProfileRepository.saveAndFlush(mp);
         entityManager.clear();
 
@@ -351,8 +352,8 @@ class CoreMentorshipFlowSmokeTest {
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
         slot.setMentorProfile(mp);
-        slot.setStartTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0));
-        slot.setEndTime(LocalDateTime.now().plusDays(1).withHour(12).withMinute(0));
+        slot.setStartTime(DateTimeUtil.now().plusDays(1).withHour(10).withMinute(0));
+        slot.setEndTime(DateTimeUtil.now().plusDays(1).withHour(12).withMinute(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
         slotRepository.saveAndFlush(slot);
         var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
@@ -385,15 +386,15 @@ class CoreMentorshipFlowSmokeTest {
         bookingService.acceptBooking(mentor.getId(), bk.bookingId(), aReq);
 
         // Fast-forward time so we can complete it
-        slot.setStartTime(LocalDateTime.now().minusDays(1));
-        slot.setEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
+        slot.setStartTime(DateTimeUtil.now().minusDays(1));
+        slot.setEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
         slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
-        booking.setSelectedStartTime(LocalDateTime.now().minusDays(1));
-        booking.setSelectedEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
-        booking.setRequestedStartTime(LocalDateTime.now().minusDays(1));
-        booking.setRequestedEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
+        booking.setSelectedStartTime(DateTimeUtil.now().minusDays(1));
+        booking.setSelectedEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
+        booking.setRequestedStartTime(DateTimeUtil.now().minusDays(1));
+        booking.setRequestedEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
         bookingRepository.saveAndFlush(booking);
 
         // Complete booking
