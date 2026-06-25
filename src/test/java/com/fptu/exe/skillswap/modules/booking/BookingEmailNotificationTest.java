@@ -8,10 +8,18 @@ import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -20,6 +28,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mail.service.EmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,9 +62,17 @@ class BookingEmailNotificationTest {
     @Autowired
     private SpecializationRepository specializationRepository;
     @Autowired
+    private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
+    @Autowired
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     @Autowired
     private BookingService bookingService;
+
+    @Autowired
+    private MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     @MockBean
     private EmailService emailService;
@@ -63,6 +80,7 @@ class BookingEmailNotificationTest {
     private User menteeUser;
     private User mentorUser;
     private MentorAvailabilitySlot testSlot;
+    private com.fptu.exe.skillswap.modules.mentor.domain.MentorService mentorService;
 
     @BeforeEach
     void setUp() {
@@ -86,12 +104,45 @@ class BookingEmailNotificationTest {
                 .sessionDuration(60)
                 .build());
 
+        MentorAvailabilityRule availabilityRule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
+                .mentorProfile(profile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.DAILY)
+                .effectiveFrom(LocalDateTime.now().toLocalDate())
+                .effectiveTo(LocalDateTime.now().toLocalDate().plusWeeks(2))
+                .startTime(LocalDateTime.now().plusDays(2).toLocalTime().withMinute(0).withSecond(0).withNano(0))
+                .endTime(LocalDateTime.now().plusDays(2).toLocalTime().withMinute(0).withSecond(0).withNano(0).plusHours(1))
+                .timezone("Asia/Ho_Chi_Minh")
+                .active(true)
+                .build());
+
+        LocalDateTime slotStart = LocalDateTime.now().plusDays(2)
+                .withMinute(0)
+                .withSecond(0)
+                .withNano(0);
         testSlot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                 .mentorProfile(profile)
-                .startTime(LocalDateTime.now().plusDays(2))
-                .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                .rule(availabilityRule)
+                .startTime(slotStart)
+                .endTime(slotStart.plusHours(1))
                 .isActive(true)
                 .isBooked(false)
+                .build());
+
+        mentorService = mentorServiceRepository.save(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                .mentorProfile(profile)
+                .title("Email Mentoring")
+                .description("Support Email")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(java.math.BigDecimal.ZERO)
+                .currency("VND")
+                .isActive(true)
+                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(testSlot.getId(), mentorService.getId()))
+                .slot(testSlot)
+                .service(mentorService)
                 .build());
     }
 
@@ -121,8 +172,7 @@ class BookingEmailNotificationTest {
 
     @Test
     void acceptBooking_shouldPublishEmailEventAfterCommit() {
-        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), 
-            new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         
         bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
 
@@ -138,8 +188,7 @@ class BookingEmailNotificationTest {
 
     @Test
     void rejectBooking_shouldPublishRejectedEmailEvent() {
-        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), 
-            new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         
         bookingService.rejectBooking(mentorUser.getId(), booking.bookingId(), new RejectBookingRequest("Busy", "Sorry"));
 
@@ -155,8 +204,7 @@ class BookingEmailNotificationTest {
 
     @Test
     void menteeCancelBooking_shouldPublishCancelledEmailToMentor() {
-        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), 
-            new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         
         bookingService.cancelBookingByMentee(menteeUser.getId(), booking.bookingId(), new CancelBookingRequest("Changed my mind"));
 
@@ -172,8 +220,7 @@ class BookingEmailNotificationTest {
 
     @Test
     void mentorCancelBooking_shouldPublishCancelledEmailToMentee() {
-        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), 
-            new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
         
         bookingService.cancelBookingByMentor(mentorUser.getId(), booking.bookingId(), new CancelBookingRequest("Emergency"));
@@ -193,8 +240,7 @@ class BookingEmailNotificationTest {
         doThrow(new RuntimeException("SMTP Connection Error")).when(emailService)
                 .sendSimpleEmail(anyString(), anyString(), anyString());
 
-        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), 
-            new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         
         BookingResponse accepted = bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
 
@@ -202,5 +248,16 @@ class BookingEmailNotificationTest {
         TestTransaction.end();
 
         org.junit.jupiter.api.Assertions.assertEquals("ACCEPTED", accepted.status().name());
+    }
+
+    private CreateBookingRequest bookingRequest(String title, String description) {
+        return new CreateBookingRequest(
+                testSlot.getId(),
+                mentorService.getId(),
+                testSlot.getStartTime(),
+                testSlot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                title,
+                description
+        );
     }
 }

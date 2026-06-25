@@ -1,25 +1,31 @@
 package com.fptu.exe.skillswap.modules.booking.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Schema(description = "Payload để mentee tạo booking request mới")
 public record CreateBookingRequest(
-        @Schema(description = "userId của mentor được chọn trên discovery", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
-        @NotNull(message = "mentorUserId là bắt buộc")
-        UUID mentorUserId,
-
-        @Schema(description = "slotId lấy từ API GET /api/mentors/{mentorUserId}/availability", example = "019f2234-aaaa-bbbb-cccc-1234567890ab")
+        @Schema(description = "slotId lấy từ API GET /api/mentors/{mentorUserId}/availability-slots", example = "019f2234-aaaa-bbbb-cccc-1234567890ab")
         @NotNull(message = "availabilitySlotId là bắt buộc")
         UUID availabilitySlotId,
 
-        @Schema(description = "serviceId bắt buộc phải có cho booking mới.", example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
+        @Schema(description = "serviceId phải thuộc danh sách services được gắn vào slot đã chọn.", example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
         @NotNull(message = "serviceId là bắt buộc")
         UUID serviceId,
+
+        @Schema(description = "Thời gian bắt đầu mentee thực sự chọn trong slot, phải khớp exact candidate hợp lệ từ API candidates", example = "2026-06-30T19:00:00")
+        @NotNull(message = "selectedStartTime là bắt buộc")
+        LocalDateTime selectedStartTime,
+
+        @Schema(description = "Thời gian kết thúc mentee thực sự chọn trong slot, phải khớp exact candidate hợp lệ từ API candidates", example = "2026-06-30T19:30:00")
+        @NotNull(message = "selectedEndTime là bắt buộc")
+        LocalDateTime selectedEndTime,
 
         @Schema(description = "Tiêu đề mục tiêu học tập ngắn gọn để mentor nhìn nhanh", example = "Review lộ trình học Spring Boot và chuẩn bị phỏng vấn intern")
         @NotBlank(message = "learningGoalTitle không được để trống")
@@ -30,4 +36,10 @@ public record CreateBookingRequest(
         @Size(max = 2000, message = "learningGoalDescription không được vượt quá 2000 ký tự")
         String learningGoalDescription
 ) {
+    @AssertTrue(message = "selectedEndTime phải sau selectedStartTime")
+    public boolean isSelectedRangeValid() {
+        return selectedStartTime != null
+                && selectedEndTime != null
+                && selectedEndTime.isAfter(selectedStartTime);
+    }
 }

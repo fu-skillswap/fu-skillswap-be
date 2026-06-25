@@ -22,7 +22,7 @@ public class AdminBookingListRequest extends BasePageRequest {
     private UUID menteeUserId;
 
     public AdminBookingListRequest() {
-        setSortBy("requestedStartTime");
+        setSortBy("selectedStartTime");
         setDirection("DESC");
         setSize(20);
     }

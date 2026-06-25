@@ -267,6 +267,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             service.setMentorProfile(mentorProfile);
             service.setTitle(seed.serviceTitle());
             service.setDescription(seed.serviceDescription());
+            service.setExpectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.");
             service.setDurationMinutes(seed.serviceDuration());
             service.setFree(seed.serviceFree());
             service.setPriceAmount(seed.priceAmount());
@@ -287,6 +288,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 .mentorProfile(mentorProfile)
                 .title(seed.serviceTitle())
                 .description(seed.serviceDescription())
+                .expectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.")
                 .durationMinutes(seed.serviceDuration())
                 .isFree(seed.serviceFree())
                 .priceAmount(seed.priceAmount())
@@ -304,17 +306,11 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
     private void upsertAvailabilityPlan(MentorProfile mentorProfile) {
         UUID mentorUserId = mentorProfile.getUserId();
-        List<MentorService> services = mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorUserId);
-        if (services.isEmpty()) {
-            return;
-        }
-        MentorService service = services.get(0);
-
         List<MentorAvailabilityRule> rules = mentorAvailabilityRuleRepository.findByMentorProfileUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(mentorUserId);
+        MentorAvailabilityRule activeRule;
         if (rules.isEmpty()) {
-            MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
+            activeRule = MentorAvailabilityRule.builder()
                     .mentorProfile(mentorProfile)
-                    .service(service)
                     .ruleType(AvailabilityRuleType.OPEN)
                     .repeatType(AvailabilityRepeatType.WEEKLY)
                     .daysOfWeek("MONDAY,TUESDAY,WEDNESDAY,THURSDAY,FRIDAY,SATURDAY,SUNDAY")
@@ -326,7 +322,9 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     .active(true)
                     .note("Demo availability plan")
                     .build();
-            mentorAvailabilityRuleRepository.save(rule);
+            activeRule = mentorAvailabilityRuleRepository.save(activeRule);
+        } else {
+            activeRule = rules.get(0);
         }
 
         List<SlotSeed> slots = List.of(
@@ -348,7 +346,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
             MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .service(service)
+                    .rule(activeRule)
                     .startTime(start)
                     .endTime(end)
                     .timezone(DEFAULT_TIMEZONE)

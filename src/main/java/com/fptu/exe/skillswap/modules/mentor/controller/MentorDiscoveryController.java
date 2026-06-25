@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardRes
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -96,11 +97,12 @@ public class MentorDiscoveryController {
     @Operation(
             summary = "Lấy danh sách slot còn hiển thị",
             description = """
-                    Trả về các availability slot còn hiển thị mà FE có thể show trước khi tạo booking request.
-                    FE dùng sau khi mentee mở trang mentor detail và cần danh sách slot để chọn lịch.
-                    
-                    Backend sẽ ẩn các slot đã ở quá khứ, inactive, đã đầy hàng chờ hoặc đã được accept bởi booking khác. Khoảng ngày được phép xem cũng bị giới hạn theo rule backend, bao gồm mốc tối đa 31 ngày hiện tại.
-                    
+                    Trả về các parent availability slots còn hiển thị mà FE có thể show trước khi tạo booking request.
+                    FE dùng sau khi mentee mở trang mentor detail và cần danh sách slot rảnh để chọn lịch.
+
+                    Backend chỉ cho xem availability trong phạm vi từ Thứ 2 tuần hiện tại đến Chủ nhật tuần sau theo timezone Asia/Ho_Chi_Minh.
+                    Backend sẽ ẩn các slot đã ở quá khứ, inactive hoặc không còn candidate segment hợp lệ để đặt lịch.
+
                     Một slot đang hiển thị vẫn chưa được giữ chỗ cho mentee cho đến khi mentor accept booking request.
                     """
     )
@@ -117,6 +119,41 @@ public class MentorDiscoveryController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
+    }
+
+    @Operation(
+            summary = "Lấy danh sách availability slot còn hiển thị theo contract Phase 2",
+            description = "Alias rõ nghĩa cho FE mới. Trả về parent availability slots kèm danh sách service đã được mentor gắn vào từng slot."
+    )
+    @GetMapping("/{mentorUserId}/availability-slots")
+    public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailabilitySlots(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID mentorUserId,
+            @ParameterObject @ModelAttribute AvailabilityQueryRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
+    }
+
+    @Operation(
+            summary = "Lấy candidate segments của một service trong một availability slot",
+            description = "FE gọi sau khi user đã chọn slot và service. Backend trả về exact candidate segments được tính từ parent slot, duration của service, accepted overlap và pending quota trên đúng selected segment."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor, slot hoặc service gắn với slot"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Slot hoặc service không còn khả dụng")
+    })
+    @GetMapping("/{mentorUserId}/availability-slots/{slotId}/candidates")
+    public ApiResponse<ServiceSlotCandidatesResponse> getSlotCandidates(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID mentorUserId,
+            @PathVariable UUID slotId,
+            @RequestParam UUID serviceId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorDiscoveryService.getMentorAvailabilityCandidates(mentorUserId, slotId, serviceId));
     }
 
     @Operation(

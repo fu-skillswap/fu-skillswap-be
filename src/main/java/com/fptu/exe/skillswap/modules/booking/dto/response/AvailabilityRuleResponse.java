@@ -13,7 +13,8 @@ import java.util.List;
 import java.util.UUID;
 
 @Builder
-@Schema(description = "Availability rule của mentor")
+@Deprecated(forRemoval = false)
+@Schema(description = "Legacy internal response cho availability rule. Contract này không còn được public cho FE mới.")
 public record AvailabilityRuleResponse(
         @Schema(description = "ID của rule")
         UUID ruleId,

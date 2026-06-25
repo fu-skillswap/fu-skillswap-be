@@ -318,11 +318,16 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 
 ### POST `/api/me/mentor-verification/documents`
 - Auth: `bearerAuth`
-- Content-Type: `multipart/form-data`
-- Form data:
-  - `documentType`
-  - `file`
-- Mục đích: tải minh chứng xác thực mentor.
+- Content-Type: `application/json`
+- Request body:
+  - `MentorVerificationDocumentUploadRequest`
+    - `documentType` `VerificationDocumentType` (ví dụ: `FPTU_AFFILIATION_PROOF`)
+    - `fileUrl` `string` (đường dẫn URL sau khi upload lên dịch vụ lưu trữ Cloudinary)
+    - `publicId` `string` (Cloudinary public ID)
+    - `originalFilename` `string`
+    - `contentType` `string`
+    - `sizeBytes` `integer`
+- Mục đích: Lưu metadata của tài liệu xác thực mentor sau khi client-side đã tự upload lên Cloudinary. Backend nhận metadata này và gắn vào request xác thực.
 - Response:
   - `MentorVerificationRequestResponse`
 - Status:

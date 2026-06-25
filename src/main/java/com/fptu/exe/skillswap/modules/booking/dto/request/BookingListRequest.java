@@ -18,7 +18,7 @@ public class BookingListRequest extends BasePageRequest {
     private BookingStatus status;
 
     public BookingListRequest() {
-        setSortBy("requestedStartTime");
+        setSortBy("selectedStartTime");
         setDirection("DESC");
         setSize(10);
     }

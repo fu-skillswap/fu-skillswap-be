@@ -36,9 +36,10 @@ public class BookingController {
             description = """
                     Tạo một booking request mới ở trạng thái PENDING cho mentor service và availability slot mà mentee đã chọn.
                     
-                    FE dùng API này sau khi mentee chọn mentor, chọn slot còn hiển thị và nhập learning goal. Slot chưa được giữ chính thức cho mentee cho đến khi mentor accept request.
+                    FE dùng API này sau khi mentee chọn mentor, chọn parent slot còn hiển thị, chọn service được gắn vào slot đó, rồi lấy exact selected segment từ API candidates.
+                    Slot chưa được giữ chính thức cho mentee cho đến khi mentor accept request.
                     
-                    FE cần handle các trường hợp conflict khi slot không còn hiển thị, mentor không còn discoverable, service không thuộc mentor, mentee vượt quota pending hoặc slot đã đầy hàng chờ pending.
+                    FE cần handle các trường hợp conflict khi slot không còn hiển thị, service chưa được gắn vào slot, selected segment không còn hợp lệ, mentee vượt quota pending hoặc exact segment đã đầy hàng chờ.
                     """
     )
     @ApiResponses({

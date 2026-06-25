@@ -38,8 +38,8 @@ public class SessionService {
                 .mentor(booking.getMentorProfile().getUser())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(booking.getId())
-                .scheduledStartTime(booking.getRequestedStartTime())
-                .scheduledEndTime(booking.getRequestedEndTime())
+                .scheduledStartTime(booking.getSelectedStartTime())
+                .scheduledEndTime(booking.getSelectedEndTime())
                 .status(SessionStatus.SCHEDULED)
                 .build();
 

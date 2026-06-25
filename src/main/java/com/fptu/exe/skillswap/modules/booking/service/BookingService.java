@@ -5,9 +5,12 @@ import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
@@ -17,7 +20,10 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -58,9 +64,11 @@ public class BookingService {
     private static final long MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES = 6 * 60;
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
+    private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 24;
 
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final MentorServiceRepository mentorServiceRepository;
     private final UserRepository userRepository;
     private final AcademicService academicService;
@@ -97,9 +105,6 @@ public class BookingService {
         if (mentorProfile == null || mentorProfile.getUser() == null || mentorProfile.getUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ hiện tại không gắn với mentor hợp lệ");
         }
-        if (!mentorProfile.getUserId().equals(request.mentorUserId())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ này không thuộc mentor đã chọn");
-        }
         if (mentorProfile.getUserId().equals(menteeUserId)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn không thể tự tạo booking với chính mình");
         }
@@ -122,45 +127,29 @@ public class BookingService {
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
         }
-        if (slot.isBooked()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này vừa được mentee khác đặt, vui lòng chọn slot khác");
-        }
         if (slot.getStartTime() == null || slot.getEndTime() == null || !slot.getEndTime().isAfter(slot.getStartTime())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring hiện tại không hợp lệ");
         }
-        if (!slot.getStartTime().isAfter(now)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bắt đầu hoặc đã trôi qua");
-        }
-
-        boolean hasOverlap = bookingRepository.hasOverlappingAcceptedBooking(
-                menteeUserId,
-                slot.getStartTime(),
-                slot.getEndTime()
-        );
-        if (hasOverlap) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ này.");
-        }
-
-        if (bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã được chấp nhận cho một booking khác");
-        }
-        long pendingBookings = bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING);
-        if (pendingBookings >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã đạt tối đa 3 yêu cầu chờ xác nhận");
-        }
-        if (bookingRepository.existsByMenteeIdAndSlotIdAndStatusIn(
-                menteeUserId,
-                slot.getId(),
-                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED)
-        )) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho khung giờ này");
+        if (!slot.getEndTime().isAfter(now)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã kết thúc hoặc đã trôi qua");
         }
 
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
-        
-        if (slot.getService() != null && (mentorService == null || !slot.getService().getId().equals(mentorService.getId()))) {
-             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ này không thuộc dịch vụ đã chọn");
+        LocalDateTime selectedStartTime = request.selectedStartTime();
+        LocalDateTime selectedEndTime = request.selectedEndTime();
+        validateSelectedRange(slot, mentorService, selectedStartTime, selectedEndTime, now);
+        validateServiceAttachedToSlot(slot.getId(), mentorService.getId());
+        validateCandidateSelection(slot, mentorService, menteeUserId, selectedStartTime, selectedEndTime);
+
+        if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
+                menteeUserId,
+                slot.getId(),
+                selectedStartTime,
+                selectedEndTime,
+                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED)
+        )) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho đúng segment này.");
         }
 
         Booking savedBooking = bookingRepository.save(Booking.builder()
@@ -170,12 +159,19 @@ public class BookingService {
                 .slot(slot)
                 .learningGoalTitle(trim(request.learningGoalTitle()))
                 .learningGoalDescription(trimToNull(request.learningGoalDescription()))
-                .requestedStartTime(slot.getStartTime())
-                .requestedEndTime(slot.getEndTime())
+                .selectedStartTime(selectedStartTime)
+                .selectedEndTime(selectedEndTime)
+                .serviceTitleSnapshot(mentorService.getTitle())
+                .serviceDescriptionSnapshot(mentorService.getDescription())
+                .serviceDurationSnapshot(mentorService.getDurationMinutes())
+                .serviceExpectedOutcomeSnapshot(mentorService.getExpectedOutcome())
+                .serviceIsFreeSnapshot(mentorService.isFree())
+                .servicePriceAmountSnapshot(mentorService.getPriceAmount())
+                .serviceCurrencySnapshot(mentorService.getCurrency())
                 .build());
 
         notificationService.createNotification(
-                request.mentorUserId(),
+                mentorProfile.getUserId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_CREATED,
                 "Bạn có yêu cầu đặt lịch mới",
                 mentee.getFullName() + " đã gửi yêu cầu đặt lịch mentoring.",
@@ -263,14 +259,29 @@ public class BookingService {
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
         }
-        if (slot.isBooked() || bookingRepository.existsBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã được chấp nhận cho booking khác");
-        }
 
         LocalDateTime now = DateTimeUtil.now();
-        
-        // 5. Lock sibling pending bookings for the same slot in deterministic order
-        List<Booking> pendingBookings = bookingRepository.findBySlotIdAndStatusForUpdate(slot.getId(), BookingStatus.PENDING);
+        LocalDateTime selectedStartTime = selectedStartTime(booking);
+        LocalDateTime selectedEndTime = selectedEndTime(booking);
+        if (selectedStartTime == null || selectedEndTime == null || !selectedEndTime.isAfter(selectedStartTime)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Booking đang thiếu selected segment hợp lệ");
+        }
+        if (bookingRepository.existsOverlappingBySlotIdAndStatus(
+                slot.getId(),
+                BookingStatus.ACCEPTED,
+                selectedStartTime,
+                selectedEndTime
+        )) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Segment này đã được chấp nhận cho booking khác");
+        }
+
+        // 5. Lock sibling pending bookings overlap the same selected segment in deterministic order
+        List<Booking> pendingBookings = bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+                slot.getId(),
+                BookingStatus.PENDING,
+                selectedStartTime,
+                selectedEndTime
+        );
 
         booking.setStatus(BookingStatus.ACCEPTED);
         booking.setAcceptedAt(now);
@@ -320,8 +331,8 @@ public class BookingService {
                 .recipientEmail(savedBooking.getMentee().getEmail())
                 .recipientName(savedBooking.getMentee().getFullName())
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
-                .bookingStartTime(savedBooking.getRequestedStartTime())
-                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .bookingStartTime(savedBooking.getSelectedStartTime())
+                .bookingEndTime(savedBooking.getSelectedEndTime())
                 .meetingLink(savedBooking.getMeetingLink())
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -367,8 +378,8 @@ public class BookingService {
                 .recipientEmail(savedBooking.getMentee().getEmail())
                 .recipientName(savedBooking.getMentee().getFullName())
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
-                .bookingStartTime(savedBooking.getRequestedStartTime())
-                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .bookingStartTime(savedBooking.getSelectedStartTime())
+                .bookingEndTime(savedBooking.getSelectedEndTime())
                 .reason(savedBooking.getRejectReason())
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -412,6 +423,74 @@ public class BookingService {
 
     @Transactional
     public BookingResponse completeBooking(UUID currentUserId, UUID bookingId, CompleteBookingRequest request) {
+        Booking booking = getBookingForSessionAction(currentUserId, bookingId);
+        return isMentorOfBooking(booking, currentUserId)
+                ? completeBookingByMentor(currentUserId, bookingId, request)
+                : confirmBookingByParticipant(currentUserId, bookingId, new ConfirmBookingRequest(
+                        request == null ? null : request.completionNote()
+                ));
+    }
+
+    @Transactional
+    public BookingResponse completeBookingByMentor(UUID mentorUserId, UUID bookingId, CompleteBookingRequest request) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+
+        LocalDateTime now = DateTimeUtil.now();
+        Booking booking = getBookingForSessionAction(mentorUserId, bookingId);
+        if (!isMentorOfBooking(booking, mentorUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor của booking mới được xác nhận hoàn tất buổi mentoring");
+        }
+        synchronizePostSessionStatusForPhaseOne(booking, now);
+        if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ mentor hoàn tất");
+        }
+        if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chưa thể hoàn tất booking trước khi buổi mentoring kết thúc");
+        }
+
+        String completionNote = trimToNull(request == null ? null : request.completionNote());
+        booking.setMentorNote(completionNote);
+        booking.setStatus(BookingStatus.AWAITING_MENTEE_CONFIRMATION);
+        booking.setCompletedAt(now);
+
+        if (booking.getActualStartTime() == null) {
+            booking.setActualStartTime(selectedStartTime(booking));
+        }
+        if (booking.getActualEndTime() == null) {
+            booking.setActualEndTime(selectedEndTime(booking));
+        }
+
+        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
+        if (session != null) {
+            session.setStatus(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED);
+            if (session.getActualStartTime() == null) {
+                session.setActualStartTime(selectedStartTime(booking));
+            }
+            if (session.getActualEndTime() == null) {
+                session.setActualEndTime(selectedEndTime(booking));
+            }
+        }
+
+        Booking savedBooking = bookingRepository.save(booking);
+        notificationService.createNotification(
+                savedBooking.getMentee().getId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
+                "Mentor đã xác nhận hoàn tất buổi mentoring",
+                "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong 24 giờ.",
+                "BOOKING",
+                savedBooking.getId()
+        );
+
+        return toBookingResponse(savedBooking);
+    }
+
+    @Transactional
+    public BookingResponse confirmBookingByParticipant(UUID currentUserId, UUID bookingId, ConfirmBookingRequest request) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
@@ -419,66 +498,24 @@ public class BookingService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
 
-        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+        Booking booking = getBookingForSessionAction(currentUserId, bookingId);
+        LocalDateTime now = DateTimeUtil.now();
+        synchronizePostSessionStatusForPhaseOne(booking, now);
         assertBookingAccess(booking, currentUserId);
 
-        if (booking.getStatus() != BookingStatus.ACCEPTED && booking.getStatus() != BookingStatus.COMPLETED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hoàn tất booking đã được chấp nhận hoặc đã hoàn thành");
+        if (booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ xác nhận sau buổi học");
         }
-
-        String completionNote = trimToNull(request == null ? null : request.completionNote());
-        boolean isMentor = isMentorOfBooking(booking, currentUserId);
-
-        if (booking.getStatus() == BookingStatus.COMPLETED) {
-            if (isMentor) {
-                if (booking.getMentorNote() != null && !booking.getMentorNote().isBlank()) {
-                    throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã ghi nhận ghi chú hoàn thành cho buổi học này rồi");
-                }
-                booking.setMentorNote(completionNote);
-            } else {
-                if (booking.getMenteeNote() != null && !booking.getMenteeNote().isBlank()) {
-                    throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã ghi nhận ghi chú hoàn thành cho buổi học này rồi");
-                }
-                booking.setMenteeNote(completionNote);
-            }
-            Booking savedBooking = bookingRepository.save(booking);
-            return toBookingResponse(savedBooking);
+        if (isMentorOfBooking(booking, currentUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Mentor không thể tự xác nhận thay cho participant còn lại");
         }
-
-        LocalDateTime now = DateTimeUtil.now();
-        if (booking.getRequestedStartTime() == null || booking.getRequestedEndTime() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian booking không hợp lệ");
-        }
-        if (now.isBefore(booking.getRequestedStartTime())) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chưa thể hoàn tất booking trước thời gian bắt đầu");
-        }
-
-        if (isMentor) {
-            booking.setMentorNote(completionNote);
-        } else {
-            booking.setMenteeNote(completionNote);
-        }
+        ensureWithinPostSessionReviewWindow(booking, now);
 
         booking.setStatus(BookingStatus.COMPLETED);
+        booking.setFinalizedAt(now);
+        booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_CONFIRMED);
         booking.setCompletedAt(now);
-        if (booking.getActualStartTime() == null) {
-            booking.setActualStartTime(booking.getRequestedStartTime());
-        }
-        if (booking.getActualEndTime() == null) {
-            booking.setActualEndTime(booking.getRequestedEndTime());
-        }
-
-        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
-        if (session != null) {
-            session.setStatus(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED);
-            if (session.getActualStartTime() == null) {
-                session.setActualStartTime(booking.getRequestedStartTime());
-            }
-            if (session.getActualEndTime() == null) {
-                session.setActualEndTime(booking.getRequestedEndTime());
-            }
-        }
+        booking.setMenteeNote(trimToNull(request == null ? null : request.confirmationNote()));
 
         MentorProfile mentorProfile = booking.getMentorProfile();
         if (mentorProfile != null) {
@@ -491,25 +528,48 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
-        boolean completedByMentor = isMentorOfBooking(savedBooking, currentUserId);
-        UUID recipientUserId = completedByMentor
-                ? savedBooking.getMentee().getId()
-                : savedBooking.getMentorProfile().getUser().getId();
-        String title = "Buổi mentoring đã được hoàn tất";
-        String message = completedByMentor
-                ? "Buổi mentoring của bạn đã được đánh dấu hoàn tất."
-                : "Buổi mentoring với " + savedBooking.getMentee().getFullName() + " đã được đánh dấu hoàn tất.";
-
-        notificationService.createNotification(
-                recipientUserId,
-                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
-                title,
-                message,
-                "BOOKING",
-                savedBooking.getId()
-        );
-
         return toBookingResponse(savedBooking);
+    }
+
+    @Transactional
+    public BookingIssueResponse submitBookingIssue(UUID currentUserId, UUID bookingId, SubmitBookingIssueRequest request) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu báo vấn đề");
+        }
+
+        Booking booking = getBookingForSessionAction(currentUserId, bookingId);
+        LocalDateTime now = DateTimeUtil.now();
+        synchronizePostSessionStatusForPhaseOne(booking, now);
+        assertBookingAccess(booking, currentUserId);
+
+        if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
+                && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái cho phép báo vấn đề");
+        }
+        if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể báo vấn đề sau khi buổi mentoring đã kết thúc");
+        }
+        ensureWithinPostSessionReviewWindow(booking, now);
+
+        booking.setStatus(BookingStatus.UNDER_REVIEW);
+        booking.setIssueSubmittedAt(now);
+        booking.setIssueType(request.issueType());
+        booking.setIssueDescription(trim(request.description()));
+        booking.setWantsAdminReview(request.wantsAdminReview());
+        booking.setCompletionOutcome(BookingCompletionOutcome.REVIEW_PENDING_DECISION);
+
+        Booking savedBooking = bookingRepository.save(booking);
+        return BookingIssueResponse.builder()
+                .bookingId(savedBooking.getId())
+                .status(savedBooking.getStatus())
+                .issueSubmittedAt(savedBooking.getIssueSubmittedAt())
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -615,9 +675,15 @@ public class BookingService {
                 .menteeUserId(mentee == null ? null : mentee.getId())
                 .menteeDisplayName(mentee == null ? null : mentee.getFullName())
                 .menteeAvatarUrl(mentee == null ? null : mentee.getAvatarUrl())
-                .slotId(slot == null ? null : slot.getId())
+                .availabilitySlotId(slot == null ? null : slot.getId())
                 .serviceId(mentorService == null ? null : mentorService.getId())
-                .serviceTitle(mentorService == null ? null : mentorService.getTitle())
+                .serviceTitle(booking.getServiceTitleSnapshot() != null ? booking.getServiceTitleSnapshot() : (mentorService == null ? null : mentorService.getTitle()))
+                .serviceDescriptionSnapshot(booking.getServiceDescriptionSnapshot())
+                .serviceExpectedOutcomeSnapshot(booking.getServiceExpectedOutcomeSnapshot())
+                .serviceDurationSnapshot(booking.getServiceDurationSnapshot())
+                .serviceIsFreeSnapshot(booking.getServiceIsFreeSnapshot())
+                .servicePriceAmountSnapshot(booking.getServicePriceAmountSnapshot())
+                .serviceCurrencySnapshot(booking.getServiceCurrencySnapshot())
                 .status(booking.getStatus())
                 .learningGoalTitle(booking.getLearningGoalTitle())
                 .learningGoalDescription(booking.getLearningGoalDescription())
@@ -627,14 +693,21 @@ public class BookingService {
                 .meetingPlatform(platform)
                 .meetingLink(link)
                 .location(booking.getLocation())
-                .requestedStartTime(booking.getRequestedStartTime())
-                .requestedEndTime(booking.getRequestedEndTime())
+                .selectedStartTime(selectedStartTime(booking))
+                .selectedEndTime(selectedEndTime(booking))
                 .actualStartTime(actualStart)
                 .actualEndTime(actualEnd)
                 .acceptedAt(booking.getAcceptedAt())
                 .rejectedAt(booking.getRejectedAt())
                 .cancelledAt(booking.getCancelledAt())
                 .completedAt(booking.getCompletedAt())
+                .finalizedAt(booking.getFinalizedAt())
+                .autoClosedAt(booking.getAutoClosedAt())
+                .completionOutcome(booking.getCompletionOutcome())
+                .issueSubmittedAt(booking.getIssueSubmittedAt())
+                .issueType(booking.getIssueType())
+                .issueDescription(booking.getIssueDescription())
+                .wantsAdminReview(booking.getWantsAdminReview())
                 .mentorNote(booking.getMentorNote())
                 .menteeNote(booking.getMenteeNote())
                 .createdAt(booking.getCreatedAt())
@@ -666,7 +739,7 @@ public class BookingService {
             case "cancelledAt" -> "cancelledAt";
             case "completedAt" -> "completedAt";
             case "status" -> "status";
-            default -> "requestedStartTime";
+            default -> "selectedStartTime";
         };
     }
 
@@ -676,6 +749,19 @@ public class BookingService {
         }
         return bookingRepository.findByIdForCancellation(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+    }
+
+    private Booking getBookingForSessionAction(UUID currentUserId, UUID bookingId) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+        assertBookingAccess(booking, currentUserId);
+        return booking;
     }
 
     private boolean isMentorOfBooking(Booking booking, UUID userId) {
@@ -693,10 +779,123 @@ public class BookingService {
     }
 
     private long minutesUntilStart(Booking booking, LocalDateTime now) {
-        if (booking.getRequestedStartTime() == null) {
+        if (selectedStartTime(booking) == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu booking không hợp lệ");
         }
-        return Duration.between(now, booking.getRequestedStartTime()).toMinutes();
+        return Duration.between(now, selectedStartTime(booking)).toMinutes();
+    }
+
+    private void validateSelectedRange(
+            MentorAvailabilitySlot slot,
+            MentorService mentorService,
+            LocalDateTime selectedStartTime,
+            LocalDateTime selectedEndTime,
+            LocalDateTime now
+    ) {
+        if (selectedStartTime == null || selectedEndTime == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime và selectedEndTime là bắt buộc");
+        }
+        if (!selectedEndTime.isAfter(selectedStartTime)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "selectedEndTime phải sau selectedStartTime");
+        }
+        if (slot == null || slot.getStartTime() == null || slot.getEndTime() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring không hợp lệ");
+        }
+        if (selectedStartTime.isBefore(slot.getStartTime()) || selectedEndTime.isAfter(slot.getEndTime())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải nằm hoàn toàn trong khung giờ của mentor");
+        }
+        if (!selectedStartTime.isAfter(now)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khoảng thời gian đã chọn đã bắt đầu hoặc đã trôi qua");
+        }
+        long durationMinutes = Duration.between(selectedStartTime, selectedEndTime).toMinutes();
+        if (mentorService == null || mentorService.getDurationMinutes() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring không hợp lệ");
+        }
+        if (durationMinutes != mentorService.getDurationMinutes()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải đúng bằng thời lượng của service");
+        }
+    }
+
+    private void validateServiceAttachedToSlot(UUID slotId, UUID serviceId) {
+        if (!availabilitySlotServiceRepository.existsBySlotIdAndServiceId(slotId, serviceId)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện chưa được gắn vào availability slot đã chọn");
+        }
+    }
+
+    private void validateCandidateSelection(
+            MentorAvailabilitySlot slot,
+            MentorService mentorService,
+            UUID menteeUserId,
+            LocalDateTime selectedStartTime,
+            LocalDateTime selectedEndTime
+    ) {
+        long offsetMinutes = Duration.between(slot.getStartTime(), selectedStartTime).toMinutes();
+        if (offsetMinutes < 0 || offsetMinutes % mentorService.getDurationMinutes() != 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime phải khớp với candidate segment hợp lệ của service trong slot");
+        }
+
+        if (bookingRepository.existsOverlappingBySlotIdAndStatus(
+                slot.getId(),
+                BookingStatus.ACCEPTED,
+                selectedStartTime,
+                selectedEndTime
+        )) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Segment đã chọn đã có booking được mentor chấp nhận trùng thời gian.");
+        }
+
+        long pendingCount = bookingRepository.countBySlotIdAndExactSegmentAndStatus(
+                slot.getId(),
+                selectedStartTime,
+                selectedEndTime,
+                BookingStatus.PENDING
+        );
+        if (pendingCount >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Segment đã chọn đã đạt tối đa 3 yêu cầu chờ xác nhận.");
+        }
+
+        if (bookingRepository.hasOverlappingAcceptedBooking(menteeUserId, selectedStartTime, selectedEndTime)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ đã chọn.");
+        }
+    }
+
+    private void synchronizePostSessionStatusForPhaseOne(Booking booking, LocalDateTime now) {
+        if (booking == null || now == null) {
+            return;
+        }
+        if (booking.getStatus() == BookingStatus.ACCEPTED
+                && selectedEndTime(booking) != null
+                && !now.isBefore(selectedEndTime(booking))) {
+            booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
+                && selectedEndTime(booking) != null
+                && now.isAfter(selectedEndTime(booking).plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
+            booking.setStatus(BookingStatus.AUTO_CLOSED);
+            booking.setAutoClosedAt(now);
+            booking.setFinalizedAt(now);
+            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_AUTO_CLOSED);
+        }
+    }
+
+    private void ensureWithinPostSessionReviewWindow(Booking booking, LocalDateTime now) {
+        LocalDateTime bookingEnd = selectedEndTime(booking);
+        if (bookingEnd == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc booking không hợp lệ");
+        }
+        if (now.isAfter(bookingEnd.plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn 24 giờ để phản hồi sau buổi mentoring");
+        }
+    }
+
+    private LocalDateTime selectedStartTime(Booking booking) {
+        return booking.getSelectedStartTime();
+    }
+
+    private LocalDateTime selectedEndTime(Booking booking) {
+        return booking.getSelectedEndTime();
     }
 
     private void applyMentorCancellationPenalty(MentorProfile mentorProfile, long minutesUntilStart, LocalDateTime now) {
@@ -776,13 +975,17 @@ public class BookingService {
         return false;
     }
 
-    private void releaseSlot(MentorAvailabilitySlot slot) {
-        slot.setBooked(false);
-    }
-
-    private void deactivateSlot(MentorAvailabilitySlot slot) {
-        slot.setBooked(false);
-        slot.setActive(false);
+    private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {
+        if (slot == null || slot.getId() == null) {
+            return;
+        }
+        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatus(
+                slot.getId(),
+                BookingStatus.ACCEPTED,
+                slot.getStartTime(),
+                slot.getEndTime()
+        );
+        slot.setBooked(hasAcceptedBookings);
     }
 
     private int defaultInteger(Integer value) {
@@ -835,9 +1038,7 @@ public class BookingService {
         booking.setCancelReason(requiredCancelReason(request));
 
         MentorAvailabilitySlot slot = booking.getSlot();
-        if (slot != null) {
-            deactivateSlot(slot);
-        }
+        refreshSlotBookedFlag(slot);
 
         MentorProfile mentorProfile = booking.getMentorProfile();
         if (mentorProfile != null) {
@@ -867,8 +1068,8 @@ public class BookingService {
                 .recipientEmail(savedBooking.getMentee().getEmail())
                 .recipientName(savedBooking.getMentee().getFullName())
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
-                .bookingStartTime(savedBooking.getRequestedStartTime())
-                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .bookingStartTime(savedBooking.getSelectedStartTime())
+                .bookingEndTime(savedBooking.getSelectedEndTime())
                 .reason(savedBooking.getCancelReason())
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -906,11 +1107,7 @@ public class BookingService {
 
         MentorAvailabilitySlot slot = booking.getSlot();
         if (slot != null && currentStatus == BookingStatus.ACCEPTED) {
-            if (minutesUntilStart >= MENTEE_ACCEPTED_CANCEL_RELEASE_DEADLINE_MINUTES) {
-                releaseSlot(slot);
-            } else {
-                deactivateSlot(slot);
-            }
+            refreshSlotBookedFlag(slot);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -932,8 +1129,8 @@ public class BookingService {
                 .recipientEmail(savedBooking.getMentorProfile().getUser().getEmail())
                 .recipientName(savedBooking.getMentorProfile().getUser().getFullName())
                 .actorName(savedBooking.getMentee().getFullName())
-                .bookingStartTime(savedBooking.getRequestedStartTime())
-                .bookingEndTime(savedBooking.getRequestedEndTime())
+                .bookingStartTime(savedBooking.getSelectedStartTime())
+                .bookingEndTime(savedBooking.getSelectedEndTime())
                 .reason(savedBooking.getCancelReason())
                 .createdAt(DateTimeUtil.now())
                 .build());

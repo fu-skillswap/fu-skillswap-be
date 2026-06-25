@@ -1,14 +1,16 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.response;
 
+import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Builder
-@Schema(description = "Slot availability đang hiển thị cho mentee trên discovery")
+@Schema(description = "Parent availability slot đang hiển thị cho mentee trên discovery. Exact queue và khả năng đặt lịch được quyết định ở candidate segment level.")
 public record MentorAvailabilitySlotResponse(
         @Schema(description = "ID của slot", example = "019f5234-aaaa-bbbb-cccc-1234567890ab")
         UUID slotId,
@@ -22,13 +24,13 @@ public record MentorAvailabilitySlotResponse(
         Integer durationMinutes,
         @Schema(description = "Hình thức mentoring của slot", example = "ONLINE")
         TeachingMode teachingMode,
-        @Schema(description = "Slot này được sinh từ recurring rule hay không")
-        boolean recurring,
-        @Schema(description = "Số booking request PENDING hiện tại trong hàng đợi của slot", example = "2")
+        @Schema(description = "Tổng số booking request PENDING hiện có trên các candidate segment thuộc slot", example = "2")
         Integer pendingRequestCount,
-        @Schema(description = "Số request PENDING tối đa mà slot có thể nhận cùng lúc", example = "3")
+        @Schema(description = "Giới hạn PENDING tối đa trên từng exact candidate segment", example = "3")
         Integer maxPendingRequests,
-        @Schema(description = "Số suất request còn có thể nhận thêm trước khi slot bị ẩn khỏi availability", example = "1")
-        Integer remainingRequestSlots
+        @Schema(description = "Số quota còn lại tốt nhất trên candidate segments hiện còn hiển thị của slot", example = "1")
+        Integer remainingRequestSlots,
+        @Schema(description = "Danh sách service cơ bản đang được gắn vào slot để mentee chọn trước khi lấy candidate")
+        List<AvailabilitySlotServiceBasicResponse> services
 ) {
 }

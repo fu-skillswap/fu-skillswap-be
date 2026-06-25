@@ -23,6 +23,11 @@ public record MentorServiceUpsertRequest(
         @Size(max = 1000, message = "Mô tả dịch vụ không được quá 1000 ký tự")
         String description,
 
+        @Schema(example = "CV rõ điểm mạnh, có action items cụ thể sau buổi mentoring.")
+        @NotBlank(message = "Kết quả kỳ vọng không được để trống")
+        @Size(max = 1000, message = "Kết quả kỳ vọng không được quá 1000 ký tự")
+        String expectedOutcome,
+
         @Schema(example = "60", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull(message = "Thời lượng dịch vụ không được để trống")
         Integer durationMinutes,
@@ -34,6 +39,11 @@ public record MentorServiceUpsertRequest(
         @Schema(example = "120000", nullable = true)
         @DecimalMin(value = "0.0", inclusive = true, message = "Giá dịch vụ không được nhỏ hơn 0")
         BigDecimal priceAmount,
+
+        @Schema(example = "VND")
+        @NotBlank(message = "Currency không được để trống")
+        @Size(max = 10, message = "Currency không được vượt quá 10 ký tự")
+        String currency,
 
         @Schema(description = "Danh sách help topic mentor service có thể hỗ trợ")
         @NotEmpty(message = "Danh sách chủ đề hỗ trợ của dịch vụ không được để trống")

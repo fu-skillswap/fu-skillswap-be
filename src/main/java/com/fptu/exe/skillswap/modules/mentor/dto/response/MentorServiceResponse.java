@@ -19,6 +19,8 @@ public record MentorServiceResponse(
         String title,
         @Schema(description = "Service description shown to mentees before booking", example = "Mình sẽ review CV, chỉ ra điểm yếu và gợi ý cách cải thiện theo vị trí backend intern.")
         String description,
+        @Schema(description = "Expected outcome after the mentoring service finishes", example = "CV rõ điểm mạnh, có action items cụ thể sau buổi mentoring.")
+        String expectedOutcome,
         @Schema(description = "Service duration in minutes", example = "60")
         Integer durationMinutes,
         @Schema(description = "Whether the service is free", example = "true")

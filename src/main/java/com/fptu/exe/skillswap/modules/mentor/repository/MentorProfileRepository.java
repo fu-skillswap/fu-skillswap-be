@@ -156,6 +156,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                    function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern or
                    function('translate', lower(coalesce(mp.expertiseDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.supportingSubjects, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(sp.bio, '')) like :keywordPattern or
                    function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(campus.name, '')) like :keywordPattern or
@@ -184,7 +186,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                                    lower(coalesce(ms_search.title, '')) like :keywordPattern or
                                    function('translate', lower(coalesce(ms_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                                    lower(coalesce(ms_search.description, '')) like :keywordPattern or
-                                   function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                                   function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(ms_search.expectedOutcome, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ms_search.expectedOutcome, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                                )
                     )
                ))
@@ -232,6 +236,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                    function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(mp.expertiseDescription, '')) like :keywordPattern or
                    function('translate', lower(coalesce(mp.expertiseDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.supportingSubjects, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.supportingSubjects, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(sp.bio, '')) like :keywordPattern or
                    function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(campus.name, '')) like :keywordPattern or
@@ -253,14 +259,16 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                                   function('translate', lower(coalesce(t.code, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                               )
                    ) or
-                   exists (
+                  exists (
                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
                         where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
                               (
                                   lower(coalesce(ms_search.title, '')) like :keywordPattern or
                                   function('translate', lower(coalesce(ms_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                                   lower(coalesce(ms_search.description, '')) like :keywordPattern or
-                                  function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                                  function('translate', lower(coalesce(ms_search.description, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(ms_search.expectedOutcome, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ms_search.expectedOutcome, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                               )
                    )
               ))
@@ -279,6 +287,124 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("plainCharacters") String plainCharacters,
             @Param("now") LocalDateTime now,
             Pageable pageable);
+
+    // -----------------------------------------------------------------------
+    // Phase S1: PostgreSQL FTS native queries (tsvector + GIN index)
+    // These use PostgreSQL-specific syntax (@@, plainto_tsquery, ANY).
+    // Guard: MentorDiscoveryService.isPostgres() must return true before calling.
+    // H2 tests never reach these methods.
+    // -----------------------------------------------------------------------
+
+    @Query(value = """
+            SELECT mp.user_id
+            FROM mentor_profiles mp
+            JOIN users u ON u.id = mp.user_id
+            LEFT JOIN student_profiles sp ON sp.user_id = mp.user_id
+            WHERE mp.status = 'ACTIVE'
+              AND u.status = 'ACTIVE'
+              AND mp.is_available = true
+              AND (mp.booking_suspended_until IS NULL OR mp.booking_suspended_until <= CAST(:now AS timestamp))
+              AND mp.verified_at IS NOT NULL
+              AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
+              AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
+              AND mp.teaching_mode IS NOT NULL
+              AND mp.session_duration IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM mentor_tags mt0
+                  WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
+              )
+              AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
+              AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
+              AND (:teachingMode IS NULL OR mp.teaching_mode = CAST(:teachingMode AS varchar))
+              AND (:hasTagFilter = false OR EXISTS (
+                  SELECT 1 FROM mentor_tags mt1
+                  WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
+                    AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
+              ))
+              AND (
+                  mp.search_vector @@ plainto_tsquery('simple', :keyword)
+                  OR EXISTS (
+                      SELECT 1 FROM mentor_tags mt2
+                      JOIN tags t ON t.id = mt2.tag_id
+                      WHERE mt2.mentor_user_id = mp.user_id
+                        AND to_tsvector('simple', coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,''))
+                            @@ plainto_tsquery('simple', :keyword)
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM mentor_services ms
+                      WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
+                        AND to_tsvector('simple', coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,''))
+                            @@ plainto_tsquery('simple', :keyword)
+                  )
+              )
+            ORDER BY mp.average_rating DESC NULLS LAST,
+                     mp.total_completed_sessions DESC NULLS LAST,
+                     mp.verified_at DESC NULLS LAST,
+                     mp.user_id ASC
+            LIMIT :limitSize OFFSET :offsetVal
+            """, nativeQuery = true)
+    List<UUID> findDiscoverableCandidateIdsByFts(
+            @Param("keyword") String keyword,
+            @Param("campusId") UUID campusId,
+            @Param("specializationId") UUID specializationId,
+            @Param("teachingMode") String teachingMode,
+            @Param("hasTagFilter") boolean hasTagFilter,
+            @Param("tagIds") String tagIds,
+            @Param("now") LocalDateTime now,
+            @Param("limitSize") int limitSize,
+            @Param("offsetVal") int offsetVal);
+
+    @Query(value = """
+            SELECT COUNT(mp.user_id)
+            FROM mentor_profiles mp
+            JOIN users u ON u.id = mp.user_id
+            LEFT JOIN student_profiles sp ON sp.user_id = mp.user_id
+            WHERE mp.status = 'ACTIVE'
+              AND u.status = 'ACTIVE'
+              AND mp.is_available = true
+              AND (mp.booking_suspended_until IS NULL OR mp.booking_suspended_until <= CAST(:now AS timestamp))
+              AND mp.verified_at IS NOT NULL
+              AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
+              AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
+              AND mp.teaching_mode IS NOT NULL
+              AND mp.session_duration IS NOT NULL
+              AND EXISTS (
+                  SELECT 1 FROM mentor_tags mt0
+                  WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
+              )
+              AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
+              AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
+              AND (:teachingMode IS NULL OR mp.teaching_mode = CAST(:teachingMode AS varchar))
+              AND (:hasTagFilter = false OR EXISTS (
+                  SELECT 1 FROM mentor_tags mt1
+                  WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
+                    AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
+              ))
+              AND (
+                  mp.search_vector @@ plainto_tsquery('simple', :keyword)
+                  OR EXISTS (
+                      SELECT 1 FROM mentor_tags mt2
+                      JOIN tags t ON t.id = mt2.tag_id
+                      WHERE mt2.mentor_user_id = mp.user_id
+                        AND to_tsvector('simple', coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,''))
+                            @@ plainto_tsquery('simple', :keyword)
+                  )
+                  OR EXISTS (
+                      SELECT 1 FROM mentor_services ms
+                      WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
+                        AND to_tsvector('simple', coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,''))
+                            @@ plainto_tsquery('simple', :keyword)
+                  )
+              )
+            """, nativeQuery = true)
+    long countDiscoverableCandidatesByFts(
+            @Param("keyword") String keyword,
+            @Param("campusId") UUID campusId,
+            @Param("specializationId") UUID specializationId,
+            @Param("teachingMode") String teachingMode,
+            @Param("hasTagFilter") boolean hasTagFilter,
+            @Param("tagIds") String tagIds,
+            @Param("now") LocalDateTime now);
 
 
     @Query("""

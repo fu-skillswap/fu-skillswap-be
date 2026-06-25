@@ -219,6 +219,105 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
+    void searchMentors_relevanceSort_shouldRankKeywordAndPersonalizationHigher() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setKeyword("spring boot");
+        request.setSortBy("relevance");
+
+        StudentProfile menteeProfile = new StudentProfile();
+        menteeProfile.setUserId(userId);
+        menteeProfile.setCampus(campus);
+        menteeProfile.setProgram(academicProgram);
+        menteeProfile.setSpecialization(specialization);
+        menteeProfile.setSemester(5);
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(menteeProfile));
+
+        User fallbackUser = new User();
+        fallbackUser.setId(fallbackMentorUserId);
+        fallbackUser.setFullName("Fallback Mentor");
+        fallbackUser.setAvatarUrl("fallback.png");
+        fallbackUser.setStatus(UserStatus.ACTIVE);
+        fallbackUser.setRoles(Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
+
+        MentorProfile fallbackProfile = MentorProfile.builder()
+                .userId(fallbackMentorUserId)
+                .user(fallbackUser)
+                .status(MentorStatus.ACTIVE)
+                .headline("Java mentor")
+                .expertiseDescription("General Java support")
+                .supportingSubjects("Java basics")
+                .isAvailable(true)
+                .teachingMode(TeachingMode.ONLINE)
+                .sessionDuration(60)
+                .verifiedAt(LocalDateTime.now().minusDays(2))
+                .averageRating(BigDecimal.valueOf(5.0))
+                .totalReviews(9)
+                .totalCompletedSessions(40)
+                .build();
+
+        MentorDiscoveryQueryRow keywordStrongMentor = discoveryRow(
+                mentorUserId,
+                "Spring Boot mentor",
+                "Spring Boot backend coaching",
+                "SWP391, Spring Boot",
+                "Mentor hỗ trợ Spring Boot",
+                campus.getId(),
+                academicProgram.getId(),
+                specialization.getId(),
+                8,
+                false
+        );
+        MentorDiscoveryQueryRow weakerMentor = discoveryRow(
+                fallbackMentorUserId,
+                "Java mentor",
+                "General Java backend coaching",
+                "Java basics",
+                "Support for backend topics",
+                campus.getId(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                3,
+                false
+        );
+
+        MentorService strongService = MentorService.builder()
+                .mentorProfile(mentorProfile)
+                .title("Spring Boot deep dive")
+                .description("Làm dự án Spring Boot thực tế")
+                .expectedOutcome("Spring Boot")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(BigDecimal.ZERO)
+                .build();
+        MentorService weakService = MentorService.builder()
+                .mentorProfile(fallbackProfile)
+                .title("Java fundamentals")
+                .description("Cơ bản Java")
+                .expectedOutcome("Spring Boot")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(BigDecimal.ZERO)
+                .build();
+
+        when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                eq(MentorStatus.ACTIVE),
+                eq(MentorTagType.HELP_TOPIC),
+                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(fallbackMentorUserId, mentorUserId)));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(fallbackMentorUserId, mentorUserId)))
+                .thenReturn(List.of(weakerMentor, keywordStrongMentor));
+        when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
+                .thenReturn(Collections.emptyList());
+        when(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(any()))
+                .thenReturn(List.of(weakService, strongService));
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+
+        assertEquals(2, response.getContent().size());
+        assertEquals(mentorUserId, response.getContent().getFirst().mentorUserId());
+    }
+
+    @Test
     void searchMentors_selectedCampusShouldRemainHardFilter() {
         MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
         request.setCampusId(campus.getId());
@@ -289,7 +388,10 @@ class MentorDiscoveryServiceTest {
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
         assertEquals(1, recommendations.size());
-        assertEquals(new BigDecimal("90.00"), recommendations.getFirst().matchScore());
+        // Phase S3: matchScore now includes quality/credibility bonuses.
+        // Breakdown: campus(+10) + program(+40) + spec(+30) + equalSemester(+10)
+        //          + highRating≥4.5(+8) + reviews≥5(+5) = 103
+        assertEquals(new BigDecimal("103.00"), recommendations.getFirst().matchScore());
         assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 

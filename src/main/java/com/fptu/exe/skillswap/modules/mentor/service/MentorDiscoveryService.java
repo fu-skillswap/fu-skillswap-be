@@ -22,7 +22,9 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailR
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -31,6 +33,7 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -38,12 +41,16 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Collections;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -54,6 +61,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -73,6 +81,15 @@ public class MentorDiscoveryService {
     private static final BigDecimal MENTOR_ALUMNI_SCORE = decimal(20);
     private static final BigDecimal MENTOR_HIGHER_SEMESTER_SCORE = decimal(15);
     private static final BigDecimal MENTOR_EQUAL_SEMESTER_SCORE = decimal(10);
+    private static final BigDecimal HEADLINE_EXACT_BONUS = decimal(60);
+    private static final BigDecimal SUBJECTS_PHRASE_BONUS = decimal(40);
+    private static final BigDecimal VERIFIED_RECENT_7D_BONUS = decimal(10);
+    private static final BigDecimal VERIFIED_RECENT_30D_BONUS = decimal(5);
+    private static final BigDecimal SESSION_VELOCITY_HIGH_BONUS = decimal(10);
+    private static final BigDecimal SESSION_VELOCITY_MED_BONUS = decimal(5);
+    private static final BigDecimal QUALITY_HIGH_RATING_BONUS = decimal(8);
+    private static final BigDecimal QUALITY_CREDIBLE_REVIEWS_BONUS = decimal(5);
+    private static final BigDecimal QUALITY_EXPERIENCED_SESSIONS_BONUS = decimal(5);
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -80,6 +97,9 @@ public class MentorDiscoveryService {
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityService mentorAvailabilityService;
     private final SessionFeedbackRepository sessionFeedbackRepository;
+    private final DataSource dataSource;
+
+    private volatile Boolean postgresDetected = null;
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
@@ -88,11 +108,13 @@ public class MentorDiscoveryService {
         }
 
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
+        StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
 
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
+        String normalizedKeyword = normalizeSearchText(safeRequest.getKeyword());
         String keywordPattern = toLikePattern(safeRequest.getKeyword());
-        String normalizedKeywordPattern = toLikePattern(normalizeSearchText(safeRequest.getKeyword()));
+        String normalizedKeywordPattern = toLikePattern(normalizedKeyword);
 
         int requestedPage = Math.max(safeRequest.getPage(), 0);
         int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
@@ -130,46 +152,63 @@ public class MentorDiscoveryService {
                 orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
             }
         }
-        Pageable searchPageable = PageRequest.of(requestedPage, requestedSize, org.springframework.data.domain.Sort.by(orders));
+        boolean relevanceSort = "relevance".equals(sortBy);
+        Pageable searchPageable = relevanceSort
+                ? PageRequest.of(0, relevanceWindowSize(requestedPage, requestedSize), org.springframework.data.domain.Sort.by(orders))
+                : PageRequest.of(requestedPage, requestedSize, org.springframework.data.domain.Sort.by(orders));
 
-        Page<UUID> candidatePage = hasKeyword
-                ? mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                        MentorStatus.ACTIVE,
-                        MentorTagType.HELP_TOPIC,
-                        safeRequest.getCampusId(),
-                        safeRequest.getSpecializationId(),
-                        safeRequest.getTeachingMode(),
-                        hasTagFilter(safeRequest.getTagIds()),
-                        tagIds,
-                        keywordPattern,
-                        normalizedKeywordPattern,
-                        ACCENTED_CHARACTERS,
-                        PLAIN_CHARACTERS,
-                        currentTime(),
-                        searchPageable
-                )
-                : mentorProfileRepository.findDiscoverableCandidateIds(
-                        MentorStatus.ACTIVE,
-                        MentorTagType.HELP_TOPIC,
-                        safeRequest.getCampusId(),
-                        safeRequest.getSpecializationId(),
-                        safeRequest.getTeachingMode(),
-                        hasTagFilter(safeRequest.getTagIds()),
-                        tagIds,
-                        currentTime(),
-                        searchPageable
-                );
+        Page<UUID> candidatePage;
+        if (hasKeyword && isPostgresDataSource()) {
+            candidatePage = findCandidatesByFts(
+                    normalizedKeyword,
+                    safeRequest,
+                    tagIds,
+                    requestedPage,
+                    requestedSize,
+                    relevanceSort
+            );
+        } else if (hasKeyword) {
+            candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                    MentorStatus.ACTIVE,
+                    MentorTagType.HELP_TOPIC,
+                    safeRequest.getCampusId(),
+                    safeRequest.getSpecializationId(),
+                    safeRequest.getTeachingMode(),
+                    hasTagFilter(safeRequest.getTagIds()),
+                    tagIds,
+                    keywordPattern,
+                    normalizedKeywordPattern,
+                    ACCENTED_CHARACTERS,
+                    PLAIN_CHARACTERS,
+                    currentTime(),
+                    searchPageable
+            );
+        } else {
+            candidatePage = mentorProfileRepository.findDiscoverableCandidateIds(
+                    MentorStatus.ACTIVE,
+                    MentorTagType.HELP_TOPIC,
+                    safeRequest.getCampusId(),
+                    safeRequest.getSpecializationId(),
+                    safeRequest.getTeachingMode(),
+                    hasTagFilter(safeRequest.getTagIds()),
+                    tagIds,
+                    currentTime(),
+                    searchPageable
+            );
+        }
 
         List<UUID> candidateIds = candidatePage.getContent();
-        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(candidateIds);
+        List<MentorDiscoveryQueryRow> rows = relevanceSort
+                ? loadDiscoveryRowsByMentorIds(candidateIds)
+                : loadDiscoveryRowsInPageOrder(candidateIds);
         if (rows.isEmpty()) {
             return PageResponse.<MentorDiscoveryCardResponse>builder()
                     .content(List.of())
-                    .page(candidatePage.getNumber())
-                    .size(candidatePage.getSize())
+                    .page(requestedPage)
+                    .size(requestedSize)
                     .totalElements(candidatePage.getTotalElements())
-                    .totalPages(candidatePage.getTotalPages())
-                    .last(candidatePage.isLast())
+                    .totalPages(totalPages(candidatePage.getTotalElements(), requestedSize))
+                    .last(isLastPage(requestedPage, requestedSize, candidatePage.getTotalElements()))
                     .build();
         }
 
@@ -178,17 +217,48 @@ public class MentorDiscoveryService {
                 Set.of(MentorTagType.HELP_TOPIC)
         );
 
-        List<MentorDiscoveryCardResponse> content = rows.stream()
-                .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
-                .toList();
+        List<MentorService> activeServices = relevanceSort
+                ? loadActiveServicesByMentorIds(candidateIds)
+                : List.of();
+        Map<UUID, List<MentorService>> servicesByMentor = relevanceSort
+                ? groupServicesByMentor(activeServices)
+                : Map.of();
+
+        List<MentorDiscoveryCardResponse> content;
+        if (relevanceSort) {
+            List<RankedSearchCandidate> rankedCandidates = rows.stream()
+                    .map(row -> new RankedSearchCandidate(
+                            row,
+                            helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                            servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                            calculateSearchScore(row, menteeProfile, normalizedKeyword, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()), servicesByMentor.getOrDefault(row.mentorUserId(), List.of()))
+                    ))
+                    .sorted(Comparator
+                            .comparing(RankedSearchCandidate::score).reversed()
+                            .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> defaultInteger(candidate.row().completedSessions()), Comparator.reverseOrder())
+                            .thenComparing(candidate -> candidate.row().verifiedAt(), Comparator.nullsLast(Comparator.reverseOrder()))
+                            .thenComparing(candidate -> candidate.row().mentorUserId()))
+                    .toList();
+
+            int fromIndex = Math.min(requestedPage * requestedSize, rankedCandidates.size());
+            int toIndex = Math.min(fromIndex + requestedSize, rankedCandidates.size());
+            content = rankedCandidates.subList(fromIndex, toIndex).stream()
+                    .map(candidate -> toCardResponse(candidate.row(), candidate.helpTopics()))
+                    .toList();
+        } else {
+            content = rows.stream()
+                    .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
+                    .toList();
+        }
 
         return PageResponse.<MentorDiscoveryCardResponse>builder()
                 .content(content)
-                .page(candidatePage.getNumber())
-                .size(candidatePage.getSize())
+                .page(requestedPage)
+                .size(requestedSize)
                 .totalElements(candidatePage.getTotalElements())
-                .totalPages(candidatePage.getTotalPages())
-                .last(candidatePage.isLast())
+                .totalPages(totalPages(candidatePage.getTotalElements(), requestedSize))
+                .last(isLastPage(requestedPage, requestedSize, candidatePage.getTotalElements()))
                 .build();
     }
 
@@ -199,9 +269,12 @@ public class MentorDiscoveryService {
         }
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
-        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
+        StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
         LocalDateTime now = currentTime();
-        int candidateFetchSize = Math.min(30, Math.max(safeLimit * 3, safeLimit));
+        boolean richProfile = menteeProfile != null
+                && menteeProfile.getProgram() != null
+                && menteeProfile.getSpecialization() != null;
+        int candidateFetchSize = richProfile ? Math.min(200, Math.max(safeLimit * 10, 60)) : Math.min(120, Math.max(safeLimit * 5, safeLimit));
 
         List<MentorDiscoveryQueryRow> candidates = mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
@@ -296,6 +369,15 @@ public class MentorDiscoveryService {
     }
 
     @Transactional(readOnly = true)
+    public ServiceSlotCandidatesResponse getMentorAvailabilityCandidates(UUID mentorUserId, UUID slotId, UUID serviceId) {
+        MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
+        if (isBookingSuspended(mentorProfile)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện đang tạm khóa nhận booking mới");
+        }
+        return mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+    }
+
+    @Transactional(readOnly = true)
     public PageResponse<MentorReviewResponse> getMentorReviews(UUID mentorUserId, BasePageRequest pageRequest) {
         getDiscoverableMentorProfile(mentorUserId);
 
@@ -372,6 +454,19 @@ public class MentorDiscoveryService {
             }
         }
 
+        BigDecimal rating = defaultDecimal(candidate.ratingAverage());
+        int reviews = defaultInteger(candidate.reviewCount());
+        int completedSessions = defaultInteger(candidate.completedSessions());
+        if (rating.compareTo(BigDecimal.valueOf(4.5)) >= 0) {
+            baseScore = baseScore.add(QUALITY_HIGH_RATING_BONUS);
+        }
+        if (reviews >= 5) {
+            baseScore = baseScore.add(QUALITY_CREDIBLE_REVIEWS_BONUS);
+        }
+        if (completedSessions >= 10) {
+            baseScore = baseScore.add(QUALITY_EXPERIENCED_SESSIONS_BONUS);
+        }
+
         return baseScore.setScale(2, RoundingMode.HALF_UP);
     }
 
@@ -381,7 +476,9 @@ public class MentorDiscoveryService {
         }
 
         Map<UUID, List<MentorTagResponse>> result = new HashMap<>();
-        mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(mentorUserIds, tagTypes)
+        List<MentorTag> mentorTags = Optional.ofNullable(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(mentorUserIds, tagTypes))
+                .orElse(List.of());
+        mentorTags
                 .stream()
                 .sorted(Comparator
                         .comparing((MentorTag mentorTag) -> mentorTag.getId().getMentorUserId())
@@ -389,6 +486,30 @@ public class MentorDiscoveryService {
                 .forEach(mentorTag -> result.computeIfAbsent(mentorTag.getId().getMentorUserId(), ignored -> new ArrayList<>())
                         .add(toTagResponse(mentorTag)));
         return result;
+    }
+
+    private List<MentorService> loadActiveServicesByMentorIds(Collection<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return List.of();
+        }
+        return Optional.ofNullable(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(new ArrayList<>(mentorUserIds)))
+                .orElse(List.of());
+    }
+
+    private Map<UUID, List<MentorService>> groupServicesByMentor(List<MentorService> services) {
+        if (services == null || services.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<UUID, List<MentorService>> grouped = new HashMap<>();
+        for (MentorService service : services) {
+            if (service == null || service.getMentorProfile() == null || service.getMentorProfile().getUserId() == null) {
+                continue;
+            }
+            grouped.computeIfAbsent(service.getMentorProfile().getUserId(), ignored -> new ArrayList<>())
+                    .add(service);
+        }
+        return grouped;
     }
 
     private String normalizeSearchText(String value) {
@@ -403,6 +524,188 @@ public class MentorDiscoveryService {
                 .replaceAll("\\s+", " ")
                 .trim();
         return normalized;
+    }
+
+    private List<String> tokenizeSearchText(String value) {
+        String normalized = normalizeSearchText(value);
+        if (normalized.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(normalized.split(" "))
+                .filter(token -> token != null && !token.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private BigDecimal calculateSearchScore(
+            MentorDiscoveryQueryRow row,
+            StudentProfile menteeProfile,
+            String normalizedKeyword,
+            List<MentorTagResponse> helpTopics,
+            List<MentorService> services
+    ) {
+        List<String> tokens = tokenizeSearchText(normalizedKeyword);
+        if (tokens.isEmpty()) {
+            return calculatePersonalizationScore(row, menteeProfile).add(calculateSearchQualityScore(row, menteeProfile));
+        }
+
+        BigDecimal score = ZERO;
+        String exactKeyword = normalizeSearchText(normalizedKeyword);
+
+        String normalizedHeadline = normalizeSearchText(row.headline());
+        String normalizedSubjects = normalizeSearchText(row.supportingSubjects());
+        if (!normalizedHeadline.isBlank() && normalizedHeadline.contains(exactKeyword)) {
+            score = score.add(HEADLINE_EXACT_BONUS);
+        }
+        if (!normalizedSubjects.isBlank() && normalizedSubjects.contains(exactKeyword)) {
+            score = score.add(SUBJECTS_PHRASE_BONUS);
+        }
+
+        List<String> profileFields = Arrays.stream(new String[]{
+                        row.displayName(),
+                        row.headline(),
+                        row.expertiseDescription(),
+                        row.supportingSubjects(),
+                        row.bio(),
+                        row.campusName(),
+                        row.programName(),
+                        row.specializationName()
+                })
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        List<String> tagFields = helpTopics == null ? List.of() : helpTopics.stream()
+                .flatMap(tag -> Arrays.stream(new String[]{tag.nameVi(), tag.nameEn(), tag.code()}))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        List<String> serviceFields = services == null ? List.of() : services.stream()
+                .flatMap(service -> Arrays.stream(new String[]{service.getTitle(), service.getDescription(), service.getExpectedOutcome()}))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+
+        if (containsPhrase(profileFields, exactKeyword) || containsPhrase(tagFields, exactKeyword) || containsPhrase(serviceFields, exactKeyword)) {
+            score = score.add(decimal(50));
+        }
+
+        int profileMatches = countTokenMatches(profileFields, tokens);
+        int tagMatches = countTokenMatches(tagFields, tokens);
+        int serviceMatches = countTokenMatches(serviceFields, tokens);
+        int totalMatches = profileMatches + tagMatches + serviceMatches;
+
+        score = score.add(decimal(profileMatches * 8));
+        score = score.add(decimal(tagMatches * 10));
+        score = score.add(decimal(serviceMatches * 12));
+
+        if (totalMatches > 0) {
+            BigDecimal coverageBonus = BigDecimal.valueOf(totalMatches)
+                    .multiply(BigDecimal.valueOf(10))
+                    .divide(BigDecimal.valueOf(tokens.size()), 2, RoundingMode.HALF_UP);
+            score = score.add(coverageBonus);
+        }
+
+        if (row.verifiedAt() != null) {
+            LocalDateTime now = currentTime();
+            if (row.verifiedAt().isAfter(now.minusDays(7))) {
+                score = score.add(VERIFIED_RECENT_7D_BONUS);
+            } else if (row.verifiedAt().isAfter(now.minusDays(30))) {
+                score = score.add(VERIFIED_RECENT_30D_BONUS);
+            }
+        }
+
+        int completedSessions = defaultInteger(row.completedSessions());
+        if (completedSessions >= 50) {
+            score = score.add(SESSION_VELOCITY_HIGH_BONUS);
+        } else if (completedSessions >= 20) {
+            score = score.add(SESSION_VELOCITY_MED_BONUS);
+        }
+
+        score = score.add(calculatePersonalizationScore(row, menteeProfile));
+        score = score.add(calculateSearchQualityScore(row, menteeProfile));
+        return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculatePersonalizationScore(MentorDiscoveryQueryRow candidate, StudentProfile menteeProfile) {
+        BigDecimal baseScore = ZERO;
+        if (menteeProfile == null) {
+            return baseScore;
+        }
+
+        if (sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId())) {
+            baseScore = baseScore.add(SAME_PROGRAM_SCORE);
+        }
+        if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
+            baseScore = baseScore.add(SAME_SPECIALIZATION_SCORE);
+        }
+        if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
+            baseScore = baseScore.add(SAME_CAMPUS_SCORE);
+        }
+        if (Boolean.TRUE.equals(candidate.alumni())) {
+            baseScore = baseScore.add(MENTOR_ALUMNI_SCORE);
+        } else {
+            Integer menteeSemester = menteeProfile.getSemester();
+            Integer mentorSemester = candidate.semester();
+            if (menteeSemester != null && mentorSemester != null) {
+                if (mentorSemester > menteeSemester) {
+                    baseScore = baseScore.add(MENTOR_HIGHER_SEMESTER_SCORE);
+                } else if (mentorSemester.equals(menteeSemester)) {
+                    baseScore = baseScore.add(MENTOR_EQUAL_SEMESTER_SCORE);
+                }
+            }
+        }
+
+        return baseScore;
+    }
+
+    private BigDecimal calculateSearchQualityScore(MentorDiscoveryQueryRow row, StudentProfile menteeProfile) {
+        BigDecimal score = ZERO;
+        BigDecimal rating = defaultDecimal(row.ratingAverage());
+        int reviews = defaultInteger(row.reviewCount());
+        int completedSessions = defaultInteger(row.completedSessions());
+
+        score = score.add(rating.multiply(BigDecimal.valueOf(2)));
+        score = score.add(BigDecimal.valueOf(Math.min(reviews, 10)));
+        score = score.add(BigDecimal.valueOf(Math.min(completedSessions, 100) / 10.0).setScale(2, RoundingMode.HALF_UP));
+
+        if (menteeProfile != null && Boolean.TRUE.equals(row.alumni())) {
+            score = score.add(decimal(5));
+        }
+        return score;
+    }
+
+    private int countTokenMatches(List<String> fields, List<String> tokens) {
+        if (fields == null || fields.isEmpty() || tokens == null || tokens.isEmpty()) {
+            return 0;
+        }
+        Set<String> matchedTokens = new LinkedHashSet<>();
+        for (String token : tokens) {
+            for (String field : fields) {
+                if (containsToken(field, token)) {
+                    matchedTokens.add(token);
+                    break;
+                }
+            }
+        }
+        return matchedTokens.size();
+    }
+
+    private boolean containsPhrase(List<String> fields, String normalizedPhrase) {
+        if (fields == null || fields.isEmpty() || normalizedPhrase == null || normalizedPhrase.isBlank()) {
+            return false;
+        }
+        return fields.stream().filter(value -> value != null && !value.isBlank())
+                .map(this::normalizeSearchText)
+                .anyMatch(normalized -> normalized.contains(normalizedPhrase));
+    }
+
+    private boolean containsToken(String field, String token) {
+        if (field == null || field.isBlank() || token == null || token.isBlank()) {
+            return false;
+        }
+        return normalizeSearchText(field).contains(token);
+    }
+
+    private StudentProfile loadStudentProfileSafely(UUID userId) {
+        Optional<StudentProfile> studentProfile = studentProfileRepository.findWithDetailsByUserId(userId);
+        return studentProfile == null ? null : studentProfile.orElse(null);
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
@@ -537,6 +840,13 @@ public class MentorDiscoveryService {
                 .toList();
     }
 
+    private List<MentorDiscoveryQueryRow> loadDiscoveryRowsByMentorIds(List<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return List.of();
+        }
+        return mentorProfileRepository.findDiscoveryRowsByMentorUserIds(mentorUserIds);
+    }
+
     private List<MentorDiscoveryQueryRow> loadDiscoveryRowsInPageOrder(List<UUID> mentorUserIds) {
         if (mentorUserIds == null || mentorUserIds.isEmpty()) {
             return List.of();
@@ -550,6 +860,24 @@ public class MentorDiscoveryService {
         return mentorProfileRepository.findDiscoveryRowsByMentorUserIds(mentorUserIds).stream()
                 .sorted(Comparator.comparingInt(row -> orderByMentorId.getOrDefault(row.mentorUserId(), Integer.MAX_VALUE)))
                 .toList();
+    }
+
+    private int relevanceWindowSize(int requestedPage, int requestedSize) {
+        int minWindow = Math.max(requestedSize * 5, requestedSize);
+        int requestedWindow = Math.max((requestedPage + 1) * requestedSize * 5, minWindow);
+        return Math.min(200, requestedWindow);
+    }
+
+    private int totalPages(long totalElements, int pageSize) {
+        if (pageSize <= 0 || totalElements <= 0) {
+            return 0;
+        }
+        return (int) Math.ceil((double) totalElements / pageSize);
+    }
+
+    private boolean isLastPage(int page, int size, long totalElements) {
+        int totalPages = totalPages(totalElements, size);
+        return totalPages == 0 || page + 1 >= totalPages;
     }
 
     private Pageable reviewPageable(BasePageRequest request) {
@@ -582,6 +910,67 @@ public class MentorDiscoveryService {
         return tagIds != null && !tagIds.isEmpty();
     }
 
+    private boolean isPostgresDataSource() {
+        if (postgresDetected != null) {
+            return postgresDetected;
+        }
+        try (Connection conn = dataSource.getConnection()) {
+            DatabaseMetaData meta = conn.getMetaData();
+            String productName = meta.getDatabaseProductName();
+            postgresDetected = productName != null && productName.toLowerCase(Locale.ROOT).contains("postgresql");
+        } catch (Exception ex) {
+            postgresDetected = false;
+        }
+        return postgresDetected;
+    }
+
+    private org.springframework.data.domain.Page<UUID> findCandidatesByFts(
+            String normalizedKeyword,
+            MentorDiscoverySearchRequest safeRequest,
+            List<UUID> tagIds,
+            int requestedPage,
+            int requestedSize,
+            boolean relevanceSort
+    ) {
+        String teachingModeStr = safeRequest.getTeachingMode() == null ? null : safeRequest.getTeachingMode().name();
+        boolean hasTagFilter = hasTagFilter(safeRequest.getTagIds());
+        String tagIdsArray = tagIds.isEmpty()
+                ? "{00000000-0000-0000-0000-000000000000}"
+                : "{" + tagIds.stream().map(UUID::toString).collect(Collectors.joining(",")) + "}";
+        LocalDateTime now = currentTime();
+
+        int fetchLimit = relevanceSort ? Math.min(200, (requestedPage + 1) * requestedSize * 5 + requestedSize) : requestedSize;
+        int fetchOffset = relevanceSort ? 0 : requestedPage * requestedSize;
+
+        List<UUID> ids = mentorProfileRepository.findDiscoverableCandidateIdsByFts(
+                normalizedKeyword,
+                safeRequest.getCampusId(),
+                safeRequest.getSpecializationId(),
+                teachingModeStr,
+                hasTagFilter,
+                tagIdsArray,
+                now,
+                fetchLimit,
+                fetchOffset
+        );
+
+        long totalCount = mentorProfileRepository.countDiscoverableCandidatesByFts(
+                normalizedKeyword,
+                safeRequest.getCampusId(),
+                safeRequest.getSpecializationId(),
+                teachingModeStr,
+                hasTagFilter,
+                tagIdsArray,
+                now
+        );
+
+        return new org.springframework.data.domain.PageImpl<>(
+                ids,
+                org.springframework.data.domain.PageRequest.of(relevanceSort ? 0 : requestedPage, relevanceSort ? Math.max(fetchLimit, 1) : requestedSize),
+                totalCount
+        );
+    }
+
     private String toLikePattern(String value) {
         String normalized = normalizeSearchText(value);
         if (normalized.isBlank()) {
@@ -612,5 +1001,13 @@ public class MentorDiscoveryService {
 
     private static BigDecimal decimal(String value) {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private record RankedSearchCandidate(
+            MentorDiscoveryQueryRow row,
+            List<MentorTagResponse> helpTopics,
+            List<MentorService> services,
+            BigDecimal score
+    ) {
     }
 }

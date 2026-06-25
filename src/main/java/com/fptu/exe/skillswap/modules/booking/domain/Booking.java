@@ -17,11 +17,11 @@ import java.util.UUID;
     @Index(name = "idx_bookings_mentee_id", columnList = "mentee_user_id"),
     @Index(name = "idx_bookings_mentor_id", columnList = "mentor_user_id"),
     @Index(name = "idx_bookings_status", columnList = "status"),
-    @Index(name = "idx_bookings_start_time", columnList = "requested_start_time"),
-    @Index(name = "idx_bookings_mentee_status_time", columnList = "mentee_user_id, status, requested_start_time"),
-    @Index(name = "idx_bookings_mentor_status_time", columnList = "mentor_user_id, status, requested_start_time"),
-    @Index(name = "idx_bookings_status_requested_start_time", columnList = "status, requested_start_time"),
-    @Index(name = "idx_bookings_mentee_status_requested_time", columnList = "mentee_user_id, status, requested_start_time, requested_end_time")
+    @Index(name = "idx_bookings_start_time", columnList = "selected_start_time"),
+    @Index(name = "idx_bookings_mentee_status_time", columnList = "mentee_user_id, status, selected_start_time"),
+    @Index(name = "idx_bookings_mentor_status_time", columnList = "mentor_user_id, status, selected_start_time"),
+    @Index(name = "idx_bookings_status_selected_start_time", columnList = "status, selected_start_time"),
+    @Index(name = "idx_bookings_mentee_status_selected_time", columnList = "mentee_user_id, status, selected_start_time, selected_end_time")
 })
 @Getter
 @Setter
@@ -61,11 +61,42 @@ public class Booking {
     @Column(name = "learning_goal_description", columnDefinition = "TEXT")
     private String learningGoalDescription;
 
-    @Column(name = "requested_start_time", nullable = false)
+    @Column(name = "selected_start_time")
+    private LocalDateTime selectedStartTime;
+
+    @Column(name = "selected_end_time")
+    private LocalDateTime selectedEndTime;
+
+    // Deferred-drop legacy columns kept only for DB compatibility during migration rollout.
+    @Deprecated
+    @Column(name = "requested_start_time")
     private LocalDateTime requestedStartTime;
 
-    @Column(name = "requested_end_time", nullable = false)
+    // Deferred-drop legacy columns kept only for DB compatibility during migration rollout.
+    @Deprecated
+    @Column(name = "requested_end_time")
     private LocalDateTime requestedEndTime;
+
+    @Column(name = "service_title_snapshot", length = 200)
+    private String serviceTitleSnapshot;
+
+    @Column(name = "service_description_snapshot", columnDefinition = "TEXT")
+    private String serviceDescriptionSnapshot;
+
+    @Column(name = "service_duration_snapshot")
+    private Integer serviceDurationSnapshot;
+
+    @Column(name = "service_expected_outcome_snapshot", columnDefinition = "TEXT")
+    private String serviceExpectedOutcomeSnapshot;
+
+    @Column(name = "service_is_free_snapshot")
+    private Boolean serviceIsFreeSnapshot;
+
+    @Column(name = "service_price_amount_snapshot", precision = 12, scale = 2)
+    private java.math.BigDecimal servicePriceAmountSnapshot;
+
+    @Column(name = "service_currency_snapshot", length = 10)
+    private String serviceCurrencySnapshot;
 
     @Column(name = "mentor_response_note", columnDefinition = "TEXT")
     private String mentorResponseNote;
@@ -87,6 +118,29 @@ public class Booking {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    @Column(name = "finalized_at")
+    private LocalDateTime finalizedAt;
+
+    @Column(name = "auto_closed_at")
+    private LocalDateTime autoClosedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "completion_outcome")
+    private BookingCompletionOutcome completionOutcome;
+
+    @Column(name = "issue_submitted_at")
+    private LocalDateTime issueSubmittedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "issue_type")
+    private BookingIssueType issueType;
+
+    @Column(name = "issue_description", columnDefinition = "TEXT")
+    private String issueDescription;
+
+    @Column(name = "wants_admin_review")
+    private Boolean wantsAdminReview;
 
     @Deprecated
     @Enumerated(EnumType.STRING)

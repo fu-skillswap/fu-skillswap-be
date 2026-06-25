@@ -72,10 +72,11 @@ public class MentorServiceManagementService {
                 .mentorProfile(mentorProfile)
                 .title(cleanRequired(request.title(), "Tiêu đề dịch vụ"))
                 .description(cleanRequired(request.description(), "Mô tả dịch vụ"))
+                .expectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"))
                 .durationMinutes(validateDuration(request.durationMinutes()))
                 .isFree(Boolean.TRUE.equals(request.isFree()))
                 .priceAmount(normalizePrice(request.isFree(), request.priceAmount()))
-                .currency("VND")
+                .currency(normalizeCurrency(request.currency()))
                 .isActive(true)
                 .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
@@ -93,10 +94,11 @@ public class MentorServiceManagementService {
 
         service.setTitle(cleanRequired(request.title(), "Tiêu đề dịch vụ"));
         service.setDescription(cleanRequired(request.description(), "Mô tả dịch vụ"));
+        service.setExpectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"));
         service.setDurationMinutes(validateDuration(request.durationMinutes()));
         service.setFree(Boolean.TRUE.equals(request.isFree()));
         service.setPriceAmount(normalizePrice(request.isFree(), request.priceAmount()));
-        service.setCurrency("VND");
+        service.setCurrency(normalizeCurrency(request.currency()));
         replaceHelpTopics(service, helpTopics);
 
         return toResponse(mentorServiceRepository.save(service));
@@ -185,6 +187,7 @@ public class MentorServiceManagementService {
                 .mentorUserId(service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId())
                 .title(service.getTitle())
                 .description(service.getDescription())
+                .expectedOutcome(service.getExpectedOutcome())
                 .durationMinutes(service.getDurationMinutes())
                 .free(service.isFree())
                 .priceAmount(defaultDecimal(service.getPriceAmount()))
@@ -226,6 +229,14 @@ public class MentorServiceManagementService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ có phí phải có giá lớn hơn 0");
         }
         return priceAmount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String normalizeCurrency(String currency) {
+        String normalized = cleanRequired(currency, "Currency").toUpperCase();
+        if (!"VND".equals(normalized)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Hiện tại chỉ hỗ trợ currency VND");
+        }
+        return normalized;
     }
 
     private String cleanRequired(String value, String label) {

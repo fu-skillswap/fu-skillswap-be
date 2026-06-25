@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.repository;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -99,16 +100,65 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMenteeIdAndStatus(UUID menteeId, BookingStatus status);
 
-    long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
-
-    boolean existsBySlotIdAndStatus(UUID slotId, BookingStatus status);
-
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
+
+    boolean existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
+            UUID menteeId,
+            UUID slotId,
+            java.time.LocalDateTime selectedStartTime,
+            java.time.LocalDateTime selectedEndTime,
+            Collection<BookingStatus> statuses
+    );
 
     @Query("select booking.slot.id from Booking booking where booking.id = :bookingId")
     Optional<UUID> findSlotIdByBookingId(@Param("bookingId") UUID bookingId);
 
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
+
+    List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
+
+    @Query("""
+            select count(b.id)
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status = :status
+              and b.selectedStartTime = :selectedStartTime
+              and b.selectedEndTime = :selectedEndTime
+            """)
+    long countBySlotIdAndExactSegmentAndStatus(
+            @Param("slotId") UUID slotId,
+            @Param("selectedStartTime") java.time.LocalDateTime selectedStartTime,
+            @Param("selectedEndTime") java.time.LocalDateTime selectedEndTime,
+            @Param("status") BookingStatus status
+    );
+
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status = :status
+              and b.selectedStartTime < :endTime
+              and b.selectedEndTime > :startTime
+            """)
+    boolean existsOverlappingBySlotIdAndStatus(
+            @Param("slotId") UUID slotId,
+            @Param("status") BookingStatus status,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select b
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status = :status
+            order by b.selectedStartTime asc, b.id asc
+            """)
+    List<Booking> findBySlotIdAndStatusOrderBySelectedStartTimeAsc(
+            @Param("slotId") UUID slotId,
+            @Param("status") BookingStatus status
+    );
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
@@ -121,14 +171,30 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             left join fetch booking.slot slot
             where booking.slot.id = :slotId
               and booking.status = :status
+              and booking.selectedStartTime < :endTime
+              and booking.selectedEndTime > :startTime
             order by booking.id asc
             """)
-    List<Booking> findBySlotIdAndStatusForUpdate(
+    List<Booking> findOverlappingBySlotIdAndStatusForUpdate(
+            @Param("slotId") UUID slotId,
+            @Param("status") BookingStatus status,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
+    @Query("""
+            select b.selectedStartTime as startTime,
+                   b.selectedEndTime as endTime,
+                   count(b.id) as pendingCount
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status = :status
+            group by b.selectedStartTime, b.selectedEndTime
+            """)
+    List<BookingSegmentPendingCountProjection> countPendingSegmentsBySlotId(
             @Param("slotId") UUID slotId,
             @Param("status") BookingStatus status
     );
-
-    List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
 
     @Query("""
             select booking
@@ -136,8 +202,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             where booking.mentee.id = :menteeId
               and booking.status = :status
               and booking.id != :excludeBookingId
-              and booking.requestedStartTime < :endTime
-              and booking.requestedEndTime > :startTime
+              and booking.selectedStartTime < :endTime
+              and booking.selectedEndTime > :startTime
             """)
     List<Booking> findOverlappingPendingBookingsForMentee(
             @Param("menteeId") UUID menteeId,
@@ -152,8 +218,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             from Booking b
             where b.mentee.id = :menteeId
               and b.status = 'ACCEPTED'
-              and b.requestedStartTime < :endTime
-              and b.requestedEndTime > :startTime
+              and b.selectedStartTime < :endTime
+              and b.selectedEndTime > :startTime
             """)
     boolean hasOverlappingAcceptedBooking(
             @Param("menteeId") UUID menteeId,
@@ -164,16 +230,16 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update Booking b
-            set b.status = :rejectedStatus,
+            set b.status = :expiredStatus,
                 b.rejectedAt = :now,
                 b.rejectReason = :reason,
                 b.updatedAt = :now
             where b.status = :pendingStatus
-              and b.requestedStartTime < :now
+              and b.selectedStartTime < :now
             """)
     int bulkExpireStalePendingBookings(
             @Param("pendingStatus") BookingStatus pendingStatus,
-            @Param("rejectedStatus") BookingStatus rejectedStatus,
+            @Param("expiredStatus") BookingStatus expiredStatus,
             @Param("now") java.time.LocalDateTime now,
             @Param("reason") String reason
     );

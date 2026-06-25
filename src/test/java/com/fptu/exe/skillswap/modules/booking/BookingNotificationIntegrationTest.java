@@ -12,8 +12,15 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -23,6 +30,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -64,6 +72,9 @@ class BookingNotificationIntegrationTest {
     private SpecializationRepository specializationRepository;
 
     @Autowired
+    private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
+
+    @Autowired
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
 
     @Autowired
@@ -72,12 +83,19 @@ class BookingNotificationIntegrationTest {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired
+    private MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
+
     private User mentee1;
     private User mentee2;
     private User mentee3;
     private User mentorUser;
     private MentorProfile mentorProfile;
     private MentorAvailabilitySlot testSlot;
+    private com.fptu.exe.skillswap.modules.mentor.domain.MentorService mentorService;
 
     @BeforeEach
     void setUp() {
@@ -102,12 +120,42 @@ class BookingNotificationIntegrationTest {
                 .sessionDuration(60)
                 .build());
 
-        testSlot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+        MentorAvailabilityRule availabilityRule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
                 .mentorProfile(mentorProfile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.DAILY)
+                .effectiveFrom(LocalDateTime.now().toLocalDate())
+                .effectiveTo(LocalDateTime.now().toLocalDate().plusWeeks(2))
+                .startTime(LocalDateTime.now().plusDays(2).toLocalTime().withMinute(0).withSecond(0).withNano(0))
+                .endTime(LocalDateTime.now().plusDays(2).toLocalTime().withMinute(0).withSecond(0).withNano(0).plusHours(1))
+                .timezone("Asia/Ho_Chi_Minh")
+                .active(true)
+                .build());
+
+        testSlot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
+                .mentorProfile(mentorProfile)
+                .rule(availabilityRule)
                 .startTime(LocalDateTime.now().plusDays(2))
                 .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
                 .isActive(true)
                 .isBooked(false)
+                .build());
+
+        mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                .mentorProfile(mentorProfile)
+                .title("Java Mentoring")
+                .description("Support Java backend and REST API")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(java.math.BigDecimal.ZERO)
+                .currency("VND")
+                .isActive(true)
+                .build());
+
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(testSlot.getId(), mentorService.getId()))
+                .slot(testSlot)
+                .service(mentorService)
                 .build());
     }
 
@@ -137,7 +185,7 @@ class BookingNotificationIntegrationTest {
 
     @Test
     void createBooking_shouldNotifyMentor() {
-        CreateBookingRequest req = new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "Help", "Desc");
+        CreateBookingRequest req = bookingRequest("Help", "Desc");
         BookingResponse booking = bookingService.createBooking(mentee1.getId(), req);
 
         var notis = notificationService.getMyNotifications(mentorUser.getId(), true, PageRequest.of(0, 10)).getContent();
@@ -151,9 +199,9 @@ class BookingNotificationIntegrationTest {
     @Test
     void acceptBooking_shouldNotifyAcceptedMentee_andAutoRejectedSiblingMentees() {
         // 3 Mentees request same slot
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
-        BookingResponse b2 = bookingService.createBooking(mentee2.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T2", "D2"));
-        BookingResponse b3 = bookingService.createBooking(mentee3.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T3", "D3"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
+        BookingResponse b2 = bookingService.createBooking(mentee2.getId(), bookingRequest("T2", "D2"));
+        BookingResponse b3 = bookingService.createBooking(mentee3.getId(), bookingRequest("T3", "D3"));
 
         // Mentor accepts b1
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
@@ -184,7 +232,7 @@ class BookingNotificationIntegrationTest {
 
     @Test
     void rejectBooking_shouldNotifyMentee() {
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         bookingService.rejectBooking(mentorUser.getId(), b1.bookingId(), new RejectBookingRequest("No time", "Sorry"));
 
@@ -198,7 +246,7 @@ class BookingNotificationIntegrationTest {
 
     @Test
     void menteeCancelBooking_shouldNotifyMentor() {
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         
         // Before cancel, mentor has 1 request created noti
         long unreadBefore = notificationService.getMyUnreadCount(mentorUser.getId());
@@ -215,7 +263,7 @@ class BookingNotificationIntegrationTest {
 
     @Test
     void mentorCancelBooking_shouldNotifyMentee() {
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
         
         // Before cancel, mentee has 1 accepted noti
@@ -233,7 +281,7 @@ class BookingNotificationIntegrationTest {
 
     @Test
     void updateMeetingLink_shouldNotifyMentee() {
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
         
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
@@ -251,7 +299,7 @@ class BookingNotificationIntegrationTest {
     @Test
     void failedBookingAction_shouldNotCreateNotification() {
         // Create booking successfully
-        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), new CreateBookingRequest(mentorUser.getId(), testSlot.getId(), null, "T1", "D1"));
+        BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         long menteeNotisCount = notificationService.getMyUnreadCount(mentee1.getId());
         
         // Try invalid reject (unauthorized mentee tries to reject their own booking as a mentor)
@@ -259,5 +307,16 @@ class BookingNotificationIntegrationTest {
         
         // Assert no notification was added
         assertEquals(menteeNotisCount, notificationService.getMyUnreadCount(mentee1.getId()));
+    }
+
+    private CreateBookingRequest bookingRequest(String title, String description) {
+        return new CreateBookingRequest(
+                testSlot.getId(),
+                mentorService.getId(),
+                testSlot.getStartTime(),
+                testSlot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                title,
+                description
+        );
     }
 }

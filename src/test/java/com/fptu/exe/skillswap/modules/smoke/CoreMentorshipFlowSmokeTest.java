@@ -8,10 +8,14 @@ import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
@@ -62,8 +66,11 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private MentorDiscoveryService mentorDiscoveryService;
     @Autowired private MentorAvailabilityService mentorAvailabilityService;
     @Autowired private BookingService bookingService;
+    @Autowired private MentorAvailabilityRuleRepository ruleRepository;
     @Autowired private MentorAvailabilitySlotRepository slotRepository;
     @Autowired private MentorProfileRepository mentorProfileRepository;
+    @Autowired private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
+    @Autowired private com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     @Autowired private com.fptu.exe.skillswap.modules.booking.repository.BookingRepository bookingRepository;
     @Autowired private jakarta.persistence.EntityManager entityManager;
     @Autowired private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
@@ -244,7 +251,23 @@ class CoreMentorshipFlowSmokeTest {
         slot.setMentorProfile(mp);
         slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0));
         slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0));
+        slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
         slotRepository.saveAndFlush(slot);
+        var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                .mentorProfile(mp)
+                .title("Spring Boot Mentoring")
+                .description("Support Spring Boot and REST API")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(java.math.BigDecimal.ZERO)
+                .currency("VND")
+                .isActive(true)
+                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
+                .slot(slot)
+                .service(mentorService)
+                .build());
 
         // 3 Mentees book
         User m1 = createUser("m1@test.com", "M1", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m1.getId(), "M111");
@@ -252,9 +275,10 @@ class CoreMentorshipFlowSmokeTest {
         User m3 = createUser("m3@test.com", "M3", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m3.getId(), "M333");
 
         CreateBookingRequest bReq = new CreateBookingRequest(
-                mentor.getId(),
                 slot.getId(),
-                null,
+                mentorService.getId(),
+                slot.getStartTime(),
+                slot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
                 "Help",
                 "Please help"
         );
@@ -329,12 +353,29 @@ class CoreMentorshipFlowSmokeTest {
         slot.setMentorProfile(mp);
         slot.setStartTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0));
         slot.setEndTime(LocalDateTime.now().plusDays(1).withHour(12).withMinute(0));
+        slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
         slotRepository.saveAndFlush(slot);
+        var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                .mentorProfile(mp)
+                .title("Spring Boot Mentoring")
+                .description("Support Spring Boot and REST API")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceAmount(java.math.BigDecimal.ZERO)
+                .currency("VND")
+                .isActive(true)
+                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
+                .slot(slot)
+                .service(mentorService)
+                .build());
 
         CreateBookingRequest bReq = new CreateBookingRequest(
-                mentor.getId(),
                 slot.getId(),
-                null,
+                mentorService.getId(),
+                slot.getStartTime(),
+                slot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
                 "Learn Spring",
                 "Learn Spring fast"
         );
@@ -349,6 +390,8 @@ class CoreMentorshipFlowSmokeTest {
         slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
+        booking.setSelectedStartTime(LocalDateTime.now().minusDays(1));
+        booking.setSelectedEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
         booking.setRequestedStartTime(LocalDateTime.now().minusDays(1));
         booking.setRequestedEndTime(LocalDateTime.now().minusDays(1).plusHours(2));
         bookingRepository.saveAndFlush(booking);
@@ -356,6 +399,7 @@ class CoreMentorshipFlowSmokeTest {
         // Complete booking
         CompleteBookingRequest cReq = new CompleteBookingRequest("Great session");
         bookingService.completeBooking(mentor.getId(), bk.bookingId(), cReq);
+        bookingService.completeBooking(mentee.getId(), bk.bookingId(), new CompleteBookingRequest("Confirmed"));
 
         var completed = bookingService.getBookingDetail(mentor.getId(), bk.bookingId());
         assertEquals(BookingStatus.COMPLETED, completed.status());
@@ -372,5 +416,19 @@ class CoreMentorshipFlowSmokeTest {
         assertEquals(1, updatedProfile.getTotalReviews());
         assertEquals(new java.math.BigDecimal("5.00"), updatedProfile.getAverageRating());
         assertEquals(1, updatedProfile.getTotalCompletedSessions());
+    }
+
+    private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {
+        return ruleRepository.save(MentorAvailabilityRule.builder()
+                .mentorProfile(mentorProfile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.NONE)
+                .effectiveFrom(startTime.toLocalDate())
+                .effectiveTo(startTime.toLocalDate())
+                .startTime(startTime.toLocalTime())
+                .endTime(endTime.toLocalTime())
+                .timezone("Asia/Ho_Chi_Minh")
+                .active(true)
+                .build());
     }
 }

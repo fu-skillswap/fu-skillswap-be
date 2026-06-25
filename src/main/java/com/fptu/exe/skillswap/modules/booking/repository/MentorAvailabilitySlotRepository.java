@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.repository;
 
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.repository.projection.MentorAvailabilityQueueProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -18,11 +17,6 @@ import java.util.UUID;
 @Repository
 public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAvailabilitySlot, UUID> {
 
-    List<MentorAvailabilitySlot> findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(
-            UUID mentorUserId,
-            LocalDateTime startTime
-    );
-
     List<MentorAvailabilitySlot> findByMentorProfileUserIdAndStartTimeGreaterThanEqualAndStartTimeLessThanAndIsActiveTrueOrderByStartTimeAsc(
             UUID mentorUserId,
             LocalDateTime startTime,
@@ -30,43 +24,31 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     );
 
     @Query("""
-            select slot.id as slotId,
-                   slot.startTime as startTime,
-                   slot.endTime as endTime,
-                   slot.timezone as timezone,
-                   case when slot.recurrenceRule is not null then true else false end as recurring,
-                   (
-                        select count(booking.id)
-                        from Booking booking
-                        where booking.slot.id = slot.id
-                          and booking.status = :pendingStatus
-                   ) as pendingRequestCount
+            select slot
             from MentorAvailabilitySlot slot
+            join fetch slot.mentorProfile mp
+            join fetch mp.user u
             where slot.mentorProfile.userId = :mentorUserId
               and slot.isActive = true
-              and slot.isBooked = false
               and slot.startTime >= :startTime
               and slot.startTime < :endTime
-              and (
-                    select count(booking.id)
-                    from Booking booking
-                    where booking.slot.id = slot.id
-                      and booking.status = :pendingStatus
-            ) < :maxPendingRequests
             order by slot.startTime asc
             """)
-    List<MentorAvailabilityQueueProjection> findQueueAvailableSlots(
+    List<MentorAvailabilitySlot> findVisibleSlotsByMentorUserId(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("startTime") LocalDateTime startTime,
-            @Param("endTime") LocalDateTime endTime,
-            @Param("pendingStatus") com.fptu.exe.skillswap.modules.booking.domain.BookingStatus pendingStatus,
-            @Param("maxPendingRequests") long maxPendingRequests
+            @Param("endTime") LocalDateTime endTime
     );
 
     boolean existsByMentorProfileUserIdAndStartTimeAndEndTimeAndIsActiveTrue(
             UUID mentorUserId,
             LocalDateTime startTime,
             LocalDateTime endTime
+    );
+
+    List<MentorAvailabilitySlot> findByRuleIdAndStartTimeGreaterThanEqualOrderByStartTimeAsc(
+            UUID ruleId,
+            LocalDateTime fromTime
     );
 
     @Query("""
@@ -89,7 +71,6 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             set slot.isActive = false
             where slot.mentorProfile.userId = :mentorUserId
               and slot.startTime >= :fromTime
-              and slot.isBooked = false
               and slot.isActive = true
             """)
     int deactivateFutureUnbookedSlots(
@@ -103,6 +84,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             from MentorAvailabilitySlot slot
             join fetch slot.mentorProfile mp
             join fetch mp.user u
+            join fetch slot.rule rule
             where slot.id = :slotId
             """)
     Optional<MentorAvailabilitySlot> findByIdForUpdate(@Param("slotId") UUID slotId);

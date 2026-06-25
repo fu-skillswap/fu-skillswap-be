@@ -7,18 +7,21 @@ import com.fptu.exe.skillswap.modules.academic.repository.SpecializationReposito
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
-import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -63,10 +66,13 @@ class BookingFlowIntegrationTest {
     private SpecializationRepository specializationRepository;
 
     @Autowired
-    private MentorAvailabilityService mentorAvailabilityService;
+    private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
 
     @Autowired
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+
+    @Autowired
+    private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     @Autowired
     private BookingService bookingService;
@@ -107,7 +113,7 @@ class BookingFlowIntegrationTest {
                 .sessionDuration(60)
                 .build());
 
-        mentorService = mentorServiceRepository.save(
+        mentorService = mentorServiceRepository.saveAndFlush(
                 com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
                         .mentorProfile(mentorProfile)
                         .title("Java Programming")
@@ -125,38 +131,43 @@ class BookingFlowIntegrationTest {
         UUID mentorId = mentorUser.getId();
         UUID menteeId = menteeUser.getId();
 
-        // 1. Mentor configures availability rule
+        // 1. Mentor configures one availability window manually for the integration test
         LocalDate effectiveDate = LocalDate.now().plusDays(1);
-        var ruleRequest = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                mentorService.getId(),
-                AvailabilityRepeatType.DAILY,
-                null,
-                effectiveDate,
-                effectiveDate.plusDays(2),
-                LocalTime.of(14, 0),
-                LocalTime.of(16, 0),
-                "Daily afternoon slots"
-        );
+        MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
+                .mentorProfile(mentorProfile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.DAILY)
+                .effectiveFrom(effectiveDate)
+                .effectiveTo(effectiveDate.plusDays(2))
+                .startTime(LocalTime.of(14, 0))
+                .endTime(LocalTime.of(16, 0))
+                .timezone("Asia/Ho_Chi_Minh")
+                .active(true)
+                .note("Daily afternoon slots")
+                .build());
 
-        mentorAvailabilityService.createRule(mentorId, ruleRequest);
+        MentorAvailabilitySlot slotToBook = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
+                .mentorProfile(mentorProfile)
+                .rule(rule)
+                .startTime(LocalDateTime.of(effectiveDate, LocalTime.of(14, 0)))
+                .endTime(LocalDateTime.of(effectiveDate, LocalTime.of(16, 0)))
+                .timezone("Asia/Ho_Chi_Minh")
+                .isActive(true)
+                .isBooked(false)
+                .build());
 
-        // 2. Generate slots manually for that rule
-        mentorAvailabilityService.generateSlotsForDateRange(mentorProfile, effectiveDate, effectiveDate.plusDays(2));
-
-        // Retrieve the generated slots
-        List<MentorAvailabilitySlot> slots = mentorAvailabilitySlotRepository
-                .findByMentorProfileUserIdAndIsActiveTrueAndIsBookedFalseAndStartTimeAfterOrderByStartTimeAsc(
-                        mentorId, LocalDateTime.now()
-                );
-        assertFalse(slots.isEmpty(), "Availability slots should have been generated");
-        MentorAvailabilitySlot slotToBook = slots.get(0);
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(slotToBook.getId(), mentorService.getId()))
+                .slot(slotToBook)
+                .service(mentorService)
+                .build());
 
         // 3. Mentee creates booking
         CreateBookingRequest createRequest = new CreateBookingRequest(
-                mentorId,
                 slotToBook.getId(),
                 mentorService.getId(),
+                slotToBook.getStartTime(),
+                slotToBook.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
                 "Need help with Java generics",
                 "Wildcard boundaries explain"
         );
@@ -182,15 +193,23 @@ class BookingFlowIntegrationTest {
         assertEquals("https://meet.google.com/abc-defg-hij", linked.meetingLink());
 
         // 6. Mentor completes booking after meeting time
-        // Modify booking requested time to past so we can complete it
+        // Modify booking selected/requested time to past so we can complete it
         com.fptu.exe.skillswap.modules.booking.domain.Booking dbBooking =
                 ((com.fptu.exe.skillswap.modules.booking.repository.BookingRepository)
                         org.springframework.test.util.ReflectionTestUtils.getField(bookingService, "bookingRepository"))
                         .findById(booking.bookingId()).orElseThrow();
+        dbBooking.setSelectedStartTime(LocalDateTime.now().minusHours(2));
+        dbBooking.setSelectedEndTime(LocalDateTime.now().minusHours(1));
         dbBooking.setRequestedStartTime(LocalDateTime.now().minusHours(2));
+        dbBooking.setRequestedEndTime(LocalDateTime.now().minusHours(1));
+
+        BookingResponse mentorCompleted = bookingService.completeBooking(
+                mentorId, booking.bookingId(), new CompleteBookingRequest("Good session, code works")
+        );
+        assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, mentorCompleted.status());
 
         BookingResponse completed = bookingService.completeBooking(
-                mentorId, booking.bookingId(), new CompleteBookingRequest("Good session, code works")
+                menteeId, booking.bookingId(), new CompleteBookingRequest("Confirmed")
         );
         assertEquals(BookingStatus.COMPLETED, completed.status());
         assertNotNull(completed.completedAt());

@@ -29,6 +29,7 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 @Entity
+@Deprecated(forRemoval = false)
 @Table(name = "mentor_availability_rules", indexes = {
         @Index(name = "idx_availability_rules_mentor_active", columnList = "mentor_user_id, is_active"),
         @Index(name = "idx_availability_rules_date_range", columnList = "effective_from, effective_to"),
@@ -48,10 +49,6 @@ public class MentorAvailabilityRule {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rules_mentor"))
     private MentorProfile mentorProfile;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rules_service"))
-    private com.fptu.exe.skillswap.modules.mentor.domain.MentorService service;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "rule_type", nullable = false, length = 20)

@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 @Repository
+@Deprecated(forRemoval = false)
 public interface MentorAvailabilityRuleRepository extends JpaRepository<MentorAvailabilityRule, UUID> {
 
     List<MentorAvailabilityRule> findByMentorProfileUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(UUID mentorUserId);

@@ -4,12 +4,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
 
-@Schema(description = "Query filter lấy availability của mentor theo khoảng ngày")
+@Schema(description = "Query filter lấy parent availability slots của mentor trong phạm vi từ Thứ 2 tuần hiện tại đến Chủ nhật tuần sau")
 public class AvailabilityQueryRequest {
 
-    @Schema(description = "Ngày bắt đầu muốn xem slot", example = "2026-06-21")
+    @Schema(description = "Ngày bắt đầu muốn xem availability slots. Nếu không truyền backend sẽ dùng Thứ 2 tuần hiện tại.", example = "2026-06-22")
     private LocalDate fromDate;
-    @Schema(description = "Ngày kết thúc muốn xem slot", example = "2026-06-28")
+    @Schema(description = "Ngày kết thúc muốn xem availability slots. Nếu không truyền backend sẽ dùng Chủ nhật tuần sau.", example = "2026-07-05")
     private LocalDate toDate;
 
     public LocalDate getFromDate() {

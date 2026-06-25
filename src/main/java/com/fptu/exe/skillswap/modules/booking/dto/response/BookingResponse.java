@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -30,11 +32,23 @@ public record BookingResponse(
         @Schema(description = "Avatar của mentee", nullable = true)
         String menteeAvatarUrl,
         @Schema(description = "slotId đã dùng để tạo booking")
-        UUID slotId,
+        UUID availabilitySlotId,
         @Schema(description = "serviceId được gắn với booking nếu mentee chọn service cụ thể", nullable = true)
         UUID serviceId,
         @Schema(description = "Tiêu đề service nếu có", nullable = true)
         String serviceTitle,
+        @Schema(description = "Mô tả service tại thời điểm booking được tạo", nullable = true)
+        String serviceDescriptionSnapshot,
+        @Schema(description = "Kết quả kỳ vọng của service tại thời điểm booking được tạo", nullable = true)
+        String serviceExpectedOutcomeSnapshot,
+        @Schema(description = "Thời lượng service snapshot tính theo phút", nullable = true)
+        Integer serviceDurationSnapshot,
+        @Schema(description = "Snapshot cờ miễn phí của service", nullable = true)
+        Boolean serviceIsFreeSnapshot,
+        @Schema(description = "Snapshot giá tiền của service", nullable = true)
+        java.math.BigDecimal servicePriceAmountSnapshot,
+        @Schema(description = "Snapshot currency của service", nullable = true)
+        String serviceCurrencySnapshot,
         @Schema(description = "Trạng thái booking hiện tại", example = "PENDING")
         BookingStatus status,
         @Schema(description = "Tiêu đề mục tiêu học tập")
@@ -53,10 +67,10 @@ public record BookingResponse(
         String meetingLink,
         @Schema(description = "Địa điểm gặp nếu mentoring offline hoặc ghi chú vị trí", nullable = true)
         String location,
-        @Schema(description = "Thời gian bắt đầu đã request theo slot")
-        LocalDateTime requestedStartTime,
-        @Schema(description = "Thời gian kết thúc đã request theo slot")
-        LocalDateTime requestedEndTime,
+        @Schema(description = "Thời gian bắt đầu thực sự được chọn cho booking")
+        LocalDateTime selectedStartTime,
+        @Schema(description = "Thời gian kết thúc thực sự được chọn cho booking")
+        LocalDateTime selectedEndTime,
         @Schema(description = "Thời gian bắt đầu thực tế nếu có", nullable = true)
         LocalDateTime actualStartTime,
         @Schema(description = "Thời gian kết thúc thực tế nếu có", nullable = true)
@@ -69,6 +83,20 @@ public record BookingResponse(
         LocalDateTime cancelledAt,
         @Schema(description = "Thời điểm booking được đánh dấu hoàn thành", nullable = true)
         LocalDateTime completedAt,
+        @Schema(description = "Thời điểm closure cuối cùng của booking", nullable = true)
+        LocalDateTime finalizedAt,
+        @Schema(description = "Thời điểm booking tự đóng do quá hạn phản hồi", nullable = true)
+        LocalDateTime autoClosedAt,
+        @Schema(description = "Kết quả closure analytics của booking", nullable = true)
+        BookingCompletionOutcome completionOutcome,
+        @Schema(description = "Thời điểm participant gửi issue", nullable = true)
+        LocalDateTime issueSubmittedAt,
+        @Schema(description = "Loại issue participant đã gửi", nullable = true)
+        BookingIssueType issueType,
+        @Schema(description = "Mô tả issue participant đã gửi", nullable = true)
+        String issueDescription,
+        @Schema(description = "Participant có yêu cầu admin review hay không", nullable = true)
+        Boolean wantsAdminReview,
         @Schema(description = "Ghi chú của mentor sau buổi học", nullable = true)
         String mentorNote,
         @Schema(description = "Ghi chú của mentee sau buổi học", nullable = true)

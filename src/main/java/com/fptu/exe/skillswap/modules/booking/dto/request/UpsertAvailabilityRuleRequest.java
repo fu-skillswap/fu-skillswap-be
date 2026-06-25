@@ -11,15 +11,12 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 
-@Schema(description = "Payload tạo hoặc cập nhật availability rule của mentor")
+@Deprecated(forRemoval = false)
+@Schema(description = "Legacy internal payload cho availability rule. Contract này không còn là public API cho FE mới.")
 public record UpsertAvailabilityRuleRequest(
     @Schema(description = "Loại rule: mở lịch hoặc đóng lịch", example = "OPEN")
     @NotNull(message = "ruleType là bắt buộc")
     AvailabilityRuleType ruleType,
-
-    @Schema(description = "serviceId của mentor service mà slot này thuộc về", example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
-    @NotNull(message = "serviceId là bắt buộc")
-    java.util.UUID serviceId,
 
         @Schema(description = "Kiểu lặp của rule", example = "WEEKLY")
         @NotNull(message = "repeatType là bắt buộc")

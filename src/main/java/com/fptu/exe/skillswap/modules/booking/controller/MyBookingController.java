@@ -2,9 +2,12 @@ package com.fptu.exe.skillswap.modules.booking.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -108,8 +111,9 @@ public class MyBookingController {
             summary = "Hoàn thành booking của tôi",
             description = """
                     Đánh dấu booking đã hoàn thành cho participant hiện tại.
-                    FE dùng sau khi buổi mentoring kết thúc và booking đang ở trạng thái backend cho phép complete.
-                    Khi complete thành công, mentee sẽ đủ điều kiện đi tiếp sang luồng gửi review/feedback.
+                    Endpoint này được giữ như alias chuyển tiếp cho Phase 1:
+                    - nếu current user là mentor: backend thực hiện mentor complete
+                    - nếu current user là participant còn lại: backend thực hiện confirm sau session
                     """
     )
     @ApiResponses({
@@ -128,6 +132,34 @@ public class MyBookingController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.completeBooking(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(
+            summary = "Participant xác nhận buổi mentoring",
+            description = "Participant còn lại xác nhận buổi mentoring đã diễn ra ổn sau khi mentor đã complete. Phase 1 mở sẵn contract này cho target beta mới."
+    )
+    @PostMapping("/{bookingId}/confirm")
+    public ApiResponse<BookingResponse> confirmBooking(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody(required = false) ConfirmBookingRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.confirmBookingByParticipant(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(
+            summary = "Participant báo vấn đề sau buổi mentoring",
+            description = "Participant hợp lệ của booking báo vấn đề trong cửa sổ 24 giờ sau khi session kết thúc. Phase 1 mới chuẩn bị contract và validation skeleton cho flow này."
+    )
+    @PostMapping("/{bookingId}/issue")
+    public ApiResponse<BookingIssueResponse> submitIssue(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody SubmitBookingIssueRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.submitBookingIssue(principal.getPublicId(), bookingId, request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

@@ -46,11 +46,16 @@ class SessionServiceUnitTest {
         mentorProfile.setUserId(mentor.getId());
         mentorProfile.setUser(mentor);
 
+        LocalDateTime startTime = LocalDateTime.now().plusHours(1);
+        LocalDateTime endTime = startTime.plusHours(1);
+
         booking = Booking.builder()
                 .id(bookingId)
                 .mentorProfile(mentorProfile)
-                .requestedStartTime(LocalDateTime.now().plusHours(1))
-                .requestedEndTime(LocalDateTime.now().plusHours(2))
+                .selectedStartTime(startTime)
+                .selectedEndTime(endTime)
+                .requestedStartTime(startTime)
+                .requestedEndTime(endTime)
                 .build();
     }
 

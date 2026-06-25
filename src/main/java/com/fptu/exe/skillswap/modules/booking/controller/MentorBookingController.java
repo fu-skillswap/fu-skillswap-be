@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
@@ -109,6 +110,20 @@ public class MentorBookingController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.cancelBookingByMentor(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(
+            summary = "Mentor xác nhận hoàn tất buổi mentoring",
+            description = "Mentor đánh dấu buổi mentoring đã diễn ra xong. Phase 1 chuyển booking sang trạng thái chờ participant còn lại xác nhận hoặc báo issue trong 24 giờ."
+    )
+    @PostMapping("/{bookingId}/complete")
+    public ApiResponse<BookingResponse> completeBooking(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody(required = false) CompleteBookingRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.completeBookingByMentor(principal.getPublicId(), bookingId, request));
     }
 
     @Operation(

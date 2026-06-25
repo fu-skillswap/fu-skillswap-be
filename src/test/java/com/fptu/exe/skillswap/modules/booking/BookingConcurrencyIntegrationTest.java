@@ -5,12 +5,19 @@ import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramReposit
 import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -19,6 +26,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -54,6 +62,9 @@ class BookingConcurrencyIntegrationTest {
     private MentorProfileRepository mentorProfileRepository;
 
     @Autowired
+    private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
+
+    @Autowired
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
 
     @Autowired
@@ -73,6 +84,12 @@ class BookingConcurrencyIntegrationTest {
 
     @Autowired
     private SpecializationRepository specializationRepository;
+
+    @Autowired
+    private MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -117,26 +134,49 @@ class BookingConcurrencyIntegrationTest {
                     .sessionDuration(60)
                     .build());
 
-            MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
+            LocalDateTime slotStart = DateTimeUtil.now().plusDays(2)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slotEnd = slotStart.plusHours(1);
+            MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusDays(2))
-                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
+                    .rule(createAvailabilityRule(mentorProfile, slotStart, slotEnd))
+                    .startTime(slotStart)
+                    .endTime(slotEnd)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(false)
                     .build());
 
-            return new SetupData(mentorUser.getId(), slot.getId(), menteeA.getId(), menteeB.getId());
+            var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile)
+                    .title("Spring Transaction Mentoring")
+                    .description("Support Java backend and transaction handling")
+                    .durationMinutes(60)
+                    .isFree(true)
+                    .priceAmount(BigDecimal.ZERO)
+                    .currency("VND")
+                    .isActive(true)
+                    .build());
+
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                    .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
+                    .slot(slot)
+                    .service(mentorService)
+                    .build());
+
+            return new SetupData(mentorUser.getId(), slot.getId(), menteeA.getId(), menteeB.getId(), mentorService.getId(), slot.getStartTime(), slot.getEndTime());
         });
         assertNotNull(setupData);
 
         BookingResponse bookingA = bookingService.createBooking(
                 setupData.menteeAId(),
-                new CreateBookingRequest(setupData.mentorId(), setupData.slotId(), null, "Need help A", "Spring transaction")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart(), setupData.slotStart().plusMinutes(60), "Need help A", "Spring transaction")
         );
         BookingResponse bookingB = bookingService.createBooking(
                 setupData.menteeBId(),
-                new CreateBookingRequest(setupData.mentorId(), setupData.slotId(), null, "Need help B", "REST API")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart(), setupData.slotStart().plusMinutes(60), "Need help B", "REST API")
         );
 
         CountDownLatch readyLatch = new CountDownLatch(2);
@@ -260,28 +300,46 @@ class BookingConcurrencyIntegrationTest {
                     .sessionDuration(60)
                     .build());
 
+            LocalDateTime slot1Start = DateTimeUtil.now().plusDays(2)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slot1End = slot1Start.plusHours(1);
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusDays(2))
-                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
+                    .rule(createAvailabilityRule(mentorProfile, slot1Start, slot1End))
+                    .startTime(slot1Start)
+                    .endTime(slot1End)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
                     .build());
 
+            LocalDateTime slot2Start = DateTimeUtil.now().plusDays(3)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slot2End = slot2Start.plusHours(1);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusDays(3))
-                    .endTime(DateTimeUtil.now().plusDays(3).plusHours(1))
+                    .rule(createAvailabilityRule(mentorProfile, slot2Start, slot2End))
+                    .startTime(slot2Start)
+                    .endTime(slot2End)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
                     .build());
 
+            LocalDateTime slot3Start = DateTimeUtil.now().plusDays(4)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slot3End = slot3Start.plusHours(1);
             MentorAvailabilitySlot slot3 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusDays(4))
-                    .endTime(DateTimeUtil.now().plusDays(4).plusHours(1))
+                    .rule(createAvailabilityRule(mentorProfile, slot3Start, slot3End))
+                    .startTime(slot3Start)
+                    .endTime(slot3End)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -293,6 +351,8 @@ class BookingConcurrencyIntegrationTest {
                     .slot(slot1)
                     .learningGoalTitle("Goal 1")
                     .status(BookingStatus.COMPLETED)
+                    .selectedStartTime(slot1.getStartTime())
+                    .selectedEndTime(slot1.getEndTime())
                     .requestedStartTime(slot1.getStartTime())
                     .requestedEndTime(slot1.getEndTime())
                     .build());
@@ -303,6 +363,8 @@ class BookingConcurrencyIntegrationTest {
                     .slot(slot2)
                     .learningGoalTitle("Goal 2")
                     .status(BookingStatus.COMPLETED)
+                    .selectedStartTime(slot2.getStartTime())
+                    .selectedEndTime(slot2.getEndTime())
                     .requestedStartTime(slot2.getStartTime())
                     .requestedEndTime(slot2.getEndTime())
                     .build());
@@ -313,6 +375,8 @@ class BookingConcurrencyIntegrationTest {
                     .slot(slot3)
                     .learningGoalTitle("Goal 3")
                     .status(BookingStatus.COMPLETED)
+                    .selectedStartTime(slot3.getStartTime())
+                    .selectedEndTime(slot3.getEndTime())
                     .requestedStartTime(slot3.getStartTime())
                     .requestedEndTime(slot3.getEndTime())
                     .build());
@@ -380,19 +444,25 @@ class BookingConcurrencyIntegrationTest {
                     .lateCancellationPenaltyPoints(BigDecimal.valueOf(1.00))
                     .build());
 
+            LocalDateTime slot1Start = DateTimeUtil.now().plusDays(2);
+            LocalDateTime slot1End = DateTimeUtil.now().plusDays(2).plusHours(1);
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusDays(2))
-                    .endTime(DateTimeUtil.now().plusDays(2).plusHours(1))
+                    .rule(createAvailabilityRule(mentorProfile, slot1Start, slot1End))
+                    .startTime(slot1Start)
+                    .endTime(slot1End)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
                     .build());
 
+            LocalDateTime slot2Start = DateTimeUtil.now().plusHours(5);
+            LocalDateTime slot2End = DateTimeUtil.now().plusHours(6);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
-                    .startTime(DateTimeUtil.now().plusHours(5))
-                    .endTime(DateTimeUtil.now().plusHours(6))
+                    .rule(createAvailabilityRule(mentorProfile, slot2Start, slot2End))
+                    .startTime(slot2Start)
+                    .endTime(slot2End)
                     .timezone("Asia/Ho_Chi_Minh")
                     .isActive(true)
                     .isBooked(true)
@@ -404,6 +474,8 @@ class BookingConcurrencyIntegrationTest {
                     .slot(slot1)
                     .learningGoalTitle("Completed Booking")
                     .status(BookingStatus.COMPLETED)
+                    .selectedStartTime(slot1.getStartTime())
+                    .selectedEndTime(slot1.getEndTime())
                     .requestedStartTime(slot1.getStartTime())
                     .requestedEndTime(slot1.getEndTime())
                     .build());
@@ -414,6 +486,8 @@ class BookingConcurrencyIntegrationTest {
                     .slot(slot2)
                     .learningGoalTitle("Accepted Booking")
                     .status(BookingStatus.ACCEPTED)
+                    .selectedStartTime(slot2.getStartTime())
+                    .selectedEndTime(slot2.getEndTime())
                     .requestedStartTime(slot2.getStartTime())
                     .requestedEndTime(slot2.getEndTime())
                     .build());
@@ -478,7 +552,21 @@ class BookingConcurrencyIntegrationTest {
         };
     }
 
-    private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId) {}
+    private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {
+        return mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
+                .mentorProfile(mentorProfile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.NONE)
+                .effectiveFrom(startTime.toLocalDate())
+                .effectiveTo(startTime.toLocalDate())
+                .startTime(startTime.toLocalTime())
+                .endTime(endTime.toLocalTime())
+                .timezone("Asia/Ho_Chi_Minh")
+                .active(true)
+                .build());
+    }
+
+    private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId, UUID serviceId, LocalDateTime slotStart, LocalDateTime slotEnd) {}
     private record SetupFeedbackData(UUID mentorId, UUID booking1Id, UUID booking2Id, UUID booking3Id, UUID mentee1Id, UUID mentee2Id, UUID mentee3Id) {}
     private record SetupFeedbackAndCancelData(UUID mentorId, UUID bookingCompletedId, UUID bookingAcceptedId, UUID menteeId) {}
 }

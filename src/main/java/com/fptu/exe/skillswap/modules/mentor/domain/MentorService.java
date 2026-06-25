@@ -39,6 +39,9 @@ public class MentorService {
     @Column(columnDefinition = "TEXT")
     private String description;
 
+    @Column(name = "expected_outcome", columnDefinition = "TEXT")
+    private String expectedOutcome;
+
     @Column(name = "duration_minutes", nullable = false)
     @Builder.Default
     private Integer durationMinutes = 60;

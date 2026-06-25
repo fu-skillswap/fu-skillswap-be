@@ -44,6 +44,10 @@ public class MentorDiscoveryRepositoryTest {
     }
 
     private MentorProfile createDiscoverableProfile(User user, String headline) {
+        return createDiscoverableProfile(user, headline, "PRJ301, SWP391");
+    }
+
+    private MentorProfile createDiscoverableProfile(User user, String headline, String supportingSubjects) {
         StudentProfile sp = StudentProfile.builder()
                 .user(user)
                 .claimedStudentCode("SC" + UUID.randomUUID().toString().substring(0, 5))
@@ -57,6 +61,7 @@ public class MentorDiscoveryRepositoryTest {
                 .status(MentorStatus.ACTIVE)
                 .headline(headline)
                 .expertiseDescription("Test expertise")
+                .supportingSubjects(supportingSubjects)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .isAvailable(true)
@@ -185,6 +190,34 @@ public class MentorDiscoveryRepositoryTest {
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
                 "%huong dan mon hoc%", "%huong dan mon hoc%",
+                "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
+                "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",
+                LocalDateTime.now(), PageRequest.of(0, 10)
+        );
+
+        assertEquals(1, result.getContent().size());
+        assertEquals(user.getId(), result.getContent().getFirst());
+    }
+
+    @Test
+    void searchMentors_keywordShouldMatchSupportingSubjectsAndServiceExpectedOutcome() {
+        User user = createTestUser("service@test.com", Set.of(RoleCode.MENTEE, RoleCode.MENTOR), UserStatus.ACTIVE);
+        MentorProfile profile = createDiscoverableProfile(user, "Mentor hỗ trợ học tập", "SWP391, Lập trình web");
+
+        com.fptu.exe.skillswap.modules.mentor.domain.MentorService mentorService = com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                .mentorProfile(profile)
+                .title("Hướng dẫn Spring Boot")
+                .description("Giải thích Spring Boot")
+                .expectedOutcome("Hỗ trợ SWP391")
+                .durationMinutes(60)
+                .isFree(true)
+                .build();
+        entityManager.persist(mentorService);
+        entityManager.flush();
+
+        Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, null, false, List.of(),
+                "%swp391%", "%swp391%",
                 "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
                 "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",
                 LocalDateTime.now(), PageRequest.of(0, 10)
