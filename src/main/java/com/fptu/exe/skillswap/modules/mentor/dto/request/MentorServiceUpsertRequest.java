@@ -1,13 +1,12 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,14 +35,10 @@ public record MentorServiceUpsertRequest(
         @NotNull(message = "Trạng thái miễn phí không được để trống")
         Boolean isFree,
 
-        @Schema(example = "120000", nullable = true)
-        @DecimalMin(value = "0.0", inclusive = true, message = "Giá dịch vụ không được nhỏ hơn 0")
-        BigDecimal priceAmount,
-
-        @Schema(example = "VND")
-        @NotBlank(message = "Currency không được để trống")
-        @Size(max = 10, message = "Currency không được vượt quá 10 ký tự")
-        String currency,
+        @Schema(example = "120", nullable = true, description = "Giá dịch vụ tính theo SCoin. 0 nghĩa là dịch vụ miễn phí.")
+        @NotNull(message = "Giá dịch vụ không được để trống")
+        @Min(value = 0, message = "Giá dịch vụ không được nhỏ hơn 0")
+        Integer priceScoin,
 
         @Schema(description = "Danh sách help topic mentor service có thể hỗ trợ")
         @NotEmpty(message = "Danh sách chủ đề hỗ trợ của dịch vụ không được để trống")

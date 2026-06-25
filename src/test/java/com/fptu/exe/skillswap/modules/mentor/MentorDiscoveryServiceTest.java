@@ -287,7 +287,7 @@ class MentorDiscoveryServiceTest {
                 .expectedOutcome("Spring Boot")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(BigDecimal.ZERO)
+                .priceScoin(0)
                 .build();
         MentorService weakService = MentorService.builder()
                 .mentorProfile(fallbackProfile)
@@ -296,7 +296,7 @@ class MentorDiscoveryServiceTest {
                 .expectedOutcome("Spring Boot")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(BigDecimal.ZERO)
+                .priceScoin(0)
                 .build();
 
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
@@ -418,7 +418,7 @@ class MentorDiscoveryServiceTest {
                         .description("Review CV")
                         .durationMinutes(60)
                         .isFree(true)
-                        .priceAmount(BigDecimal.ZERO)
+                        .priceScoin(0)
                         .build()));
 
         MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(mentorUserId);
@@ -546,3 +546,4 @@ class MentorDiscoveryServiceTest {
                 .thenReturn(Collections.emptyList());
     }
 }
+

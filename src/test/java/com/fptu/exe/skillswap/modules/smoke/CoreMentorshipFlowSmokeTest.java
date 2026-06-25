@@ -260,8 +260,7 @@ class CoreMentorshipFlowSmokeTest {
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(java.math.BigDecimal.ZERO)
-                .currency("VND")
+                .priceScoin(0)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
@@ -362,8 +361,7 @@ class CoreMentorshipFlowSmokeTest {
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(java.math.BigDecimal.ZERO)
-                .currency("VND")
+                .priceScoin(0)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
@@ -433,3 +431,4 @@ class CoreMentorshipFlowSmokeTest {
                 .build());
     }
 }
+

@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.booking.dto.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 
 @Builder
@@ -13,7 +12,6 @@ public record AvailabilitySlotServiceBasicResponse(
         String title,
         Integer durationMinutes,
         boolean isFree,
-        BigDecimal priceAmount,
-        String currency
+        Integer priceScoin
 ) {
 }

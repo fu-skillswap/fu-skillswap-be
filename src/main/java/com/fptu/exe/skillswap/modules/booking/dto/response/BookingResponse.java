@@ -45,10 +45,8 @@ public record BookingResponse(
         Integer serviceDurationSnapshot,
         @Schema(description = "Snapshot cờ miễn phí của service", nullable = true)
         Boolean serviceIsFreeSnapshot,
-        @Schema(description = "Snapshot giá tiền của service", nullable = true)
-        java.math.BigDecimal servicePriceAmountSnapshot,
-        @Schema(description = "Snapshot currency của service", nullable = true)
-        String serviceCurrencySnapshot,
+        @Schema(description = "Snapshot giá dịch vụ theo SCoin", nullable = true)
+        Integer servicePriceScoinSnapshot,
         @Schema(description = "Trạng thái booking hiện tại", example = "PENDING")
         BookingStatus status,
         @Schema(description = "Tiêu đề mục tiêu học tập")

@@ -451,8 +451,7 @@ public class MentorAvailabilityService {
                 .title(service.getTitle())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
-                .priceAmount(service.getPriceAmount())
-                .currency(service.getCurrency())
+                .priceScoin(service.getPriceScoin())
                 .build();
     }
 

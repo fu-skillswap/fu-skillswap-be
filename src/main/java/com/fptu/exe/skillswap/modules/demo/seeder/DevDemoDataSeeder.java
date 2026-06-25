@@ -270,8 +270,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             service.setExpectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.");
             service.setDurationMinutes(seed.serviceDuration());
             service.setFree(seed.serviceFree());
-            service.setPriceAmount(seed.priceAmount());
-            service.setCurrency("VND");
+            service.setPriceScoin(seed.priceScoin());
             service.setActive(true);
             service.getHelpTopics().clear();
             for (String code : seed.helpTopicCodes()) {
@@ -291,8 +290,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 .expectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.")
                 .durationMinutes(seed.serviceDuration())
                 .isFree(seed.serviceFree())
-                .priceAmount(seed.priceAmount())
-                .currency("VND")
+                .priceScoin(seed.priceScoin())
                 .isActive(true)
                 .build();
         for (String code : seed.helpTopicCodes()) {
@@ -527,7 +525,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 TeachingMode.ONLINE,
                 60,
                 false,
-                BigDecimal.valueOf(120000L),
+                120,
                 1L
         ));
 
@@ -546,7 +544,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 TeachingMode.HYBRID,
                 90,
                 false,
-                BigDecimal.valueOf(100000L),
+                100,
                 21L
         ));
 
@@ -565,7 +563,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 TeachingMode.ONLINE,
                 90,
                 false,
-                BigDecimal.valueOf(180000L),
+                180,
                 41L
         ));
 
@@ -584,7 +582,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 TeachingMode.HYBRID,
                 60,
                 false,
-                BigDecimal.valueOf(110000L),
+                110,
                 61L
         ));
 
@@ -603,7 +601,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 TeachingMode.ONLINE,
                 60,
                 false,
-                BigDecimal.valueOf(130000L),
+                130,
                 81L
         ));
 
@@ -630,7 +628,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             TeachingMode teachingMode,
             Integer sessionDuration,
             boolean serviceFree,
-            BigDecimal basePrice,
+            int basePriceScoin,
             long verifiedDaysStart
     ) {
         List<MentorSeed> seeds = new ArrayList<>();
@@ -647,7 +645,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             String supportingSubjects = specializedSupportingSubjects(programCode, specializationCode, seedIndex);
             String serviceTitle = specializedServiceTitle(programCode, specializationCode, seedIndex);
             String serviceDescription = specializedServiceDescription(programCode, specializationCode, seedIndex);
-            BigDecimal priceAmount = serviceFree ? BigDecimal.ZERO : basePrice.add(BigDecimal.valueOf((i - 1L) * 5000L));
+            Integer priceScoin = serviceFree ? 0 : basePriceScoin + ((i - 1) * 5);
             int totalCompletedSessions = 10 + i;
             int totalReviews = 6 + (i % 12);
             BigDecimal averageRating = BigDecimal.valueOf(450L - ((i - 1L) % 10L) * 5L, 2);
@@ -674,7 +672,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     serviceDescription,
                     sessionDuration,
                     serviceFree,
-                    priceAmount,
+                    priceScoin,
                     true,
                     Math.toIntExact(verifiedDaysStart + i),
                     totalCompletedSessions,
@@ -695,14 +693,14 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         Collections.shuffle(campuses, new java.util.Random(20260617L));
 
         List<RandomTrack> tracks = new ArrayList<>(List.of(
-                new RandomTrack("CNTT", "CNTT_ATTT", List.of("HELP_CV_REVIEW", "HELP_QA"), "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(95000L)),
-                new RandomTrack("CNTT", "CNTT_HTTT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, BigDecimal.valueOf(105000L)),
-                new RandomTrack("CNTT", "CNTT_TTNT", List.of("HELP_INTERVIEW", "HELP_STUDY_PLAN"), "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, BigDecimal.valueOf(175000L)),
-                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PRODUCT_FEEDBACK"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, BigDecimal.valueOf(90000L)),
-                new RandomTrack("NN", "NN_NNA", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(115000L)),
-                new RandomTrack("LUAT", "LUAT_LKT", List.of("HELP_QA", "HELP_STUDY_PLAN"), "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(80000L)),
-                new RandomTrack("QTKD", "QTKD_MKT", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, BigDecimal.valueOf(100000L)),
-                new RandomTrack("QTKD", "QTKD_TMDT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "E-commerce Mentor", "E-commerce, product review, project storytelling, digital business", "ECOM101, PRJ301, COM102", TeachingMode.ONLINE, 60, false, BigDecimal.valueOf(100000L))
+                new RandomTrack("CNTT", "CNTT_ATTT", List.of("HELP_CV_REVIEW", "HELP_QA"), "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, 95),
+                new RandomTrack("CNTT", "CNTT_HTTT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, 105),
+                new RandomTrack("CNTT", "CNTT_TTNT", List.of("HELP_INTERVIEW", "HELP_STUDY_PLAN"), "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, 175),
+                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PRODUCT_FEEDBACK"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, 90),
+                new RandomTrack("NN", "NN_NNA", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, 115),
+                new RandomTrack("LUAT", "LUAT_LKT", List.of("HELP_QA", "HELP_STUDY_PLAN"), "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, 80),
+                new RandomTrack("QTKD", "QTKD_MKT", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, 100),
+                new RandomTrack("QTKD", "QTKD_TMDT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "E-commerce Mentor", "E-commerce, product review, project storytelling, digital business", "ECOM101, PRJ301, COM102", TeachingMode.ONLINE, 60, false, 100)
         ));
         Collections.shuffle(tracks, new java.util.Random(20260618L));
 
@@ -741,7 +739,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     serviceDescription,
                     track.sessionDuration(),
                     track.serviceFree(),
-                    track.basePrice().add(BigDecimal.valueOf((i - 1L) * 3000L)),
+                    track.basePriceScoin() + ((i - 1) * 3),
                     true,
                     120 + i,
                     5 + i,
@@ -1022,7 +1020,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             TeachingMode teachingMode,
             Integer sessionDuration,
             boolean serviceFree,
-            BigDecimal basePrice
+            int basePriceScoin
     ) {
     }
 
@@ -1079,7 +1077,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             String serviceDescription,
             Integer serviceDuration,
             boolean serviceFree,
-            BigDecimal priceAmount,
+            Integer priceScoin,
             boolean activeMentor,
             Integer verifiedDaysAgo,
             Integer totalCompletedSessions,
@@ -1114,7 +1112,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     serviceDescription,
                     serviceDuration,
                     serviceFree,
-                    priceAmount,
+                    priceScoin,
                     activeMentor,
                     verifiedDaysAgo,
                     totalCompletedSessions,

@@ -92,11 +92,8 @@ public class Booking {
     @Column(name = "service_is_free_snapshot")
     private Boolean serviceIsFreeSnapshot;
 
-    @Column(name = "service_price_amount_snapshot", precision = 12, scale = 2)
-    private java.math.BigDecimal servicePriceAmountSnapshot;
-
-    @Column(name = "service_currency_snapshot", length = 10)
-    private String serviceCurrencySnapshot;
+    @Column(name = "service_price_scoin_snapshot")
+    private Integer servicePriceScoinSnapshot;
 
     @Column(name = "mentor_response_note", columnDefinition = "TEXT")
     private String mentorResponseNote;

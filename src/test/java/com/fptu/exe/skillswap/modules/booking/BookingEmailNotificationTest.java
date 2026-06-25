@@ -135,8 +135,7 @@ class BookingEmailNotificationTest {
                 .description("Support Email")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(java.math.BigDecimal.ZERO)
-                .currency("VND")
+                .priceScoin(0)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
@@ -261,3 +260,4 @@ class BookingEmailNotificationTest {
         );
     }
 }
+

@@ -31,7 +31,7 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
     public void handle(jakarta.servlet.http.HttpServletRequest request,
                        HttpServletResponse response,
                        org.springframework.security.access.AccessDeniedException accessDeniedException) throws IOException {
-        writeError(response, ErrorCode.UNAUTHORIZED, ErrorCode.UNAUTHORIZED.getMessage());
+        writeError(response, ErrorCode.ACCESS_DENIED, ErrorCode.ACCESS_DENIED.getMessage());
     }
 
     private void writeError(HttpServletResponse response, ErrorCode errorCode, String message) throws IOException {

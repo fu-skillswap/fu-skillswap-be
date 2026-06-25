@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.mentor.dto.response;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -25,10 +24,8 @@ public record MentorServiceResponse(
         Integer durationMinutes,
         @Schema(description = "Whether the service is free", example = "true")
         boolean free,
-        @Schema(description = "Service price amount when the service is paid", nullable = true, example = "120000")
-        BigDecimal priceAmount,
-        @Schema(description = "Service currency code when pricing is used", nullable = true, example = "VND")
-        String currency,
+        @Schema(description = "Service price in SCoin. 0 means the service is free.", nullable = true, example = "120")
+        Integer priceScoin,
         @Schema(description = "Whether the service is currently active for future use", example = "true")
         boolean active,
         @Schema(description = "Help topics covered by this service")

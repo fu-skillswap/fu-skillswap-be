@@ -166,8 +166,7 @@ public class BookingService {
                 .serviceDurationSnapshot(mentorService.getDurationMinutes())
                 .serviceExpectedOutcomeSnapshot(mentorService.getExpectedOutcome())
                 .serviceIsFreeSnapshot(mentorService.isFree())
-                .servicePriceAmountSnapshot(mentorService.getPriceAmount())
-                .serviceCurrencySnapshot(mentorService.getCurrency())
+                .servicePriceScoinSnapshot(mentorService.getPriceScoin())
                 .build());
 
         notificationService.createNotification(
@@ -682,8 +681,7 @@ public class BookingService {
                 .serviceExpectedOutcomeSnapshot(booking.getServiceExpectedOutcomeSnapshot())
                 .serviceDurationSnapshot(booking.getServiceDurationSnapshot())
                 .serviceIsFreeSnapshot(booking.getServiceIsFreeSnapshot())
-                .servicePriceAmountSnapshot(booking.getServicePriceAmountSnapshot())
-                .serviceCurrencySnapshot(booking.getServiceCurrencySnapshot())
+                .servicePriceScoinSnapshot(booking.getServicePriceScoinSnapshot())
                 .status(booking.getStatus())
                 .learningGoalTitle(booking.getLearningGoalTitle())
                 .learningGoalDescription(booking.getLearningGoalDescription())

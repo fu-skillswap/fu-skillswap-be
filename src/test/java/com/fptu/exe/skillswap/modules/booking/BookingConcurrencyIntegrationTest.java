@@ -155,8 +155,7 @@ class BookingConcurrencyIntegrationTest {
                     .description("Support Java backend and transaction handling")
                     .durationMinutes(60)
                     .isFree(true)
-                    .priceAmount(BigDecimal.ZERO)
-                    .currency("VND")
+                    .priceScoin(0)
                     .isActive(true)
                     .build());
 
@@ -570,3 +569,4 @@ class BookingConcurrencyIntegrationTest {
     private record SetupFeedbackData(UUID mentorId, UUID booking1Id, UUID booking2Id, UUID booking3Id, UUID mentee1Id, UUID mentee2Id, UUID mentee3Id) {}
     private record SetupFeedbackAndCancelData(UUID mentorId, UUID bookingCompletedId, UUID bookingAcceptedId, UUID menteeId) {}
 }
+

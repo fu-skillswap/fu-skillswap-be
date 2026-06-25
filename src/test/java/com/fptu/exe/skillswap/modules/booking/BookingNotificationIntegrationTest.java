@@ -147,8 +147,7 @@ class BookingNotificationIntegrationTest {
                 .description("Support Java backend and REST API")
                 .durationMinutes(60)
                 .isFree(true)
-                .priceAmount(java.math.BigDecimal.ZERO)
-                .currency("VND")
+                .priceScoin(0)
                 .isActive(true)
                 .build());
 
@@ -320,3 +319,4 @@ class BookingNotificationIntegrationTest {
         );
     }
 }
+

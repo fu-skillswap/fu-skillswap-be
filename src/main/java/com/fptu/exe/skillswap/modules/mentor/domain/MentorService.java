@@ -7,7 +7,6 @@ import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -50,13 +49,9 @@ public class MentorService {
     @Builder.Default
     private boolean isFree = true;
 
-    @Column(name = "price_amount", nullable = false, precision = 12, scale = 2)
+    @Column(name = "price_scoin", nullable = false)
     @Builder.Default
-    private BigDecimal priceAmount = BigDecimal.ZERO;
-
-    @Column(nullable = false, length = 10)
-    @Builder.Default
-    private String currency = "VND";
+    private Integer priceScoin = 0;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default

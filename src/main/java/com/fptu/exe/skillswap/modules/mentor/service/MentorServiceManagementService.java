@@ -19,8 +19,6 @@ import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -75,8 +73,7 @@ public class MentorServiceManagementService {
                 .expectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"))
                 .durationMinutes(validateDuration(request.durationMinutes()))
                 .isFree(Boolean.TRUE.equals(request.isFree()))
-                .priceAmount(normalizePrice(request.isFree(), request.priceAmount()))
-                .currency(normalizeCurrency(request.currency()))
+                .priceScoin(normalizePriceScoin(request.isFree(), request.priceScoin()))
                 .isActive(true)
                 .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
@@ -97,8 +94,7 @@ public class MentorServiceManagementService {
         service.setExpectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"));
         service.setDurationMinutes(validateDuration(request.durationMinutes()));
         service.setFree(Boolean.TRUE.equals(request.isFree()));
-        service.setPriceAmount(normalizePrice(request.isFree(), request.priceAmount()));
-        service.setCurrency(normalizeCurrency(request.currency()));
+        service.setPriceScoin(normalizePriceScoin(request.isFree(), request.priceScoin()));
         replaceHelpTopics(service, helpTopics);
 
         return toResponse(mentorServiceRepository.save(service));
@@ -190,8 +186,7 @@ public class MentorServiceManagementService {
                 .expectedOutcome(service.getExpectedOutcome())
                 .durationMinutes(service.getDurationMinutes())
                 .free(service.isFree())
-                .priceAmount(defaultDecimal(service.getPriceAmount()))
-                .currency(service.getCurrency())
+                .priceScoin(defaultInteger(service.getPriceScoin()))
                 .active(service.isActive())
                 .helpTopics(helpTopics)
                 .createdAt(service.getCreatedAt())
@@ -217,26 +212,18 @@ public class MentorServiceManagementService {
         return durationMinutes;
     }
 
-    private BigDecimal normalizePrice(Boolean isFree, BigDecimal priceAmount) {
+    private Integer normalizePriceScoin(Boolean isFree, Integer priceScoin) {
         if (Boolean.TRUE.equals(isFree)) {
-            if (priceAmount != null && priceAmount.compareTo(BigDecimal.ZERO) > 0) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ miễn phí phải có giá bằng 0");
+            if (priceScoin != null && priceScoin > 0) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ miễn phí phải có priceScoin bằng 0");
             }
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            return 0;
         }
 
-        if (priceAmount == null || priceAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ có phí phải có giá lớn hơn 0");
+        if (priceScoin == null || priceScoin <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ có phí phải có priceScoin lớn hơn 0");
         }
-        return priceAmount.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private String normalizeCurrency(String currency) {
-        String normalized = cleanRequired(currency, "Currency").toUpperCase();
-        if (!"VND".equals(normalized)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Hiện tại chỉ hỗ trợ currency VND");
-        }
-        return normalized;
+        return priceScoin;
     }
 
     private String cleanRequired(String value, String label) {
@@ -265,8 +252,8 @@ public class MentorServiceManagementService {
         }
     }
 
-    private BigDecimal defaultDecimal(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : value.setScale(2, RoundingMode.HALF_UP);
+    private Integer defaultInteger(Integer value) {
+        return value == null ? 0 : value;
     }
 
     private ActiveFilterMode resolveActiveFilter(String activeFilter) {

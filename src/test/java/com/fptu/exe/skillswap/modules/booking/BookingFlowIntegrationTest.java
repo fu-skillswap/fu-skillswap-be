@@ -120,7 +120,7 @@ class BookingFlowIntegrationTest {
                         .description("Java basics")
                         .durationMinutes(60)
                         .isFree(true)
-                        .priceAmount(java.math.BigDecimal.ZERO)
+                        .priceScoin(0)
                         .isActive(true)
                         .build()
         );
@@ -232,3 +232,4 @@ class BookingFlowIntegrationTest {
                 .build());
     }
 }
+
