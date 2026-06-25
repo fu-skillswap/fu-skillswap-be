@@ -78,6 +78,7 @@ public class BookingService {
     private final EntityManager entityManager;
     private final com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
     private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private final com.fptu.exe.skillswap.modules.payment.service.SettlementService settlementService;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -476,6 +477,7 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        settlementService.releaseForBooking(savedBooking);
         notificationService.createNotification(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
@@ -875,6 +877,7 @@ public class BookingService {
             booking.setAutoClosedAt(now);
             booking.setFinalizedAt(now);
             booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_AUTO_CLOSED);
+            settlementService.releaseForBooking(booking);
         }
     }
 

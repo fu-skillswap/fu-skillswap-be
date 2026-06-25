@@ -41,6 +41,7 @@ public class SecurityConfig {
                                 "/api/auth/google",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",
+                                "/api/payments/webhook/**",
                                 "/api/campuses",
                                 "/api/academic-programs",
                                 "/api/catalog/help-topics",

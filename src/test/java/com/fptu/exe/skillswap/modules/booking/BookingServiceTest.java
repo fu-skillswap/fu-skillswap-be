@@ -29,6 +29,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -100,6 +101,9 @@ class BookingServiceTest {
     @Mock
     private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
 
+    @Mock
+    private SettlementService settlementService;
+
     @InjectMocks
     private BookingService bookingService;
 
@@ -168,6 +172,7 @@ class BookingServiceTest {
                 .thenReturn(Optional.of(slot.getId()));
         org.mockito.Mockito.lenient().when(availabilitySlotServiceRepository.existsBySlotIdAndServiceId(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(true);
+        org.mockito.Mockito.lenient().doNothing().when(settlementService).releaseForBooking(org.mockito.ArgumentMatchers.any());
         org.mockito.Mockito.lenient().when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
                 org.mockito.ArgumentMatchers.any(UUID.class),
                 org.mockito.ArgumentMatchers.any(LocalDateTime.class),

@@ -84,6 +84,14 @@ application:
     submit-requirements:
       student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
+  payment:
+    platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
+    payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
+    payos:
+      checkout-base-url: ${PAYOS_CHECKOUT_BASE_URL:https://payos.example/checkout}
+      return-url: ${PAYOS_RETURN_URL:http://localhost:3000/payment/return}
+      cancel-url: ${PAYOS_CANCEL_URL:http://localhost:3000/payment/cancel}
+      webhook-secret: ${PAYOS_WEBHOOK_SECRET:}
   mail:
     enabled: ${APPLICATION_MAIL_ENABLED:false}
     from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
