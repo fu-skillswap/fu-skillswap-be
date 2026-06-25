@@ -443,8 +443,11 @@ class BookingConcurrencyIntegrationTest {
                     .lateCancellationPenaltyPoints(BigDecimal.valueOf(1.00))
                     .build());
 
-            LocalDateTime slot1Start = DateTimeUtil.now().plusDays(2);
+            LocalDateTime slot1Start = DateTimeUtil.now().plusDays(2)
+                    .withSecond(0)
+                    .withNano(0);
             LocalDateTime slot1End = DateTimeUtil.now().plusDays(2).plusHours(1);
+            slot1End = slot1End.withSecond(0).withNano(0);
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
                     .rule(createAvailabilityRule(mentorProfile, slot1Start, slot1End))
@@ -455,8 +458,12 @@ class BookingConcurrencyIntegrationTest {
                     .isBooked(true)
                     .build());
 
-            LocalDateTime slot2Start = DateTimeUtil.now().plusHours(5);
-            LocalDateTime slot2End = DateTimeUtil.now().plusHours(6);
+            LocalDateTime slot2Start = DateTimeUtil.now().plusHours(5)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slot2End = DateTimeUtil.now().plusHours(6)
+                    .withSecond(0)
+                    .withNano(0);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
                     .mentorProfile(mentorProfile)
                     .rule(createAvailabilityRule(mentorProfile, slot2Start, slot2End))

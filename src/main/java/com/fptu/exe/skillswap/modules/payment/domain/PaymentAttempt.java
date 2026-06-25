@@ -22,7 +22,8 @@ import java.util.UUID;
 @Table(name = "payment_attempts", indexes = {
         @Index(name = "idx_payment_attempts_order_id", columnList = "payment_order_id"),
         @Index(name = "idx_payment_attempts_status", columnList = "status"),
-        @Index(name = "idx_payment_attempts_provider_txn", columnList = "provider_transaction_id", unique = true)
+        @Index(name = "idx_payment_attempts_provider_txn", columnList = "provider_transaction_id", unique = true),
+        @Index(name = "idx_payment_attempts_provider_order_code", columnList = "provider_order_code", unique = true)
 })
 @Getter
 @Setter
@@ -50,8 +51,17 @@ public class PaymentAttempt {
     @Column(name = "provider_order_code", length = 100)
     private String providerOrderCode;
 
+    @Column(name = "provider_payment_link_id", length = 120)
+    private String providerPaymentLinkId;
+
+    @Column(name = "provider_status", length = 40)
+    private String providerStatus;
+
     @Column(name = "provider_transaction_id", unique = true, length = 100)
     private String providerTransactionId;
+
+    @Column(name = "provider_event_id", unique = true, length = 100)
+    private String providerEventId;
 
     @Column(name = "checkout_url", columnDefinition = "TEXT")
     private String checkoutUrl;

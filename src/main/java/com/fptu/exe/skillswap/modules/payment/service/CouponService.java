@@ -88,6 +88,14 @@ public class CouponService {
         if (coupon == null) {
             return null;
         }
+        CouponRedemption existing = couponRedemptionRepository.findByPaymentOrderId(paymentOrderId).orElse(null);
+        if (existing != null) {
+            existing.setCouponId(coupon.getId());
+            existing.setRedeemerUserId(redeemerUserId);
+            existing.setStatus(CouponRedemptionStatus.RESERVED);
+            existing.setDiscountScoin(discountScoin);
+            return couponRedemptionRepository.save(existing);
+        }
         return couponRedemptionRepository.save(CouponRedemption.builder()
                 .couponId(coupon.getId())
                 .paymentOrderId(paymentOrderId)

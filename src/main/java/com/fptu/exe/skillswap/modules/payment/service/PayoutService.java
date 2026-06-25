@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequest;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.MentorPayoutProfile;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PayoutRequestCreateRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PayoutRequestResponse;
 import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
@@ -21,6 +22,7 @@ public class PayoutService {
 
     private final SettlementService settlementService;
     private final PayoutRequestRepository payoutRequestRepository;
+    private final MentorPayoutProfileService payoutProfileService;
 
     @Transactional
     public PayoutRequestResponse createRequest(UUID mentorUserId, PayoutRequestCreateRequest request) {
@@ -34,14 +36,18 @@ public class PayoutService {
         if (request.amountScoin() > available) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Số dư settlement không đủ để tạo payout request");
         }
+        MentorPayoutProfile payoutProfile = payoutProfileService.getActiveProfileForPayout(mentorUserId, request.payoutProfileId());
         PayoutRequest payoutRequest = payoutRequestRepository.save(PayoutRequest.builder()
                 .mentorUserId(mentorUserId)
                 .settlementAccountId(settlementService.ensureMentorAccount(mentorUserId).getId())
+                .payoutProfileId(payoutProfile.getId())
                 .amountScoin(request.amountScoin())
                 .status(PayoutRequestStatus.REQUESTED)
+                .bankAccountNameSnapshot(payoutProfile.getAccountHolderName())
+                .bankNameSnapshot(payoutProfile.getBankName())
+                .bankAccountNumberMaskedSnapshot(MentorPayoutProfileService.maskAccountNumber(payoutProfile.getAccountNumber()))
                 .requestedAt(DateTimeUtil.now())
                 .build());
-        settlementService.holdPayout(mentorUserId, payoutRequest.getId(), request.amountScoin(), request.note());
         return toResponse(payoutRequest);
     }
 
@@ -51,6 +57,7 @@ public class PayoutService {
         if (payoutRequest.getStatus() != PayoutRequestStatus.REQUESTED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể duyệt payout request đang REQUESTED");
         }
+        settlementService.holdPayout(payoutRequest.getMentorUserId(), payoutRequest.getId(), payoutRequest.getAmountScoin(), note);
         payoutRequest.setStatus(PayoutRequestStatus.APPROVED);
         payoutRequest.setAdminUserId(adminUserId);
         payoutRequest.setAdminNote(note);
@@ -62,7 +69,8 @@ public class PayoutService {
     @Transactional
     public PayoutRequestResponse reject(UUID adminUserId, UUID payoutRequestId, String note) {
         PayoutRequest payoutRequest = load(payoutRequestId);
-        if (payoutRequest.getStatus() != PayoutRequestStatus.REQUESTED && payoutRequest.getStatus() != PayoutRequestStatus.APPROVED) {
+        PayoutRequestStatus currentStatus = payoutRequest.getStatus();
+        if (currentStatus != PayoutRequestStatus.REQUESTED && currentStatus != PayoutRequestStatus.APPROVED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể từ chối payout request đang chờ xử lý");
         }
         payoutRequest.setStatus(PayoutRequestStatus.REJECTED);
@@ -70,7 +78,9 @@ public class PayoutService {
         payoutRequest.setAdminNote(note);
         payoutRequest.setReviewedAt(DateTimeUtil.now());
         payoutRequest.setRejectedAt(DateTimeUtil.now());
-        settlementService.voidPayoutHold(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Rollback payout request " + payoutRequest.getId());
+        if (currentStatus == PayoutRequestStatus.APPROVED) {
+            settlementService.voidPayoutHold(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Rollback payout request " + payoutRequest.getId());
+        }
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
 
@@ -84,6 +94,7 @@ public class PayoutService {
         payoutRequest.setAdminUserId(adminUserId);
         payoutRequest.setAdminNote(note);
         payoutRequest.setPaidAt(DateTimeUtil.now());
+        settlementService.finalizePayout(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Finalize payout request " + payoutRequest.getId());
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
 
@@ -104,8 +115,12 @@ public class PayoutService {
                 .payoutRequestId(payoutRequest.getId())
                 .mentorUserId(payoutRequest.getMentorUserId())
                 .settlementAccountId(payoutRequest.getSettlementAccountId())
+                .payoutProfileId(payoutRequest.getPayoutProfileId())
                 .amountScoin(payoutRequest.getAmountScoin())
                 .status(payoutRequest.getStatus())
+                .bankAccountNameSnapshot(payoutRequest.getBankAccountNameSnapshot())
+                .bankNameSnapshot(payoutRequest.getBankNameSnapshot())
+                .bankAccountNumberMaskedSnapshot(payoutRequest.getBankAccountNumberMaskedSnapshot())
                 .adminUserId(payoutRequest.getAdminUserId())
                 .adminNote(payoutRequest.getAdminNote())
                 .requestedAt(payoutRequest.getRequestedAt())

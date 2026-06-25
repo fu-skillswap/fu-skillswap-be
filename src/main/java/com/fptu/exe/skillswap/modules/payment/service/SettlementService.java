@@ -9,6 +9,9 @@ import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementAccount;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntryType;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementAccountRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementEntryRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -28,6 +31,7 @@ public class SettlementService {
 
     private final SettlementAccountRepository settlementAccountRepository;
     private final SettlementEntryRepository settlementEntryRepository;
+    private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
 
     @Transactional
@@ -68,8 +72,13 @@ public class SettlementService {
         if (booking.getCompletionOutcome() == BookingCompletionOutcome.REVIEW_PENDING_DECISION) {
             return;
         }
+        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+        SettlementAccount mentorAccount = ensureMentorAccount(booking.getMentorProfile().getUserId());
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
-                ensureMentorAccount(booking.getMentorProfile().getUserId()).getId(),
+                mentorAccount.getId(),
                 LedgerSourceType.BOOKING,
                 booking.getId(),
                 SettlementEntryType.RELEASE
@@ -77,12 +86,17 @@ public class SettlementService {
             return;
         }
 
-        int grossScoin = Math.max(0, booking.getServicePriceScoinSnapshot() == null ? 0 : booking.getServicePriceScoinSnapshot());
-        int commissionBps = paymentProperties == null ? COMMISSION_BPS_DEFAULT : paymentProperties.getPlatformCommissionBps();
-        int commissionScoin = Math.max(0, (grossScoin * commissionBps) / 10_000);
-        int releasableScoin = Math.max(0, grossScoin - commissionScoin);
+        int grossScoin = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
+        int commissionBps = paymentOrder.getCommissionRateBps() == null || paymentOrder.getCommissionRateBps() <= 0
+                ? (paymentProperties == null ? COMMISSION_BPS_DEFAULT : paymentProperties.getPlatformCommissionBps())
+                : paymentOrder.getCommissionRateBps();
+        int commissionScoin = Math.max(0, paymentOrder.getCommissionScoin() == null
+                ? (grossScoin * commissionBps) / 10_000
+                : paymentOrder.getCommissionScoin());
+        int releasableScoin = Math.max(0, paymentOrder.getMentorNetScoin() == null
+                ? grossScoin - commissionScoin
+                : paymentOrder.getMentorNetScoin());
 
-        SettlementAccount mentorAccount = ensureMentorAccount(booking.getMentorProfile().getUserId());
         SettlementAccount platformAccount = ensurePlatformAccount();
 
         settlementEntryRepository.save(SettlementEntry.builder()
@@ -92,6 +106,10 @@ public class SettlementService {
                 .sourceId(booking.getId())
                 .amountScoin(releasableScoin)
                 .balanceEffectScoin(releasableScoin)
+                .grossScoin(grossScoin)
+                .commissionRateBps(commissionBps)
+                .commissionScoin(commissionScoin)
+                .mentorNetScoin(releasableScoin)
                 .memo("Release for completed booking " + booking.getId())
                 .build());
 
@@ -102,7 +120,10 @@ public class SettlementService {
                 .sourceId(booking.getId())
                 .amountScoin(commissionScoin)
                 .balanceEffectScoin(commissionScoin)
+                .grossScoin(grossScoin)
+                .commissionRateBps(commissionBps)
                 .commissionScoin(commissionScoin)
+                .mentorNetScoin(releasableScoin)
                 .memo("Platform commission for booking " + booking.getId())
                 .build());
     }
@@ -158,6 +179,27 @@ public class SettlementService {
                 .sourceId(payoutRequestId)
                 .amountScoin(hold.getAmountScoin())
                 .balanceEffectScoin(hold.getAmountScoin())
+                .memo(memo)
+                .build()));
+    }
+
+    @Transactional
+    public void finalizePayout(UUID mentorUserId, UUID payoutRequestId, String memo) {
+        SettlementAccount account = ensureMentorAccount(mentorUserId);
+        if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.PAID_OUT
+        ).isPresent()) {
+            return;
+        }
+        settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.HOLD
+        ).ifPresent(hold -> settlementEntryRepository.save(SettlementEntry.builder()
+                .accountId(account.getId())
+                .entryType(SettlementEntryType.PAID_OUT)
+                .sourceType(LedgerSourceType.PAYOUT_REQUEST)
+                .sourceId(payoutRequestId)
+                .amountScoin(hold.getAmountScoin())
+                .balanceEffectScoin(0)
                 .memo(memo)
                 .build()));
     }

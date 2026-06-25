@@ -56,6 +56,10 @@ public class PaymentOrder {
     @Builder.Default
     private Integer grossScoin = 0;
 
+    @Column(name = "commission_rate_bps", nullable = false)
+    @Builder.Default
+    private Integer commissionRateBps = 0;
+
     @Column(name = "coupon_id")
     private UUID couponId;
 
@@ -65,6 +69,16 @@ public class PaymentOrder {
     @Column(name = "coupon_discount_scoin", nullable = false)
     @Builder.Default
     private Integer couponDiscountScoin = 0;
+
+    @Column(name = "campaign_id")
+    private UUID campaignId;
+
+    @Column(name = "campaign_name_snapshot", length = 150)
+    private String campaignNameSnapshot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "campaign_funding_source", length = 30)
+    private FundingSource campaignFundingSource;
 
     @Column(name = "campaign_credit_scoin", nullable = false)
     @Builder.Default
@@ -77,6 +91,14 @@ public class PaymentOrder {
     @Column(name = "remaining_payable_scoin", nullable = false)
     @Builder.Default
     private Integer remainingPayableScoin = 0;
+
+    @Column(name = "mentor_net_scoin", nullable = false)
+    @Builder.Default
+    private Integer mentorNetScoin = 0;
+
+    @Column(name = "commission_scoin", nullable = false)
+    @Builder.Default
+    private Integer commissionScoin = 0;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -91,8 +113,17 @@ public class PaymentOrder {
     @Column(name = "provider_order_code", unique = true, length = 100)
     private String providerOrderCode;
 
+    @Column(name = "provider_payment_link_id", length = 120)
+    private String providerPaymentLinkId;
+
+    @Column(name = "provider_status", length = 40)
+    private String providerStatus;
+
     @Column(name = "provider_transaction_id", unique = true, length = 100)
     private String providerTransactionId;
+
+    @Column(name = "provider_event_id", unique = true, length = 100)
+    private String providerEventId;
 
     @Column(name = "payment_link", columnDefinition = "TEXT")
     private String paymentLink;
@@ -108,6 +139,9 @@ public class PaymentOrder {
 
     @Column(name = "failed_at")
     private LocalDateTime failedAt;
+
+    @Column(name = "credit_finalized_at")
+    private LocalDateTime creditFinalizedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -12,6 +12,18 @@ spring:
     enabled: ${FLYWAY_ENABLED:false}
     baseline-on-migrate: false
 
+springdoc:
+  api-docs:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
+
 logging:
   level:
     root: INFO
+
+application:
+  swagger:
+    # Swagger is disabled in production by default.
+    # Set APPLICATION_SWAGGER_ENABLED=true only if you need to expose API docs in prod.
+    enabled: ${APPLICATION_SWAGGER_ENABLED:false}

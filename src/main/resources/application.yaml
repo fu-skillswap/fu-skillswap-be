@@ -37,6 +37,12 @@ spring:
       max-file-size: ${MAX_FILE_SIZE:4MB}
       max-request-size: ${MAX_REQUEST_SIZE:4MB}
 
+springdoc:
+  api-docs:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+
 server:
   tomcat:
     threads:
@@ -88,13 +94,20 @@ application:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
     payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
     payos:
-      checkout-base-url: ${PAYOS_CHECKOUT_BASE_URL:https://payos.example/checkout}
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
       return-url: ${PAYOS_RETURN_URL:http://localhost:3000/payment/return}
       cancel-url: ${PAYOS_CANCEL_URL:http://localhost:3000/payment/cancel}
+      webhook-url: ${PAYOS_WEBHOOK_URL:}
       webhook-secret: ${PAYOS_WEBHOOK_SECRET:}
   mail:
     enabled: ${APPLICATION_MAIL_ENABLED:false}
     from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
+  swagger:
+    # Set APPLICATION_SWAGGER_ENABLED=false in production to block public Swagger/OpenAPI access.
+    # Default true for local development convenience.
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
 
 logging:
   pattern:

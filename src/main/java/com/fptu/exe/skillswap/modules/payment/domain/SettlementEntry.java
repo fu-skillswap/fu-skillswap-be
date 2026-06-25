@@ -57,6 +57,15 @@ public class SettlementEntry {
     @Column(name = "commission_scoin")
     private Integer commissionScoin;
 
+    @Column(name = "gross_scoin")
+    private Integer grossScoin;
+
+    @Column(name = "commission_rate_bps")
+    private Integer commissionRateBps;
+
+    @Column(name = "mentor_net_scoin")
+    private Integer mentorNetScoin;
+
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 

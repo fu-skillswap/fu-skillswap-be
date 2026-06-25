@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +29,23 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @Tag(name = "Mentor Profile", description = "Nhóm API tạo và duy trì hồ sơ mentor nền tảng, quyết định mentor đã đủ dữ liệu để verification hoặc xuất hiện trên discovery hay chưa. FE dùng trước khi user nộp mentor verification hoặc trước khi hiển thị mentor public.")
 @SecurityRequirement(name = "bearerAuth")
+/**
+ * Authorization design decision:
+ *
+ * <p>Any authenticated user (including new mentees) may GET and PUT the mentor profile.
+ * This is intentional: the mentor profile is a prerequisite for the verification wizard
+ * and must be fillable before the user has the MENTOR role. Having a profile record does
+ * NOT grant any mentor privileges — only a successfully approved verification request does.
+ *
+ * <p>ADMIN and SYSTEM_ADMIN are blocked from managing mentor profiles (same reason as
+ * MentorVerificationController: conflict-of-interest and audit integrity).
+ *
+ * <p>This is NOT a security risk because:
+ * 1. The profile data itself is non-privileged (headline, bio, teaching mode, etc.).
+ * 2. Downstream mentor-only operations (accept booking, manage services) still require
+ *    the MENTOR role enforced at their own controllers/services.
+ */
+@PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
 public class MentorProfileController {
 
     private final MentorProfileService mentorProfileService;

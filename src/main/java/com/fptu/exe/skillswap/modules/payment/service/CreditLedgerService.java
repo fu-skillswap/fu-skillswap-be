@@ -101,6 +101,31 @@ public class CreditLedgerService {
     }
 
     @Transactional
+    public void consumeReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
+        CreditLedgerAccount account = ensureUserAccount(userId);
+        if (entryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                account.getId(), sourceType, sourceId, LedgerEntryType.CONSUME
+        ).isPresent()) {
+            return;
+        }
+        List<CreditLedgerEntry> reserves = entryRepository.findByAccountIdAndSourceTypeAndSourceIdAndEntryType(
+                account.getId(), sourceType, sourceId, LedgerEntryType.RESERVE
+        );
+        for (CreditLedgerEntry reserve : reserves) {
+            entryRepository.save(CreditLedgerEntry.builder()
+                    .accountId(account.getId())
+                    .entryType(LedgerEntryType.CONSUME)
+                    .originType(reserve.getOriginType())
+                    .sourceType(sourceType)
+                    .sourceId(sourceId)
+                    .amountScoin(reserve.getAmountScoin())
+                    .balanceEffectScoin(0)
+                    .memo(memo)
+                    .build());
+        }
+    }
+
+    @Transactional
     public void releaseReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
         CreditLedgerAccount account = ensureUserAccount(userId);
         if (entryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(

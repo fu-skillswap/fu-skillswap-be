@@ -25,9 +25,23 @@ public class PaymentProperties {
     @Getter
     @Setter
     public static class PayosProperties {
-        private String checkoutBaseUrl = "https://payos.example/checkout";
+        private String clientId = "";
+        private String apiKey = "";
+        private String checksumKey = "";
         private String returnUrl = "http://localhost:3000/payment/return";
         private String cancelUrl = "http://localhost:3000/payment/cancel";
+        private String webhookUrl = "";
+        /**
+         * Backward-compatible alias for older local configs.
+         * New deployments should use checksumKey.
+         */
         private String webhookSecret = "";
+
+        public String effectiveChecksumKey() {
+            if (checksumKey != null && !checksumKey.isBlank()) {
+                return checksumKey;
+            }
+            return webhookSecret;
+        }
     }
 }

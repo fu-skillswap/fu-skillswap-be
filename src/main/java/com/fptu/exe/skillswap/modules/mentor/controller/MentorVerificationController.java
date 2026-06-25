@@ -22,6 +22,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +36,23 @@ import java.util.UUID;
 @Validated
 @Tag(name = "Mentor Verification", description = "Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review.")
 @SecurityRequirement(name = "bearerAuth")
+/**
+ * Authorization design decision:
+ *
+ * <p>Any authenticated user (including new mentees) may open and submit a mentor verification
+ * request. This is intentional — the "apply to become a mentor" flow is open to all users
+ * regardless of current role, supporting the platform's growth model.
+ *
+ * <p>ADMIN and SYSTEM_ADMIN are explicitly blocked because:
+ * 1. System administrators should not hold a dual role as mentors (conflict of interest).
+ * 2. Admin accounts interacting with the verification queue that also submit their own requests
+ *    creates an audit integrity risk.
+ * If an admin user wishes to mentor, they must use a separate personal account.
+ *
+ * <p>Users who already have the MENTOR role are not blocked — they may need to re-submit
+ * verification if their status changes (e.g., after deactivation + reactivation cycle).
+ */
+@PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
 public class MentorVerificationController {
 
     private final MentorVerificationService mentorVerificationService;

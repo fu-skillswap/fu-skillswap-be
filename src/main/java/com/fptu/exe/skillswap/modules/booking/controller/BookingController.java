@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,6 +51,14 @@ public class BookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor, slot hoặc service được tham chiếu"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Xung đột nghiệp vụ: slot không còn nhận request, mentee vượt quota pending, mentor không sẵn sàng hoặc slot không thuộc mentor đã chọn")
     })
+    /**
+     * Design decision: MENTOR is intentionally allowed to create a booking (as a mentee of another mentor).
+     * This is a valid business use case — mentors can also be learners on the platform.
+     *
+     * ADMIN and SYSTEM_ADMIN are blocked here (defense-in-depth over service-layer check in
+     * validateBookerEligibility). Fail fast at controller, return 403 before reaching service.
+     */
+    @PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @PostMapping
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,

@@ -41,6 +41,9 @@ public class PayoutRequest {
     @Column(name = "settlement_account_id", nullable = false)
     private UUID settlementAccountId;
 
+    @Column(name = "payout_profile_id", nullable = false)
+    private UUID payoutProfileId;
+
     @Column(name = "amount_scoin", nullable = false)
     private Integer amountScoin;
 
@@ -54,6 +57,15 @@ public class PayoutRequest {
 
     @Column(name = "admin_note", columnDefinition = "TEXT")
     private String adminNote;
+
+    @Column(name = "bank_account_name_snapshot", nullable = false, length = 150)
+    private String bankAccountNameSnapshot;
+
+    @Column(name = "bank_name_snapshot", nullable = false, length = 150)
+    private String bankNameSnapshot;
+
+    @Column(name = "bank_account_number_masked_snapshot", nullable = false, length = 30)
+    private String bankAccountNumberMaskedSnapshot;
 
     @Column(name = "requested_at", nullable = false)
     private LocalDateTime requestedAt;

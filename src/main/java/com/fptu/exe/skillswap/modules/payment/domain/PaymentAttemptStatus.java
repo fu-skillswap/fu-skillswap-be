@@ -2,7 +2,8 @@ package com.fptu.exe.skillswap.modules.payment.domain;
 
 public enum PaymentAttemptStatus {
     PENDING,
-    PAID,
+    REDIRECTED,
+    SUCCEEDED,
     FAILED,
     CANCELLED,
     EXPIRED

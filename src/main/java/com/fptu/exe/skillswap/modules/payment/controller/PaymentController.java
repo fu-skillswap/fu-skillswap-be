@@ -33,7 +33,7 @@ public class PaymentController {
 
     private final PaymentOrderService paymentOrderService;
 
-    @Operation(summary = "Tạo payment order cho booking", description = "FE gọi sau khi booking đã sẵn sàng thanh toán. Backend tự áp coupon và credit ledger trước khi tạo link PayOS.")
+    @Operation(summary = "Tạo payment order cho booking", description = "FE gọi sau khi booking đã sẵn sàng thanh toán. Backend tự áp coupon/credit, sau đó tạo Hosted Payment Link thật từ PayOS và trả checkoutUrl cho FE redirect.")
     @PostMapping("/me/payment-orders/checkout")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> checkout(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -43,7 +43,7 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
 
-    @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll lại trạng thái payment của booking hiện tại.")
+    @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS mới là nguồn chốt PAID; endpoint này chỉ trả trạng thái backend hiện tại và đồng bộ soft status từ provider nếu cần.")
     @GetMapping("/me/payment-orders/{bookingId}")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByBookingId(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -52,7 +52,7 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(paymentOrderService.getByBookingId(principal.getPublicId(), bookingId)));
     }
 
-    @Operation(summary = "Webhook payment provider", description = "Endpoint beta để mark payment order đã thanh toán hoặc thất bại.")
+    @Operation(summary = "Webhook payment provider", description = "Endpoint nhận webhook chuẩn từ PayOS. Backend verify chữ ký thật, xử lý idempotent và chỉ chốt PAID khi webhook hợp lệ.")
     @PostMapping("/payments/webhook/payos")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> webhook(@Valid @RequestBody PaymentWebhookRequest request) {
         return ResponseEntity.ok(ApiResponse.success(paymentOrderService.handleWebhook(request)));
