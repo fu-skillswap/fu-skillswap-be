@@ -6,7 +6,7 @@ spring:
     password: ${DATABASE_PASSWORD}
   jpa:
     hibernate:
-      ddl-auto: ${HIBERNATE_DDL_AUTO:update}
+      ddl-auto: ${HIBERNATE_DDL_AUTO:validate}
     show-sql: false
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
