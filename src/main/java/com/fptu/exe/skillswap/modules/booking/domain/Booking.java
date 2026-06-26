@@ -116,6 +116,10 @@ public class Booking {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "reschedule_count", nullable = false)
+    @Builder.Default
+    private Integer rescheduleCount = 0;
+
     @Column(name = "finalized_at")
     private LocalDateTime finalizedAt;
 

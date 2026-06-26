@@ -32,6 +32,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -58,6 +59,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -105,6 +107,9 @@ class BookingServiceTest {
     @Mock
     private SettlementService settlementService;
 
+    @Mock
+    private PaymentOrderService paymentOrderService;
+
     private BookingSlotValidator bookingSlotValidator;
 
     private BookingEligibilityPolicy bookingEligibilityPolicy;
@@ -135,6 +140,7 @@ class BookingServiceTest {
                 sessionService,
                 conversationService,
                 settlementService,
+                paymentOrderService,
                 bookingSlotValidator,
                 bookingEligibilityPolicy
         );
@@ -631,6 +637,7 @@ class BookingServiceTest {
         assertEquals(BigDecimal.valueOf(0.5), mentorProfile.getLateCancellationPenaltyPoints());
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
+        verify(paymentOrderService).handleMentorCancellation(eq(booking));
     }
 
     @Test
@@ -647,6 +654,7 @@ class BookingServiceTest {
 
         assertNotNull(mentorProfile.getBookingSuspendedUntil());
         assertTrue(mentorProfile.getBookingSuspendedUntil().isAfter(LocalDateTime.now().plusDays(2)));
+        verify(paymentOrderService).handleMentorCancellation(eq(booking));
     }
 
     @Test
@@ -664,13 +672,16 @@ class BookingServiceTest {
 
         assertEquals(BookingStatus.CANCELLED_BY_MENTEE, response.status());
         assertFalse(slot.isBooked());
+        verify(paymentOrderService, never()).handleMenteeCancellation(any(), anyBoolean());
     }
 
     @Test
-    void cancelBookingByMentee_acceptedBeforeEightHours_shouldReleaseSlot() {
+    void cancelBookingByMentee_acceptedBeforeSixHours_shouldReleaseSlotWithoutPenalty() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(testNow().plusHours(9));
-        booking.setRequestedEndTime(testNow().plusHours(10));
+        booking.setSelectedStartTime(testNow().plusHours(7));
+        booking.setSelectedEndTime(testNow().plusHours(8));
+        booking.setRequestedStartTime(testNow().plusHours(7));
+        booking.setRequestedEndTime(testNow().plusHours(8));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -684,13 +695,16 @@ class BookingServiceTest {
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
         assertNotNull(response.cancelledAt());
+        verify(paymentOrderService).handleMenteeCancellation(eq(booking), eq(false));
     }
 
     @Test
-    void cancelBookingByMentee_acceptedWithinEightHours_shouldDeactivateSlot() {
+    void cancelBookingByMentee_acceptedWithinSixHours_shouldTriggerLateCancellationSettlement() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setRequestedStartTime(testNow().plusHours(6));
-        booking.setRequestedEndTime(testNow().plusHours(7));
+        booking.setSelectedStartTime(testNow().plusHours(5));
+        booking.setSelectedEndTime(testNow().plusHours(6));
+        booking.setRequestedStartTime(testNow().plusHours(5));
+        booking.setRequestedEndTime(testNow().plusHours(6));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -704,6 +718,7 @@ class BookingServiceTest {
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
         assertNotNull(response.cancelledAt());
+        verify(paymentOrderService).handleMenteeCancellation(eq(booking), eq(true));
     }
 
     @Test
@@ -902,6 +917,7 @@ class BookingServiceTest {
 
         assertEquals(BookingStatus.CANCELLED_BY_MENTOR, booking.getStatus());
         verify(sessionService).cancelForBooking(booking.getId());
+        verify(paymentOrderService).handleMentorCancellation(eq(booking));
     }
 
     @Test

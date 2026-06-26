@@ -1,23 +1,30 @@
-# Service + AvailibilitySlot + Booking + Chat Flow
+# Service + Availability Slot + Booking + Chat Flow
 
-Tai lieu nay la checklist cho FE implement cac flow Service, Availability Slot, Booking, Notification va Chat dua tren BE hien co.
+Tai lieu nay la checklist FE cho cac flow:
+- Mentor Service
+- Mentor Availability Slot / Candidate Segment
+- Booking
+- Chat / Conversation
+- Notification
+- WebSocket realtime
 
 Muc tieu:
-- bam dung API contract hien tai
-- khong doan them business rule
-- tach ro cai nao la source of truth qua REST, cai nao la realtime push qua WebSocket
+- bam dung contract BE hien tai
+- khong doan business rule
+- REST la source of truth
+- raw WebSocket chi dung de push realtime
 
 ---
 
 ## 1. Nguyen tac tong
 
-- REST van la source of truth cho:
+- REST la source of truth cho:
   - mentor services
-  - mentor availability slots va candidate segments
-  - booking list / detail / actions
-  - conversation list
-  - message history
-  - send chat message
+  - mentor detail / discovery
+  - availability slots
+  - candidate segments
+  - booking create / list / detail / actions
+  - conversation list / message history / send message
   - notification list / unread count / mark read
 - Raw WebSocket chi dung de push outbound:
   - `AUTH_OK`
@@ -28,40 +35,28 @@ Muc tieu:
   - `NEW_NOTIFICATION`
 - FE khong gui booking command qua WebSocket.
 - FE khong gui chat message qua WebSocket o phase hien tai.
+- `?token=` chi dung cho `/ws` va chi dung **access token**.
 
 ---
 
-## 2. Flow 1 - Mentor Service
+## 2. Flow 1 - Mentor Service CRUD
 
-### FE checklist
+### API hien co
 
-- [ ] Chac chan user da co role `MENTOR`
-- [ ] Goi `GET /api/me/mentor-services?active=all` de load danh sach ban dau
-- [ ] Ho tro filter UI:
-  - `active=true`
-  - `active=false`
-  - `active=all`
-- [ ] Tao service bang `POST /api/me/mentor-services`
-- [ ] Sua service bang `PUT /api/me/mentor-services/{serviceId}`
-- [ ] Bat/tat service bang `PATCH /api/me/mentor-services/{serviceId}/active`
-- [ ] Xoa mem service bang `DELETE /api/me/mentor-services/{serviceId}`
-- [ ] Sau moi action create/update/active/delete:
-  - cap nhat state local tu response
-  - hoac refetch lai list
+#### GET `/api/me/mentor-services`
+- Auth: `bearerAuth`, role `MENTOR`
+- Query param:
+  - `active=true|false|all`
+- Mac dinh: `all`
+- Response: `List<MentorServiceResponse>`
 
-### API dung
+#### GET `/api/me/mentor-services/{serviceId}`
+- Auth: `bearerAuth`, role `MENTOR`
 
-#### 1. Load danh sach service cua toi
-`GET /api/me/mentor-services?active=all`
+#### POST `/api/me/mentor-services`
+- Auth: `bearerAuth`, role `MENTOR`
 
-#### 2. Load chi tiet service
-`GET /api/me/mentor-services/{serviceId}`
-
-#### 3. Tao service
-`POST /api/me/mentor-services`
-
-Request body toi thieu:
-
+Request body:
 ```json
 {
   "title": "Review CV Backend Intern",
@@ -74,11 +69,12 @@ Request body toi thieu:
 }
 ```
 
-#### 4. Sua service
-`PUT /api/me/mentor-services/{serviceId}`
+#### PUT `/api/me/mentor-services/{serviceId}`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body: nhu `POST`
 
-#### 5. Bat/tat service
-`PATCH /api/me/mentor-services/{serviceId}/active`
+#### PATCH `/api/me/mentor-services/{serviceId}/active`
+- Auth: `bearerAuth`, role `MENTOR`
 
 ```json
 {
@@ -86,76 +82,180 @@ Request body toi thieu:
 }
 ```
 
-#### 6. Xoa mem service
-`DELETE /api/me/mentor-services/{serviceId}`
-
-### Rule FE phai nho
-
-- `durationMinutes` phai dung option ma app ho tro.
-- `priceScoin >= 0`
-- neu `isFree = true` thi `priceScoin = 0`
-- neu `isFree = false` thi `priceScoin > 0`
-- neu backend tra `403` thi user hien tai khong duoc phep quan ly service
-- neu backend tra `409` thi thuong la mentor profile / verification / business state chua hop le
-
----
-
-## 3. Flow 2 - Availability Slot Discovery Side
-
-Day la phan mentee xem slot public cua mentor va chon candidate segment.
+#### DELETE `/api/me/mentor-services/{serviceId}`
+- Auth: `bearerAuth`, role `MENTOR`
+- Xoa mem service
 
 ### FE checklist
 
-- [ ] Load mentor detail truoc bang `GET /api/mentors/{mentorUserId}`
-- [ ] Load slot public bang:
+- [ ] User phai co role `MENTOR`
+- [ ] Load danh sach bang `GET /api/me/mentor-services?active=all`
+- [ ] Support filter UI `true | false | all`
+- [ ] Create / update / active / delete deu phai refetch hoac update local state theo response
+- [ ] Khong tu doan field `currency` nua, BE hien tai dung `priceScoin`
+
+### Rule FE phai nho
+
+- `durationMinutes` phai dung option app ho tro
+- `priceScoin >= 0`
+- `isFree = true` thi `priceScoin = 0`
+- `isFree = false` thi `priceScoin > 0`
+- `403` thuong la user khong co role mentor
+- `409` thuong la mentor profile / verification / business state chua hop le
+
+---
+
+## 3. Flow 2 - Mentor Discovery va Availability Slot
+
+### API hien co
+
+#### GET `/api/mentors/recommendations`
+- Auth: `bearerAuth`
+- Query param:
+  - `limit` (mac dinh `12`)
+
+#### GET `/api/mentors`
+- Auth: `bearerAuth`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
+  - `keyword`
+  - `tagIds`
+  - `campusId`
+  - `specializationId`
+  - `teachingMode`
+- Ghi chu:
+  - `sortBy=relevance` la default cua discovery
+  - `isAvailable` khong phai query param public chinh thuc cua endpoint nay
+
+#### GET `/api/mentors/{mentorUserId}`
+- Auth: `bearerAuth`
+
+#### GET `/api/mentors/{mentorUserId}/availability`
+- Auth: `bearerAuth`
+- Query params:
+  - `fromDate`
+  - `toDate`
+
+#### GET `/api/mentors/{mentorUserId}/availability-slots`
+- Auth: `bearerAuth`
+- Alias ro nghia hon cho FE moi, data giong endpoint availability o tren
+
+#### GET `/api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...`
+- Auth: `bearerAuth`
+
+### FE checklist
+
+- [ ] Load mentor detail truoc khi cho booking
+- [ ] Load parent availability slots bang 1 trong 2 endpoint:
   - `GET /api/mentors/{mentorUserId}/availability`
-  - hoac alias ro nghia hon: `GET /api/mentors/{mentorUserId}/availability-slots`
-- [ ] User chon 1 parent slot
-- [ ] User chon 1 service gan voi slot do
-- [ ] Goi `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...`
-- [ ] Hien thi exact candidate segments de user chon
-- [ ] Chi tao booking khi user da chon:
+  - `GET /api/mentors/{mentorUserId}/availability-slots`
+- [ ] User phai chon:
   - mentor
   - service
-  - slot
+  - parent slot
   - exact candidate segment
-
-### API dung
-
-#### 1. Load mentor detail
-`GET /api/mentors/{mentorUserId}`
-
-#### 2. Load parent slots
-`GET /api/mentors/{mentorUserId}/availability-slots`
-
-#### 3. Load candidate segments
-`GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId={serviceId}`
+- [ ] Sau khi chon slot + service, goi candidate API de lay exact segment
+- [ ] Khong coi parent slot la unit dat lich cuoi cung
 
 ### Rule FE phai nho
 
-- Parent slot chua phai cho duoc dat ngay.
-- Don vi canh tranh that su la exact candidate segment.
-- Candidate co the bi day hang doi, bi overlap, hoac bien mat giua luc user dang xem va luc user submit.
-- FE phai chap nhan backend co the tra `409 Conflict` khi tao booking du UI van dang thay slot.
+- Backend chi cho xem availability trong pham vi:
+  - tu thu 2 tuan hien tai
+  - den chu nhat tuan sau
+  - theo timezone `Asia/Ho_Chi_Minh`
+- Slot hien thi chua phai slot da giu cho mentee
+- Unit canh tranh that su la exact candidate segment
+- Candidate co the mat hieu luc giua luc user xem va luc submit
+
+### Response FE can dung
+
+`MentorDiscoveryCardResponse`:
+- `mentorUserId`
+- `displayName`
+- `avatarUrl`
+- `headline`
+- `expertiseDescription`
+- `supportingSubjects`
+- `isAvailable`
+- `ratingAverage`
+- `reviewCount`
+- `completedSessions`
+- `teachingMode`
+- `verifiedAt`
+- `campusId`
+- `campusName`
+- `programId`
+- `programName`
+- `specializationId`
+- `specializationName`
+- `helpTopicTags`
+
+`MentorDiscoveryDetailResponse`:
+- `mentorUserId`
+- `displayName`
+- `avatarUrl`
+- `headline`
+- `bio`
+- `expertiseDescription`
+- `supportingSubjects`
+- `isAvailable`
+- `bookingSuspendedUntil`
+- `ratingAverage`
+- `reviewCount`
+- `completedSessions`
+- `teachingMode`
+- `defaultSessionDuration`
+- `verifiedAt`
+- `campusId`
+- `campusName`
+- `programId`
+- `programName`
+- `specializationId`
+- `specializationName`
+- `semester`
+- `alumni`
+- `portfolioUrl`
+- `linkedinUrl`
+- `githubUrl`
+- `helpTopicTags`
+- `services`
+
+`MentorAvailabilitySlotResponse`:
+- `slotId`
+- `startTime`
+- `endTime`
+- `timezone`
+- `durationMinutes`
+- `teachingMode`
+- `pendingRequestCount`
+- `maxPendingRequests`
+- `remainingRequestSlots`
+- `services`
+
+`ServiceSlotCandidatesResponse`:
+- `slotId`
+- `serviceId`
+- `serviceDurationMinutes`
+- `candidateServiceSlots`
+  - `startTime`
+  - `endTime`
+  - `pendingCount`
+  - `remainingPendingQuota`
+  - `isSelectable`
+  - `reasonIfBlocked`
 
 ---
 
-## 4. Flow 3 - Mentor Availability Slot Management Side
+## 4. Flow 3 - Mentor Availability Slot Management
 
-Hien tai BE co endpoint de mentor thay danh sach service gan tren tung slot cu the.
+### API hien co
 
-### FE checklist
-
-- [ ] Khi mentor mo man hinh quan ly slot, FE can co danh sach service cua mentor
-- [ ] Cho mentor chon lai serviceIds gan voi slot
-- [ ] Goi `PUT /api/me/availability-slots/{slotId}/services`
-
-### API dung
-
-`PUT /api/me/availability-slots/{slotId}/services`
-
-Request body:
-
+#### PUT `/api/me/availability-slots/{slotId}/services`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body:
 ```json
 {
   "serviceIds": [
@@ -165,33 +265,29 @@ Request body:
 }
 ```
 
+### FE checklist
+
+- [ ] Man nay chi dung cho mentor
+- [ ] Chon lai danh sach service gan voi tung slot
+- [ ] Sau khi update, refetch lai slot hoac mentor detail
+
 ### Rule FE phai nho
 
 - Slot phai thuoc mentor hien tai
-- Service phai la service hop le cua mentor hien tai
+- Service phai hop le cua mentor hien tai
 - Backend co the tra `409` neu slot het hieu luc hoac service khong con dung duoc
+
+> Ghi chu: public FE hien tai khong co API `/api/mentor/availability-rules`. Phan rule generator nay chi ton tai o service noi bo, khong phai public contract.
 
 ---
 
 ## 5. Flow 4 - Create Booking
 
-### FE checklist
+### API hien co
 
-- [ ] User da login
-- [ ] User da chon exact candidate segment
-- [ ] User da nhap learning goal
-- [ ] Goi `POST /api/bookings`
-- [ ] Sau khi tao thanh cong:
-  - dua user ve booking detail
-  - hoac refetch list `GET /api/me/bookings?role=MENTEE`
-- [ ] Handle tot `409 Conflict` vi day la case rat thuong gap
-
-### API dung
-
-`POST /api/bookings`
-
-Request body:
-
+#### POST `/api/bookings`
+- Auth: `bearerAuth`
+- Body:
 ```json
 {
   "availabilitySlotId": "uuid-slot",
@@ -203,18 +299,29 @@ Request body:
 }
 ```
 
+### FE checklist
+
+- [ ] User da login
+- [ ] User da chon mentor
+- [ ] User da chon service
+- [ ] User da chon parent slot
+- [ ] User da chon exact candidate segment
+- [ ] User da nhap learning goal
+- [ ] Sau khi tao thanh cong:
+  - refetch `GET /api/me/bookings?role=MENTEE`
+  - hoac di sang booking detail
+
 ### Rule FE phai nho
 
 - `ADMIN` va `SYSTEM_ADMIN` khong duoc tao booking
-- `MENTOR` van co the booking mentor khac nhu mentee
-- Booking tao ra ban dau la `PENDING`
+- `MENTOR` van co the tao booking nhu mot mentee hop le neu business cho phep
+- Booking ban dau la `PENDING`
 - Backend tu kiem tra:
-  - user co completed student profile chua
-  - mentee co vuot quota pending khong
-  - segment co day 3 pending chua
-  - mentee co accepted booking overlap khong
-  - service co dung gan voi slot khong
-  - mentor co dang active / available / discoverable khong
+  - student profile da hoan tat chua
+  - quota pending co vuot khong
+  - segment co bi overlap / full queue khong
+  - service co thuoc mentor va slot khong
+  - mentor co active / available / discoverable khong
 
 ### Response FE can dung
 
@@ -231,61 +338,48 @@ Request body:
 
 ## 6. Flow 5 - Booking List / Detail
 
+### API hien co
+
+#### GET `/api/me/bookings`
+- Auth: `bearerAuth`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
+  - `status`
+  - `role`
+- FE dung:
+  - `role=MENTEE` cho man mentee
+  - `role=MENTOR` cho man mentor
+
+#### GET `/api/me/bookings/{bookingId}`
+- Auth: `bearerAuth`
+
 ### FE checklist
 
-- [ ] Dung `GET /api/me/bookings?role=MENTEE` cho man hinh booking cua mentee
-- [ ] Dung `GET /api/me/bookings?role=MENTOR` cho man hinh booking cua mentor
-- [ ] Co filter theo `status` neu can
-- [ ] Mo booking detail bang `GET /api/me/bookings/{bookingId}`
-
-### API dung
-
-#### 1. Booking list
-`GET /api/me/bookings?role=MENTEE&page=0&size=20`
-
-`GET /api/me/bookings?role=MENTOR&page=0&size=20`
-
-#### 2. Booking detail
-`GET /api/me/bookings/{bookingId}`
-
-### Rule FE phai nho
-
-- `role` la query param quan trong
-- mot user co the xem duoi goc `MENTEE` hoac `MENTOR`
-- FE phai render action button theo `status` that su backend tra ve, khong hardcode theo suy doan UI
+- [ ] Dung list role MENTEE / MENTOR dung nganh
+- [ ] Render action button theo `status` that su backend tra ve
+- [ ] Khong hardcode state machine o FE
 
 ---
 
 ## 7. Flow 6 - Mentor Accept / Reject / Meeting Link
 
-### FE checklist
+### API hien co
 
-- [ ] Mentor load booking detail
-- [ ] Neu `status = PENDING` thi cho hien `Accept` / `Reject`
-- [ ] Accept: goi `POST /api/mentor/bookings/{bookingId}/accept`
-- [ ] Reject: goi `POST /api/mentor/bookings/{bookingId}/reject`
-- [ ] Sau accept:
-  - refetch booking detail
-  - mo/enable khu vuc chat
-  - enable form meeting link
-- [ ] Luu meeting link bang `PATCH /api/mentor/bookings/{bookingId}/meeting-link`
-
-### API dung
-
-#### Accept
-`POST /api/mentor/bookings/{bookingId}/accept`
-
-Body co the rong hoac:
-
+#### POST `/api/mentor/bookings/{bookingId}/accept`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body co the rong hoac:
 ```json
 {
   "mentorResponseNote": "Hen em toi Google Meet"
 }
 ```
 
-#### Reject
-`POST /api/mentor/bookings/{bookingId}/reject`
-
+#### POST `/api/mentor/bookings/{bookingId}/reject`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body:
 ```json
 {
   "rejectReason": "Khung gio nay anh ban",
@@ -293,182 +387,426 @@ Body co the rong hoac:
 }
 ```
 
-#### Save meeting link
-`PATCH /api/mentor/bookings/{bookingId}/meeting-link`
-
-```json
-{
-  "meetingPlatform": "GOOGLE_MEET",
-  "meetingLink": "https://meet.google.com/abc-defg-hij"
-}
-```
-
-### Rule FE phai nho
-
-- accept se auto reject cac pending booking overlap cua segment vua duoc chot
-- sau accept, backend tao conversation
-- chi khi booking o state hop le moi duoc cap nhat meeting link
-
----
-
-## 8. Flow 7 - Cancel / Complete / Confirm / Issue
-
-### FE checklist
-
-- [ ] Mentee cancel bang `POST /api/me/bookings/{bookingId}/cancel`
-- [ ] Mentor cancel bang `POST /api/mentor/bookings/{bookingId}/cancel`
-- [ ] Mentor complete bang `POST /api/mentor/bookings/{bookingId}/complete`
-- [ ] Participant con lai confirm bang `POST /api/me/bookings/{bookingId}/confirm`
-- [ ] Neu co van de sau session, participant goi `POST /api/me/bookings/{bookingId}/issue`
-
-### API dung
-
-#### Mentee cancel
-`POST /api/me/bookings/{bookingId}/cancel`
-
-```json
-{
-  "cancelReason": "Em khong sap xep kip lich"
-}
-```
-
-#### Mentor cancel
-`POST /api/mentor/bookings/{bookingId}/cancel`
-
+#### POST `/api/mentor/bookings/{bookingId}/cancel`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body:
 ```json
 {
   "cancelReason": "Anh co viec dot xuat"
 }
 ```
 
-#### Mentor complete
-`POST /api/mentor/bookings/{bookingId}/complete`
+Rule:
+- booking phai dang `ACCEPTED`
+- mentee duoc refund `100%` ve vi Scoin
+- mentor van bi penalty:
+  - `< 6h`: suspend 3 ngay
+  - `>= 6h` va `< 12h`: +0.5 penalty points
+
+#### POST `/api/mentor/bookings/{bookingId}/complete`
+- Auth: `bearerAuth`, role `MENTOR`
+
+#### PATCH `/api/mentor/bookings/{bookingId}/meeting-link`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body:
+```json
+{
+  "meetingPlatform": "GOOGLE_MEET",
+  "meetingLink": "https://meet.google.com/abc-defg-hij",
+  "location": "Thu vien FPTU HCM - tang 2"
+}
+```
+
+### FE checklist
+
+- [ ] Neu booking `PENDING` thi cho `Accept` / `Reject`
+- [ ] Sau accept:
+  - refetch booking detail
+  - mo chat
+  - cho phep cap nhat meeting link
+- [ ] Accept thanh cong co the auto reject cac pending overlap cung segment
+
+### Rule FE phai nho
+
+- `meetingLink` phai hop le `http/https`
+- `meetingPlatform` bat buoc khi luu meeting info
+- `cancelReason` / `rejectReason` bat buoc khi action tuong ung
+
+---
+
+## 8. Flow 7 - Cancel / Complete / Confirm / Issue
+
+### API hien co
+
+#### Mentee cancel
+`POST /api/me/bookings/{bookingId}/cancel`
+
+Body:
+```json
+{
+  "cancelReason": "Em khong sap xep kip lich"
+}
+```
+
+Rule:
+- booking `PENDING`: huy tu do
+- booking `ACCEPTED`:
+  - truoc `6h`: refund `100%` ve vi Scoin mentee
+  - sau `6h`: mat `50%`
+    - `35%` vao vi mentor
+    - `15%` la commission app
+
+### Reschedule workflow
+
+#### API hien co
+
+`POST /api/me/bookings/{bookingId}/reschedule-requests`
+
+`GET /api/me/bookings/{bookingId}/reschedule-requests`
+
+`POST /api/me/bookings/reschedule-requests/{requestId}/accept`
+
+`POST /api/me/bookings/reschedule-requests/{requestId}/reject`
+
+`POST /api/mentor/bookings/{bookingId}/reschedule-requests`
+
+`POST /api/mentor/bookings/reschedule-requests/{requestId}/accept`
+
+`POST /api/mentor/bookings/reschedule-requests/{requestId}/reject`
+
+`GET /api/admin/bookings/{bookingId}/reschedule-requests`
+
+`POST /api/admin/bookings/reschedule-requests/{requestId}/force-approve`
+
+`POST /api/admin/bookings/reschedule-requests/{requestId}/force-reject`
+
+#### Rule FE phai nho
+
+- Chi booking `ACCEPTED` moi duoc reschedule
+- `PENDING` khong duoc reschedule
+- Moi booking chi duoc reschedule thanh cong toi da `1` lan
+- Chi duoc tao request neu con it nhat `6h` truoc gio hoc cu
+- Request da tao se het han tai moc `currentStartTime - 2h`
+- Mentee tao request thi chi mentor moi duoc accept/reject
+- Mentor tao request thi chi mentee moi duoc accept/reject
+- Nguoi tao request khong duoc tu accept/reject request cua minh
+- Admin khong tu tao request; admin chi `force-approve` hoac `force-reject` request da ton tai
+- Khong doi service
+- Khong doi payment
+- Khong giu slot tam
+- Luc accept moi validate lai slot moi
+- Neu slot moi fail thi booking giu lich cu
+- Neu accept thanh cong vao segment moi thi chi auto reject cac `PENDING` overlap segment moi
+
+#### Payload tao request
+
+```json
+{
+  "proposedSlotId": "uuid",
+  "proposedSelectedStartTime": "2026-06-30T19:00:00",
+  "proposedSelectedEndTime": "2026-06-30T20:00:00",
+  "reason": "Em bi trung lich hoc, muon doi sang toi thu 3"
+}
+```
+
+#### Payload accept/reject/force
+
+```json
+{
+  "reason": "Dong y doi lich"
+}
+```
+
+#### Mentor complete alias
+`POST /api/me/bookings/{bookingId}/complete`
 
 #### Participant confirm
 `POST /api/me/bookings/{bookingId}/confirm`
 
+Body:
+```json
+{
+  "confirmationNote": "Buoi mentoring di dung ke hoach."
+}
+```
+
 #### Participant issue
 `POST /api/me/bookings/{bookingId}/issue`
 
+Body:
 ```json
 {
   "issueType": "NO_SHOW_OR_QUALITY_OR_OTHER",
-  "description": "Mo ta van de",
+  "description": "Mentor khong tham gia dung gio hen.",
   "wantsAdminReview": true
 }
 ```
 
 ### Rule FE phai nho
 
-- cancel / complete / confirm / issue deu la action theo state machine, FE phai an button neu state khong hop le
-- du FE co an button, backend van co the tra `409`
-- issue flow khong phai mo luc nao cung duoc, backend check participant + time window
+- cancel / complete / confirm / issue deu la state machine action
+- issue chi hop le voi participant hop le cua booking
+- issue chi duoc gui sau khi session ket thuc va trong cua so backend cho phep
+- du FE an button, backend van co the tra `409`
 
 ---
 
 ## 9. Flow 8 - Chat
 
-### FE checklist
+### API hien co
 
-- [ ] Chi mo chat khi booking da tao conversation
-- [ ] Load conversation list bang `GET /api/me/conversations`
-- [ ] Load lich su bang `GET /api/me/conversations/{conversationId}/messages`
-- [ ] Gui tin nhan bang REST:
-  - `POST /api/me/conversations/{conversationId}/messages`
-- [ ] Sau khi gui thanh cong:
-  - them message vao UI
-  - dedupe khi WebSocket push cung message do ve
+#### GET `/api/me/conversations`
+- Auth: `bearerAuth`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
 
-### API dung
+#### GET `/api/me/conversations/{conversationId}/messages`
+- Auth: `bearerAuth`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
 
-#### Conversation list
-`GET /api/me/conversations?page=0&size=20`
-
-#### Message history
-`GET /api/me/conversations/{conversationId}/messages?page=0&size=20`
-
-#### Send message
-`POST /api/me/conversations/{conversationId}/messages`
-
+#### POST `/api/me/conversations/{conversationId}/messages`
+- Auth: `bearerAuth`
+- Body:
 ```json
 {
   "content": "Hello anh, em da vao phong hop"
 }
 ```
 
+### FE checklist
+
+- [ ] Chi mo chat khi booking da tao conversation
+- [ ] Load inbox bang `GET /api/me/conversations`
+- [ ] Load lich su bang `GET /api/me/conversations/{conversationId}/messages`
+- [ ] Gui tin nhan bang REST
+- [ ] Sau khi gui thanh cong:
+  - append message vao UI
+  - dedupe neu WebSocket push cung message do ve
+
 ### Rule FE phai nho
 
-- BE hien tai tra messages theo thu tu moi nhat truoc
-- FE nen reverse danh sach neu muon render tu cu den moi
-- `MessageResponse` co `isMine`
-- `CHAT_MESSAGE_CREATED` tu WebSocket khong co `isMine`, FE tu so sanh `senderId` voi current user
+- message history hien tai tra newest-first
+- `MessageResponse.isMine` co san
+- `CHAT_MESSAGE_CREATED` tu WebSocket khong co `isMine`
+- FE so sanh `senderId` voi current user
 
 ---
 
 ## 10. Flow 9 - Notification
 
+### API hien co
+
+#### GET `/api/me/notifications`
+- Auth: `bearerAuth`
+- Query params:
+  - `page`
+  - `size`
+  - `sortBy`
+  - `direction`
+  - `unreadOnly` (mac dinh `false`)
+
+#### GET `/api/me/notifications/unread-count`
+- Auth: `bearerAuth`
+
+#### PATCH `/api/me/notifications/{id}/read`
+- Auth: `bearerAuth`
+
+#### PATCH `/api/me/notifications/read-all`
+- Auth: `bearerAuth`
+
 ### FE checklist
 
-- [ ] Load list bang `GET /api/me/notifications`
-- [ ] Load unread count bang `GET /api/me/notifications/unread-count`
-- [ ] Mark read bang `PATCH /api/me/notifications/{id}/read`
-- [ ] Mark all bang `PATCH /api/me/notifications/read-all`
+- [ ] Load list notification bang REST
+- [ ] Load unread count bang REST
+- [ ] Mark read / read-all bang REST
 - [ ] Khi nhan `NEW_NOTIFICATION` qua WebSocket:
   - update badge local
-  - prepend item vao dropdown neu muon
-  - nhung van co the refetch REST khi user mo notification center
-
-### API dung
-
-#### Notification list
-`GET /api/me/notifications?unreadOnly=false&page=0&size=20&sort=createdAt,desc`
-
-#### Unread count
-`GET /api/me/notifications/unread-count`
-
-#### Mark one as read
-`PATCH /api/me/notifications/{id}/read`
-
-#### Mark all as read
-`PATCH /api/me/notifications/read-all`
+  - neu muon thi prepend item vao dropdown
+  - van co the refetch REST khi mo notification center
 
 ### Rule FE phai nho
 
-- notification DB van la source of truth
-- WebSocket chi push su kien moi
+- notification DB la source of truth
+- WebSocket chi push event moi
 - reconnect xong phai refetch unread count va page dau neu can
 
 ---
 
-## 11. WebSocket checklist cho FE hien tai
+## 11. Flow 10 - Payment / Wallet / Payout
 
-### FE phai lam
+### 11.1 Payment checkout cho booking
 
-- [ ] Bo SockJS client
-- [ ] Bo STOMP client
-- [ ] Tao 1 wrapper raw WebSocket
-- [ ] Connect bang:
+#### API hien co
+
+##### POST `/api/me/payment-orders/checkout`
+- Auth: `bearerAuth`
+- Body:
+```json
+{
+  "bookingId": "uuid-booking",
+  "couponCode": "WELCOME10"
+}
+```
+
+##### GET `/api/me/payment-orders/{bookingId}`
+- Auth: `bearerAuth`
+- Muc dich: poll trang thai payment order theo booking
+
+### FE checklist
+
+- [ ] Chi checkout khi booking da den luong thanh toan
+- [ ] Sau checkout thanh cong:
+  - redirect toi `checkoutUrl` hoac `paymentLink`
+  - luu tam `orderCode` / `paymentOrderId` neu can theo doi
+- [ ] Neu can theo doi trang thai:
+  - poll `GET /api/me/payment-orders/{bookingId}`
+  - hoac cho webhook PayOS cap nhat backend truoc
+
+### Rule FE phai nho
+
+- `checkoutUrl` la hosted payment link do PayOS tra ve
+- Webhook PayOS la nguon chot `PAID` that su
+- FE khong tu set paid state chi vi redirect thanh cong
+- So tien noi bo hien tai dung SCoin
+
+### 11.2 Webhook PayOS
+
+#### API hien co
+
+##### POST `/api/payments/webhook/payos`
+- Auth: Public
+- Muc dich: nhan webhook PayOS, verify chu ky, xu ly idempotent
+
+### FE checklist
+
+- [ ] FE khong goi webhook nay
+- [ ] FE chi can biet backend se tu cap nhat trang thai payment
+- [ ] Neu trang thai chua cap nhat ngay:
+  - poll lai payment order
+  - hoac refetch booking detail / wallet sau mot khoang ngan
+
+### 11.3 Wallet
+
+#### API hien co
+
+##### GET `/api/me/credit-wallet`
+- Auth: `bearerAuth`, role `MENTEE`
+
+##### GET `/api/me/mentor-wallet`
+- Auth: `bearerAuth`, role `MENTOR`
+
+### FE checklist
+
+- [ ] Dung `GET /api/me/credit-wallet` cho mentee
+- [ ] Dung `GET /api/me/mentor-wallet` cho mentor
+- [ ] Hien thi:
+  - so du available
+  - 15 giao dich gan nhat
+- [ ] Sau cac action lien quan tien:
+  - booking paid
+  - refund
+  - settlement release
+  - payout
+  - refetch lai wallet
+
+### Rule FE phai nho
+
+- `availableScoin` la so du hien tai
+- `recentTransactions` chi lay 15 item de UI nhe
+- giao dich co the la:
+  - `CAMPAIGN_BONUS`
+  - `COUPON_BONUS`
+  - `REFUND`
+  - `MANUAL`
+  - `PAYMENT_RESERVATION`
+  - `COMMISSION`
+  - `PAID_OUT`
+
+### 11.4 Mentor payout profile / payout request
+
+#### API hien co
+
+##### POST `/api/mentor/payout-profiles`
+- Auth: `bearerAuth`, role `MENTOR`
+
+##### PUT `/api/mentor/payout-profiles/{payoutProfileId}`
+- Auth: `bearerAuth`, role `MENTOR`
+
+##### GET `/api/mentor/payout-profiles`
+- Auth: `bearerAuth`, role `MENTOR`
+
+##### POST `/api/mentor/payout-requests`
+- Auth: `bearerAuth`, role `MENTOR`
+- Body:
+```json
+{
+  "amountScoin": 100,
+  "payoutProfileId": "uuid-payout-profile",
+  "note": "Rut settlement thang nay"
+}
+```
+
+##### GET `/api/mentor/payout-requests`
+- Auth: `bearerAuth`, role `MENTOR`
+
+##### Admin payout actions
+- `POST /api/admin/payout-requests/{payoutRequestId}/approve`
+- `POST /api/admin/payout-requests/{payoutRequestId}/reject`
+- `POST /api/admin/payout-requests/{payoutRequestId}/mark-paid`
+
+### FE checklist
+
+- [ ] Mentor can tao va quan ly payout profile truoc
+- [ ] Mentor chi tao payout request khi con settlement balance hop le
+- [ ] Admin moi duoc duyet / tu choi / mark paid
+- [ ] Sau moi action payout:
+  - refetch payout requests
+  - neu can thi refetch mentor wallet
+
+### Rule FE phai nho
+
+- payout la flow mentor-only
+- payout request khong phai wallet balance raw
+- admin co the cap nhat trang thai payout theo quy trinh van hanh
+
+---
+
+## 12. WebSocket checklist cho FE
+
+### Endpoint
 
 ```ts
 new WebSocket(`wss://api.skillswap.asia/ws?token=${accessToken}`)
 ```
 
-- [ ] Neu local:
+### Local
 
 ```ts
 new WebSocket(`ws://localhost:8080/ws?token=${accessToken}`)
 ```
 
+### FE phai lam
+
+- [ ] Bo SockJS client
+- [ ] Bo STOMP client
+- [ ] Tao raw WebSocket wrapper
+- [ ] Chi dung access token
 - [ ] Khong bao gio dung refresh token cho `/ws`
 - [ ] Sau reconnect phai resync qua REST:
   - unread count
   - notification page dau
   - conversation dang mo neu can
 
-### Message types hien tai
+### Message types hien co
 
 #### AUTH_OK
-
 ```json
 {
   "type": "AUTH_OK",
@@ -480,7 +818,6 @@ new WebSocket(`ws://localhost:8080/ws?token=${accessToken}`)
 ```
 
 #### PING
-
 ```json
 {
   "type": "PING"
@@ -488,7 +825,6 @@ new WebSocket(`ws://localhost:8080/ws?token=${accessToken}`)
 ```
 
 #### PONG
-
 ```json
 {
   "type": "PONG",
@@ -497,15 +833,12 @@ new WebSocket(`ws://localhost:8080/ws?token=${accessToken}`)
 ```
 
 #### CHAT_MESSAGE_CREATED
-
-payload la `ChatMessageEvent`
+- payload la `ChatMessageEvent`
 
 #### NEW_NOTIFICATION
-
-payload la `NotificationResponse`
+- payload la `NotificationResponse`
 
 #### ERROR
-
 ```json
 {
   "type": "ERROR",
@@ -522,11 +855,11 @@ payload la `NotificationResponse`
 - [ ] Connect thanh cong thi nhan `AUTH_OK`
 - [ ] Gui `PING` thi nhan `PONG`
 - [ ] Gui chat bang REST thi user nhan `CHAT_MESSAGE_CREATED`
-- [ ] Trigger booking accept / reject / cancel / verification... tao notification thi user nhan `NEW_NOTIFICATION`
+- [ ] Trigger booking accept / reject / cancel / notification thi user nhan `NEW_NOTIFICATION`
 - [ ] Restart backend thi FE reconnect duoc
-- [ ] Sau reconnect FE refetch REST de dong bo phan missed event
+- [ ] Sau reconnect FE refetch REST de dong bo
 
-### Dinh nghia boundary can nho
+### Boundary can nho
 
 - WebSocket hien tai la outbound-only practical realtime
 - Khong gui business command lon qua socket
@@ -535,51 +868,49 @@ payload la `NotificationResponse`
 
 ---
 
-## 12. Thu tu FE nen implement
+## 13. Quick checklist theo thu tu FE nen lam
 
 1. Mentor services CRUD
 2. Mentor detail + availability slots + candidates
 3. Create booking
 4. Booking list + booking detail
-5. Mentor accept/reject/meeting link
-6. Chat REST flow
-7. Notification REST flow
-8. Raw WebSocket wrapper
-9. Chat push + notification push
-10. Reconnect + REST resync
+5. Mentor accept / reject / meeting link
+6. Booking cancel / complete / confirm / issue
+7. Payment checkout + payment status poll
+8. Wallet mentee / mentor
+9. Payout profile / payout request
+10. Chat REST flow
+11. Notification REST flow
+12. Raw WebSocket wrapper
+13. Chat push + notification push
+14. Reconnect + REST resync
 
 ---
 
-## 13. Quick troubleshooting cho FE
+## 14. Quick troubleshooting
 
-### Neu tao booking bi `409`
-
+### Tao booking bi `409`
 Check:
 - segment da day 3 pending chua
 - mentee da co 5 pending chua
 - mentee da co accepted booking overlap chua
-- service co con gan voi slot khong
-- mentor co con active / available khong
+- service co thuoc mentor va slot khong
+- mentor co con active / available / discoverable khong
 
-### Neu chat gui thanh cong nhung UI bi duplicate
-
+### Chat gui thanh cong nhung bi duplicate
 Check:
 - FE da append message tu REST response
-- sau do WebSocket push cung message
+- sau do WebSocket push cung message do ve
 - can dedupe theo `messageId`
 
-### Neu WebSocket khong connect duoc
-
+### WebSocket khong connect duoc
 Check:
-- FE co dang dung `wss://` tren site `https://` khong
+- dung `wss://` tren site `https://`
 - URL co phai `/ws?token=...` khong
 - token co phai access token con han khong
 - backend/nginx da mo `/ws` chua
-- DevTools con thay `/ws/info` hoac `/xhr_send` khong
 
-### Neu notification badge khong khop
-
+### Notification badge khong khop
 Check:
 - FE da cap nhat local state tu `NEW_NOTIFICATION` chua
 - sau reconnect da refetch unread count chua
-

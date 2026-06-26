@@ -3,11 +3,15 @@ package com.fptu.exe.skillswap.modules.booking.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRescheduleRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequestResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.service.BookingRescheduleService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -40,6 +44,7 @@ import java.util.UUID;
 public class MyBookingController {
 
     private final BookingService bookingService;
+    private final BookingRescheduleService bookingRescheduleService;
 
     @Operation(
             summary = "Lấy danh sách booking của tôi",
@@ -105,6 +110,45 @@ public class MyBookingController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.cancelBookingByMentee(principal.getPublicId(), bookingId, request));
+    }
+
+    @PostMapping("/{bookingId}/reschedule-requests")
+    public ApiResponse<BookingRescheduleRequestResponse> createRescheduleRequest(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody CreateBookingRescheduleRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.created(bookingRescheduleService.createByMentee(principal.getPublicId(), bookingId, request));
+    }
+
+    @GetMapping("/{bookingId}/reschedule-requests")
+    public ApiResponse<java.util.List<BookingRescheduleRequestResponse>> getRescheduleRequests(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingRescheduleService.getMyBookingRequests(principal.getPublicId(), bookingId));
+    }
+
+    @PostMapping("/reschedule-requests/{requestId}/accept")
+    public ApiResponse<BookingRescheduleRequestResponse> acceptRescheduleRequest(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID requestId,
+            @Valid @RequestBody RespondBookingRescheduleRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingRescheduleService.acceptByParticipant(principal.getPublicId(), requestId, request));
+    }
+
+    @PostMapping("/reschedule-requests/{requestId}/reject")
+    public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID requestId,
+            @Valid @RequestBody RespondBookingRescheduleRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingRescheduleService.rejectByParticipant(principal.getPublicId(), requestId, request));
     }
 
     @Operation(

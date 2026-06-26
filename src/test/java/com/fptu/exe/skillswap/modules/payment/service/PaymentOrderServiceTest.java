@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -61,6 +62,7 @@ class PaymentOrderServiceTest {
     @Mock private CreditLedgerService creditLedgerService;
     @Mock private CampaignService campaignService;
     @Mock private PayOsGateway payOsGateway;
+    @Mock private SettlementService settlementService;
 
     private PaymentOrderService paymentOrderService;
 
@@ -84,7 +86,8 @@ class PaymentOrderServiceTest {
                 creditLedgerService,
                 campaignService,
                 paymentProperties,
-                payOsGateway
+                payOsGateway,
+                settlementService
         );
 
         menteeId = UUID.randomUUID();
@@ -164,6 +167,91 @@ class PaymentOrderServiceTest {
         verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
         // PayOsGateway must NOT be called for credit-covered checkout
         verify(payOsGateway, never()).createPaymentLink(any());
+    }
+
+    @Test
+    void handleMenteeCancellation_awaitingPayment_shouldRollbackReservedCreditAndVoidCoupon() {
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .orderCode("PAY-CANCEL-1")
+                .bookingId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
+                .build();
+
+        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        paymentOrderService.handleMenteeCancellation(booking, false);
+
+        assertEquals(PaymentOrderStatus.CANCELLED, order.getStatus());
+        assertNotNull(order.getCancelledAt());
+        verify(creditLedgerService).releaseReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
+        verify(couponService).voidRedemption(order.getId());
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
+    void handleMenteeCancellation_paid_shouldDelegateToSettlement() {
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .orderCode("PAY-CANCEL-2")
+                .bookingId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .status(PaymentOrderStatus.PAID)
+                .build();
+
+        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        paymentOrderService.handleMenteeCancellation(booking, true);
+
+        assertNotNull(order.getCancelledAt());
+        verify(settlementService).handlePaidBookingCancelledByMentee(eq(booking), eq(order), eq(true));
+    }
+
+    @Test
+    void handleMentorCancellation_awaitingPayment_shouldRollbackReservedCreditAndVoidCoupon() {
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .orderCode("PAY-MENTOR-CANCEL-1")
+                .bookingId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
+                .build();
+
+        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        paymentOrderService.handleMentorCancellation(booking);
+
+        assertEquals(PaymentOrderStatus.CANCELLED, order.getStatus());
+        verify(creditLedgerService).releaseReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
+        verify(couponService).voidRedemption(order.getId());
+        verifyNoInteractions(settlementService);
+    }
+
+    @Test
+    void handleMentorCancellation_paid_shouldDelegateFullRefundToSettlement() {
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .orderCode("PAY-MENTOR-CANCEL-2")
+                .bookingId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .status(PaymentOrderStatus.PAID)
+                .build();
+
+        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        paymentOrderService.handleMentorCancellation(booking);
+
+        assertNotNull(order.getCancelledAt());
+        verify(settlementService).handlePaidBookingCancelledByMentor(eq(booking), eq(order));
     }
 
     // ─── Webhook: valid signature (gateway returns success) ──────────────────────

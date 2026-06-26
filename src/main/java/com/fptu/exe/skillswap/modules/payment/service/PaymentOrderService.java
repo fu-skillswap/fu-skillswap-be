@@ -47,6 +47,7 @@ public class PaymentOrderService {
     private final CampaignService campaignService;
     private final PaymentProperties paymentProperties;
     private final PayOsGateway payOsGateway;
+    private final SettlementService settlementService;
 
     @Transactional
     public PaymentCheckoutResponse checkout(UUID currentUserId, PaymentCheckoutRequest request) {
@@ -220,6 +221,52 @@ public class PaymentOrderService {
         return toResponse(order, latestAttempt);
     }
 
+    @Transactional
+    public void handleMenteeCancellation(Booking booking, boolean lateCancellation) {
+        if (booking == null || booking.getId() == null) {
+            return;
+        }
+        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        if (order == null) {
+            return;
+        }
+        if (isAwaitingPayment(order.getStatus())) {
+            cancelAwaitingPaymentOrder(order);
+            return;
+        }
+        if (order.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+        if (order.getCancelledAt() == null) {
+            order.setCancelledAt(DateTimeUtil.now());
+            paymentOrderRepository.save(order);
+        }
+        settlementService.handlePaidBookingCancelledByMentee(booking, order, lateCancellation);
+    }
+
+    @Transactional
+    public void handleMentorCancellation(Booking booking) {
+        if (booking == null || booking.getId() == null) {
+            return;
+        }
+        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        if (order == null) {
+            return;
+        }
+        if (isAwaitingPayment(order.getStatus())) {
+            cancelAwaitingPaymentOrder(order);
+            return;
+        }
+        if (order.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+        if (order.getCancelledAt() == null) {
+            order.setCancelledAt(DateTimeUtil.now());
+            paymentOrderRepository.save(order);
+        }
+        settlementService.handlePaidBookingCancelledByMentor(booking, order);
+    }
+
     private void validateCheckoutOwnership(UUID currentUserId, Booking booking) {
         if (booking.getMentee() == null || !currentUserId.equals(booking.getMentee().getId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentee của booking mới có thể thanh toán");
@@ -241,6 +288,17 @@ public class PaymentOrderService {
                 ? booking.getService().getPriceScoin()
                 : 0);
         return Math.max(0, basePriceScoin);
+    }
+
+    private void cancelAwaitingPaymentOrder(PaymentOrder order) {
+        if (order == null || isFinal(order.getStatus())) {
+            return;
+        }
+        order.setStatus(PaymentOrderStatus.CANCELLED);
+        order.setCancelledAt(DateTimeUtil.now());
+        rollbackReservedCredit(order);
+        couponService.voidRedemption(order.getId());
+        paymentOrderRepository.save(order);
     }
 
     private void prepareOrderForCheckout(PaymentOrder draftOrder,

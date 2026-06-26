@@ -5,12 +5,15 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerAccountType;
+import com.fptu.exe.skillswap.modules.payment.domain.LedgerEntryType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementAccount;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntryType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
+import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerEntryRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementAccountRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementEntryRepository;
@@ -28,11 +31,16 @@ public class SettlementService {
 
     private static final int COMMISSION_BPS_DEFAULT = 1000;
     private static final UUID PLATFORM_OWNER_ID = new UUID(0L, 1L);
+    private static final int LATE_MENTEE_CANCEL_REFUND_BPS = 5000;
+    private static final int LATE_MENTEE_CANCEL_MENTOR_BPS = 3500;
+    private static final int LATE_MENTEE_CANCEL_PLATFORM_BPS = 1500;
 
     private final SettlementAccountRepository settlementAccountRepository;
     private final SettlementEntryRepository settlementEntryRepository;
+    private final CreditLedgerEntryRepository creditLedgerEntryRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
+    private final CreditLedgerService creditLedgerService;
 
     @Transactional
     public SettlementAccount ensureMentorAccount(UUID mentorUserId) {
@@ -126,6 +134,133 @@ public class SettlementService {
                 .mentorNetScoin(releasableScoin)
                 .memo("Platform commission for booking " + booking.getId())
                 .build());
+    }
+
+    @Transactional
+    public void handlePaidBookingCancelledByMentee(Booking booking, PaymentOrder paymentOrder, boolean lateCancellation) {
+        if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
+            return;
+        }
+        if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+
+        var creditAccount = creditLedgerService.ensureUserAccount(booking.getMentee().getId());
+        boolean refundAlreadyRecorded = creditLedgerEntryRepository
+                .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                        creditAccount.getId(),
+                        LedgerSourceType.BOOKING,
+                        booking.getId(),
+                        LedgerEntryType.REFUND
+                )
+                .isPresent();
+        if (refundAlreadyRecorded) {
+            return;
+        }
+
+        int grossScoin = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
+        if (grossScoin <= 0) {
+            return;
+        }
+
+        if (!lateCancellation) {
+            creditLedgerService.refundCredit(
+                    booking.getMentee().getId(),
+                    CreditOriginType.REFUND,
+                    LedgerSourceType.BOOKING,
+                    booking.getId(),
+                    grossScoin,
+                    "Full refund for early mentee cancellation of booking " + booking.getId()
+            );
+            return;
+        }
+
+        int mentorShare = (grossScoin * LATE_MENTEE_CANCEL_MENTOR_BPS) / 10_000;
+        int platformShare = (grossScoin * LATE_MENTEE_CANCEL_PLATFORM_BPS) / 10_000;
+        int refundShare = Math.max(0, grossScoin - mentorShare - platformShare);
+
+        if (refundShare > 0) {
+            creditLedgerService.refundCredit(
+                    booking.getMentee().getId(),
+                    CreditOriginType.REFUND,
+                    LedgerSourceType.BOOKING,
+                    booking.getId(),
+                    refundShare,
+                    "50% refund for late mentee cancellation of booking " + booking.getId()
+            );
+        }
+
+        SettlementAccount mentorAccount = ensureMentorAccount(paymentOrder.getMentorUserId());
+        SettlementAccount platformAccount = ensurePlatformAccount();
+
+        if (mentorShare > 0) {
+            settlementEntryRepository.save(SettlementEntry.builder()
+                    .accountId(mentorAccount.getId())
+                    .entryType(SettlementEntryType.RELEASE)
+                    .sourceType(LedgerSourceType.BOOKING)
+                    .sourceId(booking.getId())
+                    .amountScoin(mentorShare)
+                    .balanceEffectScoin(mentorShare)
+                    .grossScoin(grossScoin)
+                    .commissionRateBps(LATE_MENTEE_CANCEL_PLATFORM_BPS)
+                    .commissionScoin(platformShare)
+                    .mentorNetScoin(mentorShare)
+                    .memo("Late mentee cancellation compensation for booking " + booking.getId())
+                    .build());
+        }
+
+        if (platformShare > 0) {
+            settlementEntryRepository.save(SettlementEntry.builder()
+                    .accountId(platformAccount.getId())
+                    .entryType(SettlementEntryType.COMMISSION)
+                    .sourceType(LedgerSourceType.BOOKING)
+                    .sourceId(booking.getId())
+                    .amountScoin(platformShare)
+                    .balanceEffectScoin(platformShare)
+                    .grossScoin(grossScoin)
+                    .commissionRateBps(LATE_MENTEE_CANCEL_PLATFORM_BPS)
+                    .commissionScoin(platformShare)
+                    .mentorNetScoin(mentorShare)
+                    .memo("Platform commission from late mentee cancellation of booking " + booking.getId())
+                    .build());
+        }
+    }
+
+    @Transactional
+    public void handlePaidBookingCancelledByMentor(Booking booking, PaymentOrder paymentOrder) {
+        if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
+            return;
+        }
+        if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+
+        var creditAccount = creditLedgerService.ensureUserAccount(booking.getMentee().getId());
+        boolean refundAlreadyRecorded = creditLedgerEntryRepository
+                .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                        creditAccount.getId(),
+                        LedgerSourceType.BOOKING,
+                        booking.getId(),
+                        LedgerEntryType.REFUND
+                )
+                .isPresent();
+        if (refundAlreadyRecorded) {
+            return;
+        }
+
+        int grossScoin = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
+        if (grossScoin <= 0) {
+            return;
+        }
+
+        creditLedgerService.refundCredit(
+                booking.getMentee().getId(),
+                CreditOriginType.REFUND,
+                LedgerSourceType.BOOKING,
+                booking.getId(),
+                grossScoin,
+                "Full refund because mentor cancelled booking " + booking.getId()
+        );
     }
 
     @Transactional(readOnly = true)

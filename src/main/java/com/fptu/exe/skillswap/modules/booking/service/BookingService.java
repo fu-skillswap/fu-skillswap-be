@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class BookingService {
 
-    private static final long MENTEE_ACCEPTED_CANCEL_RELEASE_DEADLINE_MINUTES = 8 * 60;
+    private static final long MENTEE_FREE_CANCEL_DEADLINE_MINUTES = 6 * 60;
     private static final long MENTOR_SAFE_CANCEL_DEADLINE_MINUTES = 12 * 60;
     private static final long MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES = 6 * 60;
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
@@ -74,6 +74,7 @@ public class BookingService {
     private final com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
     private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
     private final com.fptu.exe.skillswap.modules.payment.service.SettlementService settlementService;
+    private final com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService paymentOrderService;
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
 
@@ -939,6 +940,7 @@ public class BookingService {
         Booking savedBooking = bookingRepository.save(booking);
 
         sessionService.cancelForBooking(bookingId);
+        paymentOrderService.handleMentorCancellation(savedBooking);
 
         notificationService.createNotification(
                 savedBooking.getMentee().getId(),
@@ -987,6 +989,8 @@ public class BookingService {
         long minutesUntilStart = currentStatus == BookingStatus.ACCEPTED
                 ? minutesUntilStart(booking, now)
                 : Long.MAX_VALUE;
+        boolean lateCancellation = currentStatus == BookingStatus.ACCEPTED
+                && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
 
         booking.setStatus(BookingStatus.CANCELLED_BY_MENTEE);
         booking.setCancelledAt(now);
@@ -1000,6 +1004,9 @@ public class BookingService {
         Booking savedBooking = bookingRepository.save(booking);
 
         sessionService.cancelForBooking(bookingId);
+        if (currentStatus == BookingStatus.ACCEPTED) {
+            paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
+        }
 
         notificationService.createNotification(
                 savedBooking.getMentorProfile().getUserId(),
