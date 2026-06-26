@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -64,6 +65,7 @@ class BookingRescheduleServiceTest {
     private Booking booking;
     private MentorAvailabilitySlot currentSlot;
     private MentorAvailabilitySlot proposedSlot;
+    private LocalDateTime now;
 
     @BeforeEach
     void setUp() {
@@ -79,6 +81,7 @@ class BookingRescheduleServiceTest {
 
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
+        now = DateTimeUtil.now();
 
         User mentee = new User();
         mentee.setId(menteeId);
@@ -95,15 +98,15 @@ class BookingRescheduleServiceTest {
         currentSlot = new MentorAvailabilitySlot();
         currentSlot.setId(UUID.randomUUID());
         currentSlot.setMentorProfile(mentorProfile);
-        currentSlot.setStartTime(LocalDateTime.now().plusHours(12));
-        currentSlot.setEndTime(LocalDateTime.now().plusHours(13));
+        currentSlot.setStartTime(now.plusHours(12));
+        currentSlot.setEndTime(now.plusHours(13));
         currentSlot.setActive(true);
 
         proposedSlot = new MentorAvailabilitySlot();
         proposedSlot.setId(UUID.randomUUID());
         proposedSlot.setMentorProfile(mentorProfile);
-        proposedSlot.setStartTime(LocalDateTime.now().plusHours(15));
-        proposedSlot.setEndTime(LocalDateTime.now().plusHours(16));
+        proposedSlot.setStartTime(now.plusHours(15));
+        proposedSlot.setEndTime(now.plusHours(16));
         proposedSlot.setActive(true);
 
         booking = Booking.builder()
@@ -121,8 +124,8 @@ class BookingRescheduleServiceTest {
 
     @Test
     void createByMentee_afterSixHoursWindow_shouldThrowConflict() {
-        booking.setSelectedStartTime(LocalDateTime.now().plusHours(5));
-        booking.setSelectedEndTime(LocalDateTime.now().plusHours(6));
+        booking.setSelectedStartTime(now.plusHours(5));
+        booking.setSelectedEndTime(now.plusHours(6));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException ex = assertThrows(BaseException.class, () -> bookingRescheduleService.createByMentee(
@@ -154,7 +157,7 @@ class BookingRescheduleServiceTest {
                 .previousSelectedEndTime(currentSlot.getEndTime())
                 .proposedSelectedStartTime(proposedSlot.getStartTime())
                 .proposedSelectedEndTime(proposedSlot.getEndTime())
-                .requestedAt(LocalDateTime.now())
+                .requestedAt(now)
                 .build();
 
         when(bookingRescheduleRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
@@ -194,7 +197,7 @@ class BookingRescheduleServiceTest {
                 .previousSelectedEndTime(currentSlot.getEndTime())
                 .proposedSelectedStartTime(proposedSlot.getStartTime())
                 .proposedSelectedEndTime(proposedSlot.getEndTime())
-                .requestedAt(LocalDateTime.now())
+                .requestedAt(now)
                 .build();
 
         when(bookingRescheduleRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
@@ -216,8 +219,8 @@ class BookingRescheduleServiceTest {
 
     @Test
     void expirePendingRequests_shouldExpireAtTwoHoursBeforeStart() {
-        booking.setSelectedStartTime(LocalDateTime.now().plusMinutes(100));
-        booking.setSelectedEndTime(LocalDateTime.now().plusMinutes(160));
+        booking.setSelectedStartTime(now.plusMinutes(100));
+        booking.setSelectedEndTime(now.plusMinutes(160));
 
         BookingRescheduleRequest request = BookingRescheduleRequest.builder()
                 .id(UUID.randomUUID())
@@ -232,7 +235,7 @@ class BookingRescheduleServiceTest {
                 .previousSelectedEndTime(currentSlot.getEndTime())
                 .proposedSelectedStartTime(proposedSlot.getStartTime())
                 .proposedSelectedEndTime(proposedSlot.getEndTime())
-                .requestedAt(LocalDateTime.now())
+                .requestedAt(now)
                 .build();
 
         when(bookingRescheduleRequestRepository.findExpirablePendingRequests(eq(BookingRescheduleStatus.PENDING), any()))
@@ -247,8 +250,8 @@ class BookingRescheduleServiceTest {
 
     @Test
     void expirePendingRequests_shouldNotExpireBeforeTwoHourThreshold() {
-        booking.setSelectedStartTime(LocalDateTime.now().plusHours(3));
-        booking.setSelectedEndTime(LocalDateTime.now().plusHours(4));
+        booking.setSelectedStartTime(now.plusHours(3));
+        booking.setSelectedEndTime(now.plusHours(4));
 
         BookingRescheduleRequest request = BookingRescheduleRequest.builder()
                 .id(UUID.randomUUID())
@@ -263,7 +266,7 @@ class BookingRescheduleServiceTest {
                 .previousSelectedEndTime(currentSlot.getEndTime())
                 .proposedSelectedStartTime(proposedSlot.getStartTime())
                 .proposedSelectedEndTime(proposedSlot.getEndTime())
-                .requestedAt(LocalDateTime.now())
+                .requestedAt(now)
                 .build();
 
         when(bookingRescheduleRequestRepository.findExpirablePendingRequests(eq(BookingRescheduleStatus.PENDING), any()))
