@@ -709,7 +709,43 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
   - `createdAt` `LocalDateTime`
 - Lưu ý cho FE: Kênh WebSocket chỉ nhận tin (Push-only), không gửi tin ngược lên. FE cần so khớp `senderId` với current user ID để phân biệt vị trí hiển thị bong bóng chat.
 
-## 14. System Admin
+## 14. Wallet
+
+### GET `/api/me/credit-wallet`
+- Auth: `bearerAuth`, role `MENTEE`
+- Mục đích: xem số dư Scoin khả dụng của mentee / user hiện tại và 15 giao dịch gần nhất.
+- Response:
+  - `CreditWalletResponse`
+    - `availableScoin` `integer`: số Scoin khả dụng hiện tại.
+    - `recentTransactions` `List<WalletTransactionResponse>`: tối đa 15 giao dịch gần nhất, sắp xếp mới nhất trước.
+      - `id` `UUID`
+      - `entryType` `LedgerEntryType`
+      - `originType` `CreditOriginType` nullable
+      - `sourceType` `LedgerSourceType`
+      - `sourceId` `UUID` nullable
+      - `amountScoin` `integer`
+      - `balanceEffectScoin` `integer`
+      - `memo` `string` nullable
+      - `createdAt` `LocalDateTime`
+
+### GET `/api/me/mentor-wallet`
+- Auth: `bearerAuth`, role `MENTOR`
+- Mục đích: xem settlement earnings khả dụng của mentor hiện tại và 15 giao dịch gần nhất.
+- Response:
+  - `MentorWalletResponse`
+    - `availableScoin` `integer`: số settlement earnings khả dụng hiện tại.
+    - `recentTransactions` `List<WalletTransactionResponse>`: tối đa 15 giao dịch gần nhất, sắp xếp mới nhất trước.
+      - `id` `UUID`
+      - `entryType` `LedgerEntryType`
+      - `originType` `CreditOriginType` nullable
+      - `sourceType` `LedgerSourceType`
+      - `sourceId` `UUID` nullable
+      - `amountScoin` `integer`
+      - `balanceEffectScoin` `integer`
+      - `memo` `string` nullable
+      - `createdAt` `LocalDateTime`
+
+## 15. System Admin
 
 ### POST `/api/system/users/admin-role/grant`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
@@ -751,7 +787,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Response:
   - `PageResponse<SystemUserResponse>`
  
-## 15. Admin User Management
+## 16. Admin User Management
 
 ### GET `/api/admin/users`
 - Auth: `bearerAuth`, role `ADMIN`
@@ -795,7 +831,7 @@ Tài liệu này mô tả toàn bộ API hiện có trong backend SkillSwap tạ
 - Response:
   - `SystemUserResponse`
  
-## 16. Ghi chú cho FE
+## 17. Ghi chú cho FE
  
 - `GET /api/auth/me` nên gọi ngay sau login để xác định:
   - user đã login thành công chưa,

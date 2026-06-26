@@ -30,4 +30,6 @@ public interface SettlementEntryRepository extends JpaRepository<SettlementEntry
             UUID sourceId,
             SettlementEntryType entryType
     );
+
+    List<SettlementEntry> findTop15ByAccountIdOrderByCreatedAtDesc(UUID accountId);
 }

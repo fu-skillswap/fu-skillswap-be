@@ -68,6 +68,12 @@ public class CreditLedgerService {
         return balances;
     }
 
+    @Transactional(readOnly = true)
+    public List<CreditLedgerEntry> getRecentTransactions(UUID userId) {
+        CreditLedgerAccount account = ensureUserAccount(userId);
+        return entryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
+    }
+
     @Transactional
     public List<CreditLedgerEntry> reserveCredit(UUID userId,
                                                  int amountScoin,

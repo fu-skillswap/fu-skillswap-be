@@ -39,4 +39,6 @@ public interface CreditLedgerEntryRepository extends JpaRepository<CreditLedgerE
             UUID sourceId,
             LedgerEntryType entryType
     );
+
+    List<CreditLedgerEntry> findTop15ByAccountIdOrderByCreatedAtDesc(UUID accountId);
 }

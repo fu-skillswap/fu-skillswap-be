@@ -134,6 +134,12 @@ public class SettlementService {
         return settlementEntryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<SettlementEntry> getRecentTransactions(UUID mentorUserId) {
+        SettlementAccount account = ensureMentorAccount(mentorUserId);
+        return settlementEntryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
+    }
+
     @Transactional
     public SettlementEntry holdPayout(UUID mentorUserId, UUID payoutRequestId, int amountScoin, String memo) {
         if (amountScoin <= 0) {
