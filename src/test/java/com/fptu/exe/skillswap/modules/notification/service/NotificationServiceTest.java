@@ -37,6 +37,9 @@ class NotificationServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private NotificationService notificationService;
 
@@ -53,6 +56,7 @@ class NotificationServiceTest {
     @Test
     void createNotification_shouldPersistUnreadNotification() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(mockUser));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         notificationService.createNotification(userId, NotificationType.BOOKING_ACCEPTED, "Title", "Message", "BOOKING", UUID.randomUUID());
 
@@ -63,6 +67,7 @@ class NotificationServiceTest {
         assertEquals(userId, saved.getRecipientUser().getId());
         assertEquals("Title", saved.getTitle());
         assertNull(saved.getReadAt());
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent.class));
     }
 
     @Test

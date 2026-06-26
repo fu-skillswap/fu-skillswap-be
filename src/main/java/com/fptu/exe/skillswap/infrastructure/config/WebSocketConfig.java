@@ -1,25 +1,40 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
+import com.fptu.exe.skillswap.infrastructure.websocket.RealtimeWebSocketHandler;
+import com.fptu.exe.skillswap.infrastructure.websocket.WebSocketAuthHandshakeInterceptor;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
-import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
-import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.core.env.Environment;
+import org.springframework.web.socket.config.annotation.EnableWebSocket;
+import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Configuration
-@EnableWebSocketMessageBroker
-public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
 
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/queue");
-        config.setApplicationDestinationPrefixes("/app");
+    private final List<String> allowedOriginPatterns;
+    private final RealtimeWebSocketHandler realtimeWebSocketHandler;
+    private final WebSocketAuthHandshakeInterceptor webSocketAuthHandshakeInterceptor;
+
+    public WebSocketConfig(Environment environment,
+                           RealtimeWebSocketHandler realtimeWebSocketHandler,
+                           WebSocketAuthHandshakeInterceptor webSocketAuthHandshakeInterceptor) {
+        String patterns = environment.getProperty("application.cors.allowed-origin-patterns", "");
+        this.allowedOriginPatterns = Arrays.stream(patterns.split(","))
+                .map(String::trim)
+                .filter(pattern -> !pattern.isEmpty())
+                .toList();
+        this.realtimeWebSocketHandler = realtimeWebSocketHandler;
+        this.webSocketAuthHandshakeInterceptor = webSocketAuthHandshakeInterceptor;
     }
 
     @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
-                .withSockJS();
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(realtimeWebSocketHandler, "/ws")
+                .addInterceptors(webSocketAuthHandshakeInterceptor)
+                .setAllowedOriginPatterns(allowedOriginPatterns.toArray(String[]::new));
     }
 }

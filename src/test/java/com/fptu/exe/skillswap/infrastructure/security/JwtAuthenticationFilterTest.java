@@ -68,7 +68,7 @@ class JwtAuthenticationFilterTest {
         when(userBanStatusPort.isBanned(userId)).thenReturn(false);
 
         MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setServletPath("/ws/info");
+        request.setServletPath("/ws");
         request.setParameter("token", "socket-jwt");
 
         jwtAuthenticationFilter.doFilter(

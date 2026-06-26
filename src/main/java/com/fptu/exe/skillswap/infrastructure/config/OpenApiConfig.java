@@ -37,32 +37,29 @@ public class OpenApiConfig {
                             ## SkillSwap API Documentation - EXE201
                             
                             SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
-                            Backend cung cấp REST API cho xác thực Google, hồ sơ học thuật, hồ sơ mentor,
-                            danh mục kỹ năng và các luồng mentoring sẽ được phát triển tiếp theo.
+                            Backend hiện cung cấp REST API cho xác thực, hồ sơ, mentor service, availability,
+                            booking, notification và chat; realtime dùng raw WebSocket theo scope nhỏ.
                             
-                            ### Cách FE đăng nhập với Google
-                            1. FE tích hợp Google Identity Services hoặc thư viện Google Login tương đương.
-                            2. Sau khi người dùng đăng nhập Google thành công, FE lấy `idToken` từ Google.
-                            3. FE gửi `idToken` vào `POST /api/auth/google`.
-                            4. Backend xác thực `idToken` với Google, tự tạo hoặc liên kết tài khoản người dùng.
-                            5. Backend trả về `accessToken` và `refreshToken`.
-                            6. FE dùng `accessToken` cho các API cần xác thực bằng header:
-                               `Authorization: Bearer {accessToken}`.
-                            7. Khi `accessToken` hết hạn, FE gọi `POST /api/auth/refresh` bằng `refreshToken`.
-                            8. Khi đăng xuất, FE gọi `POST /api/auth/logout` để thu hồi `refreshToken`.
+                            ### Realtime guide cho Frontend
+                            - Dùng **REST API** để:
+                              - gửi chat message
+                              - load conversation list
+                              - load message history
+                              - load notification list và unread count
+                            - Dùng **raw WebSocket** chỉ để nhận realtime push event.
+                            - FE connect websocket bằng:
+                              - `wss://api.skillswap.asia/ws?token=<accessToken>`
+                            - Chỉ dùng **access token**. Không dùng refresh token trong websocket URL.
+                            - Sau khi reconnect, FE nên resync dữ liệu cần thiết qua REST.
+                            - Scope websocket hiện tại được giữ nhỏ, chỉ gồm:
+                              - push chat message mới
+                              - push notification mới / cập nhật unread count nếu backend emit
                             
-                            ### Cách test API xác thực trên Swagger UI
-                            1. Gọi `POST /api/auth/google` với Google `idToken` hợp lệ.
-                            2. Copy giá trị `accessToken` trong response.
-                            3. Bấm nút **Authorize** ở góc trên bên phải Swagger UI.
-                            4. Dán `accessToken` vào ô `bearerAuth` (không cần nhập tiền tố `Bearer `).
-                            5. Bấm **Authorize**, sau đó có thể gọi các API như `GET /api/auth/me`
-                               hoặc `GET /api/me/student-profile`.
-                            
-                            ### Luồng đăng nhập lần đầu
-                            Sau khi nhận token, FE gọi `GET /api/auth/me` và kiểm tra `profileCompleted`:
-                            - `false` → Chuyển hướng đến trang **điền hồ sơ học thuật** (`PUT /api/me/student-profile`)
-                            - `true` → Vào **dashboard** bình thường
+                            ### Cách dùng token trên Swagger UI
+                            1. Lấy `accessToken` hợp lệ từ flow login hiện tại.
+                            2. Bấm **Authorize** ở góc trên bên phải Swagger UI.
+                            3. Dán `accessToken` vào ô `bearerAuth` (không cần nhập tiền tố `Bearer `).
+                            4. Bấm **Authorize** để gọi các API cần xác thực.
                             """)
                         .version("v1.0.0")
                         .contact(new Contact()

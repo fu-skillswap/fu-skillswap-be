@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
+import com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -26,6 +27,7 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void createNotification(UUID recipientUserId, NotificationType type, String title, String message, String relatedEntityType, UUID relatedEntityId) {
@@ -41,7 +43,8 @@ public class NotificationService {
                 .relatedEntityId(relatedEntityId)
                 .build();
 
-        notificationRepository.save(notification);
+        notification = notificationRepository.save(notification);
+        eventPublisher.publishEvent(new NotificationCreatedEvent(recipientUserId, mapToResponse(notification)));
     }
 
     @Transactional(readOnly = true)

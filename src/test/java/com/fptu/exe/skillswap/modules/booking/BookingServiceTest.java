@@ -19,6 +19,8 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.booking.service.BookingSlotValidator;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -39,7 +41,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -104,7 +105,10 @@ class BookingServiceTest {
     @Mock
     private SettlementService settlementService;
 
-    @InjectMocks
+    private BookingSlotValidator bookingSlotValidator;
+
+    private BookingEligibilityPolicy bookingEligibilityPolicy;
+
     private BookingService bookingService;
 
     private UUID menteeId;
@@ -117,6 +121,24 @@ class BookingServiceTest {
 
     @BeforeEach
     void setUp() {
+        bookingSlotValidator = new BookingSlotValidator(availabilitySlotServiceRepository, bookingRepository);
+        bookingEligibilityPolicy = new BookingEligibilityPolicy(academicService);
+        bookingService = new BookingService(
+                bookingRepository,
+                mentorAvailabilitySlotRepository,
+                mentorServiceRepository,
+                userRepository,
+                notificationService,
+                eventPublisher,
+                mentorProfileRepository,
+                entityManager,
+                sessionService,
+                conversationService,
+                settlementService,
+                bookingSlotValidator,
+                bookingEligibilityPolicy
+        );
+
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
         serviceId = UUID.randomUUID();

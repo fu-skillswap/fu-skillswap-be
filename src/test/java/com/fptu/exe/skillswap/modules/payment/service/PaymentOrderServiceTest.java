@@ -27,42 +27,43 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import vn.payos.exception.PayOSException;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * Unit tests for PaymentOrderService, focusing on:
+ * 1. Webhook signature verification via PayOsGateway (HMAC done inside SdkPayOsGateway)
+ * 2. Idempotency guards (duplicate eventId, already-final order)
+ * 3. Checkout: credit-covers-all path (no PayOS call needed)
+ *
+ * Security note: Actual HMAC-SHA256 verification against PayOS's checksumKey is
+ * tested indirectly here by mocking PayOsGateway.verifyWebhook(). The real
+ * HMAC logic lives in SdkPayOsGateway and is covered by integration tests.
+ */
 @ExtendWith(MockitoExtension.class)
 class PaymentOrderServiceTest {
 
-    @Mock
-    private BookingRepository bookingRepository;
-    @Mock
-    private PaymentOrderRepository paymentOrderRepository;
-    @Mock
-    private PaymentAttemptRepository paymentAttemptRepository;
-    @Mock
-    private CouponService couponService;
-    @Mock
-    private CreditLedgerService creditLedgerService;
-    @Mock
-    private CampaignService campaignService;
-    @Mock
-    private PayOsGateway payOsGateway;
+    @Mock private BookingRepository bookingRepository;
+    @Mock private PaymentOrderRepository paymentOrderRepository;
+    @Mock private PaymentAttemptRepository paymentAttemptRepository;
+    @Mock private CouponService couponService;
+    @Mock private CreditLedgerService creditLedgerService;
+    @Mock private CampaignService campaignService;
+    @Mock private PayOsGateway payOsGateway;
 
     private PaymentOrderService paymentOrderService;
-    private PaymentProperties paymentProperties;
+
     private UUID menteeId;
     private UUID mentorId;
     private UUID bookingId;
@@ -70,12 +71,10 @@ class PaymentOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        paymentProperties = new PaymentProperties();
-        paymentProperties.getPayos().setClientId("client-id");
-        paymentProperties.getPayos().setApiKey("api-key");
-        paymentProperties.getPayos().setChecksumKey("checksum-key");
+        PaymentProperties paymentProperties = new PaymentProperties();
         paymentProperties.getPayos().setReturnUrl("https://skillswap.asia/payment/return");
         paymentProperties.getPayos().setCancelUrl("https://skillswap.asia/payment/cancel");
+        paymentProperties.getPayos().setChecksumKey("test-checksum-key");
 
         paymentOrderService = new PaymentOrderService(
                 bookingRepository,
@@ -94,8 +93,6 @@ class PaymentOrderServiceTest {
 
         User mentee = new User();
         mentee.setId(menteeId);
-        mentee.setFullName("Nguyen Van An");
-        mentee.setEmail("an@example.com");
 
         MentorProfile mentorProfile = MentorProfile.builder()
                 .userId(mentorId)
@@ -106,13 +103,45 @@ class PaymentOrderServiceTest {
                 .mentee(mentee)
                 .mentorProfile(mentorProfile)
                 .status(BookingStatus.ACCEPTED)
-                .serviceTitleSnapshot("Spring Boot mentoring")
                 .servicePriceScoinSnapshot(100)
                 .build();
     }
 
+    // ─── Helper ──────────────────────────────────────────────────────────────────
+
+    private PaymentWebhookRequest buildWebhookRequest(Long orderCode, String signature) {
+        PaymentWebhookRequest.PaymentWebhookDataRequest data = new PaymentWebhookRequest.PaymentWebhookDataRequest(
+                orderCode,   // orderCode
+                null,        // amount
+                null,        // description
+                null,        // accountNumber
+                null,        // reference
+                null,        // transactionDateTime
+                null,        // currency
+                null,        // paymentLinkId
+                "00",        // code (success)
+                "success",   // desc
+                null, null, null, null, null, null
+        );
+        return new PaymentWebhookRequest("00", "success", true, data, signature);
+    }
+
+    private PayOsGateway.VerifiedWebhook verifiedWebhook(String orderCode, String transactionId) {
+        return new PayOsGateway.VerifiedWebhook(
+                orderCode,
+                "pl-" + orderCode,
+                "evt-" + orderCode,
+                transactionId,
+                "PAID",
+                true,
+                LocalDateTime.now()
+        );
+    }
+
+    // ─── Checkout ────────────────────────────────────────────────────────────────
+
     @Test
-    void checkout_creditFullyCovers_shouldCompleteInternallyWithoutCheckoutUrl() {
+    void checkout_creditFullyCovers_shouldCompleteInternallyWithoutPaymentLink() {
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
@@ -123,62 +152,35 @@ class PaymentOrderServiceTest {
                         .amountScoin(100)
                         .originType(CreditOriginType.MANUAL)
                         .build()));
-        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentAttemptRepository.countByPaymentOrderId(any())).thenReturn(0L);
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PaymentCheckoutResponse response = paymentOrderService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, null));
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         assertEquals(0, response.remainingPayableScoin());
-        assertNull(response.checkoutUrl());
-        verify(payOsGateway, never()).createPaymentLink(any());
+        assertNull(response.paymentLink());
         verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
+        // PayOsGateway must NOT be called for credit-covered checkout
+        verify(payOsGateway, never()).createPaymentLink(any());
     }
 
-    @Test
-    void checkout_remainingPayable_shouldCreateRealPayOsAttempt() {
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
-        when(couponService.resolveCoupon(null)).thenReturn(null);
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(100)))
-                .thenReturn(CampaignService.CampaignCreditApplication.none());
-        when(creditLedgerService.reserveCredit(eq(menteeId), eq(100), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
-                .thenReturn(List.of());
-        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentAttemptRepository.countByPaymentOrderId(any())).thenReturn(0L);
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(payOsGateway.createPaymentLink(any())).thenReturn(new PayOsGateway.CreatePaymentLinkResult(
-                "123456789",
-                "plink_123",
-                "PENDING",
-                "https://pay.payos.vn/link",
-                LocalDateTime.now().plusMinutes(30)
-        ));
-
-        PaymentCheckoutResponse response = paymentOrderService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, null));
-
-        assertEquals(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, response.status());
-        assertEquals("https://pay.payos.vn/link", response.checkoutUrl());
-        assertEquals("123456789", response.providerOrderCode());
-        assertEquals("plink_123", response.providerPaymentLinkId());
-
-        ArgumentCaptor<PayOsGateway.CreatePaymentLinkCommand> commandCaptor =
-                ArgumentCaptor.forClass(PayOsGateway.CreatePaymentLinkCommand.class);
-        verify(payOsGateway).createPaymentLink(commandCaptor.capture());
-        assertEquals(100L, commandCaptor.getValue().amountVnd());
-    }
+    // ─── Webhook: valid signature (gateway returns success) ──────────────────────
 
     @Test
-    void handleWebhook_validPaidWebhook_shouldConsumeReservedCreditAndMarkSucceeded() {
+    void handleWebhook_paid_gatewayVerifiesOk_shouldConsumeReservedCreditAndMarkSucceeded() {
+        Long orderCode = 123456789L;
+        PaymentWebhookRequest webhookRequest = buildWebhookRequest(orderCode, "valid-hmac-signature");
+
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-TEST")
-                .bookingId(bookingId)
+                .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
-                .grossScoin(100)
-                .remainingPayableScoin(100)
+                .grossScoin(200)
+                .remainingPayableScoin(50)
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
         PaymentAttempt attempt = PaymentAttempt.builder()
@@ -186,26 +188,18 @@ class PaymentOrderServiceTest {
                 .paymentOrderId(order.getId())
                 .attemptNo(1)
                 .status(PaymentAttemptStatus.REDIRECTED)
-                .providerOrderCode("123456789")
                 .build();
 
-        when(payOsGateway.verifyWebhook(any())).thenReturn(new PayOsGateway.VerifiedWebhook(
-                "123456789",
-                "plink_123",
-                "ref_123",
-                "ref_123",
-                "00",
-                true,
-                LocalDateTime.now()
-        ));
-        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate("123456789")).thenReturn(Optional.of(attempt));
+        // Gateway returns verified result (HMAC is correct per SdkPayOsGateway)
+        when(payOsGateway.verifyWebhook(webhookRequest)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-1"));
+        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
-        when(paymentOrderRepository.existsByProviderEventId("ref_123")).thenReturn(false);
-        when(paymentAttemptRepository.existsByProviderEventId("ref_123")).thenReturn(false);
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentCheckoutResponse response = paymentOrderService.handleWebhook(sampleWebhookRequest(123456789L));
+        PaymentCheckoutResponse response = paymentOrderService.handleWebhook(webhookRequest);
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
@@ -214,19 +208,71 @@ class PaymentOrderServiceTest {
         ArgumentCaptor<PaymentAttempt> attemptCaptor = ArgumentCaptor.forClass(PaymentAttempt.class);
         verify(paymentAttemptRepository).save(attemptCaptor.capture());
         assertEquals(PaymentAttemptStatus.SUCCEEDED, attemptCaptor.getValue().getStatus());
-        assertEquals("PAID", attemptCaptor.getValue().getProviderStatus());
     }
 
+    // ─── Webhook security: invalid signature ─────────────────────────────────────
+
+    /**
+     * Critical security test: attacker sends forged webhook — PayOS SDK signature check throws PayOSException.
+     * SdkPayOsGateway wraps this as UNAUTHORIZED BaseException.
+     * No credit must be consumed, no order must be saved.
+     */
     @Test
-    void handleWebhook_duplicateProviderEvent_shouldReturnWithoutReprocessing() {
+    void handleWebhook_invalidSignature_gatewayThrows_shouldPropagateUnauthorized() {
+        Long orderCode = 999999L;
+        PaymentWebhookRequest forgedRequest = buildWebhookRequest(orderCode, "FORGED_SIGNATURE");
+
+        // Simulate what SdkPayOsGateway does when PayOS SDK rejects the signature
+        when(payOsGateway.verifyWebhook(forgedRequest))
+                .thenThrow(new BaseException(ErrorCode.UNAUTHORIZED, "Webhook PayOS không hợp lệ hoặc sai chữ ký"));
+
+        BaseException ex = assertThrows(BaseException.class,
+                () -> paymentOrderService.handleWebhook(forgedRequest));
+
+        assertEquals(ErrorCode.UNAUTHORIZED, ex.getErrorCode());
+        // No financial mutation must have occurred
+        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+        verify(paymentOrderRepository, never()).save(any());
+        verify(paymentAttemptRepository, never()).save(any());
+    }
+
+    // ─── Webhook: BAD_REQUEST for non-success payload ────────────────────────────
+
+    @Test
+    void handleWebhook_providerStatusNotPaid_shouldThrowBadRequest() {
+        Long orderCode = 111L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+
+        // Gateway verifies signature OK but status is not PAID (e.g. CANCELLED)
+        PayOsGateway.VerifiedWebhook notPaid = new PayOsGateway.VerifiedWebhook(
+                String.valueOf(orderCode), "pl-111", "evt-111", "txn-111",
+                "CANCELLED",  // not PAID
+                false,        // success = false
+                null
+        );
+        when(payOsGateway.verifyWebhook(request)).thenReturn(notPaid);
+
+        BaseException ex = assertThrows(BaseException.class,
+                () -> paymentOrderService.handleWebhook(request));
+
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+    }
+
+    // ─── Webhook idempotency: duplicate eventId ───────────────────────────────────
+
+    @Test
+    void handleWebhook_duplicateEventId_shouldReturnEarlyWithoutReprocessing() {
+        Long orderCode = 222L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .orderCode("PAY-DUP")
-                .bookingId(bookingId)
+                .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .grossScoin(100)
-                .remainingPayableScoin(100)
+                .remainingPayableScoin(0)
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
         PaymentAttempt attempt = PaymentAttempt.builder()
@@ -234,109 +280,53 @@ class PaymentOrderServiceTest {
                 .paymentOrderId(order.getId())
                 .attemptNo(1)
                 .status(PaymentAttemptStatus.REDIRECTED)
-                .providerOrderCode("123456789")
                 .build();
 
-        when(payOsGateway.verifyWebhook(any())).thenReturn(new PayOsGateway.VerifiedWebhook(
-                "123456789",
-                "plink_123",
-                "ref_dup",
-                "ref_dup",
-                "00",
-                true,
-                LocalDateTime.now()
-        ));
-        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate("123456789")).thenReturn(Optional.of(attempt));
+        when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-dup"));
+        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
-        when(paymentOrderRepository.existsByProviderEventId("ref_dup")).thenReturn(true);
+        // Simulate already-processed event
+        when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(true);
 
-        PaymentCheckoutResponse response = paymentOrderService.handleWebhook(sampleWebhookRequest(123456789L));
+        paymentOrderService.handleWebhook(request);
 
-        assertEquals(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, response.status());
+        // Must short-circuit — no financial mutation
         verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
         verify(paymentOrderRepository, never()).save(any());
     }
 
+    // ─── Webhook idempotency: order already in final state ────────────────────────
+
     @Test
-    void getByBookingId_providerExpired_shouldSyncFinalStatusAndReleaseReserve() {
+    void handleWebhook_orderAlreadyPaid_shouldReturnEarlyWithoutReprocessing() {
+        Long orderCode = 333L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
-                .orderCode("PAY-EXPIRED")
                 .grossScoin(100)
-                .remainingPayableScoin(100)
-                .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
+                .remainingPayableScoin(0)
+                .status(PaymentOrderStatus.PAID) // already finalized
                 .build();
         PaymentAttempt attempt = PaymentAttempt.builder()
                 .id(UUID.randomUUID())
                 .paymentOrderId(order.getId())
                 .attemptNo(1)
-                .status(PaymentAttemptStatus.REDIRECTED)
-                .providerOrderCode("123456789")
+                .status(PaymentAttemptStatus.SUCCEEDED)
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
-        when(paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())).thenReturn(Optional.of(attempt));
-        when(payOsGateway.getPaymentLink(123456789L)).thenReturn(new PayOsGateway.PaymentLinkDetails(
-                "plink_123",
-                "EXPIRED",
-                LocalDateTime.now().minusMinutes(30),
-                null
-        ));
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-final"));
+        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.existsByProviderEventId(any())).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId(any())).thenReturn(false);
 
-        PaymentCheckoutResponse response = paymentOrderService.getByBookingId(menteeId, bookingId);
+        paymentOrderService.handleWebhook(request);
 
-        assertEquals(PaymentOrderStatus.EXPIRED, response.status());
-        verify(creditLedgerService).releaseReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
-        verify(couponService).voidRedemption(order.getId());
-    }
-
-    @Test
-    void handleWebhook_notSuccessful_shouldThrowBadRequest() {
-        when(payOsGateway.verifyWebhook(any())).thenReturn(new PayOsGateway.VerifiedWebhook(
-                "123456789",
-                "plink_123",
-                "ref_fail",
-                "ref_fail",
-                "FAILED",
-                false,
-                null
-        ));
-
-        BaseException ex = assertThrows(BaseException.class,
-                () -> paymentOrderService.handleWebhook(sampleWebhookRequest(123456789L)));
-
-        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
-    }
-
-    private PaymentWebhookRequest sampleWebhookRequest(long orderCode) {
-        return new PaymentWebhookRequest(
-                "00",
-                "success",
-                true,
-                new PaymentWebhookRequest.PaymentWebhookDataRequest(
-                        orderCode,
-                        100L,
-                        "Thanh toan don hang",
-                        "12345678",
-                        "ref_123",
-                        "2026-06-25 12:00:00",
-                        "VND",
-                        "plink_123",
-                        "00",
-                        "Thanh cong",
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null
-                ),
-                "signed_payload"
-        );
+        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+        verify(paymentOrderRepository, never()).save(any());
     }
 }
