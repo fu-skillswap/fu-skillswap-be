@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.controller;
 
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequestResponse;
@@ -68,6 +69,19 @@ public class AdminBookingController {
     @GetMapping("/{bookingId}")
     public ApiResponse<BookingResponse> getBookingDetail(@PathVariable UUID bookingId) {
         return ApiResponse.success(bookingService.getAdminBookingDetail(bookingId));
+    }
+
+    @Operation(
+            summary = "Resolve booking issue",
+            description = "Admin đóng một booking đang UNDER_REVIEW sau khi xử lý dispute/manual support. Action chỉ finalize lại booking, không đổi service hay payment gốc."
+    )
+    @PostMapping("/{bookingId}/resolve-issue")
+    public ApiResponse<BookingResponse> resolveIssue(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody AdminResolveBookingIssueRequest request
+    ) {
+        return ApiResponse.success(bookingService.resolveBookingIssue(principal.getPublicId(), bookingId, request));
     }
 
     @GetMapping("/{bookingId}/reschedule-requests")

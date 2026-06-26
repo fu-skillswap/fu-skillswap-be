@@ -15,6 +15,7 @@ public enum ErrorCode {
     RESOURCE_CONFLICT(409, "SYS_0007", "error.sys.conflict", "Dữ liệu xung đột với trạng thái hiện tại"),
     PAYLOAD_TOO_LARGE(413, "SYS_0008", "error.sys.payload_too_large", "Dữ liệu tải lên vượt quá giới hạn cho phép"),
     UNSUPPORTED_MEDIA_TYPE(415, "SYS_0009", "error.sys.unsupported_media_type", "Kiểu dữ liệu gửi lên không được hỗ trợ"),
+    TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Bạn đang thao tác quá nhanh, vui lòng thử lại sau"),
 
     // Auth
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),

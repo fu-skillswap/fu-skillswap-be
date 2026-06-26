@@ -143,6 +143,15 @@ public class Booking {
     @Column(name = "wants_admin_review")
     private Boolean wantsAdminReview;
 
+    @Column(name = "issue_resolved_at")
+    private LocalDateTime issueResolvedAt;
+
+    @Column(name = "issue_resolved_by_user_id")
+    private UUID issueResolvedByUserId;
+
+    @Column(name = "issue_resolution_note", columnDefinition = "TEXT")
+    private String issueResolutionNote;
+
     @Deprecated
     @Enumerated(EnumType.STRING)
     @Column(name = "meeting_platform")

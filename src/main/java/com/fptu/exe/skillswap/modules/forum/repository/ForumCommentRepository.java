@@ -1,0 +1,50 @@
+package com.fptu.exe.skillswap.modules.forum.repository;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
+import java.util.Optional;
+import java.util.UUID;
+
+@Repository
+public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID> {
+
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.helpTopic"})
+    Page<ForumComment> findByPostIdAndStatus(UUID postId, ForumCommentStatus status, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.helpTopic"})
+    @Query("""
+            select c
+            from ForumComment c
+            join c.authorUser u
+            where (:status is null or c.status = :status)
+              and (:postId is null or c.post.id = :postId)
+              and (:authorId is null or u.id = :authorId)
+              and (
+                    :keywordPattern is null
+                    or lower(c.content) like :keywordPattern
+                    or lower(u.fullName) like :keywordPattern
+              )
+            """)
+    Page<ForumComment> searchAdminComments(@Param("status") ForumCommentStatus status,
+                                           @Param("postId") UUID postId,
+                                           @Param("authorId") UUID authorId,
+                                           @Param("keywordPattern") String keywordPattern,
+                                           Pageable pageable);
+
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
+    Optional<ForumComment> findById(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from ForumComment c where c.id = :id")
+    Optional<ForumComment> findByIdForUpdate(@Param("id") UUID id);
+}

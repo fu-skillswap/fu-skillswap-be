@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
@@ -591,6 +592,46 @@ public class BookingService {
                 .build();
     }
 
+    @Transactional
+    public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, AdminResolveBookingIssueRequest request) {
+        if (adminUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu resolve booking issue");
+        }
+
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+        if (booking.getStatus() != BookingStatus.UNDER_REVIEW) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể resolve booking đang UNDER_REVIEW");
+        }
+
+        LocalDateTime now = DateTimeUtil.now();
+        booking.setIssueResolvedAt(now);
+        booking.setIssueResolvedByUserId(adminUserId);
+        booking.setIssueResolutionNote(trimToNull(request.adminNote()));
+
+        if (request.action() == com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction.COMPLETE) {
+            booking.setStatus(BookingStatus.COMPLETED);
+            booking.setCompletedAt(booking.getCompletedAt() == null ? now : booking.getCompletedAt());
+            booking.setFinalizedAt(now);
+            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_CONFIRMED);
+        } else {
+            booking.setStatus(BookingStatus.AUTO_CLOSED);
+            booking.setAutoClosedAt(now);
+            booking.setFinalizedAt(now);
+            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_AUTO_CLOSED);
+        }
+
+        Booking savedBooking = bookingRepository.save(booking);
+        settlementService.releaseForBooking(savedBooking);
+        return toBookingResponse(savedBooking);
+    }
+
     @Transactional(readOnly = true)
     public BookingResponse getAdminBookingDetail(UUID bookingId) {
         if (bookingId == null) {
@@ -706,6 +747,9 @@ public class BookingService {
                 .issueType(booking.getIssueType())
                 .issueDescription(booking.getIssueDescription())
                 .wantsAdminReview(booking.getWantsAdminReview())
+                .issueResolvedAt(booking.getIssueResolvedAt())
+                .issueResolvedByUserId(booking.getIssueResolvedByUserId())
+                .issueResolutionNote(booking.getIssueResolutionNote())
                 .mentorNote(booking.getMentorNote())
                 .menteeNote(booking.getMenteeNote())
                 .createdAt(booking.getCreatedAt())

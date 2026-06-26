@@ -95,6 +95,12 @@ public record BookingResponse(
         String issueDescription,
         @Schema(description = "Participant có yêu cầu admin review hay không", nullable = true)
         Boolean wantsAdminReview,
+        @Schema(description = "Thời điểm admin resolve issue", nullable = true)
+        LocalDateTime issueResolvedAt,
+        @Schema(description = "admin userId đã resolve issue", nullable = true)
+        UUID issueResolvedByUserId,
+        @Schema(description = "Ghi chú xử lý issue của admin", nullable = true)
+        String issueResolutionNote,
         @Schema(description = "Ghi chú của mentor sau buổi học", nullable = true)
         String mentorNote,
         @Schema(description = "Ghi chú của mentee sau buổi học", nullable = true)

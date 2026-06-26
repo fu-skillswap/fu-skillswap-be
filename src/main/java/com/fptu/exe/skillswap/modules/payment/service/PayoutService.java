@@ -3,13 +3,19 @@ package com.fptu.exe.skillswap.modules.payment.service;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequest;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.MentorPayoutProfile;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminPayoutRequestListRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PayoutRequestCreateRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PayoutRequestResponse;
+import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -105,9 +111,51 @@ public class PayoutService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<PayoutRequestResponse> getAdminPayoutRequests(AdminPayoutRequestListRequest request) {
+        AdminPayoutRequestListRequest safeRequest = request == null ? new AdminPayoutRequestListRequest() : request;
+        Page<PayoutRequest> page = payoutRequestRepository.searchForAdmin(
+                safeRequest.getStatus(),
+                safeRequest.getMentorUserId(),
+                adminPageable(safeRequest)
+        );
+
+        return PageResponse.<PayoutRequestResponse>builder()
+                .content(page.getContent().stream().map(this::toResponse).toList())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public PayoutRequestResponse getAdminPayoutRequestDetail(UUID payoutRequestId) {
+        return toResponse(load(payoutRequestId));
+    }
+
     private PayoutRequest load(UUID payoutRequestId) {
         return payoutRequestRepository.findById(payoutRequestId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payout request"));
+    }
+
+    private Pageable adminPageable(AdminPayoutRequestListRequest request) {
+        int page = Math.max(request.getPage(), 0);
+        int size = Math.min(Math.max(request.getSize(), 1), 100);
+        return PageRequest.of(page, size, Sort.by(request.resolveDirection(), adminSortBy(request.getSortBy())));
+    }
+
+    private String adminSortBy(String sortBy) {
+        return switch (sortBy == null ? "" : sortBy.trim()) {
+            case "createdAt" -> "createdAt";
+            case "updatedAt" -> "updatedAt";
+            case "status" -> "status";
+            case "approvedAt" -> "approvedAt";
+            case "paidAt" -> "paidAt";
+            case "rejectedAt" -> "rejectedAt";
+            default -> "requestedAt";
+        };
     }
 
     private PayoutRequestResponse toResponse(PayoutRequest payoutRequest) {

@@ -4,14 +4,18 @@ import com.fptu.exe.skillswap.modules.payment.domain.MentorPayoutProfile;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequest;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementAccount;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminPayoutRequestListRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PayoutRequestCreateRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PayoutRequestResponse;
 import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
+import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -118,5 +122,55 @@ class PayoutServiceTest {
 
         assertEquals(PayoutRequestStatus.REJECTED, response.status());
         verify(settlementService).voidPayoutHold(eq(mentorUserId), eq(payoutRequestId), any());
+    }
+
+    @Test
+    void getAdminPayoutRequests_shouldReturnPagedQueue() {
+        UUID mentorUserId = UUID.randomUUID();
+        PayoutRequest payoutRequest = PayoutRequest.builder()
+                .id(UUID.randomUUID())
+                .mentorUserId(mentorUserId)
+                .payoutProfileId(UUID.randomUUID())
+                .settlementAccountId(UUID.randomUUID())
+                .amountScoin(150)
+                .status(PayoutRequestStatus.REQUESTED)
+                .bankAccountNameSnapshot("VO QUANG TAM")
+                .bankNameSnapshot("ACB")
+                .bankAccountNumberMaskedSnapshot("******7890")
+                .build();
+        AdminPayoutRequestListRequest request = new AdminPayoutRequestListRequest();
+        request.setMentorUserId(mentorUserId);
+        request.setStatus(PayoutRequestStatus.REQUESTED);
+
+        when(payoutRequestRepository.searchForAdmin(eq(PayoutRequestStatus.REQUESTED), eq(mentorUserId), any()))
+                .thenReturn(new PageImpl<>(java.util.List.of(payoutRequest), PageRequest.of(0, 20), 1));
+
+        PageResponse<PayoutRequestResponse> response = payoutService.getAdminPayoutRequests(request);
+
+        assertEquals(1, response.getContent().size());
+        assertEquals(mentorUserId, response.getContent().getFirst().mentorUserId());
+    }
+
+    @Test
+    void getAdminPayoutRequestDetail_shouldReturnMappedResponse() {
+        UUID payoutRequestId = UUID.randomUUID();
+        PayoutRequest payoutRequest = PayoutRequest.builder()
+                .id(payoutRequestId)
+                .mentorUserId(UUID.randomUUID())
+                .payoutProfileId(UUID.randomUUID())
+                .settlementAccountId(UUID.randomUUID())
+                .amountScoin(300)
+                .status(PayoutRequestStatus.PAID)
+                .bankAccountNameSnapshot("VO QUANG TAM")
+                .bankNameSnapshot("VCB")
+                .bankAccountNumberMaskedSnapshot("******1234")
+                .build();
+
+        when(payoutRequestRepository.findById(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
+
+        PayoutRequestResponse response = payoutService.getAdminPayoutRequestDetail(payoutRequestId);
+
+        assertEquals(payoutRequestId, response.payoutRequestId());
+        assertEquals(PayoutRequestStatus.PAID, response.status());
     }
 }

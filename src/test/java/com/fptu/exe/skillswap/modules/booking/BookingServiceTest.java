@@ -1,14 +1,17 @@
 package com.fptu.exe.skillswap.modules.booking;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
@@ -968,6 +971,42 @@ class BookingServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
         assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
         assertTrue(exception.getMessage().contains("đã có booking được mentor chấp nhận"));
+    }
+
+    @Test
+    void resolveBookingIssue_complete_shouldFinalizeBooking() {
+        UUID adminUserId = UUID.randomUUID();
+        Booking booking = bookingForDecision(BookingStatus.UNDER_REVIEW);
+        booking.setCompletionOutcome(BookingCompletionOutcome.REVIEW_PENDING_DECISION);
+
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        BookingResponse response = bookingService.resolveBookingIssue(
+                adminUserId,
+                booking.getId(),
+                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.COMPLETE, "Issue verified and closed")
+        );
+
+        assertEquals(BookingStatus.COMPLETED, response.status());
+        assertEquals(BookingCompletionOutcome.COMPLETED_CONFIRMED, response.completionOutcome());
+        assertEquals(adminUserId, response.issueResolvedByUserId());
+        assertEquals("Issue verified and closed", response.issueResolutionNote());
+        verify(settlementService).releaseForBooking(booking);
+    }
+
+    @Test
+    void resolveBookingIssue_nonReviewStatus_shouldThrowConflict() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () -> bookingService.resolveBookingIssue(
+                UUID.randomUUID(),
+                booking.getId(),
+                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.AUTO_CLOSE, "Manual close")
+        ));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
     }
 
     private Booking bookingForDecision(BookingStatus status) {
