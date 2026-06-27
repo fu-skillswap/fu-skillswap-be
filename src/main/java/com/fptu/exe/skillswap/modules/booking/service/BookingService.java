@@ -709,6 +709,8 @@ public class BookingService {
                 .bookingId(booking.getId())
                 .sessionId(booking.getId())
                 .sessionStatus(booking.getStatus())
+                .actualSessionId(session == null ? null : session.getId())
+                .actualSessionStatus(session == null ? null : session.getStatus())
                 .mentorUserId(mentorProfile == null ? null : mentorProfile.getUserId())
                 .mentorDisplayName(mentorUser == null ? null : mentorUser.getFullName())
                 .mentorAvatarUrl(mentorUser == null ? null : mentorUser.getAvatarUrl())

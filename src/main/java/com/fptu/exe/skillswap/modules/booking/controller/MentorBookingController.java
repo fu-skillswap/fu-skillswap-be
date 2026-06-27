@@ -118,6 +118,10 @@ public class MentorBookingController {
     }
 
     @PostMapping("/{bookingId}/reschedule-requests")
+    @Operation(
+            summary = "Mentor tạo yêu cầu đổi lịch",
+            description = "Tạo reschedule request cho một booking đã được accept mà user hiện tại là mentor. FE mentor dùng khi cần đề xuất khung giờ mới cho mentee xác nhận."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> createRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -128,6 +132,10 @@ public class MentorBookingController {
     }
 
     @PostMapping("/reschedule-requests/{requestId}/accept")
+    @Operation(
+            summary = "Mentor chấp nhận yêu cầu đổi lịch",
+            description = "Mentor chấp nhận một reschedule request đang pending do mentee tạo. Backend áp dụng lịch mới nếu request còn hợp lệ và không xung đột slot."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> acceptRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,
@@ -138,6 +146,10 @@ public class MentorBookingController {
     }
 
     @PostMapping("/reschedule-requests/{requestId}/reject")
+    @Operation(
+            summary = "Mentor từ chối yêu cầu đổi lịch",
+            description = "Mentor từ chối một reschedule request đang pending do mentee tạo. Booking hiện tại được giữ nguyên và FE có thể hiển thị lý do phản hồi nếu có."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,

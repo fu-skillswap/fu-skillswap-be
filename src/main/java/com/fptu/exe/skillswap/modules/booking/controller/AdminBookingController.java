@@ -85,11 +85,19 @@ public class AdminBookingController {
     }
 
     @GetMapping("/{bookingId}/reschedule-requests")
+    @Operation(
+            summary = "Admin xem yêu cầu đổi lịch của booking",
+            description = "Trả về toàn bộ reschedule request của một booking để admin kiểm tra lịch sử đổi lịch khi xử lý vận hành hoặc dispute."
+    )
     public ApiResponse<java.util.List<BookingRescheduleRequestResponse>> getRescheduleRequests(@PathVariable UUID bookingId) {
         return ApiResponse.success(bookingRescheduleService.getAdminBookingRequests(bookingId));
     }
 
     @PostMapping("/reschedule-requests/{requestId}/force-approve")
+    @Operation(
+            summary = "Admin force approve yêu cầu đổi lịch",
+            description = "Admin phê duyệt thủ công một reschedule request đang pending khi cần can thiệp vận hành. Backend ghi nhận actor admin và áp dụng lịch mới nếu request còn hợp lệ."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> approveRescheduleRequest(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,
@@ -99,6 +107,10 @@ public class AdminBookingController {
     }
 
     @PostMapping("/reschedule-requests/{requestId}/force-reject")
+    @Operation(
+            summary = "Admin force reject yêu cầu đổi lịch",
+            description = "Admin từ chối thủ công một reschedule request đang pending khi cần xử lý vận hành hoặc dispute. Booking hiện tại được giữ nguyên."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,

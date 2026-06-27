@@ -9,10 +9,14 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 public class OpenApiConfig {
@@ -85,9 +89,15 @@ public class OpenApiConfig {
                         new Tag().name("Mentor Services").description("Nhóm API để mentor tạo, cập nhật, bật tắt hoặc lưu trữ các dịch vụ mentoring cụ thể. FE dùng nhóm này để quản lý các gói/dịch vụ mà mentee có thể chọn khi booking."),
                         new Tag().name("Mentor Verification").description("Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review."),
                         new Tag().name("Mentor Discovery").description("Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking."),
+                        new Tag().name("Mentor Availability Rule").description("Nhóm API để mentor quản lý rule sinh availability slot. FE mentor dùng khi cấu hình lịch rảnh lặp lại hoặc theo ngày."),
+                        new Tag().name("Mentor Availability Slot").description("Nhóm API để mentor quản lý service gắn vào từng slot cụ thể. FE dùng trước khi mentee chọn service và khung giờ chính xác."),
                         new Tag().name("Mentor Booking").description("Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot."),
                         new Tag().name("Conversation").description("Nhóm API lấy danh sách conversation và gửi/đọc tin nhắn gắn với booking đã được accept. FE dùng sau khi hệ thống đã tự tạo conversation cho booking hợp lệ."),
                         new Tag().name("Notification").description("Nhóm API đọc danh sách thông báo, unread count và cập nhật trạng thái đã đọc của user hiện tại. FE dùng để dựng badge, dropdown và trang notification history."),
+                        new Tag().name("Wallet").description("Nhóm API xem ví SCoin của mentee và ví settlement của mentor. FE dùng cho màn số dư, giao dịch gần nhất và trạng thái earnings."),
+                        new Tag().name("Payment Orders").description("Nhóm API tạo checkout, poll trạng thái payment theo booking và nhận webhook PayOS. FE chỉ gọi các endpoint /api/me, webhook dành cho provider."),
+                        new Tag().name("Payout Requests").description("Nhóm API mentor tạo payout request và admin duyệt/từ chối/mark-paid. FE mentor và FE admin dùng ở các màn tài chính beta."),
+                        new Tag().name("Mentor Payout Profiles").description("Nhóm API mentor quản lý tài khoản nhận tiền payout. FE dùng để tạo, cập nhật và chọn payout profile trước khi tạo payout request."),
                         new Tag().name("Forum").description("Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và report nội dung theo help topic. FE dùng để xây forum text-only MVP cho cộng đồng SkillSwap."),
                         new Tag().name("Review & Rating").description("Nhóm API để mentee gửi feedback sau buổi mentoring và để hệ thống hiển thị dữ liệu review của mentor. FE dùng sau khi booking đã hoàn thành."),
                         new Tag().name("Admin - Mentor Verification").description("Nhóm API cho admin review hồ sơ mentor verification, xem chi tiết request và xử lý quyết định theo cơ chế soft lock. FE admin dùng trong queue review và màn hình xử lý hồ sơ."),
@@ -98,5 +108,61 @@ public class OpenApiConfig {
                         new Tag().name("System Admin - Roles").description("Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này."),
                         new Tag().name("System").description("Nhóm API kỹ thuật để kiểm tra sức khỏe dịch vụ và chẩn đoán cơ bản. FE hoặc đội vận hành dùng để smoke check theo đúng cấu hình security hiện tại.")
                 ));
+    }
+
+    @Bean
+    public OpenApiCustomizer deduplicateTags() {
+        return openApi -> {
+            if (openApi.getTags() == null || openApi.getTags().isEmpty()) {
+                return;
+            }
+
+            Map<String, Tag> tagsByName = new LinkedHashMap<>();
+            for (Tag tag : openApi.getTags()) {
+                tagsByName.merge(tag.getName(), tag, (existing, incoming) -> {
+                    boolean existingHasDescription = existing.getDescription() != null && !existing.getDescription().isBlank();
+                    return existingHasDescription ? existing : incoming;
+                });
+            }
+
+            List<String> preferredOrder = List.of(
+                    "Authentication",
+                    "Academic Catalog",
+                    "Help Topic Catalog",
+                    "Academic Profile",
+                    "Mentor Profile",
+                    "Mentor Services",
+                    "Mentor Verification",
+                    "Admin - Mentor Verification",
+                    "Mentor Discovery",
+                    "Mentor Availability Rule",
+                    "Mentor Availability Slot",
+                    "Mentor Booking",
+                    "Review & Rating",
+                    "Conversation",
+                    "Notification",
+                    "Wallet",
+                    "Payment Orders",
+                    "Mentor Payout Profiles",
+                    "Payout Requests",
+                    "Forum",
+                    "Admin - Forum",
+                    "Admin - Mentors",
+                    "Admin - Users",
+                    "Admin - Bookings",
+                    "System Admin - Roles",
+                    "System"
+            );
+
+            List<Tag> orderedTags = new ArrayList<>();
+            for (String tagName : preferredOrder) {
+                Tag tag = tagsByName.remove(tagName);
+                if (tag != null) {
+                    orderedTags.add(tag);
+                }
+            }
+            orderedTags.addAll(tagsByName.values());
+            openApi.setTags(orderedTags);
+        };
     }
 }

@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -50,6 +51,36 @@ class BookingControllerAuthorizationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRequest())))
                 .andExpect(status().isForbidden());
+
+        verifyNoInteractions(bookingService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void createBooking_malformedJsonShouldReturnClearErrorEnvelope() throws Exception {
+        mockMvc.perform(post("/api/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("VAL_3001"))
+                .andExpect(jsonPath("$.message").value("Body request không hợp lệ hoặc không đúng định dạng mà API hỗ trợ"))
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        verifyNoInteractions(bookingService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void createBooking_unsupportedContentTypeShouldReturnClearErrorEnvelope() throws Exception {
+        mockMvc.perform(post("/api/bookings")
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .content("not-json"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.status").value(415))
+                .andExpect(jsonPath("$.code").value("SYS_0009"))
+                .andExpect(jsonPath("$.message").value("Content-Type không được hỗ trợ"))
+                .andExpect(jsonPath("$.data[0].field").value("Content-Type"));
 
         verifyNoInteractions(bookingService);
     }

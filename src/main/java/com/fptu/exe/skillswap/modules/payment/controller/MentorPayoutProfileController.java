@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @RequestMapping("/api/mentor/payout-profiles")
 @Tag(name = "Mentor Payout Profiles", description = "Nhóm API quản lý tài khoản nhận tiền payout của mentor.")
+@SecurityRequirement(name = "bearerAuth")
 public class MentorPayoutProfileController {
 
     private final MentorPayoutProfileService payoutProfileService;

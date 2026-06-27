@@ -42,6 +42,10 @@ springdoc:
     enabled: ${APPLICATION_SWAGGER_ENABLED:true}
   swagger-ui:
     enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+    filter: true
+    doc-expansion: none
+    display-request-duration: true
+    persist-authorization: true
 
 server:
   tomcat:

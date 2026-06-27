@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,7 @@ public class PaymentController {
     private final PaymentOrderService paymentOrderService;
 
     @Operation(summary = "Tạo payment order cho booking", description = "FE gọi sau khi booking đã sẵn sàng thanh toán. Backend tự áp coupon/credit, sau đó tạo Hosted Payment Link thật từ PayOS và trả checkoutUrl cho FE redirect.")
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/me/payment-orders/checkout")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> checkout(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -44,6 +46,7 @@ public class PaymentController {
     }
 
     @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS mới là nguồn chốt PAID; endpoint này chỉ trả trạng thái backend hiện tại và đồng bộ soft status từ provider nếu cần.")
+    @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me/payment-orders/{bookingId}")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByBookingId(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,

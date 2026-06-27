@@ -113,6 +113,10 @@ public class MyBookingController {
     }
 
     @PostMapping("/{bookingId}/reschedule-requests")
+    @Operation(
+            summary = "Mentee tạo yêu cầu đổi lịch",
+            description = "Tạo reschedule request cho một booking đã được accept mà user hiện tại là mentee. FE dùng khi mentee muốn đề xuất khung giờ mới; request sẽ ở trạng thái pending cho participant còn lại phản hồi."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> createRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -123,6 +127,10 @@ public class MyBookingController {
     }
 
     @GetMapping("/{bookingId}/reschedule-requests")
+    @Operation(
+            summary = "Lấy các yêu cầu đổi lịch của booking",
+            description = "Trả về danh sách reschedule request của một booking mà user hiện tại là participant. FE dùng ở booking detail để hiển thị lịch sử đề xuất đổi lịch và action accept/reject nếu còn pending."
+    )
     public ApiResponse<java.util.List<BookingRescheduleRequestResponse>> getRescheduleRequests(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId
@@ -132,6 +140,10 @@ public class MyBookingController {
     }
 
     @PostMapping("/reschedule-requests/{requestId}/accept")
+    @Operation(
+            summary = "Participant chấp nhận yêu cầu đổi lịch",
+            description = "Participant còn lại chấp nhận một reschedule request đang pending. Backend sẽ cập nhật slot/thời gian booking theo đề xuất hợp lệ và trả trạng thái reschedule mới cho FE."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> acceptRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,
@@ -142,6 +154,10 @@ public class MyBookingController {
     }
 
     @PostMapping("/reschedule-requests/{requestId}/reject")
+    @Operation(
+            summary = "Participant từ chối yêu cầu đổi lịch",
+            description = "Participant còn lại từ chối một reschedule request đang pending. FE dùng để đóng đề xuất đổi lịch nhưng giữ booking hiện tại không đổi."
+    )
     public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID requestId,

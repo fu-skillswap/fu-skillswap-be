@@ -40,8 +40,6 @@ public class SystemUserRoleService {
         }
 
         User systemAdmin = findActor(systemAdminId);
-        targetUser.getRoles().remove(RoleCode.MENTEE);
-        targetUser.getRoles().remove(RoleCode.MENTOR);
         targetUser.getRoles().add(RoleCode.ADMIN);
         userRepository.save(targetUser);
 

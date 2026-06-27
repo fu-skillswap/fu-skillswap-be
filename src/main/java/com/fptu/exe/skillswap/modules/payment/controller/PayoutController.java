@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @RequestMapping("/api")
 @Tag(name = "Payout Requests", description = "Nhóm API mentor tạo payout request và admin duyệt/ghi nhận chi trả thủ công.")
+@SecurityRequirement(name = "bearerAuth")
 public class PayoutController {
 
     private final PayoutService payoutService;

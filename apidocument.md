@@ -489,6 +489,11 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Response:
   - `BookingResponse`
 
+> Ghi chú contract:
+> - `sessionId` và `sessionStatus` là field legacy alias để giữ tương thích ngược.
+> - `actualSessionId` và `actualSessionStatus` là field nguồn sự thật cho session thật do backend tạo từ booking.
+> - FE mới nên ưu tiên đọc `actualSessionId` và `actualSessionStatus` khi có mặt.
+
 ### GET `/api/me/bookings`
 - Auth: `bearerAuth`
 - Query params:

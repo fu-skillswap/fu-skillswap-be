@@ -15,7 +15,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,6 +24,7 @@ import java.util.UUID;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final UserAuthLookupPort userAuthLookupPort;
     private final UserBanStatusPort userBanStatusPort;
 
     @Override
@@ -47,20 +47,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
                 
-                String email = claims.get("email", String.class);
-                
-                List<?> rolesRaw = claims.get("roles", List.class);
-                List<com.fptu.exe.skillswap.shared.constant.RoleCode> roles = new ArrayList<>();
-                if (rolesRaw != null) {
-                    for (Object roleObj : rolesRaw) {
-                        try {
-                            roles.add(com.fptu.exe.skillswap.shared.constant.RoleCode.valueOf(roleObj.toString()));
-                        } catch (Exception e) {
-                            log.warn("Invalid role in token: {}", roleObj);
-                        }
-                    }
+                var snapshot = userAuthLookupPort.findSnapshotByUserId(userId).orElse(null);
+                if (snapshot == null) {
+                    log.warn("Skipping authentication because user {} was not found in persistence", userId);
+                    filterChain.doFilter(request, response);
+                    return;
                 }
-                
+
+                String email = snapshot.email();
+                List<com.fptu.exe.skillswap.shared.constant.RoleCode> roles = snapshot.roles() == null
+                        ? List.of()
+                        : snapshot.roles();
+
                 UserPrincipal userPrincipal = UserPrincipal.create(userId, email, roles);
 
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(

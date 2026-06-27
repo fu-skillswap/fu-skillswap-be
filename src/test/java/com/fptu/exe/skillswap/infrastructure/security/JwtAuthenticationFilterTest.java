@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.infrastructure.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.impl.DefaultClaims;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,9 @@ class JwtAuthenticationFilterTest {
 
     @Mock
     private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private UserAuthLookupPort userAuthLookupPort;
 
     @Mock
     private UserBanStatusPort userBanStatusPort;
@@ -66,6 +70,9 @@ class JwtAuthenticationFilterTest {
         when(jwtTokenProvider.validateAccessToken("socket-jwt")).thenReturn(true);
         when(jwtTokenProvider.getClaimsFromToken("socket-jwt")).thenReturn(claims);
         when(userBanStatusPort.isBanned(userId)).thenReturn(false);
+        when(userAuthLookupPort.findSnapshotByUserId(userId)).thenReturn(
+                java.util.Optional.of(new UserAuthSnapshot(userId, "socket-user@test.com", List.of(RoleCode.MENTOR)))
+        );
 
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServletPath("/ws");
@@ -79,5 +86,8 @@ class JwtAuthenticationFilterTest {
 
         verify(jwtTokenProvider).validateAccessToken("socket-jwt");
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
+        var principal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        org.junit.jupiter.api.Assertions.assertTrue(principal.getRoles().contains(RoleCode.MENTOR));
+        org.junit.jupiter.api.Assertions.assertFalse(principal.getRoles().contains(RoleCode.MENTEE));
     }
 }

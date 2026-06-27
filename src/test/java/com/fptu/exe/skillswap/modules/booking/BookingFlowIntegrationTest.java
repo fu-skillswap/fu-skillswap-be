@@ -22,6 +22,9 @@ import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotService
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
+import com.fptu.exe.skillswap.modules.conversation.domain.ConversationSourceType;
+import com.fptu.exe.skillswap.modules.conversation.repository.ConversationParticipantRepository;
+import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -29,6 +32,9 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.session.domain.SessionSourceType;
+import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
+import com.fptu.exe.skillswap.modules.session.repository.SessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,6 +85,15 @@ class BookingFlowIntegrationTest {
 
     @Autowired
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private SessionRepository sessionRepository;
+
+    @Autowired
+    private ConversationRepository conversationRepository;
+
+    @Autowired
+    private ConversationParticipantRepository conversationParticipantRepository;
 
     private User menteeUser;
     private User mentorUser;
@@ -175,14 +190,33 @@ class BookingFlowIntegrationTest {
         BookingResponse booking = bookingService.createBooking(menteeId, createRequest);
         assertNotNull(booking);
         assertEquals(BookingStatus.PENDING, booking.status());
+        assertEquals(booking.bookingId(), booking.sessionId());
+        assertEquals(BookingStatus.PENDING, booking.sessionStatus());
+        assertNull(booking.actualSessionId());
+        assertNull(booking.actualSessionStatus());
         assertFalse(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
+        assertTrue(sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.bookingId()).isEmpty());
+        assertTrue(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.bookingId()).isEmpty());
 
         // 4. Mentor accepts booking
         BookingResponse accepted = bookingService.acceptBooking(
                 mentorId, booking.bookingId(), new AcceptBookingRequest("Happy to help!")
         );
         assertEquals(BookingStatus.ACCEPTED, accepted.status());
+        assertEquals(accepted.bookingId(), accepted.sessionId());
+        assertEquals(BookingStatus.ACCEPTED, accepted.sessionStatus());
+        assertNotNull(accepted.actualSessionId());
+        assertEquals(SessionStatus.SCHEDULED, accepted.actualSessionStatus());
         assertTrue(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
+
+        var session = sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.bookingId()).orElseThrow();
+        assertEquals(accepted.actualSessionId(), session.getId());
+        assertEquals(SessionStatus.SCHEDULED, session.getStatus());
+        assertEquals(slotToBook.getStartTime(), session.getScheduledStartTime());
+        assertEquals(slotToBook.getStartTime().plusMinutes(mentorService.getDurationMinutes()), session.getScheduledEndTime());
+
+        var conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.bookingId()).orElseThrow();
+        assertEquals(2, conversationParticipantRepository.findByConversationId(conversation.getId()).size());
 
         // 5. Mentor saves meeting link
         BookingResponse linked = bookingService.saveMeetingLink(
@@ -207,11 +241,13 @@ class BookingFlowIntegrationTest {
                 mentorId, booking.bookingId(), new CompleteBookingRequest("Good session, code works")
         );
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, mentorCompleted.status());
+        assertEquals(SessionStatus.COMPLETED, mentorCompleted.actualSessionStatus());
 
         BookingResponse completed = bookingService.completeBooking(
                 menteeId, booking.bookingId(), new CompleteBookingRequest("Confirmed")
         );
         assertEquals(BookingStatus.COMPLETED, completed.status());
+        assertEquals(SessionStatus.COMPLETED, completed.actualSessionStatus());
         assertNotNull(completed.completedAt());
     }
 

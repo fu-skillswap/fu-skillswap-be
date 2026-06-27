@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -15,10 +16,31 @@ import java.util.UUID;
 public record BookingResponse(
         @Schema(description = "ID của booking", example = "019f4234-aaaa-bbbb-cccc-1234567890ab")
         UUID bookingId,
-        @Schema(description = "Hiện đang map theo sessionId nội bộ nếu đã có session, chưa có thì có thể null", nullable = true)
+        @Deprecated(forRemoval = false)
+        @Schema(
+                description = "Legacy alias giữ tương thích ngược. Hiện vẫn map theo bookingId nội bộ.",
+                nullable = true,
+                deprecated = true
+        )
         UUID sessionId,
-        @Schema(description = "Trạng thái session/buổi học hiện tại theo model hiện có", nullable = true, example = "COMPLETED")
+        @Deprecated(forRemoval = false)
+        @Schema(
+                description = "Legacy alias giữ tương thích ngược. Hiện vẫn map theo BookingStatus nội bộ.",
+                nullable = true,
+                deprecated = true
+        )
         BookingStatus sessionStatus,
+        @Schema(
+                description = "ID của session thật do backend tạo từ booking",
+                nullable = true
+        )
+        UUID actualSessionId,
+        @Schema(
+                description = "Trạng thái session thật do backend tạo từ booking",
+                nullable = true,
+                example = "COMPLETED"
+        )
+        SessionStatus actualSessionStatus,
         @Schema(description = "userId của mentor")
         UUID mentorUserId,
         @Schema(description = "Tên hiển thị của mentor")

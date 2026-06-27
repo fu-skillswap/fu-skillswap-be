@@ -828,7 +828,41 @@ class BookingServiceTest {
             BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
             assertEquals(status, response.status());
             assertEquals(status, response.sessionStatus());
+            assertNull(response.actualSessionId());
+            assertEquals(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.SCHEDULED, response.actualSessionStatus());
         }
+    }
+
+    @Test
+    void actualSessionFields_shouldMirrorRealSessionEntityWhenPresent() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        com.fptu.exe.skillswap.modules.session.domain.Session session = com.fptu.exe.skillswap.modules.session.domain.Session.builder()
+                .id(UUID.randomUUID())
+                .sourceType(com.fptu.exe.skillswap.modules.session.domain.SessionSourceType.BOOKING)
+                .sourceId(booking.getId())
+                .status(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED)
+                .build();
+        when(sessionService.findByBookingId(booking.getId())).thenReturn(session);
+
+        BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
+
+        assertEquals(booking.getId(), response.sessionId());
+        assertEquals(BookingStatus.ACCEPTED, response.sessionStatus());
+        assertEquals(session.getId(), response.actualSessionId());
+        assertEquals(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED, response.actualSessionStatus());
+    }
+
+    @Test
+    void actualSessionFields_shouldStayNullWhenSessionDoesNotExist() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        when(sessionService.findByBookingId(booking.getId())).thenReturn(null);
+
+        BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
+
+        assertEquals(booking.getId(), response.sessionId());
+        assertEquals(BookingStatus.ACCEPTED, response.sessionStatus());
+        assertNull(response.actualSessionId());
+        assertNull(response.actualSessionStatus());
     }
 
     @Test
