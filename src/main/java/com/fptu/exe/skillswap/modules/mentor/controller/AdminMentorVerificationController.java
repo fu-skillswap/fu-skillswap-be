@@ -64,7 +64,7 @@ public class AdminMentorVerificationController {
     }
 
     private UUID requiredAdminId(UserPrincipal principal) {
-        if (principal == null || !principal.getRoles().contains(RoleCode.ADMIN)) {
+        if (principal == null || !(principal.getRoles().contains(RoleCode.ADMIN) || principal.getRoles().contains(RoleCode.SYSTEM_ADMIN))) {
             throw new AccessDeniedException("Bạn không có quyền thực hiện hành động này");
         }
         return principal.getPublicId();
