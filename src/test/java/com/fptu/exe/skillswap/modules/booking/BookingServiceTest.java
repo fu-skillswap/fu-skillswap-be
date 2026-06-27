@@ -537,6 +537,27 @@ class BookingServiceTest {
     }
 
     @Test
+    void saveMeetingLink_sameValues_shouldNotCreateNotification() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        booking.setLocation("Room 201");
+        com.fptu.exe.skillswap.modules.session.domain.Session session = new com.fptu.exe.skillswap.modules.session.domain.Session();
+        session.setMeetingPlatform(MeetingPlatform.GOOGLE_MEET);
+        session.setMeetingLink("https://meet.google.com/abc");
+        when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        when(sessionService.findByBookingId(booking.getId())).thenReturn(session);
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.saveMeetingLink(
+                mentorId,
+                booking.getId(),
+                new SaveMeetingLinkRequest(MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/abc", "Room 201")
+        );
+
+        assertEquals("Room 201", response.location());
+        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void completeBooking_asMentor_shouldUpdateCompletionAndCounters() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
         booking.setSelectedStartTime(testNow().minusHours(1));
@@ -773,6 +794,7 @@ class BookingServiceTest {
     void rejectAllPendingBookingsForMentor_successful() {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
+                .mentee(mentee)
                 .mentorProfile(mentorProfile)
                 .status(BookingStatus.PENDING)
                 .slot(slot)
@@ -786,6 +808,14 @@ class BookingServiceTest {
         assertEquals(BookingStatus.REJECTED, booking.getStatus());
         assertFalse(slot.isBooked());
         verify(bookingRepository).saveAll(any());
+        verify(notificationService).createNotification(
+                eq(menteeId),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED),
+                any(),
+                any(),
+                eq("BOOKING"),
+                eq(booking.getId())
+        );
     }
 
     @Test
@@ -958,22 +988,25 @@ class BookingServiceTest {
     }
 
     @Test
-    void expireStalePendingBookings_shouldCallBulkUpdateAndReturnCount() {
-        when(bookingRepository.bulkExpireStalePendingBookings(
+    void expireStalePendingBookings_shouldUpdateBookingsAndNotifyMentees() {
+        Booking staleBooking = bookingForDecision(BookingStatus.PENDING);
+        when(bookingRepository.findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(
                 eq(BookingStatus.PENDING),
-                eq(BookingStatus.REJECTED),
-                any(LocalDateTime.class),
-                eq("Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.")
-        )).thenReturn(5);
+                any(LocalDateTime.class)
+        )).thenReturn(List.of(staleBooking));
 
         int expiredCount = bookingService.expireStalePendingBookings();
 
-        assertEquals(5, expiredCount);
-        verify(bookingRepository).bulkExpireStalePendingBookings(
-                eq(BookingStatus.PENDING),
-                eq(BookingStatus.REJECTED),
-                any(LocalDateTime.class),
-                eq("Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.")
+        assertEquals(1, expiredCount);
+        assertEquals(BookingStatus.REJECTED, staleBooking.getStatus());
+        verify(bookingRepository).saveAll(any());
+        verify(notificationService).createNotification(
+                eq(menteeId),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED),
+                any(),
+                any(),
+                eq("BOOKING"),
+                eq(staleBooking.getId())
         );
     }
 

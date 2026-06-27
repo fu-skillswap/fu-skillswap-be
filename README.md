@@ -405,6 +405,8 @@ Rule:
 - Email phải thuộc user đã tồn tại trong hệ thống.
 - User đã có `ADMIN` mà grant lại sẽ trả `409 Conflict`.
 - User chưa có `ADMIN` mà revoke sẽ trả `409 Conflict`.
+- Grant `ADMIN` chuyển tài khoản sang vai trò vận hành admin-only: backend gỡ `MENTEE` và `MENTOR` khỏi user để chặn các API self-service/mentoring dành cho user thường.
+- Revoke `ADMIN` trả tài khoản về role mặc định `MENTEE`; role `MENTOR` không được tự khôi phục sau khi thu hồi admin.
 - `ADMIN` không gọi được API thuộc `/api/system/**`.
 
 ## Mentor Verification State

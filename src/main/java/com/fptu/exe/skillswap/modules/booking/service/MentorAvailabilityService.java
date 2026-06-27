@@ -29,6 +29,8 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidateIt
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -78,6 +80,7 @@ public class MentorAvailabilityService {
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final MentorServiceRepository mentorServiceRepository;
     private final BookingRepository bookingRepository;
+    private final NotificationService notificationService;
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
 
     @Deprecated(forRemoval = false)
@@ -643,6 +646,16 @@ public class MentorAvailabilityService {
             pendingBooking.setRejectReason(reason);
         }
         bookingRepository.saveAll(pendingBookings);
+        for (Booking pendingBooking : pendingBookings) {
+            notificationService.createNotification(
+                    pendingBooking.getMentee().getId(),
+                    NotificationType.BOOKING_AUTO_REJECTED,
+                    "Yêu cầu đặt lịch không còn hiệu lực",
+                    "Yêu cầu đặt lịch của bạn đã bị từ chối: " + reason,
+                    "BOOKING",
+                    pendingBooking.getId()
+            );
+        }
     }
 
     private MentorProfile getManagedActiveMentorProfile(UUID mentorUserId) {

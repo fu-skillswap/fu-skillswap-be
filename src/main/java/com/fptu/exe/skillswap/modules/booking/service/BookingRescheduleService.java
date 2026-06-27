@@ -453,16 +453,20 @@ public class BookingRescheduleService {
 
     private void notifyAccept(BookingRescheduleRequest request) {
         Booking booking = request.getBooking();
+        if (request.isAdminOverride()) {
+            notifyBothParticipants(
+                    booking,
+                    NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
+                    "Đề xuất dời lịch đã được chấp nhận",
+                    "Booking của bạn đã được dời sang lịch mới."
+            );
+            return;
+        }
+        UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
+                ? booking.getMentee().getId()
+                : booking.getMentorProfile().getUserId();
         notificationService.createNotification(
-                booking.getMentee().getId(),
-                NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
-                "Đề xuất dời lịch đã được chấp nhận",
-                "Booking của bạn đã được dời sang lịch mới.",
-                "BOOKING",
-                booking.getId()
-        );
-        notificationService.createNotification(
-                booking.getMentorProfile().getUserId(),
+                recipientId,
                 NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
                 "Đề xuất dời lịch đã được chấp nhận",
                 "Booking của bạn đã được dời sang lịch mới.",
@@ -473,16 +477,20 @@ public class BookingRescheduleService {
 
     private void notifyReject(BookingRescheduleRequest request) {
         Booking booking = request.getBooking();
+        if (request.isAdminOverride()) {
+            notifyBothParticipants(
+                    booking,
+                    NotificationType.BOOKING_RESCHEDULE_REJECTED,
+                    "Đề xuất dời lịch đã bị từ chối",
+                    "Reschedule request của booking đã bị từ chối. Lịch cũ vẫn được giữ nguyên."
+            );
+            return;
+        }
+        UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
+                ? booking.getMentee().getId()
+                : booking.getMentorProfile().getUserId();
         notificationService.createNotification(
-                booking.getMentee().getId(),
-                NotificationType.BOOKING_RESCHEDULE_REJECTED,
-                "Đề xuất dời lịch đã bị từ chối",
-                "Reschedule request của booking đã bị từ chối. Lịch cũ vẫn được giữ nguyên.",
-                "BOOKING",
-                booking.getId()
-        );
-        notificationService.createNotification(
-                booking.getMentorProfile().getUserId(),
+                recipientId,
                 NotificationType.BOOKING_RESCHEDULE_REJECTED,
                 "Đề xuất dời lịch đã bị từ chối",
                 "Reschedule request của booking đã bị từ chối. Lịch cũ vẫn được giữ nguyên.",
@@ -492,6 +500,7 @@ public class BookingRescheduleService {
     }
 
     private void notifyExpire(BookingRescheduleRequest request) {
+
         Booking booking = request.getBooking();
         notificationService.createNotification(
                 booking.getMentee().getId(),
@@ -506,6 +515,25 @@ public class BookingRescheduleService {
                 NotificationType.BOOKING_RESCHEDULE_EXPIRED,
                 "Đề xuất dời lịch đã hết hạn",
                 "Reschedule request của booking đã hết hạn vì chưa được phản hồi trước giờ học cũ.",
+                "BOOKING",
+                booking.getId()
+        );
+    }
+
+    private void notifyBothParticipants(Booking booking, NotificationType type, String title, String message) {
+        notificationService.createNotification(
+                booking.getMentee().getId(),
+                type,
+                title,
+                message,
+                "BOOKING",
+                booking.getId()
+        );
+        notificationService.createNotification(
+                booking.getMentorProfile().getUserId(),
+                type,
+                title,
+                message,
                 "BOOKING",
                 booking.getId()
         );

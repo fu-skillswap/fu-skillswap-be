@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
 import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
@@ -46,6 +48,7 @@ public class AdminUserService {
     private final AuditLogRepository auditLogRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final StudentProfileRepository studentProfileRepository;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminUserListItemResponse> getVisibleUsers(AdminUserListRequest request) {
@@ -120,6 +123,16 @@ public class AdminUserService {
         }
 
         userRepository.save(user);
+        if (!ban && oldStatus == UserStatus.BANNED) {
+            notificationService.createNotification(
+                    userId,
+                    NotificationType.ACCOUNT_UNLOCKED,
+                    "Tài khoản của bạn đã được mở lại",
+                    "Bạn có thể đăng nhập và tiếp tục sử dụng SkillSwap bình thường.",
+                    "USER",
+                    userId
+            );
+        }
 
         // Save Audit Log
         AuditLog auditLog = AuditLog.builder()

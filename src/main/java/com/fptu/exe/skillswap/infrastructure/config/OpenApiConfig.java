@@ -105,7 +105,7 @@ public class OpenApiConfig {
                         new Tag().name("Admin - Users").description("Nhóm API vận hành nội bộ để xem danh sách user visible và thay đổi trạng thái tài khoản như ban hoặc unban. FE admin dùng trong các màn moderation user."),
                         new Tag().name("Admin - Bookings").description("Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking."),
                         new Tag().name("Admin - Forum").description("Nhóm API moderation forum dành cho admin để đọc queue report, ẩn hoặc khôi phục nội dung forum khi cần xử lý vi phạm."),
-                        new Tag().name("System Admin - Roles").description("Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này."),
+                        new Tag().name("System Admin - Roles").description("Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Grant ADMIN sẽ gỡ MENTEE/MENTOR để tài khoản thành admin-only; revoke ADMIN sẽ trả user về MENTEE mặc định. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này."),
                         new Tag().name("System").description("Nhóm API kỹ thuật để kiểm tra sức khỏe dịch vụ và chẩn đoán cơ bản. FE hoặc đội vận hành dùng để smoke check theo đúng cấu hình security hiện tại.")
                 ));
     }

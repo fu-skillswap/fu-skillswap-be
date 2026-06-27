@@ -38,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -176,6 +177,8 @@ class BookingRescheduleServiceTest {
         assertEquals(proposedSlot.getId(), booking.getSlot().getId());
         assertEquals(1, booking.getRescheduleCount());
         verify(bookingSlotValidator).validateServiceAttachedToSlot(eq(proposedSlot.getId()), eq(booking.getService().getId()));
+        verify(notificationService).createNotification(eq(menteeId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+        verify(notificationService, never()).createNotification(eq(mentorId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
     }
 
     @Test
@@ -215,6 +218,39 @@ class BookingRescheduleServiceTest {
 
         assertEquals("ACCEPTED", response.status());
         verify(auditLogRepository).save(any());
+        verify(notificationService, times(2)).createNotification(any(UUID.class), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+    }
+
+    @Test
+    void rejectByParticipant_shouldNotifyRequesterOnly() {
+        BookingRescheduleRequest request = BookingRescheduleRequest.builder()
+                .id(UUID.randomUUID())
+                .booking(booking)
+                .currentSlot(currentSlot)
+                .proposedSlot(proposedSlot)
+                .requestedByUserId(mentorId)
+                .requesterRole(BookingRescheduleActorRole.MENTOR)
+                .status(BookingRescheduleStatus.PENDING)
+                .requestReason("Need another time")
+                .previousSelectedStartTime(currentSlot.getStartTime())
+                .previousSelectedEndTime(currentSlot.getEndTime())
+                .proposedSelectedStartTime(proposedSlot.getStartTime())
+                .proposedSelectedEndTime(proposedSlot.getEndTime())
+                .requestedAt(now)
+                .build();
+
+        when(bookingRescheduleRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(bookingRescheduleRequestRepository.save(any(BookingRescheduleRequest.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BookingRescheduleRequestResponse response = bookingRescheduleService.rejectByParticipant(
+                menteeId,
+                request.getId(),
+                new RespondBookingRescheduleRequest("Keep current schedule")
+        );
+
+        assertEquals("REJECTED", response.status());
+        verify(notificationService).createNotification(eq(mentorId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_REJECTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+        verify(notificationService, never()).createNotification(eq(menteeId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_REJECTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
@@ -25,6 +26,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -72,6 +75,9 @@ class MentorAvailabilityServiceTest {
     @Mock
     private BookingRepository bookingRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator = new AvailabilityCalendarWindowCalculator();
 
     private MentorAvailabilityService mentorAvailabilityService;
@@ -89,6 +95,7 @@ class MentorAvailabilityServiceTest {
                 availabilitySlotServiceRepository,
                 mentorServiceRepository,
                 bookingRepository,
+                notificationService,
                 calendarWindowCalculator
         );
         mentorUserId = UUID.randomUUID();
@@ -310,6 +317,39 @@ class MentorAvailabilityServiceTest {
         );
 
         verify(mentorAvailabilitySlotRepository, never()).save(any(MentorAvailabilitySlot.class));
+    }
+
+    @Test
+    void rejectPendingBookingsForWindow_shouldNotifyAffectedMentees() {
+        UUID windowId = UUID.randomUUID();
+        User mentee = new User();
+        mentee.setId(UUID.randomUUID());
+        Booking pendingBooking = Booking.builder()
+                .id(UUID.randomUUID())
+                .mentee(mentee)
+                .status(BookingStatus.PENDING)
+                .build();
+
+        when(bookingRepository.findBySlotIdAndStatus(windowId, BookingStatus.PENDING))
+                .thenReturn(List.of(pendingBooking));
+
+        ReflectionTestUtils.invokeMethod(
+                mentorAvailabilityService,
+                "rejectPendingBookingsForWindow",
+                windowId,
+                "Khung giờ mentoring đã được mentor cập nhật nên yêu cầu chờ không còn hiệu lực.",
+                LocalDateTime.now()
+        );
+
+        assertEquals(BookingStatus.REJECTED, pendingBooking.getStatus());
+        verify(notificationService).createNotification(
+                eq(mentee.getId()),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED),
+                any(),
+                any(),
+                eq("BOOKING"),
+                eq(pendingBooking.getId())
+        );
     }
 
     private BookingSegmentPendingCountProjection pendingCount(LocalDateTime startTime, LocalDateTime endTime, long pendingCount) {

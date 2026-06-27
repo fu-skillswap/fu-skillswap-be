@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/system/users")
 @RequiredArgsConstructor
-@Tag(name = "System Admin - Roles", description = "Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này.")
+@Tag(name = "System Admin - Roles", description = "Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Grant ADMIN sẽ gỡ MENTEE/MENTOR để tài khoản thành admin-only; revoke ADMIN sẽ trả user về MENTEE mặc định. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('SYSTEM_ADMIN')")
 public class SystemUserRoleController {
@@ -39,7 +39,7 @@ public class SystemUserRoleController {
 
     @Operation(
             summary = "Cấp quyền admin",
-            description = "Cấp quyền ADMIN cho một user đã tồn tại theo email. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần nâng quyền vận hành cho một tài khoản."
+            description = "Cấp quyền ADMIN cho một user đã tồn tại theo email. Khi cấp thành công, backend gỡ MENTEE và MENTOR để tài khoản trở thành admin-only, tránh tiếp tục dùng các API self-service/mentoring dành cho user thường. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần nâng quyền vận hành cho một tài khoản."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấp quyền thành công"),
@@ -60,7 +60,7 @@ public class SystemUserRoleController {
 
     @Operation(
             summary = "Thu hồi quyền admin",
-            description = "Thu hồi quyền ADMIN của một user đã tồn tại theo email. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần gỡ quyền vận hành của một tài khoản."
+            description = "Thu hồi quyền ADMIN của một user đã tồn tại theo email. Khi thu hồi thành công, backend gỡ ADMIN, gỡ MENTOR nếu còn dữ liệu cũ, và gán lại MENTEE mặc định. FE nội bộ chỉ dùng API này trong màn hình role management dành cho SYSTEM_ADMIN khi cần gỡ quyền vận hành của một tài khoản."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Thu hồi quyền thành công"),

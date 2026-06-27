@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
@@ -36,6 +37,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
@@ -56,6 +58,9 @@ class AdminUserServiceTest {
 
     @Mock
     private StudentProfileRepository studentProfileRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private AdminUserService adminUserService;
@@ -102,6 +107,7 @@ class AdminUserServiceTest {
         verify(eventPublisher).publishEvent(any(UserBannedEvent.class));
         verify(userRepository).save(targetUser);
         verify(auditLogRepository).save(any(AuditLog.class));
+        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -117,6 +123,14 @@ class AdminUserServiceTest {
         assertEquals(UserStatus.ACTIVE, targetUser.getStatus());
         verify(eventPublisher, never()).publishEvent(any(UserBannedEvent.class));
         verify(userRepository).save(targetUser);
+        verify(notificationService).createNotification(
+                eq(userId),
+                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.ACCOUNT_UNLOCKED),
+                any(),
+                any(),
+                eq("USER"),
+                eq(userId)
+        );
     }
 
     @Test

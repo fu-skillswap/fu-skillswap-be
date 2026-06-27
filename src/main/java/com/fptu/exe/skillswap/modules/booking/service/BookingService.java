@@ -49,6 +49,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -400,22 +401,32 @@ public class BookingService {
         if (session == null) {
             session = sessionService.createForAcceptedBooking(booking);
         }
-        session.setMeetingPlatform(request.meetingPlatform());
-        session.setMeetingLink(cleanMeetingLink(request.meetingLink()));
-        // Note: location should be added to Session if needed. Leaving it here for backward compatibility or ignoring it if Session doesn't have it.
-        // Wait, I didn't add location to Session. I will leave it to booking.setLocation.
-        booking.setLocation(trimToNull(request.location()));
+        MeetingPlatform previousPlatform = session.getMeetingPlatform();
+        String previousMeetingLink = trimToNull(session.getMeetingLink());
+        String previousLocation = trimToNull(booking.getLocation());
+        MeetingPlatform nextPlatform = request.meetingPlatform();
+        String nextMeetingLink = cleanMeetingLink(request.meetingLink());
+        String nextLocation = trimToNull(request.location());
+        boolean meetingChanged = !Objects.equals(previousPlatform, nextPlatform)
+                || !Objects.equals(previousMeetingLink, nextMeetingLink)
+                || !Objects.equals(previousLocation, nextLocation);
+
+        session.setMeetingPlatform(nextPlatform);
+        session.setMeetingLink(nextMeetingLink);
+        booking.setLocation(nextLocation);
 
         Booking savedBooking = bookingRepository.save(booking);
 
-        notificationService.createNotification(
-                savedBooking.getMentee().getId(),
-                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.MEETING_LINK_UPDATED,
-                "Thông tin buổi học đã được cập nhật",
-                savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
-                "BOOKING",
-                savedBooking.getId()
-        );
+        if (meetingChanged) {
+            notificationService.createNotification(
+                    savedBooking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.MEETING_LINK_UPDATED,
+                    "Thông tin buổi học đã được cập nhật",
+                    savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+        }
 
         return toBookingResponse(savedBooking);
     }
@@ -932,6 +943,9 @@ public class BookingService {
             return;
         }
         List<Booking> pendingBookings = bookingRepository.findByMentorProfileUserIdAndStatus(mentorUserId, BookingStatus.PENDING);
+        if (pendingBookings.isEmpty()) {
+            return;
+        }
         for (Booking booking : pendingBookings) {
             booking.setStatus(BookingStatus.REJECTED);
             booking.setRejectedAt(DateTimeUtil.now());
@@ -941,6 +955,16 @@ public class BookingService {
             }
         }
         bookingRepository.saveAll(pendingBookings);
+        for (Booking booking : pendingBookings) {
+            notificationService.createNotification(
+                    booking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED,
+                    "Yêu cầu đặt lịch không còn hiệu lực",
+                    buildAutoRejectedMessage(reason),
+                    "BOOKING",
+                    booking.getId()
+            );
+        }
     }
 
     @Transactional
@@ -1081,12 +1105,42 @@ public class BookingService {
     @Transactional
     public int expireStalePendingBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        return bookingRepository.bulkExpireStalePendingBookings(
+        String reason = "Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.";
+        List<Booking> staleBookings = bookingRepository.findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(
                 BookingStatus.PENDING,
-                BookingStatus.REJECTED,
-                now,
-                "Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu."
+                now
         );
+        if (staleBookings.isEmpty()) {
+            return 0;
+        }
+        for (Booking booking : staleBookings) {
+            booking.setStatus(BookingStatus.REJECTED);
+            booking.setRejectedAt(now);
+            booking.setRejectReason(reason);
+            if (booking.getSlot() != null) {
+                booking.getSlot().setBooked(false);
+            }
+        }
+        bookingRepository.saveAll(staleBookings);
+        for (Booking booking : staleBookings) {
+            notificationService.createNotification(
+                    booking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED,
+                    "Yêu cầu đặt lịch đã hết hạn",
+                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi trước giờ bắt đầu. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
+                    "BOOKING",
+                    booking.getId()
+            );
+        }
+        return staleBookings.size();
+    }
+
+    private String buildAutoRejectedMessage(String reason) {
+        String normalizedReason = trimToNull(reason);
+        if (normalizedReason == null) {
+            return "Yêu cầu đặt lịch của bạn đã bị từ chối do thay đổi về trạng thái nhận lịch của mentor.";
+        }
+        return "Yêu cầu đặt lịch của bạn đã bị từ chối: " + normalizedReason;
     }
 }
 

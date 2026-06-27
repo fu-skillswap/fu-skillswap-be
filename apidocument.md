@@ -27,6 +27,9 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Mục đích: đăng nhập Google bằng `idToken`, backend phát hành access token của SkillSwap.
 - Request body:
   - `idToken` `string`
+- Ghi chú:
+  - Notification hiển thị cho user thường, không bao gồm admin queue nội bộ.
+  - Các `type` user-facing dùng ở beta gồm booking lifecycle, reschedule, feedback, forum moderation cho owner và `ACCOUNT_UNLOCKED`.
 - Response:
   - `TokenResponse`
     - `accessToken`
@@ -924,12 +927,18 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Request body:
   - `AdminRoleChangeRequest`
     - `email`
+- Behavior:
+  - Nếu user đã có `ADMIN` thì trả `409 Conflict`.
+  - Nếu cấp thành công, backend gỡ `MENTEE` và `MENTOR` khỏi user để tài khoản trở thành admin-only.
 
 ### POST `/api/system/users/admin-role/revoke`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
 - Request body:
   - `AdminRoleChangeRequest`
     - `email`
+- Behavior:
+  - Nếu user chưa có `ADMIN` thì trả `409 Conflict`.
+  - Nếu thu hồi thành công, backend gỡ `ADMIN`, gỡ `MENTOR` nếu còn dữ liệu cũ, và gán lại `MENTEE` mặc định.
 
 ### GET `/api/system/users/admins`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`

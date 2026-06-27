@@ -57,7 +57,7 @@ class SystemUserRoleServiceTest {
     }
 
     @Test
-    void grantAdminRole_successful_shouldNormalizeEmailAndAddRole() {
+    void grantAdminRole_successful_shouldNormalizeEmailAndSwitchToAdminOnlyRole() {
         when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
         when(userRepository.findById(systemAdminId)).thenReturn(Optional.of(systemAdmin));
 
@@ -65,13 +65,13 @@ class SystemUserRoleServiceTest {
 
         assertEquals(targetUser.getId(), response.userId());
         assertTrue(targetUser.getRoles().contains(RoleCode.ADMIN));
-        assertTrue(targetUser.getRoles().contains(RoleCode.MENTEE));
+        assertFalse(targetUser.getRoles().contains(RoleCode.MENTEE));
         verify(userRepository).findActiveByEmailIgnoreCase("user@test.com");
         verify(userRepository).save(targetUser);
     }
 
     @Test
-    void grantAdminRole_shouldPreserveExistingMentorAndMenteeRoles() {
+    void grantAdminRole_shouldRemoveExistingMentorAndMenteeRoles() {
         targetUser.getRoles().add(RoleCode.MENTOR);
         when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
         when(userRepository.findById(systemAdminId)).thenReturn(Optional.of(systemAdmin));
@@ -79,8 +79,8 @@ class SystemUserRoleServiceTest {
         systemUserRoleService.grantAdminRole(systemAdminId, "user@test.com");
 
         assertTrue(targetUser.getRoles().contains(RoleCode.ADMIN));
-        assertTrue(targetUser.getRoles().contains(RoleCode.MENTEE));
-        assertTrue(targetUser.getRoles().contains(RoleCode.MENTOR));
+        assertFalse(targetUser.getRoles().contains(RoleCode.MENTEE));
+        assertFalse(targetUser.getRoles().contains(RoleCode.MENTOR));
     }
 
     @Test
@@ -107,7 +107,7 @@ class SystemUserRoleServiceTest {
     }
 
     @Test
-    void revokeAdminRole_shouldPreserveNonAdminRoles() {
+    void revokeAdminRole_shouldRemoveAdminAndReturnUserToMenteeRole() {
         targetUser.getRoles().add(RoleCode.MENTOR);
         targetUser.getRoles().add(RoleCode.ADMIN);
         when(userRepository.findActiveByEmailIgnoreCase("user@test.com")).thenReturn(Optional.of(targetUser));
@@ -117,7 +117,7 @@ class SystemUserRoleServiceTest {
         assertEquals(targetUser.getId(), response.userId());
         assertFalse(targetUser.getRoles().contains(RoleCode.ADMIN));
         assertTrue(targetUser.getRoles().contains(RoleCode.MENTEE));
-        assertTrue(targetUser.getRoles().contains(RoleCode.MENTOR));
+        assertFalse(targetUser.getRoles().contains(RoleCode.MENTOR));
         verify(userRepository).save(targetUser);
     }
 
