@@ -123,10 +123,28 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     private final TagRepository tagRepository;
     private final MentorTagRepository mentorTagRepository;
 
+    private boolean seederEnabled = false;
+
+    public void setSeederEnabled(boolean seederEnabled) {
+        this.seederEnabled = seederEnabled;
+    }
+
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("SkillSwap demo data seeding is disabled to keep DB clean.");
+        if (!seederEnabled) {
+            log.info("SkillSwap demo data seeding is disabled to keep DB clean.");
+            return;
+        }
+
+        log.info("Starting SkillSwap demo data seeding...");
+
+        Map<String, Tag> helpTopics = loadHelpTopics();
+        purgeMenteeSeeds();
+        seedMentors(helpTopics);
+        logQualifiedMentorStatistics();
+
+        log.info("SkillSwap demo data seeding completed successfully!");
     }
 
     private void purgeMenteeSeeds() {

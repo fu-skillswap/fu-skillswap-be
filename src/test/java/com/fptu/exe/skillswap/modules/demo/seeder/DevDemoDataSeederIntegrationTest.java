@@ -102,6 +102,7 @@ class DevDemoDataSeederIntegrationTest {
                 tagRepository,
                 mentorTagRepository
         );
+        seeder.setSeederEnabled(true);
     }
 
     @Test
