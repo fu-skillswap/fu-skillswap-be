@@ -700,6 +700,13 @@ public class MentorVerificationService {
         request.setLockedAt(null);
         request.setLockExpiresAt(null);
     }
+
+    @Transactional(readOnly = true)
+    public String getLatestVerificationStatus(UUID userId) {
+        return findLatestRequest(userId)
+                .map(req -> req.getStatus().name())
+                .orElse("NOT_STARTED");
+    }
 }
 
 

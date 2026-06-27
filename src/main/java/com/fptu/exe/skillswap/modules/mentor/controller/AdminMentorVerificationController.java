@@ -30,7 +30,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Admin - Mentor Verification", description = "Nhóm API cho admin review hồ sơ mentor verification, xem chi tiết request và xử lý quyết định theo cơ chế soft lock. FE admin dùng trong queue review và màn hình xử lý hồ sơ.")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminMentorVerificationController {
 
     private final AdminMentorVerificationService adminMentorVerificationService;

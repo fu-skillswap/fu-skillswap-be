@@ -98,13 +98,35 @@ public class NotificationService {
     }
 
     private NotificationResponse mapToResponse(Notification notification) {
+        String relatedEntityType = notification.getRelatedEntityType();
+        UUID relatedEntityId = notification.getRelatedEntityId();
+
+        String deepLink = "";
+        String actionType = "VIEW_DETAIL";
+
+        if ("BOOKING".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
+            deepLink = "/bookings/" + relatedEntityId;
+            actionType = "VIEW_BOOKING";
+        } else if ("CONVERSATION".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
+            deepLink = "/chat/" + relatedEntityId;
+            actionType = "OPEN_CHAT";
+        } else if ("FORUM_POST".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
+            deepLink = "/forum/posts/" + relatedEntityId;
+            actionType = "VIEW_FORUM_POST";
+        } else if ("MENTOR_VERIFICATION".equalsIgnoreCase(relatedEntityType)) {
+            deepLink = "/mentor/verification";
+            actionType = "VIEW_MENTOR_VERIFICATION";
+        }
+
         return NotificationResponse.builder()
                 .notificationId(notification.getId())
                 .type(notification.getType().name())
                 .title(notification.getTitle())
                 .message(notification.getMessage())
-                .relatedEntityType(notification.getRelatedEntityType())
-                .relatedEntityId(notification.getRelatedEntityId())
+                .relatedEntityType(relatedEntityType)
+                .relatedEntityId(relatedEntityId)
+                .deepLink(deepLink)
+                .actionType(actionType)
                 .read(notification.getReadAt() != null)
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())

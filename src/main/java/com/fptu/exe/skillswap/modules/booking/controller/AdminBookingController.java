@@ -34,7 +34,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 @RequiredArgsConstructor
 @Tag(name = "Admin - Bookings", description = "Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking.")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminBookingController {
 
     private final BookingService bookingService;

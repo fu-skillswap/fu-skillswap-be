@@ -21,7 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Admin - Mentors", description = "Admin list and details view for system mentors")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminMentorController {
 
     private final AdminMentorService adminMentorService;

@@ -31,6 +31,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -201,9 +202,14 @@ public class BookingService {
                     : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
         };
 
+        java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
+        java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
+                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+                : java.util.Collections.emptyMap();
+
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream()
-                        .map(this::toBookingResponse)
+                        .map(b -> toBookingResponse(b, bookingToConvMap))
                         .toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -593,8 +599,13 @@ public class BookingService {
                 adminBookingPageable(safeRequest)
         );
 
+        java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
+        java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
+                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+                : java.util.Collections.emptyMap();
+
         return PageResponse.<BookingResponse>builder()
-                .content(page.getContent().stream().map(this::toBookingResponse).toList())
+                .content(page.getContent().stream().map(b -> toBookingResponse(b, bookingToConvMap)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -703,6 +714,10 @@ public class BookingService {
     }
 
     private BookingResponse toBookingResponse(Booking booking) {
+        return toBookingResponse(booking, null);
+    }
+
+    private BookingResponse toBookingResponse(Booking booking, java.util.Map<UUID, UUID> bookingToConversationMap) {
         User mentee = booking.getMentee();
         MentorProfile mentorProfile = booking.getMentorProfile();
         User mentorUser = mentorProfile == null ? null : mentorProfile.getUser();
@@ -715,6 +730,59 @@ public class BookingService {
         String link = session != null ? session.getMeetingLink() : booking.getMeetingLink();
         LocalDateTime actualStart = session != null ? session.getActualStartTime() : booking.getActualStartTime();
         LocalDateTime actualEnd = session != null ? session.getActualEndTime() : booking.getActualEndTime();
+
+        UUID conversationId = null;
+        if (bookingToConversationMap != null && bookingToConversationMap.containsKey(booking.getId())) {
+            conversationId = bookingToConversationMap.get(booking.getId());
+        } else if (conversationService != null) {
+            com.fptu.exe.skillswap.modules.conversation.domain.Conversation conv = conversationService.findByBookingId(booking.getId());
+            if (conv != null) {
+                conversationId = conv.getId();
+            }
+        }
+
+        UUID currentUserId = null;
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserPrincipal) {
+            currentUserId = ((UserPrincipal) auth.getPrincipal()).getPublicId();
+        }
+
+        boolean isMenteeUser = currentUserId != null && mentee != null && currentUserId.equals(mentee.getId());
+        boolean isMentorUser = currentUserId != null && mentorProfile != null && currentUserId.equals(mentorProfile.getUserId());
+
+        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime startTime = selectedStartTime(booking);
+        LocalDateTime endTime = selectedEndTime(booking);
+
+        boolean canCancel = false;
+        boolean canComplete = false;
+        boolean canReschedule = false;
+        boolean canSubmitFeedback = false;
+
+        if (currentUserId != null) {
+            if (booking.getStatus() == BookingStatus.PENDING) {
+                canCancel = isMenteeUser;
+            } else if (booking.getStatus() == BookingStatus.ACCEPTED) {
+                canCancel = (isMenteeUser || isMentorUser) && startTime != null && now.isBefore(startTime);
+            }
+
+            if (isMentorUser) {
+                canComplete = (booking.getStatus() == BookingStatus.ACCEPTED || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
+                        && endTime != null && now.isAfter(endTime);
+            } else if (isMenteeUser) {
+                canComplete = booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
+                        && endTime != null && now.isBefore(endTime.plusHours(24));
+            }
+
+            canReschedule = (isMenteeUser || isMentorUser)
+                    && booking.getStatus() == BookingStatus.ACCEPTED
+                    && (booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) < 1
+                    && startTime != null
+                    && java.time.Duration.between(now, startTime).toMinutes() >= 6 * 60;
+
+            canSubmitFeedback = isMenteeUser
+                    && (booking.getStatus() == BookingStatus.COMPLETED || booking.getStatus() == BookingStatus.AUTO_CLOSED);
+        }
 
         return BookingResponse.builder()
                 .bookingId(booking.getId())
@@ -745,8 +813,8 @@ public class BookingService {
                 .meetingPlatform(platform)
                 .meetingLink(link)
                 .location(booking.getLocation())
-                .selectedStartTime(selectedStartTime(booking))
-                .selectedEndTime(selectedEndTime(booking))
+                .selectedStartTime(startTime)
+                .selectedEndTime(endTime)
                 .actualStartTime(actualStart)
                 .actualEndTime(actualEnd)
                 .acceptedAt(booking.getAcceptedAt())
@@ -767,6 +835,11 @@ public class BookingService {
                 .menteeNote(booking.getMenteeNote())
                 .createdAt(booking.getCreatedAt())
                 .updatedAt(booking.getUpdatedAt())
+                .conversationId(conversationId)
+                .canCancel(canCancel)
+                .canComplete(canComplete)
+                .canReschedule(canReschedule)
+                .canSubmitFeedback(canSubmitFeedback)
                 .build();
     }
 

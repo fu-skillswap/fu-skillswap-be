@@ -9,6 +9,7 @@ import java.util.UUID;
 public interface ConversationParticipantRepository extends JpaRepository<ConversationParticipant, UUID> {
     List<ConversationParticipant> findByUserId(UUID userId);
     boolean existsByConversationIdAndUserId(UUID conversationId, UUID userId);
+    java.util.Optional<ConversationParticipant> findByConversationIdAndUserId(UUID conversationId, UUID userId);
     List<ConversationParticipant> findByConversationIdIn(List<UUID> conversationIds);
     List<ConversationParticipant> findByConversationId(UUID conversationId);
 

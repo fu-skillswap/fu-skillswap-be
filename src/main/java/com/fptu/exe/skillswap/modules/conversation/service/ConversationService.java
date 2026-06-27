@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.conversation.domain.ConversationStatus;
 import com.fptu.exe.skillswap.modules.conversation.domain.ConversationType;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
+import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
+    private final MessageRepository messageRepository;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -95,12 +97,22 @@ public class ConversationService {
         java.util.Map<UUID, java.util.List<ConversationParticipant>> participantsByConvId = allParticipants.stream()
                 .collect(java.util.stream.Collectors.groupingBy(cp -> cp.getConversation().getId()));
 
+        java.util.List<Object[]> unreadCountsRaw = messageRepository.countUnreadMessagesBatch(conversationIds, userId);
+        java.util.Map<UUID, Long> unreadCountsMap = unreadCountsRaw.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> (Long) row[1],
+                        (a, b) -> a
+                ));
+
         return conversationsPage.map(conv -> {
             java.util.List<ConversationParticipant> participants = participantsByConvId.getOrDefault(conv.getId(), java.util.Collections.emptyList());
             ConversationParticipant other = participants.stream()
                     .filter(p -> !p.getUser().getId().equals(userId))
                     .findFirst()
                     .orElse(null);
+
+            long unread = unreadCountsMap.getOrDefault(conv.getId(), 0L);
 
             return com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse.builder()
                     .id(conv.getId())
@@ -114,6 +126,7 @@ public class ConversationService {
                     .lastMessageContent(conv.getLastMessageContent())
                     .lastMessageAt(conv.getLastMessageAt())
                     .createdAt(conv.getCreatedAt())
+                    .unreadCount(unread)
                     .build();
         });
     }
@@ -190,5 +203,83 @@ public class ConversationService {
                 .createdAt(message.getCreatedAt())
                 .isMine(true)
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse getConversationDetail(UUID conversationId, UUID userId) {
+        Conversation conv = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(
+                        com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
+
+        java.util.List<ConversationParticipant> participants = participantRepository.findByConversationId(conversationId);
+        boolean isParticipant = participants.stream().anyMatch(p -> p.getUser().getId().equals(userId));
+        if (!isParticipant) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(
+                    com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
+        }
+
+        ConversationParticipant other = participants.stream()
+                .filter(p -> !p.getUser().getId().equals(userId))
+                .findFirst()
+                .orElse(null);
+
+        ConversationParticipant me = participants.stream()
+                .filter(p -> p.getUser().getId().equals(userId))
+                .findFirst()
+                .orElse(null);
+
+        long unread = 0;
+        if (me != null) {
+            java.time.LocalDateTime lastRead = me.getLastReadAt() != null ? me.getLastReadAt() : me.getJoinedAt();
+            unread = messageRepository.countUnreadMessages(conv.getId(), userId, lastRead);
+        }
+
+        return com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse.builder()
+                .id(conv.getId())
+                .sourceType(conv.getSourceType())
+                .sourceId(conv.getSourceId())
+                .type(conv.getType())
+                .status(conv.getStatus())
+                .otherUserId(other != null ? other.getUser().getId() : null)
+                .otherUserName(other != null ? other.getUser().getFullName() : null)
+                .otherUserAvatarUrl(other != null ? other.getUser().getAvatarUrl() : null)
+                .lastMessageContent(conv.getLastMessageContent())
+                .lastMessageAt(conv.getLastMessageAt())
+                .createdAt(conv.getCreatedAt())
+                .unreadCount(unread)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public long getTotalUnreadCount(UUID userId) {
+        java.util.List<ConversationParticipant> myParticipations = participantRepository.findByUserId(userId);
+        long totalUnread = 0;
+        for (ConversationParticipant cp : myParticipations) {
+            java.time.LocalDateTime lastRead = cp.getLastReadAt() != null ? cp.getLastReadAt() : cp.getJoinedAt();
+            totalUnread += messageRepository.countUnreadMessages(cp.getConversation().getId(), userId, lastRead);
+        }
+        return totalUnread;
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, UUID> findConversationIdsByBookingIds(java.util.List<UUID> bookingIds) {
+        if (bookingIds == null || bookingIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.List<Conversation> convs = conversationRepository.findBySourceTypeAndSourceIdIn(ConversationSourceType.BOOKING, bookingIds);
+        return convs.stream().collect(java.util.stream.Collectors.toMap(
+                Conversation::getSourceId,
+                Conversation::getId,
+                (a, b) -> a
+        ));
+    }
+
+    @Transactional
+    public void markConversationAsRead(UUID conversationId, UUID userId) {
+        ConversationParticipant me = participantRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(
+                        com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này"));
+        me.setLastReadAt(DateTimeUtil.now());
+        participantRepository.save(me);
     }
 }

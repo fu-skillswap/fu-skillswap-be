@@ -130,6 +130,16 @@ public record BookingResponse(
         @Schema(description = "Thời điểm tạo booking")
         LocalDateTime createdAt,
         @Schema(description = "Thời điểm cập nhật booking gần nhất")
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        @Schema(description = "ID cuộc hội thoại chat tương ứng của booking nếu có", nullable = true)
+        UUID conversationId,
+        @Schema(description = "true nếu user hiện tại có thể hủy booking")
+        boolean canCancel,
+        @Schema(description = "true nếu user hiện tại có thể hoàn tất booking")
+        boolean canComplete,
+        @Schema(description = "true nếu user hiện tại có thể đề xuất dời lịch")
+        boolean canReschedule,
+        @Schema(description = "true nếu user hiện tại có thể viết đánh giá feedback")
+        boolean canSubmitFeedback
 ) {
 }

@@ -52,6 +52,9 @@ class ConversationServiceUnitTest {
     private ConversationParticipantRepository participantRepository;
 
     @Mock
+    private MessageRepository messageRepository;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
@@ -228,5 +231,96 @@ class ConversationServiceUnitTest {
         assertEquals("Hello world!", capturedEvent.getEvent().content());
         assertEquals(2, capturedEvent.getRecipientUserIds().size());
         assertTrue(capturedEvent.getRecipientUserIds().contains(otherParticipant.getUser().getId()));
+    }
+
+    @Test
+    void getConversationDetail_shouldReturnDetail_whenUserIsParticipant() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID otherUserId = UUID.randomUUID();
+
+        User meUser = new User();
+        meUser.setId(userId);
+
+        User otherUser = new User();
+        otherUser.setId(otherUserId);
+
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .sourceType(ConversationSourceType.BOOKING)
+                .sourceId(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .status(ConversationStatus.ACTIVE)
+                .build();
+
+        ConversationParticipant me = ConversationParticipant.builder()
+                .conversation(conversation)
+                .user(meUser)
+                .joinedAt(LocalDateTime.now().minusDays(1))
+                .build();
+
+        ConversationParticipant other = ConversationParticipant.builder()
+                .conversation(conversation)
+                .user(otherUser)
+                .joinedAt(LocalDateTime.now().minusDays(1))
+                .build();
+
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(me, other));
+        when(messageRepository.countUnreadMessages(eq(conversationId), eq(userId), any())).thenReturn(5L);
+
+        ConversationResponse response = conversationService.getConversationDetail(conversationId, userId);
+
+        assertNotNull(response);
+        assertEquals(conversationId, response.id());
+        assertEquals(otherUserId, response.otherUserId());
+        assertEquals(5L, response.unreadCount());
+    }
+
+    @Test
+    void getConversationDetail_shouldThrowAccessDenied_whenUserIsNotParticipant() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Conversation conversation = Conversation.builder().id(conversationId).build();
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(Collections.emptyList());
+
+        assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> conversationService.getConversationDetail(conversationId, userId));
+    }
+
+    @Test
+    void getTotalUnreadCount_shouldAccumulateUnreadCounts() {
+        UUID userId = UUID.randomUUID();
+        UUID convId1 = UUID.randomUUID();
+        UUID convId2 = UUID.randomUUID();
+
+        Conversation conv1 = Conversation.builder().id(convId1).build();
+        Conversation conv2 = Conversation.builder().id(convId2).build();
+
+        ConversationParticipant cp1 = ConversationParticipant.builder().conversation(conv1).joinedAt(LocalDateTime.now()).build();
+        ConversationParticipant cp2 = ConversationParticipant.builder().conversation(conv2).joinedAt(LocalDateTime.now()).build();
+
+        when(participantRepository.findByUserId(userId)).thenReturn(List.of(cp1, cp2));
+        when(messageRepository.countUnreadMessages(eq(convId1), eq(userId), any())).thenReturn(3L);
+        when(messageRepository.countUnreadMessages(eq(convId2), eq(userId), any())).thenReturn(4L);
+
+        long total = conversationService.getTotalUnreadCount(userId);
+        assertEquals(7L, total);
+    }
+
+    @Test
+    void markConversationAsRead_shouldUpdateLastReadAt() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        ConversationParticipant me = ConversationParticipant.builder().build();
+        when(participantRepository.findByConversationIdAndUserId(conversationId, userId)).thenReturn(Optional.of(me));
+
+        conversationService.markConversationAsRead(conversationId, userId);
+
+        assertNotNull(me.getLastReadAt());
+        verify(participantRepository, times(1)).save(me);
     }
 }

@@ -27,6 +27,10 @@ public class NotificationResponse {
     private String relatedEntityType;
     @Schema(description = "Related entity ID for deep linking", example = "019f4234-aaaa-bbbb-cccc-1234567890ab")
     private UUID relatedEntityId;
+    @Schema(description = "Đường dẫn chi tiết để FE thực hiện điều hướng", example = "/bookings/019f...")
+    private String deepLink;
+    @Schema(description = "Loại hành động mà FE nên hiển thị hoặc thực hiện", example = "VIEW_BOOKING")
+    private String actionType;
     @Schema(description = "Whether the notification has already been marked as read", example = "false")
     private boolean read;
     @Schema(description = "Timestamp when the notification was marked as read", nullable = true, example = "2026-06-24T12:00:00")

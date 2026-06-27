@@ -11,4 +11,27 @@ import java.util.UUID;
 public interface MessageRepository extends JpaRepository<Message, UUID> {
     @EntityGraph(attributePaths = {"sender"})
     Page<Message> findByConversationIdOrderByCreatedAtDesc(UUID conversationId, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Query("""
+        select count(m) from Message m
+        where m.conversation.id = :conversationId
+          and (m.sender is null or m.sender.id <> :userId)
+          and m.createdAt > :lastReadAt
+    """)
+    long countUnreadMessages(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
+                             @org.springframework.data.repository.query.Param("userId") UUID userId,
+                             @org.springframework.data.repository.query.Param("lastReadAt") java.time.LocalDateTime lastReadAt);
+
+    @org.springframework.data.jpa.repository.Query("""
+        select m.conversation.id, count(m)
+        from Message m
+        join ConversationParticipant cp on cp.conversation.id = m.conversation.id
+        where cp.user.id = :userId
+          and m.conversation.id in :conversationIds
+          and (m.sender.id is null or m.sender.id <> :userId)
+          and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt)
+        group by m.conversation.id
+    """)
+    java.util.List<Object[]> countUnreadMessagesBatch(@org.springframework.data.repository.query.Param("conversationIds") java.util.List<UUID> conversationIds,
+                                                    @org.springframework.data.repository.query.Param("userId") UUID userId);
 }

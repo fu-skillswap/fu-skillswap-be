@@ -126,14 +126,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        log.info("Starting SkillSwap demo data seeding...");
-
-        Map<String, Tag> helpTopics = loadHelpTopics();
-        purgeMenteeSeeds();
-        seedMentors(helpTopics);
-        logQualifiedMentorStatistics();
-
-        log.info("SkillSwap demo data seeding completed successfully!");
+        log.info("SkillSwap demo data seeding is disabled to keep DB clean.");
     }
 
     private void purgeMenteeSeeds() {

@@ -36,7 +36,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Tag(name = "Admin - Forum", description = "Nhóm API moderation forum dành cho admin để xử lý report, ẩn hoặc khôi phục nội dung.")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminForumController {
 
     private final AdminForumModerationService adminForumModerationService;

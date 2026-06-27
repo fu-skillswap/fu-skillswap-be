@@ -104,4 +104,57 @@ public class ChatController {
         MessageResponse response = conversationService.sendMessage(conversationId, userPrincipal.getId(), request, messageRepository, userRepository);
         return ApiResponse.created(response);
     }
+
+    @GetMapping("/{conversationId}")
+    @Operation(
+            summary = "Lấy chi tiết conversation theo ID",
+            description = "Trả về thông tin chi tiết (metadata) của một cuộc hội thoại mà user hiện tại đang tham gia."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversation detail loaded successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+    })
+    public ApiResponse<ConversationResponse> getConversationDetail(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable UUID conversationId) {
+        
+        ConversationResponse response = conversationService.getConversationDetail(conversationId, userPrincipal.getId());
+        return ApiResponse.success(response);
+    }
+
+    @GetMapping("/unread-count")
+    @Operation(
+            summary = "Lấy tổng số tin nhắn chưa đọc của tôi",
+            description = "Trả về tổng số tin nhắn chưa đọc trên toàn bộ các active conversations của user hiện tại."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Unread count loaded successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated")
+    })
+    public ApiResponse<java.util.Map<String, Long>> getTotalUnreadCount(
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        
+        long count = conversationService.getTotalUnreadCount(userPrincipal.getId());
+        return ApiResponse.success(java.util.Map.of("totalUnreadCount", count));
+    }
+
+    @PatchMapping("/{conversationId}/read")
+    @Operation(
+            summary = "Đánh dấu cuộc hội thoại đã đọc",
+            description = "Cập nhật thời điểm đọc tin nhắn cuối cùng của user hiện tại trong cuộc hội thoại thành thời gian hiện tại."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversation marked as read successfully"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation")
+    })
+    public ApiResponse<String> markConversationAsRead(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable UUID conversationId) {
+        
+        conversationService.markConversationAsRead(conversationId, userPrincipal.getId());
+        return ApiResponse.success("Đánh dấu đã đọc thành công");
+    }
 }

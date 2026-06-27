@@ -326,6 +326,14 @@ public class MentorDiscoveryService {
         int reviews = defaultInteger(mentorProfile.getTotalReviews());
         BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
 
+        boolean hasCompletedProfile = mentorProfile.getHeadline() != null && !mentorProfile.getHeadline().isBlank()
+                && mentorProfile.getExpertiseDescription() != null && !mentorProfile.getExpertiseDescription().isBlank()
+                && mentorProfile.getTeachingMode() != null && mentorProfile.getSessionDuration() != null;
+        boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::active);
+        boolean canRequestBooking = mentorProfile.isAvailable() && mentorProfile.getVerifiedAt() != null
+                && (mentorProfile.getBookingSuspendedUntil() == null || mentorProfile.getBookingSuspendedUntil().isBefore(LocalDateTime.now()))
+                && hasActiveServices;
+
         return MentorDiscoveryDetailResponse.builder()
                 .mentorUserId(mentorProfile.getUserId())
                 .displayName(mentorProfile.getUser().getFullName())
@@ -355,6 +363,9 @@ public class MentorDiscoveryService {
                 .githubUrl(mentorProfile.getGithubUrl())
                 .helpTopicTags(filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
                 .services(services)
+                .canRequestBooking(canRequestBooking)
+                .hasCompletedProfile(hasCompletedProfile)
+                .hasActiveServices(hasActiveServices)
                 .build();
     }
 

@@ -33,6 +33,8 @@ public record ConversationResponse(
         @Schema(description = "Timestamp of the latest message", example = "2026-06-24T11:45:00")
         LocalDateTime lastMessageAt,
         @Schema(description = "Conversation creation time", example = "2026-06-24T10:30:00")
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        @Schema(description = "Số lượng tin nhắn chưa đọc đối với user hiện tại", example = "3")
+        long unreadCount
 ) {
 }
