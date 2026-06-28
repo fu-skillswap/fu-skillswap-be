@@ -179,7 +179,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedTag("HELP_CAREER_PATH", "Định hướng nghề nghiệp", "Career Guidance", TagType.HELP_TOPIC, 96);
         seedTag("HELP_INTERNSHIP", "Hỗ trợ thực tập", "Internship Guidance", TagType.HELP_TOPIC, 93);
         seedTag("HELP_PROJECT_REVIEW", "Đánh giá dự án", "Project Review", TagType.HELP_TOPIC, 92);
-        seedTag("HELP_GRADUATION_THESIS", "Hỗ trợ đồ án tốt nghiệp", "Graduation Thesis Support", TagType.HELP_TOPIC, 90);
+        seedTag("HELP_GRADUATION_THESIS", "Hướng dẫn đồ án tốt nghiệp", "Graduation Thesis Guidance", TagType.HELP_TOPIC, 90);
         seedTag("HELP_PRODUCT_FEEDBACK", "Góp ý sản phẩm", "Product Feedback", TagType.HELP_TOPIC, 88);
         seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 89);
         seedTag("HELP_STUDY_PLAN", "Hướng dẫn môn học", "Study Guidance", TagType.HELP_TOPIC, 87);
