@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking;
 
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
@@ -18,6 +19,7 @@ import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindow
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -28,6 +30,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -45,6 +48,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -167,6 +171,56 @@ class MentorAvailabilityServiceTest {
         BaseException ex = assertThrows(BaseException.class, () ->
                 mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
         assertEquals(ErrorCode.RESOURCE_CONFLICT, ex.getErrorCode());
+    }
+
+    @Test
+    void createSlotDirectly_withServices_assignsCompositeIdsBeforeSaveAll() {
+        CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(1).plusHours(2),
+                "Note",
+                List.of(UUID.randomUUID())
+        );
+
+        MentorService mentorService = new MentorService();
+        UUID serviceId = UUID.randomUUID();
+        mentorService.setId(serviceId);
+        mentorService.setMentorProfile(mentorProfile);
+        mentorService.setActive(true);
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
+                .thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+                .thenReturn(false);
+        when(mentorServiceRepository.findAllById(request.serviceIds()))
+                .thenReturn(List.of(mentorService));
+        when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID slotId = UUID.randomUUID();
+        MentorAvailabilitySlot savedSlot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .startTime(request.startTime())
+                .endTime(request.endTime())
+                .isActive(true)
+                .isBooked(false)
+                .note(request.note())
+                .build();
+        when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
+                .thenReturn(savedSlot);
+
+        mentorAvailabilityService.createSlotDirectly(mentorUserId, request);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<AvailabilitySlotService>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(availabilitySlotServiceRepository, times(1)).saveAll(captor.capture());
+        List<AvailabilitySlotService> bindings = captor.getValue();
+        assertEquals(1, bindings.size());
+        AvailabilitySlotService binding = bindings.getFirst();
+        assertNotNull(binding.getId());
+        assertEquals(slotId, binding.getId().getSlotId());
+        assertEquals(serviceId, binding.getId().getServiceId());
     }
 
     @Test

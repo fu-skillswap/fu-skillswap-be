@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
+import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
@@ -178,10 +179,7 @@ public class MentorAvailabilityService {
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> AvailabilitySlotService.builder()
-                            .slot(savedSlot)
-                            .service(service)
-                            .build())
+                    .map(service -> buildSlotServiceBinding(savedSlot, service))
                     .toList();
             availabilitySlotServiceRepository.saveAll(slotServices);
             savedSlot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
@@ -253,10 +251,7 @@ public class MentorAvailabilityService {
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> AvailabilitySlotService.builder()
-                            .slot(slot)
-                            .service(service)
-                            .build())
+                    .map(service -> buildSlotServiceBinding(slot, service))
                     .toList();
             availabilitySlotServiceRepository.saveAll(slotServices);
             slot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
@@ -740,12 +735,23 @@ public class MentorAvailabilityService {
         }
         availabilitySlotServiceRepository.saveAll(
                 services.stream()
-                        .map(service -> AvailabilitySlotService.builder()
-                                .slot(slot)
-                                .service(service)
-                                .build())
+                        .map(service -> buildSlotServiceBinding(slot, service))
                         .toList()
         );
+    }
+
+    private AvailabilitySlotService buildSlotServiceBinding(MentorAvailabilitySlot slot, MentorService service) {
+        if (slot == null || slot.getId() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Availability slot chưa sẵn sàng để gắn service");
+        }
+        if (service == null || service.getId() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Service chưa sẵn sàng để gắn vào slot");
+        }
+        return AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(slot.getId(), service.getId()))
+                .slot(slot)
+                .service(service)
+                .build();
     }
 
     private boolean overlapsClosedRule(LocalDateTime windowStart, LocalDateTime windowEnd, List<MentorAvailabilityRule> closedRules) {
