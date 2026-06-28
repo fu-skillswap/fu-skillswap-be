@@ -34,6 +34,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,6 +84,9 @@ class BookingNotificationIntegrationTest {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private PaymentOrderService paymentOrderService;
 
     @Autowired
     private MentorServiceRepository mentorServiceRepository;
@@ -282,6 +287,7 @@ class BookingNotificationIntegrationTest {
     void updateMeetingLink_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
+        paymentOrderService.checkout(mentee1.getId(), new PaymentCheckoutRequest(b1.bookingId(), null));
         
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         

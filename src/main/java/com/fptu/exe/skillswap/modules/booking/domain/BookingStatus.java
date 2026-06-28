@@ -5,7 +5,9 @@ import io.swagger.v3.oas.annotations.media.Schema;
 @Schema(description = "Booking lifecycle status used across mentee, mentor, admin, notification, and review flows.")
 public enum BookingStatus {
     PENDING,
+    ACCEPTED_AWAITING_PAYMENT,
     ACCEPTED,
+    PAID,
     REJECTED,
     EXPIRED,
     CANCELLED_BY_MENTEE,

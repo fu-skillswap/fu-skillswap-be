@@ -76,6 +76,11 @@ public class MentorAvailabilityService {
     private static final String BLOCKED_BY_ACCEPTED_REASON = "Đã có booking được mentor chấp nhận trùng với khoảng thời gian này";
     private static final String BLOCKED_BY_PENDING_QUOTA_REASON = "Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận";
     private static final String BLOCKED_BY_PAST_TIME_REASON = "Segment này đã bắt đầu hoặc đã trôi qua";
+    private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
+            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+            BookingStatus.ACCEPTED,
+            BookingStatus.PAID
+    );
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
@@ -461,10 +466,9 @@ public class MentorAvailabilityService {
     private List<ServiceSlotCandidateItemResponse> buildSegmentCandidates(MentorAvailabilitySlot slot, MentorService service) {
         validateSlotSegmentBase(slot, service);
 
-        List<Booking> acceptedBookings = bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(
-                slot.getId(),
-                BookingStatus.ACCEPTED
-        );
+        List<Booking> acceptedBookings = SLOT_LOCKING_STATUSES.stream()
+                .flatMap(status -> bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(slot.getId(), status).stream())
+                .toList();
         Map<String, Integer> pendingCountBySegment = toPendingSegmentCountMap(
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
@@ -596,7 +600,7 @@ public class MentorAvailabilityService {
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
         int totalPendingRequests = pendingCounts.values().stream().mapToInt(Integer::intValue).sum();
-        int acceptedSlotCount = Math.toIntExact(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED));
+        int acceptedSlotCount = Math.toIntExact(bookingRepository.countBySlotIdAndStatusIn(slot.getId(), SLOT_LOCKING_STATUSES));
         Integer remainingRequestSlots = pendingCounts.isEmpty()
                 ? BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT
                 : Math.max(
@@ -815,9 +819,9 @@ public class MentorAvailabilityService {
             if (!window.isActive()) {
                 continue;
             }
-            if (bookingRepository.existsOverlappingBySlotIdAndStatus(
+            if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                     window.getId(),
-                    BookingStatus.ACCEPTED,
+                    SLOT_LOCKING_STATUSES,
                     window.getStartTime(),
                     window.getEndTime()
             )) {

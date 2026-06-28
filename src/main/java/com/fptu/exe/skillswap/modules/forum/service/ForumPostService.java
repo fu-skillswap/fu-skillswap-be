@@ -32,6 +32,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -44,6 +45,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ForumPostService {
 
     private final ForumPostRepository forumPostRepository;
@@ -149,14 +151,18 @@ public class ForumPostService {
         forumPostRepository.save(post);
 
         if (!currentUser.getId().equals(post.getAuthorUser().getId())) {
-            notificationService.createNotification(
-                    post.getAuthorUser().getId(),
-                    NotificationType.FORUM_POST_COMMENTED,
-                    "Bài viết của bạn có bình luận mới",
-                    currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
-                    "FORUM_POST",
-                    post.getId()
-            );
+            try {
+                notificationService.createNotification(
+                        post.getAuthorUser().getId(),
+                        NotificationType.FORUM_POST_COMMENTED,
+                        "Bài viết của bạn có bình luận mới",
+                        currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
+                        "FORUM_POST",
+                        post.getId()
+                );
+            } catch (RuntimeException ex) {
+                log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
+            }
         }
 
         return toCommentResponse(saved);

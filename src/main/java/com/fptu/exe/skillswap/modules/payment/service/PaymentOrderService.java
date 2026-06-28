@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.payment.service;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
@@ -18,12 +19,16 @@ import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutRespon
 import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.session.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -48,6 +53,10 @@ public class PaymentOrderService {
     private final PaymentProperties paymentProperties;
     private final PayOsGateway payOsGateway;
     private final SettlementService settlementService;
+    private final SessionService sessionService;
+    private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public PaymentCheckoutResponse checkout(UUID currentUserId, PaymentCheckoutRequest request) {
@@ -274,9 +283,8 @@ public class PaymentOrderService {
         if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không gắn với mentor hợp lệ");
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED
-                && booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
-                && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
+                && booking.getStatus() != BookingStatus.ACCEPTED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán");
         }
     }
@@ -299,6 +307,20 @@ public class PaymentOrderService {
         rollbackReservedCredit(order);
         couponService.voidRedemption(order.getId());
         paymentOrderRepository.save(order);
+    }
+
+    @Transactional
+    public void expireAwaitingPayment(Booking booking) {
+        if (booking == null || booking.getId() == null) {
+            return;
+        }
+        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        if (order == null) {
+            return;
+        }
+        if (isAwaitingPayment(order.getStatus())) {
+            cancelAwaitingPaymentOrder(order);
+        }
     }
 
     private void prepareOrderForCheckout(PaymentOrder draftOrder,
@@ -494,6 +516,47 @@ public class PaymentOrderService {
         order.setProviderStatus(providerStatus);
         order.setPaidAt(order.getPaidAt() == null ? DateTimeUtil.now() : order.getPaidAt());
         markAttemptFinalState(attempt, PaymentAttemptStatus.SUCCEEDED, providerTransactionId, providerEventId, providerStatus, null);
+        finalizePaidBooking(order);
+    }
+
+    private void finalizePaidBooking(PaymentOrder order) {
+        Booking booking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+        if (booking.getStatus() == BookingStatus.PAID) {
+            return;
+        }
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
+                && booking.getStatus() != BookingStatus.ACCEPTED) {
+            throw new BaseException(
+                    ErrorCode.RESOURCE_CONFLICT,
+                    "Booking hiện không còn ở trạng thái chờ thanh toán để xác nhận"
+            );
+        }
+        booking.setStatus(BookingStatus.PAID);
+        bookingRepository.save(booking);
+
+        sessionService.createForAcceptedBooking(booking);
+        conversationService.createDirectForAcceptedBooking(booking);
+
+        notificationService.createNotification(
+                booking.getMentorProfile().getUserId(),
+                NotificationType.BOOKING_PAYMENT_CONFIRMED,
+                "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
+                booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
+                "BOOKING",
+                booking.getId()
+        );
+
+        eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
+                .bookingId(booking.getId())
+                .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
+                .recipientEmail(booking.getMentorProfile().getUser().getEmail())
+                .recipientName(booking.getMentorProfile().getUser().getFullName())
+                .actorName(booking.getMentee().getFullName())
+                .bookingStartTime(booking.getSelectedStartTime())
+                .bookingEndTime(booking.getSelectedEndTime())
+                .createdAt(DateTimeUtil.now())
+                .build());
     }
 
     private void markAttemptFinalState(PaymentAttempt attempt,

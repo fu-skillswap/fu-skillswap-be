@@ -23,6 +23,12 @@ public class BookingCleanupScheduler {
             } else {
                 log.debug("No stale pending bookings to expire.");
             }
+            int paymentExpiredCount = bookingService.expireAwaitingPaymentBookings();
+            if (paymentExpiredCount > 0) {
+                log.info("Expired {} stale awaiting-payment bookings.", paymentExpiredCount);
+            } else {
+                log.debug("No stale awaiting-payment bookings to expire.");
+            }
         } catch (Exception ex) {
             log.error("Error occurred while expiring stale pending bookings", ex);
         }

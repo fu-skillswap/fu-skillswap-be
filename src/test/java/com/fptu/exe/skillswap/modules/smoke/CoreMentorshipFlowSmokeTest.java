@@ -33,6 +33,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
 import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.system.service.AdminUserService;
@@ -76,6 +78,7 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private jakarta.persistence.EntityManager entityManager;
     @Autowired private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
     @Autowired private com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService mentorProfileService;
+    @Autowired private PaymentOrderService paymentOrderService;
     
     @Autowired private CampusRepository campusRepository;
     @Autowired private AcademicProgramRepository programRepository;
@@ -296,7 +299,7 @@ class CoreMentorshipFlowSmokeTest {
         bookingService.acceptBooking(mentor.getId(), bk1.bookingId(), aReq);
 
         var accepted = bookingService.getBookingDetail(m1.getId(), bk1.bookingId());
-        assertEquals(BookingStatus.ACCEPTED, accepted.status());
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, accepted.status());
 
         // Sibling bindings must be rejected
         var r2 = bookingService.getBookingDetail(m2.getId(), bk2.bookingId());
@@ -382,6 +385,7 @@ class CoreMentorshipFlowSmokeTest {
 
         AcceptBookingRequest aReq = new AcceptBookingRequest("Sure");
         bookingService.acceptBooking(mentor.getId(), bk.bookingId(), aReq);
+        paymentOrderService.checkout(mentee.getId(), new PaymentCheckoutRequest(bk.bookingId(), null));
 
         // Fast-forward time so we can complete it
         slot.setStartTime(DateTimeUtil.now().minusDays(1));

@@ -30,6 +30,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -92,6 +94,9 @@ class BookingOwnershipIntegrationTest {
 
     @Autowired
     private MessageRepository messageRepository;
+
+    @Autowired
+    private PaymentOrderService paymentOrderService;
 
     private User menteeUser;
     private User mentorUser;
@@ -183,6 +188,7 @@ class BookingOwnershipIntegrationTest {
         ));
 
         bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("Accepted"));
+        paymentOrderService.checkout(menteeUser.getId(), new PaymentCheckoutRequest(booking.bookingId(), null));
 
         BaseException bookingException = assertThrows(BaseException.class,
                 () -> bookingService.getBookingDetail(outsiderUser.getId(), booking.bookingId()));

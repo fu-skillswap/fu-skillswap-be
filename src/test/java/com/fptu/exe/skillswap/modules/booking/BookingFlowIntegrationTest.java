@@ -32,6 +32,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.session.domain.SessionSourceType;
 import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
 import com.fptu.exe.skillswap.modules.session.repository.SessionRepository;
@@ -94,6 +96,9 @@ class BookingFlowIntegrationTest {
 
     @Autowired
     private ConversationParticipantRepository conversationParticipantRepository;
+
+    @Autowired
+    private PaymentOrderService paymentOrderService;
 
     private User menteeUser;
     private User mentorUser;
@@ -202,15 +207,26 @@ class BookingFlowIntegrationTest {
         BookingResponse accepted = bookingService.acceptBooking(
                 mentorId, booking.bookingId(), new AcceptBookingRequest("Happy to help!")
         );
-        assertEquals(BookingStatus.ACCEPTED, accepted.status());
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, accepted.status());
         assertEquals(accepted.bookingId(), accepted.sessionId());
-        assertEquals(BookingStatus.ACCEPTED, accepted.sessionStatus());
-        assertNotNull(accepted.actualSessionId());
-        assertEquals(SessionStatus.SCHEDULED, accepted.actualSessionStatus());
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, accepted.sessionStatus());
+        assertNull(accepted.actualSessionId());
+        assertNull(accepted.actualSessionStatus());
         assertTrue(mentorAvailabilitySlotRepository.findById(slotToBook.getId()).orElseThrow().isBooked());
+        assertTrue(sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.bookingId()).isEmpty());
+        assertTrue(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.bookingId()).isEmpty());
+
+        paymentOrderService.checkout(menteeId, new PaymentCheckoutRequest(booking.bookingId(), null));
+
+        BookingResponse paid = bookingService.getBookingDetail(menteeId, booking.bookingId());
+        assertEquals(BookingStatus.PAID, paid.status());
+        assertEquals(paid.bookingId(), paid.sessionId());
+        assertEquals(BookingStatus.PAID, paid.sessionStatus());
+        assertNotNull(paid.actualSessionId());
+        assertEquals(SessionStatus.SCHEDULED, paid.actualSessionStatus());
 
         var session = sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.bookingId()).orElseThrow();
-        assertEquals(accepted.actualSessionId(), session.getId());
+        assertEquals(paid.actualSessionId(), session.getId());
         assertEquals(SessionStatus.SCHEDULED, session.getStatus());
         assertEquals(slotToBook.getStartTime(), session.getScheduledStartTime());
         assertEquals(slotToBook.getStartTime().plusMinutes(mentorService.getDurationMinutes()), session.getScheduledEndTime());

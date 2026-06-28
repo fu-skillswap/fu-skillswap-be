@@ -11,6 +11,7 @@ import java.util.UUID;
 public class BookingEmailNotificationEvent {
     public enum EventType {
         BOOKING_ACCEPTED_EMAIL,
+        BOOKING_PAID_CONFIRMED_EMAIL,
         BOOKING_REJECTED_EMAIL,
         BOOKING_CANCELLED_BY_MENTEE_EMAIL,
         BOOKING_CANCELLED_BY_MENTOR_EMAIL
@@ -25,5 +26,6 @@ public class BookingEmailNotificationEvent {
     private final LocalDateTime bookingEndTime;
     private final String reason;
     private final String meetingLink;
+    private final LocalDateTime paymentDeadline;
     private final LocalDateTime createdAt;
 }

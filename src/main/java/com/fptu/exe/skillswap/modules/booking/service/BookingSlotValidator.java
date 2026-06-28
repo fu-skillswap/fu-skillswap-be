@@ -13,11 +13,18 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Component
 @RequiredArgsConstructor
 public class BookingSlotValidator {
+
+    private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
+            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+            BookingStatus.ACCEPTED,
+            BookingStatus.PAID
+    );
 
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final BookingRepository bookingRepository;
@@ -71,9 +78,9 @@ public class BookingSlotValidator {
             throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime phải khớp với candidate segment hợp lệ của service trong slot");
         }
 
-        if (bookingRepository.existsOverlappingBySlotIdAndStatus(
+        if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(),
-                BookingStatus.ACCEPTED,
+                SLOT_LOCKING_STATUSES,
                 selectedStartTime,
                 selectedEndTime
         )) {
@@ -92,7 +99,12 @@ public class BookingSlotValidator {
                     "Segment đã chọn đã đạt tối đa 3 yêu cầu chờ xác nhận.");
         }
 
-        if (bookingRepository.hasOverlappingAcceptedBooking(menteeUserId, selectedStartTime, selectedEndTime)) {
+        if (bookingRepository.hasOverlappingBookingByStatuses(
+                menteeUserId,
+                SLOT_LOCKING_STATUSES,
+                selectedStartTime,
+                selectedEndTime
+        )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ đã chọn.");
         }

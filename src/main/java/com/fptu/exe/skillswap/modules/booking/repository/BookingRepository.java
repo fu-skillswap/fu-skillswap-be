@@ -153,6 +153,21 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endTime") java.time.LocalDateTime endTime
     );
 
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status in :statuses
+              and b.selectedStartTime < :endTime
+              and b.selectedEndTime > :startTime
+            """)
+    boolean existsOverlappingBySlotIdAndStatusIn(
+            @Param("slotId") UUID slotId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     @Query("""
             select b
@@ -232,6 +247,26 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("startTime") java.time.LocalDateTime startTime,
             @Param("endTime") java.time.LocalDateTime endTime
     );
+
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.mentee.id = :menteeId
+              and b.status in :statuses
+              and b.selectedStartTime < :endTime
+              and b.selectedEndTime > :startTime
+            """)
+    boolean hasOverlappingBookingByStatuses(
+            @Param("menteeId") UUID menteeId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
+    long countBySlotIdAndStatusIn(UUID slotId, Collection<BookingStatus> statuses);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(BookingStatus status, LocalDateTime acceptedAtBefore);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

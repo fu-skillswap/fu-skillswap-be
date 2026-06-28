@@ -19,6 +19,8 @@ import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutRespon
 import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.session.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import vn.payos.exception.PayOSException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -63,6 +65,10 @@ class PaymentOrderServiceTest {
     @Mock private CampaignService campaignService;
     @Mock private PayOsGateway payOsGateway;
     @Mock private SettlementService settlementService;
+    @Mock private SessionService sessionService;
+    @Mock private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    @Mock private NotificationService notificationService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private PaymentOrderService paymentOrderService;
 
@@ -87,7 +93,11 @@ class PaymentOrderServiceTest {
                 campaignService,
                 paymentProperties,
                 payOsGateway,
-                settlementService
+                settlementService,
+                sessionService,
+                conversationService,
+                notificationService,
+                eventPublisher
         );
 
         menteeId = UUID.randomUUID();
@@ -96,16 +106,23 @@ class PaymentOrderServiceTest {
 
         User mentee = new User();
         mentee.setId(menteeId);
+        mentee.setFullName("Test Mentee");
+
+        User mentorUser = new User();
+        mentorUser.setId(mentorId);
+        mentorUser.setEmail("mentor@test.com");
+        mentorUser.setFullName("Test Mentor");
 
         MentorProfile mentorProfile = MentorProfile.builder()
                 .userId(mentorId)
+                .user(mentorUser)
                 .build();
 
         booking = Booking.builder()
                 .id(bookingId)
                 .mentee(mentee)
                 .mentorProfile(mentorProfile)
-                .status(BookingStatus.ACCEPTED)
+                .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .servicePriceScoinSnapshot(100)
                 .build();
     }
@@ -264,6 +281,7 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-TEST")
+                .bookingId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -282,6 +300,8 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(webhookRequest)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-1"));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
         when(paymentAttemptRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));

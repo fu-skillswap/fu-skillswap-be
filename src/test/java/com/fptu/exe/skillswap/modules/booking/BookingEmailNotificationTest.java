@@ -180,8 +180,8 @@ class BookingEmailNotificationTest {
 
         verify(emailService, times(1)).sendSimpleEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Lịch mentoring của bạn đã được chấp nhận"),
-                contains("đã chấp nhận lịch mentoring của bạn")
+                eq("[SkillSwap] Mentor đã chấp nhận yêu cầu đặt lịch của bạn"),
+                contains("Vui lòng hoàn tất thanh toán trong vòng 2 giờ")
         );
     }
 
@@ -246,7 +246,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        org.junit.jupiter.api.Assertions.assertEquals("ACCEPTED", accepted.status().name());
+        org.junit.jupiter.api.Assertions.assertEquals("ACCEPTED_AWAITING_PAYMENT", accepted.status().name());
     }
 
     private CreateBookingRequest bookingRequest(String title, String description) {

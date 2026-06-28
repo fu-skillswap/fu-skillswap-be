@@ -65,6 +65,12 @@ public class BookingService {
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
     private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 24;
+    private static final long PAYMENT_WINDOW_MINUTES = 120;
+    private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
+            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+            BookingStatus.ACCEPTED,
+            BookingStatus.PAID
+    );
 
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
@@ -148,7 +154,7 @@ public class BookingService {
                 slot.getId(),
                 selectedStartTime,
                 selectedEndTime,
-                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED)
+                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID)
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho đúng segment này.");
@@ -272,9 +278,9 @@ public class BookingService {
         if (selectedStartTime == null || selectedEndTime == null || !selectedEndTime.isAfter(selectedStartTime)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking đang thiếu selected segment hợp lệ");
         }
-        if (bookingRepository.existsOverlappingBySlotIdAndStatus(
+        if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(),
-                BookingStatus.ACCEPTED,
+                SLOT_LOCKING_STATUSES,
                 selectedStartTime,
                 selectedEndTime
         )) {
@@ -289,7 +295,7 @@ public class BookingService {
                 selectedEndTime
         );
 
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         booking.setAcceptedAt(now);
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
         slot.setBooked(true);
@@ -306,14 +312,11 @@ public class BookingService {
         bookingRepository.saveAll(pendingBookings);
         Booking savedBooking = bookingRepository.save(booking);
 
-        sessionService.createForAcceptedBooking(savedBooking);
-        conversationService.createDirectForAcceptedBooking(savedBooking);
-
         notificationService.createNotification(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
-                "Yêu cầu đặt lịch đã được chấp nhận",
-                savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn.",
+                "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán",
+                savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng 2 giờ.",
                 "BOOKING",
                 savedBooking.getId()
         );
@@ -339,7 +342,7 @@ public class BookingService {
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
-                .meetingLink(savedBooking.getMeetingLink())
+                .paymentDeadline(now.plusMinutes(PAYMENT_WINDOW_MINUTES))
                 .createdAt(DateTimeUtil.now())
                 .build());
 
@@ -399,8 +402,8 @@ public class BookingService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu meeting link");
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được chấp nhận");
+        if (!isConfirmedBookingStatus(booking.getStatus())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận thanh toán");
         }
 
         com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
@@ -762,12 +765,12 @@ public class BookingService {
         if (currentUserId != null) {
             if (booking.getStatus() == BookingStatus.PENDING) {
                 canCancel = isMenteeUser;
-            } else if (booking.getStatus() == BookingStatus.ACCEPTED) {
+            } else if (booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedBookingStatus(booking.getStatus())) {
                 canCancel = (isMenteeUser || isMentorUser) && startTime != null && now.isBefore(startTime);
             }
 
             if (isMentorUser) {
-                canComplete = (booking.getStatus() == BookingStatus.ACCEPTED || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
+                canComplete = (isConfirmedBookingStatus(booking.getStatus()) || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
                         && endTime != null && now.isAfter(endTime);
             } else if (isMenteeUser) {
                 canComplete = booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
@@ -775,7 +778,7 @@ public class BookingService {
             }
 
             canReschedule = (isMenteeUser || isMentorUser)
-                    && booking.getStatus() == BookingStatus.ACCEPTED
+                    && isConfirmedBookingStatus(booking.getStatus())
                     && (booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) < 1
                     && startTime != null
                     && java.time.Duration.between(now, startTime).toMinutes() >= 6 * 60;
@@ -917,7 +920,7 @@ public class BookingService {
         if (booking == null || now == null) {
             return;
         }
-        if (booking.getStatus() == BookingStatus.ACCEPTED
+        if (isConfirmedBookingStatus(booking.getStatus())
                 && selectedEndTime(booking) != null
                 && !now.isBefore(selectedEndTime(booking))) {
             booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
@@ -993,13 +996,17 @@ public class BookingService {
         return trimmed == null || trimmed.isBlank() ? null : trimmed;
     }
 
+    private boolean isConfirmedBookingStatus(BookingStatus status) {
+        return status == BookingStatus.PAID || status == BookingStatus.ACCEPTED;
+    }
+
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {
         if (slot == null || slot.getId() == null) {
             return;
         }
-        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatus(
+        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(),
-                BookingStatus.ACCEPTED,
+                SLOT_LOCKING_STATUSES,
                 slot.getStartTime(),
                 slot.getEndTime()
         );
@@ -1054,7 +1061,7 @@ public class BookingService {
         if (!isMentorOfBooking(booking, mentorUserId)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT && !isConfirmedBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
         }
 
@@ -1123,16 +1130,18 @@ public class BookingService {
         if (menteeId == null || booking.getMentee() == null || !menteeId.equals(booking.getMentee().getId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
         }
-        if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.PENDING
+                && booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
+                && !isConfirmedBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hủy booking đang chờ phản hồi hoặc đã được chấp nhận");
         }
 
         LocalDateTime now = DateTimeUtil.now();
         BookingStatus currentStatus = booking.getStatus();
-        long minutesUntilStart = currentStatus == BookingStatus.ACCEPTED
+        long minutesUntilStart = isConfirmedBookingStatus(currentStatus)
                 ? minutesUntilStart(booking, now)
                 : Long.MAX_VALUE;
-        boolean lateCancellation = currentStatus == BookingStatus.ACCEPTED
+        boolean lateCancellation = isConfirmedBookingStatus(currentStatus)
                 && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
 
         booking.setStatus(BookingStatus.CANCELLED_BY_MENTEE);
@@ -1140,14 +1149,14 @@ public class BookingService {
         booking.setCancelReason(requiredCancelReason(request));
 
         MentorAvailabilitySlot slot = booking.getSlot();
-        if (slot != null && currentStatus == BookingStatus.ACCEPTED) {
+        if (slot != null && currentStatus != BookingStatus.PENDING) {
             refreshSlotBookedFlag(slot);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
 
         sessionService.cancelForBooking(bookingId);
-        if (currentStatus == BookingStatus.ACCEPTED) {
+        if (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedBookingStatus(currentStatus)) {
             paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
         }
 
@@ -1201,6 +1210,41 @@ public class BookingService {
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi trước giờ bắt đầu. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
+                    "BOOKING",
+                    booking.getId()
+            );
+        }
+        return staleBookings.size();
+    }
+
+    @Transactional
+    public int expireAwaitingPaymentBookings() {
+        LocalDateTime now = DateTimeUtil.now();
+        List<Booking> staleBookings = bookingRepository.findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(
+                BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+                now.minusMinutes(PAYMENT_WINDOW_MINUTES)
+        );
+        if (staleBookings.isEmpty()) {
+            return 0;
+        }
+        for (Booking booking : staleBookings) {
+            booking.setStatus(BookingStatus.EXPIRED);
+            booking.setRejectedAt(now);
+            booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng 2 giờ.");
+            if (booking.getSlot() != null
+                    && booking.getSlot().getStartTime() != null
+                    && now.isBefore(booking.getSlot().getStartTime())) {
+                refreshSlotBookedFlag(booking.getSlot());
+            }
+            paymentOrderService.expireAwaitingPayment(booking);
+        }
+        bookingRepository.saveAll(staleBookings);
+        for (Booking booking : staleBookings) {
+            notificationService.createNotification(
+                    booking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_EXPIRED,
+                    "Yêu cầu đặt lịch đã hết hạn thanh toán",
+                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng 2 giờ.",
                     "BOOKING",
                     booking.getId()
             );

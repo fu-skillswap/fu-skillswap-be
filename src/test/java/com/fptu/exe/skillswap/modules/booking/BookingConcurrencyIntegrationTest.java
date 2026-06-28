@@ -195,7 +195,7 @@ class BookingConcurrencyIntegrationTest {
             assertEquals(1, (firstSucceeded ? 1 : 0) + (secondSucceeded ? 1 : 0));
 
             List<com.fptu.exe.skillswap.modules.booking.domain.Booking> bookings =
-                    bookingRepository.findBySlotIdAndStatus(setupData.slotId(), BookingStatus.ACCEPTED);
+                    bookingRepository.findBySlotIdAndStatus(setupData.slotId(), BookingStatus.ACCEPTED_AWAITING_PAYMENT);
             assertEquals(1, bookings.size());
 
             long rejectedCount = bookingRepository.findBySlotIdAndStatus(setupData.slotId(), BookingStatus.REJECTED).size();

@@ -24,6 +24,7 @@ import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -174,6 +175,42 @@ class ForumPostServiceTest {
 
         assertEquals(ErrorCode.NOT_FOUND, ex.getErrorCode());
         verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createComment_notificationFailure_shouldNotRollbackComment() {
+        ForumPost post = ForumPost.builder()
+                .id(UUID.randomUUID())
+                .authorUser(User.builder()
+                        .id(UUID.randomUUID())
+                        .email("author@test.com")
+                        .fullName("Forum Author")
+                        .status(UserStatus.ACTIVE)
+                        .roles(Set.of(RoleCode.MENTEE))
+                        .build())
+                .helpTopic(helpTopic)
+                .title("Need help")
+                .content("content")
+                .status(ForumPostStatus.PUBLISHED)
+                .build();
+        ForumCommentUpsertRequest request = new ForumCommentUpsertRequest("Em muốn hỏi thêm");
+
+        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
+        when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
+        when(forumCommentRepository.save(any(ForumComment.class))).thenAnswer(inv -> {
+            ForumComment comment = inv.getArgument(0);
+            comment.setId(UUID.randomUUID());
+            return comment;
+        });
+        when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(inv -> inv.getArgument(0));
+        doThrow(new DataIntegrityViolationException("notification schema mismatch"))
+                .when(notificationService).createNotification(any(), any(), any(), any(), any(), any());
+
+        var response = forumPostService.createComment(mentee.getId(), post.getId(), request);
+
+        assertEquals("Em muốn hỏi thêm", response.content());
+        verify(forumCommentRepository).save(any(ForumComment.class));
+        verify(forumPostRepository).save(any(ForumPost.class));
     }
 
     @Test

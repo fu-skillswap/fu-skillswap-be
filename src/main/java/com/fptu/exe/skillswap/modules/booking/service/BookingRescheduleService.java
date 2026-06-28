@@ -236,7 +236,11 @@ public class BookingRescheduleService {
         booking.setSelectedEndTime(rescheduleRequest.getProposedSelectedEndTime());
         booking.setRequestedStartTime(rescheduleRequest.getProposedSelectedStartTime());
         booking.setRequestedEndTime(rescheduleRequest.getProposedSelectedEndTime());
-        booking.setStatus(BookingStatus.ACCEPTED);
+        if (booking.getStatus() == BookingStatus.PAID) {
+            booking.setStatus(BookingStatus.PAID);
+        } else {
+            booking.setStatus(BookingStatus.ACCEPTED);
+        }
         booking.setUpdatedAt(DateTimeUtil.now());
         booking.setRescheduleCount((booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) + 1);
         bookingRepository.save(booking);
@@ -345,8 +349,8 @@ public class BookingRescheduleService {
     }
 
     private void validateRescheduleableBooking(Booking booking) {
-        if (booking.getStatus() != BookingStatus.ACCEPTED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking ở trạng thái ACCEPTED mới được reschedule");
+        if (booking.getStatus() != BookingStatus.PAID && booking.getStatus() != BookingStatus.ACCEPTED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking đã xác nhận mới được reschedule");
         }
         if (booking.getService() == null || booking.getService().getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking hiện không gắn với service hợp lệ để reschedule");
@@ -408,9 +412,9 @@ public class BookingRescheduleService {
         if (slot == null || slot.getId() == null) {
             return;
         }
-        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatus(
+        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(),
-                BookingStatus.ACCEPTED,
+                List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID),
                 slot.getStartTime(),
                 slot.getEndTime()
         );
