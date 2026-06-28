@@ -100,13 +100,25 @@ public class MentorAvailabilityService {
         MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
         UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
 
+        LocalDate effectiveFrom = safeRequest.effectiveFrom();
+        LocalDate effectiveTo = safeRequest.effectiveTo();
+        if (safeRequest.repeatType() != AvailabilityRepeatType.NONE) {
+            LocalDate today = LocalDate.now(APP_ZONE);
+            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate sundayNextWeek = mondayThisWeek.plusDays(13);
+            effectiveFrom = mondayThisWeek;
+            effectiveTo = sundayNextWeek;
+        } else {
+            effectiveTo = effectiveFrom;
+        }
+
         MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
                 .mentorProfile(mentorProfile)
                 .ruleType(safeRequest.ruleType())
                 .repeatType(safeRequest.repeatType())
                 .daysOfWeek(encodeDays(safeRequest.daysOfWeek()))
-                .effectiveFrom(safeRequest.effectiveFrom())
-                .effectiveTo(safeRequest.effectiveTo())
+                .effectiveFrom(effectiveFrom)
+                .effectiveTo(effectiveTo)
                 .startTime(normalizedStartTime(safeRequest))
                 .endTime(normalizedEndTime(safeRequest))
                 .timezone(APP_TIMEZONE)
@@ -131,13 +143,25 @@ public class MentorAvailabilityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy rule lịch rảnh"));
         UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
 
+        LocalDate effectiveFrom = safeRequest.effectiveFrom();
+        LocalDate effectiveTo = safeRequest.effectiveTo();
+        if (safeRequest.repeatType() != AvailabilityRepeatType.NONE) {
+            LocalDate today = LocalDate.now(APP_ZONE);
+            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            LocalDate sundayNextWeek = mondayThisWeek.plusDays(13);
+            effectiveFrom = mondayThisWeek;
+            effectiveTo = sundayNextWeek;
+        } else {
+            effectiveTo = effectiveFrom;
+        }
+
         reconcileFutureWindowsForRule(rule, RULE_UPDATED_PENDING_REJECTION_REASON);
 
         rule.setRuleType(safeRequest.ruleType());
         rule.setRepeatType(safeRequest.repeatType());
         rule.setDaysOfWeek(encodeDays(safeRequest.daysOfWeek()));
-        rule.setEffectiveFrom(safeRequest.effectiveFrom());
-        rule.setEffectiveTo(safeRequest.effectiveTo());
+        rule.setEffectiveFrom(effectiveFrom);
+        rule.setEffectiveTo(effectiveTo);
         rule.setStartTime(normalizedStartTime(safeRequest));
         rule.setEndTime(normalizedEndTime(safeRequest));
         rule.setTimezone(APP_TIMEZONE);
