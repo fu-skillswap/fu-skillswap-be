@@ -48,7 +48,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -174,7 +173,7 @@ class MentorAvailabilityServiceTest {
     }
 
     @Test
-    void createSlotDirectly_withServices_assignsCompositeIdsBeforeSaveAll() {
+    void createSlotDirectly_withServices_assignsCompositeIdsIntoManagedSlotCollection() {
         CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
                 LocalDateTime.now().plusDays(1),
                 LocalDateTime.now().plusDays(1).plusHours(2),
@@ -212,15 +211,12 @@ class MentorAvailabilityServiceTest {
 
         mentorAvailabilityService.createSlotDirectly(mentorUserId, request);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<AvailabilitySlotService>> captor = ArgumentCaptor.forClass((Class) List.class);
-        verify(availabilitySlotServiceRepository, times(1)).saveAll(captor.capture());
-        List<AvailabilitySlotService> bindings = captor.getValue();
-        assertEquals(1, bindings.size());
-        AvailabilitySlotService binding = bindings.getFirst();
+        assertEquals(1, savedSlot.getSlotServices().size());
+        AvailabilitySlotService binding = savedSlot.getSlotServices().iterator().next();
         assertNotNull(binding.getId());
         assertEquals(slotId, binding.getId().getSlotId());
         assertEquals(serviceId, binding.getId().getServiceId());
+        verify(availabilitySlotServiceRepository, never()).saveAll(any());
     }
 
     @Test

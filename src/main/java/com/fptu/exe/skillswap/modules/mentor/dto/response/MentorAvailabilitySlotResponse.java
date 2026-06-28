@@ -24,11 +24,13 @@ public record MentorAvailabilitySlotResponse(
         Integer durationMinutes,
         @Schema(description = "Hình thức mentoring của slot", example = "ONLINE")
         TeachingMode teachingMode,
-        @Schema(description = "Tổng số booking request PENDING hiện có trên các candidate segment thuộc slot", example = "2")
+        @Schema(description = "Tổng số booking request PENDING đã gửi vào parent slot này ở thời điểm hiện tại", example = "2")
         Integer pendingRequestCount,
-        @Schema(description = "Giới hạn PENDING tối đa trên từng exact candidate segment", example = "3")
+        @Schema(description = "Số booking trong slot này đã được mentor chấp nhận ở trạng thái ACCEPTED", example = "1")
+        Integer acceptedSlotCount,
+        @Schema(description = "Legacy field cũ của phase candidate summary. FE mới không nên dùng ở parent slot.", example = "3", deprecated = true, hidden = true)
         Integer maxPendingRequests,
-        @Schema(description = "Số quota còn lại tốt nhất trên candidate segments hiện còn hiển thị của slot", example = "1")
+        @Schema(description = "Legacy field cũ của phase candidate summary. FE mới không nên dùng ở parent slot.", example = "1", deprecated = true, hidden = true)
         Integer remainingRequestSlots,
         @Schema(description = "Danh sách service cơ bản đang được gắn vào slot. FE chọn serviceId từ đây trước khi gọi API candidates.")
         List<AvailabilitySlotServiceBasicResponse> services

@@ -298,9 +298,10 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `timezone`
   - `durationMinutes` (legacy convenience field, suy ra từ `endTime - startTime`)
   - `teachingMode`
-  - `pendingRequestCount`
-  - `maxPendingRequests`
-  - `remainingRequestSlots`
+  - `pendingRequestCount` (tổng số request `PENDING` hiện có trong parent slot)
+  - `acceptedSlotCount` (số booking `ACCEPTED` hiện có trong parent slot)
+  - `maxPendingRequests` (legacy, FE mới không nên dùng ở parent slot)
+  - `remainingRequestSlots` (legacy, FE mới không nên dùng ở parent slot)
   - `services` (mỗi service có `serviceId`, `durationMinutes`, giá)
 
 ### GET `/api/mentors/{mentorUserId}/availability-slots`

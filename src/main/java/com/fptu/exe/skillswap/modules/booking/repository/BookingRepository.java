@@ -116,6 +116,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
+    long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
+
     List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})

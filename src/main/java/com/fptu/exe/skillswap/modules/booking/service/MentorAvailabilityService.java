@@ -181,8 +181,7 @@ public class MentorAvailabilityService {
             List<AvailabilitySlotService> slotServices = services.stream()
                     .map(service -> buildSlotServiceBinding(savedSlot, service))
                     .toList();
-            availabilitySlotServiceRepository.saveAll(slotServices);
-            savedSlot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
+            replaceSlotServices(savedSlot, slotServices);
         }
 
         return toManagedSlotResponse(savedSlot);
@@ -253,8 +252,7 @@ public class MentorAvailabilityService {
             List<AvailabilitySlotService> slotServices = services.stream()
                     .map(service -> buildSlotServiceBinding(slot, service))
                     .toList();
-            availabilitySlotServiceRepository.saveAll(slotServices);
-            slot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
+            replaceSlotServices(slot, slotServices);
         }
 
         MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
@@ -598,6 +596,7 @@ public class MentorAvailabilityService {
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
         int totalPendingRequests = pendingCounts.values().stream().mapToInt(Integer::intValue).sum();
+        int acceptedSlotCount = Math.toIntExact(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.ACCEPTED));
         Integer remainingRequestSlots = pendingCounts.isEmpty()
                 ? BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT
                 : Math.max(
@@ -613,6 +612,7 @@ public class MentorAvailabilityService {
                 .durationMinutes((int) Duration.between(slot.getStartTime(), slot.getEndTime()).toMinutes())
                 .teachingMode(teachingMode)
                 .pendingRequestCount(totalPendingRequests)
+                .acceptedSlotCount(acceptedSlotCount)
                 .maxPendingRequests(BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT)
                 .remainingRequestSlots(remainingRequestSlots)
                 .services(slotServices.stream()
@@ -733,7 +733,8 @@ public class MentorAvailabilityService {
         if (services.isEmpty()) {
             return;
         }
-        availabilitySlotServiceRepository.saveAll(
+        replaceSlotServices(
+                slot,
                 services.stream()
                         .map(service -> buildSlotServiceBinding(slot, service))
                         .toList()
@@ -752,6 +753,15 @@ public class MentorAvailabilityService {
                 .slot(slot)
                 .service(service)
                 .build();
+    }
+
+    private void replaceSlotServices(MentorAvailabilitySlot slot, List<AvailabilitySlotService> bindings) {
+        if (slot.getSlotServices() == null) {
+            slot.setSlotServices(new java.util.LinkedHashSet<>());
+        } else {
+            slot.getSlotServices().clear();
+        }
+        slot.getSlotServices().addAll(bindings);
     }
 
     private boolean overlapsClosedRule(LocalDateTime windowStart, LocalDateTime windowEnd, List<MentorAvailabilityRule> closedRules) {
