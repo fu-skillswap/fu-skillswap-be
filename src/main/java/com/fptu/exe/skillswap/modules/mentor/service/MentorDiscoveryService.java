@@ -416,6 +416,19 @@ public class MentorDiscoveryService {
         List<String> reasons = new ArrayList<>();
         BigDecimal score = calculateMatchScore(candidate, menteeProfile, reasons);
 
+        BigDecimal maxScore = SAME_PROGRAM_SCORE
+                .add(SAME_SPECIALIZATION_SCORE)
+                .add(SAME_CAMPUS_SCORE)
+                .add(MENTOR_ALUMNI_SCORE)
+                .add(QUALITY_HIGH_RATING_BONUS)
+                .add(QUALITY_CREDIBLE_REVIEWS_BONUS)
+                .add(QUALITY_EXPERIENCED_SESSIONS_BONUS);
+
+        BigDecimal percentageScore = BigDecimal.ZERO;
+        if (maxScore.compareTo(BigDecimal.ZERO) > 0) {
+            percentageScore = score.multiply(BigDecimal.valueOf(100)).divide(maxScore, 2, RoundingMode.HALF_UP);
+        }
+
         if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có phiên mentoring hoàn thành"::equals)) {
             reasons.add("Đã có phiên mentoring hoàn thành");
         }
@@ -426,7 +439,7 @@ public class MentorDiscoveryService {
 
         return MentorRecommendationResponse.builder()
                 .mentor(toCardResponse(candidate, helpTopicTags))
-                .matchScore(score)
+                .matchScore(percentageScore)
                 .matchReasons(reasons.stream().limit(3).toList())
                 .build();
     }

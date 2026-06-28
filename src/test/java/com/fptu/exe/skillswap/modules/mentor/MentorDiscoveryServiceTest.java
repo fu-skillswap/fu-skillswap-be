@@ -388,10 +388,11 @@ class MentorDiscoveryServiceTest {
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
         assertEquals(1, recommendations.size());
-        // Phase S3: matchScore now includes quality/credibility bonuses.
-        // Breakdown: campus(+10) + program(+40) + spec(+30) + equalSemester(+10)
+        // Phase S3: matchScore now converted to percentage of max theoretical score (118.00).
+        // Raw breakdown: campus(+10) + program(+40) + spec(+30) + equalSemester(+10)
         //          + highRating≥4.5(+8) + reviews≥5(+5) = 103
-        assertEquals(new BigDecimal("103.00"), recommendations.getFirst().matchScore());
+        // Percentage: 103 * 100 / 118 = 87.29%
+        assertEquals(new BigDecimal("87.29"), recommendations.getFirst().matchScore());
         assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 
