@@ -406,14 +406,7 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId, slotId và serviceId là bắt buộc");
         }
 
-        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy availability slot"));
-        if (slot.getMentorProfile() == null || !mentorUserId.equals(slot.getMentorProfile().getUserId())) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Availability slot không thuộc về mentor này");
-        }
-        if (!slot.isActive()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Availability slot hiện không còn hoạt động");
-        }
+        MentorAvailabilitySlot slot = resolvePublicActiveSlot(mentorUserId, slotId);
 
         AvailabilitySlotService slotService = availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Service chưa được gắn vào availability slot này"));
@@ -493,10 +486,25 @@ public class MentorAvailabilityService {
             LocalDateTime candidateEnd = current.plusMinutes(durationMinutes);
             int pendingCount = pendingCountBySegment.getOrDefault(segmentKey(candidateStart, candidateEnd), 0);
 
-            boolean blockedByAccepted = acceptedBookings.stream()
-                    .anyMatch(booking -> overlaps(candidateStart, candidateEnd, selectedStartTime(booking), selectedEndTime(booking)));
+            Booking blockingAcceptedBooking = acceptedBookings.stream()
+                    .filter(booking -> overlaps(candidateStart, candidateEnd, selectedStartTime(booking), selectedEndTime(booking)))
+                    .findFirst()
+                    .orElse(null);
+            boolean blockedByAccepted = blockingAcceptedBooking != null;
+            UUID blockingServiceId = blockingAcceptedBooking != null && blockingAcceptedBooking.getService() != null
+                    ? blockingAcceptedBooking.getService().getId()
+                    : null;
+            String blockingServiceTitle = blockingAcceptedBooking != null
+                    ? firstNonBlank(
+                    blockingAcceptedBooking.getServiceTitleSnapshot(),
+                    blockingAcceptedBooking.getService() == null ? null : blockingAcceptedBooking.getService().getTitle()
+            )
+                    : null;
+            boolean blockedBySameService = blockedByAccepted && blockingServiceId != null && blockingServiceId.equals(service.getId());
+            boolean blockedByDifferentService = blockedByAccepted && !blockedBySameService;
 
             String reasonIfBlocked = null;
+            String bookingConflictNote = null;
             boolean selectable = true;
             if (!candidateStart.isAfter(now)) {
                 selectable = false;
@@ -504,6 +512,9 @@ public class MentorAvailabilityService {
             } else if (blockedByAccepted) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_ACCEPTED_REASON;
+                bookingConflictNote = blockedBySameService
+                        ? "Segment này đã có booking ACCEPTED của cùng service"
+                        : "Segment này đã có booking ACCEPTED của service khác trong cùng slot";
             } else if (pendingCount >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_PENDING_QUOTA_REASON;
@@ -516,11 +527,30 @@ public class MentorAvailabilityService {
                     .remainingPendingQuota(Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount))
                     .isSelectable(selectable)
                     .reasonIfBlocked(reasonIfBlocked)
+                    .blockedByAcceptedBooking(blockedByAccepted)
+                    .blockingBookingId(blockingAcceptedBooking == null ? null : blockingAcceptedBooking.getId())
+                    .blockingServiceId(blockingServiceId)
+                    .blockingServiceTitle(blockingServiceTitle)
+                    .blockedBySameService(blockedBySameService)
+                    .blockedByDifferentService(blockedByDifferentService)
+                    .bookingConflictNote(bookingConflictNote)
                     .build());
             current = candidateEnd;
         }
 
         return results;
+    }
+
+    private MentorAvailabilitySlot resolvePublicActiveSlot(UUID mentorUserId, UUID slotId) {
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy availability slot"));
+        if (slot.getMentorProfile() == null || !mentorUserId.equals(slot.getMentorProfile().getUserId())) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Availability slot không thuộc về mentor này");
+        }
+        if (!slot.isActive()) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Availability slot hiện không còn hoạt động");
+        }
+        return slot;
     }
 
     private void validateSlotSegmentBase(MentorAvailabilitySlot slot, MentorService service) {
@@ -552,6 +582,16 @@ public class MentorAvailabilityService {
 
     private String segmentKey(LocalDateTime startTime, LocalDateTime endTime) {
         return startTime + "|" + endTime;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        if (second != null && !second.isBlank()) {
+            return second;
+        }
+        return null;
     }
 
     private MentorAvailabilitySlotResponse toPublicSlotResponse(

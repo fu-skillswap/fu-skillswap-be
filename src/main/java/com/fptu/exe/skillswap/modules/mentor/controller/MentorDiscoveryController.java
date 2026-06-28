@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -94,23 +95,8 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
     }
 
-    @Operation(
-            summary = "Lấy danh sách slot còn hiển thị",
-            description = """
-                    Trả về các parent availability slots còn hiển thị mà FE có thể show trước khi tạo booking request.
-                    FE dùng sau khi mentee mở trang mentor detail và cần danh sách slot rảnh để chọn lịch.
-
-                    Backend chỉ cho xem availability trong phạm vi từ Thứ 2 tuần hiện tại đến Chủ nhật tuần sau theo timezone Asia/Ho_Chi_Minh.
-                    Backend sẽ ẩn các slot đã ở quá khứ, inactive hoặc không còn candidate segment hợp lệ để đặt lịch.
-
-                    Một slot đang hiển thị vẫn chưa được giữ chỗ cho mentee cho đến khi mentor accept booking request.
-                    """
-    )
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy availability thành công"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor hoặc mentor không ở trạng thái discoverable")
-    })
+    @Hidden
+    @Deprecated
     @GetMapping("/{mentorUserId}/availability")
     public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailability(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -123,7 +109,15 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Lấy danh sách availability slot còn hiển thị theo contract Phase 2",
-            description = "Alias rõ nghĩa cho FE mới. Trả về parent availability slots kèm danh sách service đã được mentor gắn vào từng slot."
+            description = """
+                    API discovery chính cho FE.
+                    Trả về parent availability slots còn hiển thị, kèm danh sách service đã được mentor gắn vào từng slot.
+
+                    API này chưa nhận serviceId vì đây là bước chọn slot cha trước.
+                    Sau khi FE chọn 1 service trong danh sách services của slot, FE gọi tiếp
+                    GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...
+                    để lấy exact candidate segments của đúng service đã chọn.
+                    """
     )
     @GetMapping("/{mentorUserId}/availability-slots")
     public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailabilitySlots(
@@ -137,10 +131,10 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Lấy candidate segments của một service trong một availability slot",
-            description = "FE gọi sau khi user đã chọn slot và service. Backend trả về exact candidate segments được tính từ parent slot, duration của service, accepted overlap và pending quota trên đúng selected segment."
+            description = "FE gọi sau khi user đã chọn parent slot và selected service. Backend chỉ trả về exact candidate segments của đúng service được yêu cầu, đồng thời note rõ segment nào bị block bởi booking ACCEPTED của cùng service hoặc service khác."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment của service đã chọn"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor, slot hoặc service gắn với slot"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Slot hoặc service không còn khả dụng")

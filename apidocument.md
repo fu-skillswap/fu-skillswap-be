@@ -286,6 +286,8 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 
 ### GET `/api/mentors/{mentorUserId}/availability`
 - Auth: `bearerAuth`
+- Legacy alias của `/api/mentors/{mentorUserId}/availability-slots`.
+- Nên bỏ khỏi flow FE mới để tránh trùng contract.
 - Query params:
   - `fromDate`
   - `toDate`
@@ -294,16 +296,19 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `startTime`
   - `endTime`
   - `timezone`
-  - `durationMinutes`
+  - `durationMinutes` (legacy convenience field, suy ra từ `endTime - startTime`)
   - `teachingMode`
   - `pendingRequestCount`
   - `maxPendingRequests`
   - `remainingRequestSlots`
-  - `services`
+  - `services` (mỗi service có `serviceId`, `durationMinutes`, giá)
 
 ### GET `/api/mentors/{mentorUserId}/availability-slots`
 - Auth: `bearerAuth`
-- Alias rõ nghĩa cho FE mới của endpoint availability phía trên.
+- Endpoint chính FE nên dùng.
+- Trả về parent slots và danh sách `services` đã gắn vào từng slot.
+- Không nhận `serviceId` ở bước này vì đây là bước chọn slot cha trước.
+- Sau khi user chọn 1 service trong `services`, FE gọi `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...`.
 
 ### GET `/api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates`
 - Auth: `bearerAuth`
@@ -320,6 +325,13 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
     - `remainingPendingQuota`
     - `isSelectable`
     - `reasonIfBlocked`
+    - `blockedByAcceptedBooking`
+    - `blockingBookingId`
+    - `blockingServiceId`
+    - `blockingServiceTitle`
+    - `blockedBySameService`
+    - `blockedByDifferentService`
+    - `bookingConflictNote`
 
 ### GET `/api/mentors/{mentorUserId}/reviews`
 - Auth: `bearerAuth`

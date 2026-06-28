@@ -20,7 +20,7 @@ public record MentorAvailabilitySlotResponse(
         LocalDateTime endTime,
         @Schema(description = "Timezone hệ thống dùng để hiển thị và tính business rule", example = "Asia/Ho_Chi_Minh")
         String timezone,
-        @Schema(description = "Thời lượng slot tính theo phút", example = "60")
+        @Schema(description = "Thời lượng parent slot tính theo phút, được suy ra từ endTime - startTime. Đây là field dẫn xuất để FE tiện hiển thị, không phải duration của service.", example = "60", deprecated = true)
         Integer durationMinutes,
         @Schema(description = "Hình thức mentoring của slot", example = "ONLINE")
         TeachingMode teachingMode,
@@ -30,7 +30,7 @@ public record MentorAvailabilitySlotResponse(
         Integer maxPendingRequests,
         @Schema(description = "Số quota còn lại tốt nhất trên candidate segments hiện còn hiển thị của slot", example = "1")
         Integer remainingRequestSlots,
-        @Schema(description = "Danh sách service cơ bản đang được gắn vào slot để mentee chọn trước khi lấy candidate")
+        @Schema(description = "Danh sách service cơ bản đang được gắn vào slot. FE chọn serviceId từ đây trước khi gọi API candidates.")
         List<AvailabilitySlotServiceBasicResponse> services
 ) {
 }
