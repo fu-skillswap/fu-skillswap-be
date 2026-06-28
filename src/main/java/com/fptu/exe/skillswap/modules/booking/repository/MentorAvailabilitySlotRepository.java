@@ -78,6 +78,39 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             @Param("fromTime") LocalDateTime fromTime
     );
 
+    @Query("""
+            select distinct slot
+            from MentorAvailabilitySlot slot
+            left join fetch slot.slotServices ss
+            left join fetch ss.service
+            where slot.mentorProfile.userId = :mentorUserId
+              and slot.isActive = true
+              and slot.startTime >= :startTime
+              and slot.startTime <= :endTime
+            order by slot.startTime asc
+            """)
+    List<MentorAvailabilitySlot> findMyManagedSlotsWithServices(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
+    @Query("""
+            select (count(slot) > 0)
+            from MentorAvailabilitySlot slot
+            where slot.mentorProfile.userId = :mentorUserId
+              and slot.id <> :slotId
+              and slot.isActive = true
+              and slot.startTime < :endTime
+              and slot.endTime > :startTime
+            """)
+    boolean existsOverlappingActiveSlotExcludeSelf(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("slotId") UUID slotId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select slot

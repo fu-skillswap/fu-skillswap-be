@@ -1,31 +1,27 @@
 package com.fptu.exe.skillswap.modules.booking;
 
-import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
-import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -34,12 +30,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -98,6 +92,7 @@ class MentorAvailabilityServiceTest {
                 notificationService,
                 calendarWindowCalculator
         );
+
         mentorUserId = UUID.randomUUID();
         user = new User();
         user.setId(mentorUserId);
@@ -107,221 +102,154 @@ class MentorAvailabilityServiceTest {
         mentorProfile.setUserId(mentorUserId);
         mentorProfile.setUser(user);
         mentorProfile.setStatus(MentorStatus.ACTIVE);
-        mentorProfile.setVerifiedAt(LocalDateTime.now().minusDays(1));
-        mentorProfile.setTeachingMode(TeachingMode.ONLINE);
+        mentorProfile.setVerifiedAt(LocalDateTime.now());
     }
 
     @Test
-    void getMyRules_successful() {
-        MentorAvailabilityRule rule = new MentorAvailabilityRule();
-        rule.setId(UUID.randomUUID());
-        rule.setRuleType(AvailabilityRuleType.OPEN);
-        rule.setRepeatType(AvailabilityRepeatType.DAILY);
-        rule.setEffectiveFrom(LocalDate.now());
-
-        when(mentorAvailabilityRuleRepository.findByMentorProfileUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(mentorUserId))
-                .thenReturn(List.of(rule));
-
-        List<AvailabilityRuleResponse> results = mentorAvailabilityService.getMyRules(mentorUserId);
-
-        assertEquals(1, results.size());
-    }
-
-    @Test
-    void createRule_successful_generatesCalendarWindow() {
-        LocalDate effectiveDate = LocalDate.now().plusDays(1);
-        UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.DAILY,
-                null,
-                effectiveDate,
-                effectiveDate.plusDays(2),
-                LocalTime.of(9, 0),
-                LocalTime.of(11, 0),
-                "Daily open window"
+    void createSlotDirectly_success() {
+        // Arrange
+        CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(1).plusHours(2),
+                "Note",
+                List.of()
         );
 
-        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
-                .thenAnswer(invocation -> {
-                    MentorAvailabilityRule saved = invocation.getArgument(0);
-                    saved.setId(UUID.randomUUID());
-                    return saved;
-                });
-        when(mentorAvailabilityRuleRepository.findActiveRulesOverlapping(eq(mentorUserId), any(LocalDate.class), any(LocalDate.class)))
-                .thenAnswer(invocation -> {
-                    LocalDate fromDate = invocation.getArgument(1);
-                    LocalDate toDate = invocation.getArgument(2);
-                    MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
-                            .id(UUID.randomUUID())
-                            .mentorProfile(mentorProfile)
-                            .ruleType(AvailabilityRuleType.OPEN)
-                            .repeatType(AvailabilityRepeatType.DAILY)
-                            .effectiveFrom(fromDate)
-                            .effectiveTo(toDate)
-                            .startTime(LocalTime.of(9, 0))
-                            .endTime(LocalTime.of(11, 0))
-                            .active(true)
-                            .build();
-                    return List.of(rule);
-                });
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
+                .thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
                 .thenReturn(false);
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId))
+                .thenReturn(List.of());
+
+        when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        MentorAvailabilitySlot expectedSlot = MentorAvailabilitySlot.builder()
+                .id(UUID.randomUUID())
+                .mentorProfile(mentorProfile)
+                .startTime(request.startTime())
+                .endTime(request.endTime())
+                .isActive(true)
+                .isBooked(false)
+                .note(request.note())
+                .build();
+        when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
+                .thenReturn(expectedSlot);
+
+        // Act
+        MentorManagedAvailabilitySlotResponse response = mentorAvailabilityService.createSlotDirectly(mentorUserId, request);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(expectedSlot.getId(), response.slotId());
+        assertEquals(expectedSlot.getStartTime(), response.startTime());
+        assertEquals(expectedSlot.getEndTime(), response.endTime());
+        assertEquals("Note", response.note());
+    }
+
+    @Test
+    void createSlotDirectly_overlap_throwsConflict() {
+        // Arrange
+        CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(1).plusHours(2),
+                "Note",
+                List.of()
+        );
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
+                .thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+                .thenReturn(true);
+
+        // Act & Assert
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, ex.getErrorCode());
+    }
+
+    @Test
+    void updateSlotDirectly_success() {
+        // Arrange
+        UUID slotId = UUID.randomUUID();
+        UpdateAvailabilitySlotRequest request = new UpdateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(2),
+                LocalDateTime.now().plusDays(2).plusHours(2),
+                "Updated Note",
+                List.of()
+        );
+
+        MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .rule(rule)
+                .startTime(LocalDateTime.now().plusDays(1))
+                .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .isActive(true)
+                .isBooked(false)
+                .build();
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, request.startTime(), request.endTime()))
+                .thenReturn(false);
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId))
+                .thenReturn(List.of());
+
         when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
-        AvailabilityRuleResponse response = mentorAvailabilityService.createRule(mentorUserId, request);
+        // Act
+        MentorManagedAvailabilitySlotResponse response = mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request);
 
+        // Assert
         assertNotNull(response);
-        verify(mentorAvailabilitySlotRepository, org.mockito.Mockito.atLeastOnce()).save(any(MentorAvailabilitySlot.class));
+        assertEquals(slotId, response.slotId());
+        assertEquals(request.startTime(), response.startTime());
+        assertEquals(request.endTime(), response.endTime());
+        assertEquals("Updated Note", response.note());
     }
 
     @Test
-    void createRule_weeklyWithoutDays_shouldThrowBadRequest() {
-        UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.WEEKLY,
-                List.of(),
-                LocalDate.now(),
-                null,
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                null
+    void updateSlotDirectly_bookedSlot_throwsBadRequest() {
+        // Arrange
+        UUID slotId = UUID.randomUUID();
+        UpdateAvailabilitySlotRequest request = new UpdateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(2),
+                LocalDateTime.now().plusDays(2).plusHours(2),
+                "Updated Note",
+                List.of()
         );
 
-        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-
-        BaseException exception = assertThrows(BaseException.class, () -> mentorAvailabilityService.createRule(mentorUserId, request));
-
-        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
-    }
-
-    @Test
-    void createRule_nonWeeklyWithDays_shouldThrowBadRequest() {
-        UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.DAILY,
-                List.of(DayOfWeek.MONDAY),
-                LocalDate.now(),
-                null,
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                null
-        );
-
-        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-
-        BaseException exception = assertThrows(BaseException.class, () -> mentorAvailabilityService.createRule(mentorUserId, request));
-
-        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
-    }
-
-    @Test
-    void createRule_unverifiedMentor_shouldThrowConflict() {
-        mentorProfile.setVerifiedAt(null);
-        UpsertAvailabilityRuleRequest request = new UpsertAvailabilityRuleRequest(
-                AvailabilityRuleType.OPEN,
-                AvailabilityRepeatType.DAILY,
-                null,
-                LocalDate.now(),
-                null,
-                LocalTime.of(9, 0),
-                LocalTime.of(10, 0),
-                null
-        );
-
-        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-
-        BaseException exception = assertThrows(BaseException.class, () -> mentorAvailabilityService.createRule(mentorUserId, request));
-
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
-    }
-
-    @Test
-    void availability_shouldShowWindowWithLessThanThreePendingRequests() {
-        MentorAvailabilitySlot availableSlot = new MentorAvailabilitySlot();
-        availableSlot.setId(UUID.randomUUID());
-        availableSlot.setMentorProfile(mentorProfile);
-        availableSlot.setStartTime(LocalDateTime.now().plusDays(1).withHour(8).withMinute(0).withSecond(0).withNano(0));
-        availableSlot.setEndTime(LocalDateTime.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0));
-        availableSlot.setTimezone("Asia/Ho_Chi_Minh");
-        availableSlot.setActive(true);
-        availableSlot.setBooked(false);
-
-        MentorService attachedService = MentorService.builder()
-                .id(UUID.randomUUID())
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
                 .mentorProfile(mentorProfile)
-                .title("Spring Boot Mentoring")
-                .durationMinutes(120)
                 .isActive(true)
+                .isBooked(true)
                 .build();
 
-        when(mentorAvailabilitySlotRepository.findVisibleSlotsByMentorUserId(
-                eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class)
-        )).thenReturn(List.of(availableSlot));
-        when(availabilitySlotServiceRepository.findBySlotIdInOrderByCreatedAtAsc(List.of(availableSlot.getId())))
-                .thenReturn(List.of(AvailabilitySlotService.builder().slot(availableSlot).service(attachedService).build()));
-        when(bookingRepository.countPendingSegmentsBySlotId(availableSlot.getId(), BookingStatus.PENDING))
-                .thenReturn(List.of(pendingCount(availableSlot.getStartTime(), availableSlot.getEndTime(), 2L)));
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
 
-        AvailabilityCalendarWindowCalculator.DateRange visibleRange = calendarWindowCalculator.currentVisibleRange(LocalDate.now());
-        List<MentorAvailabilitySlotResponse> response = mentorAvailabilityService.getAvailableSlots(
-                mentorProfile,
-                visibleRange.startDate().plusDays(1),
-                visibleRange.startDate().plusDays(1)
-        );
-
-        assertEquals(1, response.size());
-        assertEquals(120, response.getFirst().durationMinutes());
-        assertEquals(2, response.getFirst().pendingRequestCount());
-        assertEquals(3, response.getFirst().maxPendingRequests());
-        assertEquals(1, response.getFirst().remainingRequestSlots());
+        // Act & Assert
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
     }
 
     @Test
-    void getAvailableSlots_outsideCurrentCalendarWindow_shouldThrowBadRequest() {
-        AvailabilityCalendarWindowCalculator.DateRange visibleRange = calendarWindowCalculator.currentVisibleRange(LocalDate.now());
-
-        BaseException exception = assertThrows(BaseException.class, () -> mentorAvailabilityService.getAvailableSlots(
-                mentorProfile,
-                visibleRange.startDate().minusDays(1),
-                visibleRange.endDate()
-        ));
-
-        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
-    }
-
-    @Test
-    void generateSlotsForDateRange_overlappingWindow_shouldNotCreateNewWindow() {
-        MentorAvailabilityRule openRule = MentorAvailabilityRule.builder()
-                .id(UUID.randomUUID())
+    void deleteSlotDirectly_success() {
+        // Arrange
+        UUID slotId = UUID.randomUUID();
+        MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
                 .mentorProfile(mentorProfile)
-                .ruleType(AvailabilityRuleType.OPEN)
-                .repeatType(AvailabilityRepeatType.DAILY)
-                .effectiveFrom(LocalDate.now().plusDays(1))
-                .effectiveTo(LocalDate.now().plusDays(1))
-                .startTime(LocalTime.of(9, 0))
-                .endTime(LocalTime.of(11, 0))
-                .active(true)
+                .rule(rule)
+                .isActive(true)
+                .isBooked(false)
                 .build();
 
-        when(mentorAvailabilityRuleRepository.findActiveRulesOverlapping(eq(mentorUserId), any(LocalDate.class), any(LocalDate.class)))
-                .thenReturn(List.of(openRule));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(eq(mentorUserId), any(LocalDateTime.class), any(LocalDateTime.class)))
-                .thenReturn(true);
-
-        mentorAvailabilityService.generateSlotsForDateRange(
-                mentorProfile,
-                LocalDate.now().plusDays(1),
-                LocalDate.now().plusDays(1)
-        );
-
-        verify(mentorAvailabilitySlotRepository, never()).save(any(MentorAvailabilitySlot.class));
-    }
-
-    @Test
-    void rejectPendingBookingsForWindow_shouldNotifyAffectedMentees() {
-        UUID windowId = UUID.randomUUID();
         User mentee = new User();
         mentee.setId(UUID.randomUUID());
         Booking pendingBooking = Booking.builder()
@@ -330,44 +258,60 @@ class MentorAvailabilityServiceTest {
                 .status(BookingStatus.PENDING)
                 .build();
 
-        when(bookingRepository.findBySlotIdAndStatus(windowId, BookingStatus.PENDING))
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING))
                 .thenReturn(List.of(pendingBooking));
 
-        ReflectionTestUtils.invokeMethod(
-                mentorAvailabilityService,
-                "rejectPendingBookingsForWindow",
-                windowId,
-                "Khung giờ mentoring đã được mentor cập nhật nên yêu cầu chờ không còn hiệu lực.",
-                LocalDateTime.now()
-        );
+        // Act
+        mentorAvailabilityService.deleteSlotDirectly(mentorUserId, slotId);
 
+        // Assert
+        verify(bookingRepository).save(pendingBooking);
         assertEquals(BookingStatus.REJECTED, pendingBooking.getStatus());
         verify(notificationService).createNotification(
                 eq(mentee.getId()),
-                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED),
-                any(),
-                any(),
-                eq("BOOKING"),
-                eq(pendingBooking.getId())
+                eq(NotificationType.BOOKING_REJECTED),
+                any(), any(), any(), any()
         );
+        verify(mentorAvailabilitySlotRepository).save(slot);
+        assertEquals(false, slot.isActive());
+        verify(mentorAvailabilityRuleRepository).save(rule);
+        assertEquals(false, rule.isActive());
     }
 
-    private BookingSegmentPendingCountProjection pendingCount(LocalDateTime startTime, LocalDateTime endTime, long pendingCount) {
-        return new BookingSegmentPendingCountProjection() {
-            @Override
-            public LocalDateTime getStartTime() {
-                return startTime;
-            }
+    @Test
+    void deleteSlotDirectly_bookedSlot_throwsBadRequest() {
+        // Arrange
+        UUID slotId = UUID.randomUUID();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .isActive(true)
+                .isBooked(true)
+                .build();
 
-            @Override
-            public LocalDateTime getEndTime() {
-                return endTime;
-            }
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
 
-            @Override
-            public long getPendingCount() {
-                return pendingCount;
-            }
-        };
+        // Act & Assert
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.deleteSlotDirectly(mentorUserId, slotId));
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void getMySlots_success() {
+        // Arrange
+        LocalDate fromDate = LocalDate.now();
+        LocalDate toDate = LocalDate.now().plusDays(7);
+
+        when(mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(eq(mentorUserId), any(), any()))
+                .thenReturn(new ArrayList<>());
+
+        // Act
+        List<MentorManagedAvailabilitySlotResponse> responses = mentorAvailabilityService.getMySlots(mentorUserId, fromDate, toDate);
+
+        // Assert
+        assertNotNull(responses);
+        assertTrue(responses.isEmpty());
     }
 }

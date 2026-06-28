@@ -10,6 +10,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
@@ -97,135 +99,158 @@ public class MentorAvailabilityService {
     @Deprecated(forRemoval = false)
     @Transactional
     public AvailabilityRuleResponse createRule(UUID mentorUserId, UpsertAvailabilityRuleRequest request) {
-        MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
-        UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
-
-        LocalDate effectiveFrom = safeRequest.effectiveFrom();
-        LocalDate effectiveTo = safeRequest.effectiveTo();
-        if (safeRequest.repeatType() != AvailabilityRepeatType.NONE) {
-            LocalDate today = LocalDate.now(APP_ZONE);
-            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            LocalDate sundayNextWeek = mondayThisWeek.plusDays(13);
-            effectiveFrom = mondayThisWeek;
-            effectiveTo = sundayNextWeek;
-        } else {
-            effectiveTo = effectiveFrom;
-        }
-
-        MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
-                .ruleType(safeRequest.ruleType())
-                .repeatType(safeRequest.repeatType())
-                .daysOfWeek(encodeDays(safeRequest.daysOfWeek()))
-                .effectiveFrom(effectiveFrom)
-                .effectiveTo(effectiveTo)
-                .startTime(normalizedStartTime(safeRequest))
-                .endTime(normalizedEndTime(safeRequest))
-                .timezone(APP_TIMEZONE)
-                .active(true)
-                .note(trimToNull(safeRequest.note()))
-                .build();
-
-        MentorAvailabilityRule savedRule = mentorAvailabilityRuleRepository.save(rule);
-        generatePlanningWindowsForRule(mentorProfile, savedRule);
-        return toRuleResponse(savedRule);
+        throw new BaseException(ErrorCode.BAD_REQUEST, "API này đã lỗi thời và không còn được hỗ trợ. Hãy sử dụng API slots mới.");
     }
 
     @Deprecated(forRemoval = false)
     @Transactional
     public AvailabilityRuleResponse updateRule(UUID mentorUserId, UUID ruleId, UpsertAvailabilityRuleRequest request) {
-        requireUserId(mentorUserId);
-        if (ruleId == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã rule lịch rảnh không hợp lệ");
-        }
-
-        MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.findByIdAndMentorProfileUserId(ruleId, mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy rule lịch rảnh"));
-        UpsertAvailabilityRuleRequest safeRequest = validateRuleRequest(request);
-
-        LocalDate effectiveFrom = safeRequest.effectiveFrom();
-        LocalDate effectiveTo = safeRequest.effectiveTo();
-        if (safeRequest.repeatType() != AvailabilityRepeatType.NONE) {
-            LocalDate today = LocalDate.now(APP_ZONE);
-            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            LocalDate sundayNextWeek = mondayThisWeek.plusDays(13);
-            effectiveFrom = mondayThisWeek;
-            effectiveTo = sundayNextWeek;
-        } else {
-            effectiveTo = effectiveFrom;
-        }
-
-        reconcileFutureWindowsForRule(rule, RULE_UPDATED_PENDING_REJECTION_REASON);
-
-        rule.setRuleType(safeRequest.ruleType());
-        rule.setRepeatType(safeRequest.repeatType());
-        rule.setDaysOfWeek(encodeDays(safeRequest.daysOfWeek()));
-        rule.setEffectiveFrom(effectiveFrom);
-        rule.setEffectiveTo(effectiveTo);
-        rule.setStartTime(normalizedStartTime(safeRequest));
-        rule.setEndTime(normalizedEndTime(safeRequest));
-        rule.setTimezone(APP_TIMEZONE);
-        rule.setNote(trimToNull(safeRequest.note()));
-
-        generatePlanningWindowsForRule(rule.getMentorProfile(), rule);
-        return toRuleResponse(rule);
+        throw new BaseException(ErrorCode.BAD_REQUEST, "API này đã lỗi thời và không còn được hỗ trợ. Hãy sử dụng API slots mới.");
     }
 
     @Deprecated(forRemoval = false)
     @Transactional
     public void deleteRule(UUID mentorUserId, UUID ruleId) {
-        requireUserId(mentorUserId);
-        if (ruleId == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã rule lịch rảnh không hợp lệ");
-        }
-
-        MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.findByIdAndMentorProfileUserId(ruleId, mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy rule lịch rảnh"));
-        rule.setActive(false);
-        reconcileFutureWindowsForRule(rule, RULE_DELETED_PENDING_REJECTION_REASON);
+        throw new BaseException(ErrorCode.BAD_REQUEST, "API này đã lỗi thời và không còn được hỗ trợ. Hãy sử dụng API slots mới.");
     }
 
     @Transactional
-    public MentorManagedAvailabilitySlotResponse replaceSlotServices(
-            UUID mentorUserId,
-            UUID slotId,
-            ReplaceAvailabilitySlotServicesRequest request
-    ) {
+    public MentorManagedAvailabilitySlotResponse createSlotDirectly(UUID mentorUserId, CreateAvailabilitySlotRequest request) {
+        requireUserId(mentorUserId);
+        MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
+
+        LocalDateTime start = request.startTime();
+        LocalDateTime end = request.endTime();
+
+        if (start == null || end == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu và kết thúc là bắt buộc");
+        }
+        if (!end.isAfter(start)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc phải sau thời gian bắt đầu");
+        }
+        if (!start.isAfter(now())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể tạo slot rảnh ở quá khứ");
+        }
+
+        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, start, end)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
+        }
+
+        MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
+                .mentorProfile(mentorProfile)
+                .ruleType(AvailabilityRuleType.OPEN)
+                .repeatType(AvailabilityRepeatType.NONE)
+                .daysOfWeek(null)
+                .effectiveFrom(start.toLocalDate())
+                .effectiveTo(start.toLocalDate())
+                .startTime(start.toLocalTime())
+                .endTime(end.toLocalTime())
+                .timezone(APP_TIMEZONE)
+                .active(true)
+                .note(trimToNull(request.note()))
+                .build();
+        MentorAvailabilityRule savedRule = mentorAvailabilityRuleRepository.save(rule);
+
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .mentorProfile(mentorProfile)
+                .rule(savedRule)
+                .startTime(start)
+                .endTime(end)
+                .timezone(APP_TIMEZONE)
+                .isActive(true)
+                .isBooked(false)
+                .recurrenceRule(AvailabilityRepeatType.NONE.name())
+                .note(trimToNull(request.note()))
+                .build();
+        MentorAvailabilitySlot savedSlot = mentorAvailabilitySlotRepository.save(slot);
+
+        List<MentorService> services;
+        if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
+            services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
+        } else {
+            services = mentorServiceRepository.findAllById(request.serviceIds());
+            for (MentorService service : services) {
+                if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
+                    throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
+                }
+            }
+        }
+
+        if (!services.isEmpty()) {
+            List<AvailabilitySlotService> slotServices = services.stream()
+                    .map(service -> AvailabilitySlotService.builder()
+                            .slot(savedSlot)
+                            .service(service)
+                            .build())
+                    .toList();
+            availabilitySlotServiceRepository.saveAll(slotServices);
+            savedSlot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
+        }
+
+        return toManagedSlotResponse(savedSlot);
+    }
+
+    @Transactional
+    public MentorManagedAvailabilitySlotResponse updateSlotDirectly(UUID mentorUserId, UUID slotId, UpdateAvailabilitySlotRequest request) {
         requireUserId(mentorUserId);
         if (slotId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
         }
-        if (request == null || request.serviceIds() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "serviceIds không được để trống");
-        }
 
-        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy availability slot"));
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
         validateMentorOwnsSlot(mentorUserId, slot);
-        if (!slot.isActive()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể gắn service cho availability slot đang hoạt động");
-        }
-        if (slot.getEndTime() == null || !slot.getEndTime().isAfter(now())) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể cập nhật service cho availability slot đã kết thúc");
+
+        if (slot.isBooked()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa đổi slot rảnh đã được đặt lịch");
         }
 
-        List<UUID> requestedServiceIds = request.serviceIds().stream()
-                .filter(java.util.Objects::nonNull)
-                .distinct()
-                .toList();
+        LocalDateTime start = request.startTime();
+        LocalDateTime end = request.endTime();
 
-        List<MentorService> services = requestedServiceIds.isEmpty()
-                ? List.of()
-                : mentorServiceRepository.findAllById(requestedServiceIds).stream()
-                .filter(MentorService::isActive)
-                .filter(service -> service.getMentorProfile() != null && mentorUserId.equals(service.getMentorProfile().getUserId()))
-                .toList();
-
-        if (services.size() != requestedServiceIds.size()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tất cả service phải tồn tại, đang hoạt động và thuộc về mentor hiện tại");
+        if (start == null || end == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu và kết thúc là bắt buộc");
         }
+        if (!end.isAfter(start)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc phải sau thời gian bắt đầu");
+        }
+        if (!start.isAfter(now())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa slot rảnh thành thời gian quá khứ");
+        }
+
+        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, start, end)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
+        }
+
+        MentorAvailabilityRule rule = slot.getRule();
+        if (rule != null) {
+            rule.setEffectiveFrom(start.toLocalDate());
+            rule.setEffectiveTo(start.toLocalDate());
+            rule.setStartTime(start.toLocalTime());
+            rule.setEndTime(end.toLocalTime());
+            rule.setNote(trimToNull(request.note()));
+            mentorAvailabilityRuleRepository.save(rule);
+        }
+
+        slot.setStartTime(start);
+        slot.setEndTime(end);
+        slot.setNote(trimToNull(request.note()));
 
         availabilitySlotServiceRepository.deleteBySlotId(slotId);
+        slot.getSlotServices().clear();
+
+        List<MentorService> services;
+        if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
+            services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
+        } else {
+            services = mentorServiceRepository.findAllById(request.serviceIds());
+            for (MentorService service : services) {
+                if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
+                    throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
+                }
+            }
+        }
+
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
                     .map(service -> AvailabilitySlotService.builder()
@@ -234,20 +259,111 @@ public class MentorAvailabilityService {
                             .build())
                     .toList();
             availabilitySlotServiceRepository.saveAll(slotServices);
+            slot.setSlotServices(new java.util.LinkedHashSet<>(slotServices));
         }
 
-        List<AvailabilitySlotServiceBasicResponse> serviceResponses = services.stream()
-                .map(this::toSlotServiceBasicResponse)
-                .toList();
+        MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
+        return toManagedSlotResponse(updatedSlot);
+    }
 
-        return MentorManagedAvailabilitySlotResponse.builder()
-                .slotId(slot.getId())
-                .startTime(slot.getStartTime())
-                .endTime(slot.getEndTime())
-                .timezone(slot.getTimezone())
-                .active(slot.isActive())
-                .services(serviceResponses)
-                .build();
+    @Transactional
+    public void deleteSlotDirectly(UUID mentorUserId, UUID slotId) {
+        requireUserId(mentorUserId);
+        if (slotId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
+        }
+
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
+        validateMentorOwnsSlot(mentorUserId, slot);
+
+        if (slot.isBooked()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xóa slot rảnh đã được đặt lịch");
+        }
+
+        List<Booking> pendingBookings = bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING);
+        if (!pendingBookings.isEmpty()) {
+            for (Booking booking : pendingBookings) {
+                booking.setStatus(BookingStatus.REJECTED);
+                booking.setRejectedAt(now());
+                booking.setRejectReason(RULE_DELETED_PENDING_REJECTION_REASON);
+                bookingRepository.save(booking);
+
+                try {
+                    notificationService.createNotification(
+                            booking.getMentee().getId(),
+                            NotificationType.BOOKING_REJECTED,
+                            "Yêu cầu đặt lịch đã bị hủy",
+                            "Khung giờ rảnh của mentor đã được gỡ bỏ khỏi lịch biểu.",
+                            "booking",
+                            booking.getId()
+                    );
+                } catch (Exception ex) {
+                    log.error("Failed to send booking rejection notification for booking: {}", booking.getId(), ex);
+                }
+            }
+        }
+
+        slot.setActive(false);
+        mentorAvailabilitySlotRepository.save(slot);
+
+        MentorAvailabilityRule rule = slot.getRule();
+        if (rule != null) {
+            rule.setActive(false);
+            mentorAvailabilityRuleRepository.save(rule);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorManagedAvailabilitySlotResponse> getMySlots(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
+        requireUserId(mentorUserId);
+        LocalDateTime start;
+        LocalDateTime end;
+
+        if (fromDate == null) {
+            LocalDate today = LocalDate.now(APP_ZONE);
+            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+            start = mondayThisWeek.atStartOfDay();
+            end = mondayThisWeek.plusDays(14).atTime(LocalTime.MAX);
+        } else {
+            start = fromDate.atStartOfDay();
+            end = toDate != null ? toDate.atTime(LocalTime.MAX) : start.toLocalDate().plusDays(14).atTime(LocalTime.MAX);
+        }
+
+        return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, start, end).stream()
+                .map(this::toManagedSlotResponse)
+                .toList();
+    }
+
+    @Transactional
+    public MentorManagedAvailabilitySlotResponse replaceSlotServices(
+            UUID mentorUserId,
+            UUID slotId,
+            ReplaceAvailabilitySlotServicesRequest request
+    ) {
+        throw new BaseException(ErrorCode.BAD_REQUEST, "API này đã lỗi thời và không còn được hỗ trợ. Hãy sử dụng API slots mới.");
+    }
+
+    private MentorManagedAvailabilitySlotResponse toManagedSlotResponse(MentorAvailabilitySlot slot) {
+        List<AvailabilitySlotServiceBasicResponse> services = slot.getSlotServices().stream()
+                .map(ss -> new AvailabilitySlotServiceBasicResponse(
+                        ss.getService().getId(),
+                        ss.getService().getTitle(),
+                        ss.getService().getDurationMinutes(),
+                        ss.getService().isFree(),
+                        ss.getService().getPriceScoin()
+                ))
+                .collect(Collectors.toList());
+        return new MentorManagedAvailabilitySlotResponse(
+                slot.getId(),
+                slot.getStartTime(),
+                slot.getEndTime(),
+                slot.getTimezone(),
+                slot.isActive(),
+                slot.isBooked(),
+                slot.getNote(),
+                services
+        );
     }
 
     @Transactional(readOnly = true)

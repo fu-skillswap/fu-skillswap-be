@@ -15,6 +15,8 @@ public record MentorManagedAvailabilitySlotResponse(
         LocalDateTime endTime,
         String timezone,
         boolean active,
+        boolean booked,
+        String note,
         List<AvailabilitySlotServiceBasicResponse> services
 ) {
 }

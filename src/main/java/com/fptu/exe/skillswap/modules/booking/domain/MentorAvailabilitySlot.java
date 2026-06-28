@@ -60,6 +60,9 @@ public class MentorAvailabilitySlot {
     @Column(name = "recurrence_rule", columnDefinition = "TEXT")
     private String recurrenceRule;
 
+    @Column(name = "note", length = 200)
+    private String note;
+
     @OneToMany(mappedBy = "slot", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private Set<AvailabilitySlotService> slotServices = new LinkedHashSet<>();
