@@ -74,13 +74,15 @@ class EmailServiceTest {
         MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
         when(javaMailSender.createMimeMessage()).thenReturn(mimeMessage);
 
-        emailService.sendHtmlEmail("test@test.com", "HTML Subject", "<h1>Hello</h1>", "Hello");
+        emailService.sendHtmlEmail("test@test.com", "[SkillSwap] Mentor đã chấp nhận lịch", "<h1>Xin chào</h1>", "Xin chào");
 
         ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
         verify(javaMailSender, times(1)).send(messageCaptor.capture());
         MimeMessage sentMessage = messageCaptor.getValue();
-        assertEquals("HTML Subject", sentMessage.getSubject());
+        assertEquals("[SkillSwap] Mentor đã chấp nhận lịch", sentMessage.getSubject());
         assertEquals("no-reply@skillswap.com", sentMessage.getFrom()[0].toString());
         assertEquals("test@test.com", sentMessage.getAllRecipients()[0].toString());
+        assertEquals("vi", sentMessage.getHeader("Content-Language", null));
+        assertEquals("8bit", sentMessage.getHeader("Content-Transfer-Encoding", null));
     }
 }

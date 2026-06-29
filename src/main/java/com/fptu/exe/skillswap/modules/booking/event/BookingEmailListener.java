@@ -107,7 +107,7 @@ public class BookingEmailListener {
                   <meta name="viewport" content="width=device-width, initial-scale=1.0">
                   <title>%s</title>
                 </head>
-                <body style="margin:0;padding:0;background:#f2f7fb;font-family:Arial,Helvetica,sans-serif;color:#102a43;">
+                <body style="margin:0;padding:0;background:#f2f7fb;font-family:sans-serif;color:#102a43;">
                   <div style="display:none;max-height:0;overflow:hidden;color:#f2f7fb;">%s</div>
                   <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="background:#f2f7fb;padding:28px 12px;">
                     <tr>

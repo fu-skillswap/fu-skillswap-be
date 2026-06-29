@@ -9,10 +9,14 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailService {
+
+    private static final String MAIL_ENCODING = StandardCharsets.UTF_8.name();
 
     private final JavaMailSender javaMailSender;
 
@@ -51,11 +55,17 @@ public class EmailService {
 
         try {
             MimeMessage message = javaMailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message,
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    MAIL_ENCODING
+            );
             helper.setFrom(senderEmail);
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(plainTextFallback == null ? "" : plainTextFallback, htmlBody);
+            message.setHeader("Content-Language", "vi");
+            message.setHeader("Content-Transfer-Encoding", "8bit");
 
             javaMailSender.send(message);
             log.info("HTML email sent successfully to: {}", to);
