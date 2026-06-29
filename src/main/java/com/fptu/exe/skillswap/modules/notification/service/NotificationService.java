@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
+import com.fptu.exe.skillswap.modules.notification.event.NotificationBadgeChangedEvent;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -37,14 +38,19 @@ public class NotificationService {
         Notification notification = Notification.builder()
                 .recipientUser(recipient)
                 .type(type)
-                .title(title)
+                .title(normalizeTitle(type, title))
                 .message(message)
                 .relatedEntityType(relatedEntityType)
                 .relatedEntityId(relatedEntityId)
                 .build();
 
         notification = notificationRepository.save(notification);
-        eventPublisher.publishEvent(new NotificationCreatedEvent(recipientUserId, mapToResponse(notification)));
+        long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(recipientUserId);
+        eventPublisher.publishEvent(new NotificationCreatedEvent(
+                recipientUserId,
+                mapToResponse(notification, unreadCount, "CREATED"),
+                type
+        ));
     }
 
     @Transactional(readOnly = true)
@@ -88,6 +94,8 @@ public class NotificationService {
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
             notificationRepository.save(notification);
+            long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(currentUserId);
+            eventPublisher.publishEvent(new NotificationBadgeChangedEvent(currentUserId, unreadCount, "READ"));
         }
         // If already read, idempotent behavior (do not fail, preserve old readAt)
     }
@@ -95,9 +103,15 @@ public class NotificationService {
     @Transactional
     public void markAllAsRead(UUID currentUserId) {
         notificationRepository.markAllAsRead(currentUserId, LocalDateTime.now());
+        long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(currentUserId);
+        eventPublisher.publishEvent(new NotificationBadgeChangedEvent(currentUserId, unreadCount, "READ_ALL"));
     }
 
     private NotificationResponse mapToResponse(Notification notification) {
+        return mapToResponse(notification, null, null);
+    }
+
+    private NotificationResponse mapToResponse(Notification notification, Long unreadCount, String realtimeEventKind) {
         String relatedEntityType = notification.getRelatedEntityType();
         UUID relatedEntityId = notification.getRelatedEntityId();
 
@@ -130,6 +144,39 @@ public class NotificationService {
                 .read(notification.getReadAt() != null)
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
+                .unreadCount(unreadCount)
+                .realtimeEventKind(realtimeEventKind)
                 .build();
+    }
+
+    private String normalizeTitle(NotificationType type, String fallbackTitle) {
+        if (type == null) {
+            return fallbackTitle;
+        }
+        return switch (type) {
+            case MENTOR_VERIFICATION_APPROVED -> "Hồ sơ mentor được duyệt";
+            case MENTOR_VERIFICATION_REJECTED -> "Hồ sơ mentor bị từ chối";
+            case MENTOR_VERIFICATION_NEEDS_REVISION -> "Cần bổ sung hồ sơ mentor";
+            case BOOKING_REQUEST_CREATED -> "Có yêu cầu mentoring mới";
+            case BOOKING_ACCEPTED -> "Mentor đã nhận lịch";
+            case BOOKING_PAYMENT_CONFIRMED -> "Thanh toán đã xác nhận";
+            case BOOKING_PAYMENT_EXPIRED -> "Hết hạn thanh toán";
+            case BOOKING_REJECTED -> "Yêu cầu mentoring bị từ chối";
+            case BOOKING_CANCELLED_BY_MENTEE -> "Mentee đã hủy lịch";
+            case BOOKING_CANCELLED_BY_MENTOR -> "Mentor đã hủy lịch";
+            case BOOKING_AUTO_REJECTED -> "Yêu cầu đã tự hủy";
+            case BOOKING_REQUEST_EXPIRED -> "Yêu cầu mentoring đã hết hạn";
+            case BOOKING_RESCHEDULE_REQUESTED -> "Có yêu cầu đổi lịch";
+            case BOOKING_RESCHEDULE_ACCEPTED -> "Đề nghị đổi lịch đã duyệt";
+            case BOOKING_RESCHEDULE_REJECTED -> "Đề nghị đổi lịch bị từ chối";
+            case BOOKING_RESCHEDULE_EXPIRED -> "Yêu cầu đổi lịch hết hạn";
+            case MEETING_LINK_UPDATED -> "Link buổi học đã cập nhật";
+            case SESSION_COMPLETED -> "Phiên mentoring đã hoàn thành";
+            case FEEDBACK_RECEIVED -> "Bạn vừa nhận đánh giá mới";
+            case FORUM_POST_COMMENTED -> "Bài viết có bình luận mới";
+            case FORUM_POST_HIDDEN -> "Bài viết đã bị ẩn";
+            case FORUM_COMMENT_HIDDEN -> "Bình luận đã bị ẩn";
+            case ACCOUNT_UNLOCKED -> "Tài khoản đã được mở khóa";
+        };
     }
 }

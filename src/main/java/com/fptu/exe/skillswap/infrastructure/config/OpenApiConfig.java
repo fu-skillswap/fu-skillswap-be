@@ -57,7 +57,8 @@ public class OpenApiConfig {
                             - Sau khi reconnect, FE nên resync dữ liệu cần thiết qua REST.
                             - Scope websocket hiện tại được giữ nhỏ, chỉ gồm:
                               - push chat message mới
-                              - push notification mới / cập nhật unread count nếu backend emit
+                              - push notification quan trọng
+                              - push badge update cho notification unread count
                             
                             ### Cách dùng token trên Swagger UI
                             1. Lấy `accessToken` hợp lệ từ flow login hiện tại.

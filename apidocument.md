@@ -1030,6 +1030,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `ERROR`
   - `CHAT_MESSAGE_CREATED`
   - `NEW_NOTIFICATION`
+  - `NOTIFICATION_BADGE_UPDATED`
 
 ### Payload realtime
 
@@ -1041,8 +1042,17 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `messageType`
   - `content`
   - `createdAt`
+  - `conversationType`
+  - `isSelf`
+  - `unreadCount`
 - `NEW_NOTIFICATION`
   - payload là `NotificationResponse`
+  - realtime có thể bổ sung:
+    - `unreadCount`
+    - `realtimeEventKind`
+- `NOTIFICATION_BADGE_UPDATED`
+  - `unreadCount`
+  - `eventKind`
 
 ## 21. Core status enums
 

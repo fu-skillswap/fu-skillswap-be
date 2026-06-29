@@ -12,4 +12,7 @@ public final class RealtimePayloads {
 
     public record ErrorPayload(String code, String message) {
     }
+
+    public record NotificationBadgePayload(long unreadCount, String eventKind) {
+    }
 }

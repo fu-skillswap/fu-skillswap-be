@@ -37,4 +37,8 @@ public class NotificationResponse {
     private LocalDateTime readAt;
     @Schema(description = "Notification creation time", example = "2026-06-24T11:45:00")
     private LocalDateTime createdAt;
+    @Schema(description = "Realtime-only unread notification count snapshot. REST list endpoints may leave this field null.", nullable = true, example = "3")
+    private Long unreadCount;
+    @Schema(description = "Realtime-only event kind such as CREATED, READ, or READ_ALL. REST list endpoints may leave this field null.", nullable = true, example = "CREATED")
+    private String realtimeEventKind;
 }

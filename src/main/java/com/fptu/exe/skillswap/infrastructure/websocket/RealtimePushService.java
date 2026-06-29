@@ -37,6 +37,11 @@ public class RealtimePushService {
         sendToSession(session, RealtimeMessageType.ERROR, new RealtimePayloads.ErrorPayload(code, message));
     }
 
+    public void pushErrorAndCloseUnauthorized(WebSocketSession session, String code, String message) {
+        pushError(session, code, message);
+        closeUnauthorized(session);
+    }
+
     public void pushToUser(UUID userId, String type, Object payload) {
         Set<WebSocketSession> sessions = sessionRegistry.getSessions(userId);
         if (sessions.isEmpty()) {

@@ -186,7 +186,7 @@ class ConversationServiceUnitTest {
         UUID senderId = UUID.randomUUID();
         SendMessageRequest request = new SendMessageRequest("Hello world!");
 
-        Conversation conversation = Conversation.builder().id(conversationId).build();
+        Conversation conversation = Conversation.builder().id(conversationId).type(ConversationType.DIRECT).build();
         User sender = new User(); sender.setId(senderId); sender.setFullName("Sender Name");
 
         MessageRepository messageRepository = mock(MessageRepository.class);
@@ -216,6 +216,8 @@ class ConversationServiceUnitTest {
                         ConversationParticipant.builder().conversation(conversation).user(sender).build(),
                         otherParticipant
                 ));
+        when(messageRepository.countUnreadMessages(eq(conversationId), eq(otherParticipant.getUser().getId()), any()))
+                .thenReturn(1L);
 
         MessageResponse response = conversationService.sendMessage(conversationId, senderId, request, messageRepository, userRepository);
 
@@ -229,8 +231,10 @@ class ConversationServiceUnitTest {
         ChatMessageSavedEvent capturedEvent = eventCaptor.getValue();
         assertNotNull(capturedEvent);
         assertEquals("Hello world!", capturedEvent.getEvent().content());
-        assertEquals(2, capturedEvent.getRecipientUserIds().size());
-        assertTrue(capturedEvent.getRecipientUserIds().contains(otherParticipant.getUser().getId()));
+        assertEquals(1, capturedEvent.getDeliveries().size());
+        assertEquals(otherParticipant.getUser().getId(), capturedEvent.getDeliveries().getFirst().recipientUserId());
+        assertEquals(1L, capturedEvent.getDeliveries().getFirst().event().unreadCount());
+        assertFalse(Boolean.TRUE.equals(capturedEvent.getDeliveries().getFirst().event().isSelf()));
     }
 
     @Test

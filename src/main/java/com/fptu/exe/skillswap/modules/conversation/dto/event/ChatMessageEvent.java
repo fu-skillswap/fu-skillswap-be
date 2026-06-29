@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.conversation.dto.event;
 
 import com.fptu.exe.skillswap.modules.conversation.domain.MessageType;
+import com.fptu.exe.skillswap.modules.conversation.domain.ConversationType;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
@@ -14,6 +15,9 @@ public record ChatMessageEvent(
         String senderName,
         MessageType messageType,
         String content,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        ConversationType conversationType,
+        Boolean isSelf,
+        Long unreadCount
 ) {
 }

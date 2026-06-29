@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.conversation.domain.ConversationType;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
+import com.fptu.exe.skillswap.modules.conversation.event.ChatMessageRealtimeDelivery;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
@@ -184,14 +185,35 @@ public class ConversationService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .createdAt(message.getCreatedAt())
+                .conversationType(conversation.getType())
+                .isSelf(false)
+                .unreadCount(0L)
                 .build();
 
         java.util.List<ConversationParticipant> participants = participantRepository.findByConversationId(conversation.getId());
-        java.util.List<UUID> recipientUserIds = participants.stream()
-                .map(p -> p.getUser().getId())
+        java.util.List<ChatMessageRealtimeDelivery> deliveries = participants.stream()
+                .filter(p -> !p.getUser().getId().equals(userId))
+                .map(p -> {
+                    java.time.LocalDateTime lastRead = p.getLastReadAt() != null ? p.getLastReadAt() : p.getJoinedAt();
+                    long unreadCount = messageRepository.countUnreadMessages(conversation.getId(), p.getUser().getId(), lastRead);
+                    com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent recipientEvent =
+                            com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
+                                    .conversationId(event.conversationId())
+                                    .messageId(event.messageId())
+                                    .senderId(event.senderId())
+                                    .senderName(event.senderName())
+                                    .messageType(event.messageType())
+                                    .content(event.content())
+                                    .createdAt(event.createdAt())
+                                    .conversationType(event.conversationType())
+                                    .isSelf(false)
+                                    .unreadCount(unreadCount)
+                                    .build();
+                    return new ChatMessageRealtimeDelivery(p.getUser().getId(), recipientEvent);
+                })
                 .collect(java.util.stream.Collectors.toList());
 
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.conversation.event.ChatMessageSavedEvent(event, recipientUserIds));
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.conversation.event.ChatMessageSavedEvent(event, deliveries));
 
         return com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
                 .id(message.getId())

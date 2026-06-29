@@ -8,6 +8,7 @@ public final class RealtimeMessageType {
     public static final String PONG = "PONG";
     public static final String CHAT_MESSAGE_CREATED = "CHAT_MESSAGE_CREATED";
     public static final String NEW_NOTIFICATION = "NEW_NOTIFICATION";
+    public static final String NOTIFICATION_BADGE_UPDATED = "NOTIFICATION_BADGE_UPDATED";
 
     private RealtimeMessageType() {
     }

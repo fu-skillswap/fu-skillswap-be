@@ -24,10 +24,11 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        boolean authenticated = Boolean.TRUE.equals(session.getAttributes().get(WebSocketAuthHandshakeInterceptor.AUTHENTICATED_ATTRIBUTE));
         UUID userId = (UUID) session.getAttributes().get(WebSocketAuthHandshakeInterceptor.USER_ID_ATTRIBUTE);
         UserPrincipal principal = (UserPrincipal) session.getAttributes().get(WebSocketAuthHandshakeInterceptor.USER_PRINCIPAL_ATTRIBUTE);
-        if (userId == null || principal == null) {
-            realtimePushService.closeUnauthorized(session);
+        if (!authenticated || userId == null || principal == null) {
+            realtimePushService.pushErrorAndCloseUnauthorized(session, "WS_4401", "Phiên đăng nhập không hợp lệ hoặc đã hết hạn");
             return;
         }
         sessionRegistry.register(userId, session);
@@ -37,7 +38,13 @@ public class RealtimeWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        JsonNode root = objectMapper.readTree(message.getPayload());
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(message.getPayload());
+        } catch (Exception ex) {
+            realtimePushService.pushError(session, "WS_4001", "Realtime payload không hợp lệ");
+            return;
+        }
         JsonNode typeNode = root.get("type");
         String type = typeNode == null ? null : typeNode.asText(null);
         if (RealtimeMessageType.PING.equals(type)) {

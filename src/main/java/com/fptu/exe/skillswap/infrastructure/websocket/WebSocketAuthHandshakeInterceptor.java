@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.infrastructure.websocket;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -21,6 +20,7 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
 
     public static final String USER_ID_ATTRIBUTE = "ws.userId";
     public static final String USER_PRINCIPAL_ATTRIBUTE = "ws.userPrincipal";
+    public static final String AUTHENTICATED_ATTRIBUTE = "ws.authenticated";
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request,
@@ -29,16 +29,17 @@ public class WebSocketAuthHandshakeInterceptor implements HandshakeInterceptor {
                                    Map<String, Object> attributes) {
         Authentication authentication = resolveAuthentication(request);
         if (!(authentication instanceof AbstractAuthenticationToken token) || !token.isAuthenticated()) {
-            response.setStatusCode(HttpStatus.UNAUTHORIZED);
-            return false;
+            attributes.put(AUTHENTICATED_ATTRIBUTE, false);
+            return true;
         }
         Object principal = token.getPrincipal();
         if (!(principal instanceof UserPrincipal userPrincipal)) {
-            response.setStatusCode(HttpStatus.UNAUTHORIZED);
-            return false;
+            attributes.put(AUTHENTICATED_ATTRIBUTE, false);
+            return true;
         }
         attributes.put(USER_ID_ATTRIBUTE, userPrincipal.getPublicId());
         attributes.put(USER_PRINCIPAL_ATTRIBUTE, userPrincipal);
+        attributes.put(AUTHENTICATED_ATTRIBUTE, true);
         return true;
     }
 

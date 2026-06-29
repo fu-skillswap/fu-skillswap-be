@@ -6,6 +6,8 @@ import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
+import com.fptu.exe.skillswap.modules.notification.event.NotificationBadgeChangedEvent;
+import com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +59,7 @@ class NotificationServiceTest {
     void createNotification_shouldPersistUnreadNotification() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(mockUser));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(1L);
 
         notificationService.createNotification(userId, NotificationType.BOOKING_ACCEPTED, "Title", "Message", "BOOKING", UUID.randomUUID());
 
@@ -65,9 +68,9 @@ class NotificationServiceTest {
 
         Notification saved = captor.getValue();
         assertEquals(userId, saved.getRecipientUser().getId());
-        assertEquals("Title", saved.getTitle());
+        assertEquals("Mentor đã nhận lịch", saved.getTitle());
         assertNull(saved.getReadAt());
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent.class));
+        verify(eventPublisher).publishEvent(any(NotificationCreatedEvent.class));
     }
 
     @Test
@@ -107,11 +110,13 @@ class NotificationServiceTest {
         UUID notifId = UUID.randomUUID();
         Notification notif = Notification.builder().id(notifId).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
         when(notificationRepository.findByIdAndRecipientUserId(notifId, userId)).thenReturn(Optional.of(notif));
+        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(0L);
 
         notificationService.markAsRead(userId, notifId);
 
         assertNotNull(notif.getReadAt());
         verify(notificationRepository).save(notif);
+        verify(eventPublisher).publishEvent(any(NotificationBadgeChangedEvent.class));
     }
 
     @Test
@@ -137,8 +142,10 @@ class NotificationServiceTest {
 
     @Test
     void markAllAsRead_shouldOnlyMarkCurrentUserNotifications() {
+        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(0L);
         notificationService.markAllAsRead(userId);
         verify(notificationRepository).markAllAsRead(eq(userId), any(LocalDateTime.class));
+        verify(eventPublisher).publishEvent(any(NotificationBadgeChangedEvent.class));
     }
 
     @Test

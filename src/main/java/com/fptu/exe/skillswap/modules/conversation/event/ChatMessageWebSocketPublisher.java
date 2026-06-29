@@ -8,8 +8,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.util.UUID;
-
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -20,15 +18,15 @@ public class ChatMessageWebSocketPublisher {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = false)
     public void handleChatMessageSaved(ChatMessageSavedEvent event) {
         log.info("Publishing ChatMessageEvent to raw WebSockets after transaction commit for message: {}", event.getEvent().messageId());
-        for (UUID recipientId : event.getRecipientUserIds()) {
+        for (ChatMessageRealtimeDelivery delivery : event.getDeliveries()) {
             try {
                 realtimePushService.pushToUser(
-                        recipientId,
+                        delivery.recipientUserId(),
                         RealtimeMessageType.CHAT_MESSAGE_CREATED,
-                        event.getEvent()
+                        delivery.event()
                 );
             } catch (Exception ex) {
-                log.error("Failed to send WebSocket message to user: {}", recipientId, ex);
+                log.error("Failed to send WebSocket message to user: {}", delivery.recipientUserId(), ex);
             }
         }
     }

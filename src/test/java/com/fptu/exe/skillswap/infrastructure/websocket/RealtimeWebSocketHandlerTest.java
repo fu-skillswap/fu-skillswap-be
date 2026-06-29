@@ -49,6 +49,7 @@ class RealtimeWebSocketHandlerTest {
         UUID userId = UUID.randomUUID();
         UserPrincipal principal = UserPrincipal.create(userId, "user@test.com", List.of(RoleCode.MENTEE));
         Map<String, Object> attributes = new HashMap<>();
+        attributes.put(WebSocketAuthHandshakeInterceptor.AUTHENTICATED_ATTRIBUTE, true);
         attributes.put(WebSocketAuthHandshakeInterceptor.USER_ID_ATTRIBUTE, userId);
         attributes.put(WebSocketAuthHandshakeInterceptor.USER_PRINCIPAL_ATTRIBUTE, principal);
 
@@ -67,7 +68,7 @@ class RealtimeWebSocketHandlerTest {
 
         handler.afterConnectionEstablished(session);
 
-        verify(realtimePushService).closeUnauthorized(session);
+        verify(realtimePushService).pushErrorAndCloseUnauthorized(session, "WS_4401", "Phiên đăng nhập không hợp lệ hoặc đã hết hạn");
         verify(sessionRegistry, never()).register(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
@@ -81,5 +82,16 @@ class RealtimeWebSocketHandlerTest {
 
         verify(realtimePushService).pushPong(session);
         verify(realtimePushService, never()).pushError(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void handleTextMessage_invalidJson_shouldPushError() throws Exception {
+        Method method = RealtimeWebSocketHandler.class
+                .getDeclaredMethod("handleTextMessage", WebSocketSession.class, TextMessage.class);
+        method.setAccessible(true);
+
+        method.invoke(handler, session, new TextMessage("{not-json"));
+
+        verify(realtimePushService).pushError(session, "WS_4001", "Realtime payload không hợp lệ");
     }
 }

@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.http.server.ServletServerHttpResponse;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -18,7 +17,6 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WebSocketAuthHandshakeInterceptorTest {
@@ -31,36 +29,38 @@ class WebSocketAuthHandshakeInterceptorTest {
     }
 
     @Test
-    void beforeHandshake_withoutAuthentication_shouldReject() {
+    void beforeHandshake_withoutAuthentication_shouldAllowAndMarkUnauthenticated() {
         MockHttpServletResponse response = new MockHttpServletResponse();
+        Map<String, Object> attributes = new HashMap<>();
 
         boolean allowed = interceptor.beforeHandshake(
                 new ServletServerHttpRequest(new MockHttpServletRequest("GET", "/ws")),
                 new ServletServerHttpResponse(response),
                 null,
-                new HashMap<>()
+                attributes
         );
 
-        assertFalse(allowed);
-        assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
+        assertTrue(allowed);
+        assertEquals(Boolean.FALSE, attributes.get(WebSocketAuthHandshakeInterceptor.AUTHENTICATED_ATTRIBUTE));
     }
 
     @Test
-    void beforeHandshake_withInvalidPrincipal_shouldReject() {
+    void beforeHandshake_withInvalidPrincipal_shouldAllowAndMarkUnauthenticated() {
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("plain-string", null, List.of())
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
+        Map<String, Object> attributes = new HashMap<>();
 
         boolean allowed = interceptor.beforeHandshake(
                 new ServletServerHttpRequest(new MockHttpServletRequest("GET", "/ws")),
                 new ServletServerHttpResponse(response),
                 null,
-                new HashMap<>()
+                attributes
         );
 
-        assertFalse(allowed);
-        assertEquals(HttpStatus.UNAUTHORIZED.value(), response.getStatus());
+        assertTrue(allowed);
+        assertEquals(Boolean.FALSE, attributes.get(WebSocketAuthHandshakeInterceptor.AUTHENTICATED_ATTRIBUTE));
     }
 
     @Test
@@ -83,5 +83,6 @@ class WebSocketAuthHandshakeInterceptorTest {
         assertTrue(allowed);
         assertEquals(userId, attributes.get(WebSocketAuthHandshakeInterceptor.USER_ID_ATTRIBUTE));
         assertEquals(principal, attributes.get(WebSocketAuthHandshakeInterceptor.USER_PRINCIPAL_ATTRIBUTE));
+        assertEquals(Boolean.TRUE, attributes.get(WebSocketAuthHandshakeInterceptor.AUTHENTICATED_ATTRIBUTE));
     }
 }

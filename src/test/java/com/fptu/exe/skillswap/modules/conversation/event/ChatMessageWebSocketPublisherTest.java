@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.conversation.event;
 import com.fptu.exe.skillswap.infrastructure.websocket.RealtimeMessageType;
 import com.fptu.exe.skillswap.infrastructure.websocket.RealtimePushService;
 import com.fptu.exe.skillswap.modules.conversation.domain.MessageType;
+import com.fptu.exe.skillswap.modules.conversation.domain.ConversationType;
 import com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,9 +38,18 @@ class ChatMessageWebSocketPublisherTest {
                 .messageType(MessageType.TEXT)
                 .content("hello")
                 .createdAt(LocalDateTime.now())
+                .conversationType(ConversationType.DIRECT)
+                .isSelf(false)
+                .unreadCount(1L)
                 .build();
 
-        publisher.handleChatMessageSaved(new ChatMessageSavedEvent(event, List.of(recipientA, recipientB)));
+        publisher.handleChatMessageSaved(new ChatMessageSavedEvent(
+                event,
+                List.of(
+                        new ChatMessageRealtimeDelivery(recipientA, event),
+                        new ChatMessageRealtimeDelivery(recipientB, event)
+                )
+        ));
 
         verify(realtimePushService).pushToUser(recipientA, RealtimeMessageType.CHAT_MESSAGE_CREATED, event);
         verify(realtimePushService).pushToUser(recipientB, RealtimeMessageType.CHAT_MESSAGE_CREATED, event);
