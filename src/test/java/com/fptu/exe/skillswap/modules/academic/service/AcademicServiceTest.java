@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.academic.repository.SpecializationReposito
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -131,5 +132,45 @@ class AcademicServiceTest {
 
         assertNotNull(response);
         assertEquals("SE999999", response.getStudentCode(), "Response must map claimedStudentCode back to studentCode for frontend compatibility");
+    }
+
+    @Test
+    void updateStudentProfile_whenSemesterGreaterThanNine_shouldReject() {
+        request.setSemester(10);
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> academicService.updateStudentProfile(userId, request));
+
+        assertEquals("Học kỳ không được lớn hơn 9", exception.getMessage());
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
+    }
+
+    @Test
+    void updateStudentProfile_whenAlumni_shouldForceSemesterNine() {
+        request.setIsAlumni(true);
+        request.setSemester(5);
+        request.setGraduationYear(2024);
+        when(studentProfileRepository.findById(userId)).thenReturn(Optional.empty());
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(i -> {
+            StudentProfile profile = i.getArgument(0);
+            assertTrue(profile.isAlumni());
+            assertEquals(9, profile.getSemester());
+            return profile;
+        });
+
+        StudentProfileResponse response = academicService.updateStudentProfile(userId, request);
+
+        assertTrue(response.isAlumni());
+        assertEquals(9, response.getSemester());
+    }
+
+    @Test
+    void incrementEligibleSemesters_shouldDelegateBulkUpdate() {
+        when(studentProfileRepository.incrementEligibleSemesters(any())).thenReturn(3);
+
+        int updatedCount = academicService.incrementEligibleSemesters();
+
+        assertEquals(3, updatedCount);
+        verify(studentProfileRepository).incrementEligibleSemesters(any());
     }
 }

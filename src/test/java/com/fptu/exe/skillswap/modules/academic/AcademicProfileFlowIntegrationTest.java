@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileRespon
 import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -36,6 +37,9 @@ class AcademicProfileFlowIntegrationTest {
 
     @Autowired
     private SpecializationRepository specializationRepository;
+
+    @Autowired
+    private StudentProfileRepository studentProfileRepository;
 
     private User user;
 
@@ -81,5 +85,59 @@ class AcademicProfileFlowIntegrationTest {
         assertEquals(updated.getDisplayName(), fetched.getDisplayName());
         assertEquals(updated.getAvatarUrl(), fetched.getAvatarUrl());
         assertEquals(updated.getBio(), fetched.getBio());
+    }
+
+    @Test
+    void incrementEligibleSemesters_shouldSkipPreparatoryAlumniAndCappedProfiles() {
+        var campus = campusRepository.findAll().getFirst();
+        var program = academicProgramRepository.findAll().getFirst();
+        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
+
+        User preparatory = createUser("semester-zero@test.com");
+        User active = createUser("semester-eight@test.com");
+        User capped = createUser("semester-nine@test.com");
+        User alumni = createUser("semester-alumni@test.com");
+
+        academicService.updateStudentProfile(preparatory.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190124", 0, false));
+        academicService.updateStudentProfile(active.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190125", 8, false));
+        academicService.updateStudentProfile(capped.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190126", 9, false));
+        academicService.updateStudentProfile(alumni.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190127", 5, true));
+
+        int updatedCount = academicService.incrementEligibleSemesters();
+
+        assertEquals(1, updatedCount);
+        assertEquals(0, studentProfileRepository.findById(preparatory.getId()).orElseThrow().getSemester());
+        assertEquals(9, studentProfileRepository.findById(active.getId()).orElseThrow().getSemester());
+        assertEquals(9, studentProfileRepository.findById(capped.getId()).orElseThrow().getSemester());
+        assertEquals(9, studentProfileRepository.findById(alumni.getId()).orElseThrow().getSemester());
+    }
+
+    private User createUser(String email) {
+        return userRepository.save(User.builder()
+                .email(email)
+                .fullName(email)
+                .status(UserStatus.ACTIVE)
+                .build());
+    }
+
+    private StudentProfileRequest profileRequest(
+            java.util.UUID campusId,
+            java.util.UUID programId,
+            java.util.UUID specializationId,
+            String studentCode,
+            int semester,
+            boolean alumni
+    ) {
+        return StudentProfileRequest.builder()
+                .studentCode(studentCode)
+                .campusId(campusId)
+                .programId(programId)
+                .specializationId(specializationId)
+                .semester(semester)
+                .intakeYear(2022)
+                .isAlumni(alumni)
+                .graduationYear(alumni ? 2025 : null)
+                .bio("Semester increment test")
+                .build();
     }
 }

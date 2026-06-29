@@ -27,6 +27,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import java.time.Year;
 import java.util.List;
 import java.util.UUID;
@@ -174,14 +175,26 @@ public class AcademicService {
         profile.setCampus(campus);
         profile.setProgram(program);
         profile.setSpecialization(specialization);
-        profile.setSemester(request.getSemester());
+        boolean alumni = Boolean.TRUE.equals(request.getIsAlumni());
+        profile.setSemester(resolveSemester(request.getSemester(), alumni));
         profile.setIntakeYear(request.getIntakeYear());
-        profile.setAlumni(request.getIsAlumni());
+        profile.setAlumni(alumni);
         profile.setGraduationYear(request.getGraduationYear());
         profile.setBio(request.getBio());
 
         StudentProfile savedProfile = studentProfileRepository.save(profile);
         return mapToStudentProfileResponse(savedProfile);
+    }
+
+    @Transactional
+    public int incrementEligibleSemesters() {
+        int updatedCount = studentProfileRepository.incrementEligibleSemesters(DateTimeUtil.now());
+        if (updatedCount > 0) {
+            log.info("Incremented semester for {} eligible student profiles", updatedCount);
+        } else {
+            log.info("No eligible student profiles for semester increment");
+        }
+        return updatedCount;
     }
 
     /**
@@ -245,8 +258,14 @@ public class AcademicService {
     private void validateAcademicTimeline(StudentProfileRequest request) {
         int currentYear = Year.now().getValue();
 
+        if (request.getSemester() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được để trống");
+        }
         if (request.getSemester() != null && request.getSemester() < 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được nhỏ hơn 0");
+        }
+        if (request.getSemester() != null && request.getSemester() > 9) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được lớn hơn 9");
         }
 
         if (request.getIntakeYear() != null
@@ -266,6 +285,13 @@ public class AcademicService {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không thể nhỏ hơn năm nhập học");
             }
         }
+    }
+
+    private int resolveSemester(Integer requestedSemester, boolean alumni) {
+        if (alumni) {
+            return 9;
+        }
+        return requestedSemester;
     }
 
     @EventListener

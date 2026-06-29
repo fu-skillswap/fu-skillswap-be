@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.academic.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -66,11 +68,13 @@ public class StudentProfileRequest {
     private UUID specializationId;
 
     @Schema(
-        description = "Học kỳ hiện tại (ví dụ: 1, 2, 3, ...)",
+        description = "Học kỳ hiện tại. 0 = tiếng Anh dự bị, 1-9 = kỳ chuyên ngành",
         example = "5",
         requiredMode = Schema.RequiredMode.REQUIRED
     )
     @NotNull(message = "Học kỳ không được để trống")
+    @Min(value = 0, message = "Học kỳ không được nhỏ hơn 0")
+    @Max(value = 9, message = "Học kỳ không được lớn hơn 9")
     private Integer semester;
 
     @Schema(
