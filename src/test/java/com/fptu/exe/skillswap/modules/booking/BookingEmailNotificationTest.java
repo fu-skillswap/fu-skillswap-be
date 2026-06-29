@@ -178,7 +178,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã chấp nhận yêu cầu đặt lịch của bạn"),
                 contains("Vui lòng hoàn tất thanh toán trong vòng 2 giờ")
@@ -194,7 +194,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Yêu cầu đặt lịch của bạn đã bị từ chối"),
                 contains("Busy")
@@ -210,7 +210,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
                 eq(mentorUser.getEmail()),
                 eq("[SkillSwap] Mentee đã hủy lịch mentoring"),
                 contains("Changed my mind")
@@ -227,7 +227,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã hủy lịch mentoring"),
                 contains("Emergency")

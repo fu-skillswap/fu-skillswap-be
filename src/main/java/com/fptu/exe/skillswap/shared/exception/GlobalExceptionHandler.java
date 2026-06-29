@@ -149,13 +149,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({DataAccessException.class, JpaSystemException.class})
     public ResponseEntity<ApiResponse<Object>> handleDataAccess(Exception ex) {
         log.error("Database access error", ex);
-        String detailedMessage = "Không thể xử lý dữ liệu do lỗi hệ thống lưu trữ: " + ex.getMessage();
-        if (ex instanceof org.springframework.dao.DataAccessException) {
-            try {
-                detailedMessage += " | Chi tiết: " + ((org.springframework.dao.DataAccessException) ex).getMostSpecificCause().getMessage();
-            } catch (Exception ignored) {}
-        }
-        return buildResponse(ErrorCode.DATABASE_ERROR, detailedMessage);
+        return buildResponse(ErrorCode.DATABASE_ERROR, ErrorCode.DATABASE_ERROR.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -49,6 +49,7 @@ public class SecurityConfig {
                                     "/api/catalog/help-topics",
                                     "/api/specializations",
                                     "/api/academic-programs/**",
+                                    "/health",
                                     "/ws/**",
                                     "/v3/api-docs/**",
                                     "/swagger-ui/**",

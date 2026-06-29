@@ -17,9 +17,8 @@ public class BookingEmailListener {
 
     private final EmailService emailService;
 
-    // Use Async if mail sending is slow. In this MVP, running after commit is enough to separate transaction boundaries, 
-    // but executing synchronously still blocks the client response until mail sends. 
-    // For pure Best-Effort without blocking API, @Async is recommended, but let's keep it simple first.
+    // Best-effort email must not hold the API response path after the business transaction commits.
+    @Async("mailNotificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleBookingEmailNotification(BookingEmailNotificationEvent event) {
         log.info("Processing email event: {} for booking: {}", event.getEventType(), event.getBookingId());
