@@ -763,6 +763,64 @@ class BookingServiceTest {
     }
 
     @Test
+    void getMyBookings_asMenteeWithoutStatus_shouldUseDashboardPriorityOrder() {
+        Booking booking = bookingForDecision(BookingStatus.PAID);
+        BookingListRequest request = new BookingListRequest();
+        request.setRole(BookingViewRole.MENTEE);
+
+        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+                eq(menteeId),
+                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(booking)));
+
+        PageResponse<BookingResponse> response = bookingService.getMyBookings(menteeId, request);
+
+        assertEquals(1, response.getContent().size());
+        assertEquals(BookingStatus.PAID, response.getContent().getFirst().status());
+        verify(bookingRepository).findMyMenteeBookingsOrderedByDashboardPriority(
+                eq(menteeId),
+                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(Pageable.class)
+        );
+    }
+
+    @Test
+    void getMyBookings_asMentorWithoutStatus_shouldUseDashboardPriorityOrder() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        BookingListRequest request = new BookingListRequest();
+        request.setRole(BookingViewRole.MENTOR);
+
+        when(bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
+                eq(mentorId),
+                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(booking)));
+
+        PageResponse<BookingResponse> response = bookingService.getMyBookings(mentorId, request);
+
+        assertEquals(1, response.getContent().size());
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.getContent().getFirst().status());
+        verify(bookingRepository).findMyMentorBookingsOrderedByDashboardPriority(
+                eq(mentorId),
+                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(Pageable.class)
+        );
+    }
+
+    @Test
     void getAdminBookings_shouldUseSearchForAdminAndMapResponse() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
         AdminBookingListRequest request = new AdminBookingListRequest();

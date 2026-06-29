@@ -34,8 +34,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE:4MB}
-      max-request-size: ${MAX_REQUEST_SIZE:4MB}
+      max-file-size: ${MAX_FILE_SIZE:15MB}
+      max-request-size: ${MAX_REQUEST_SIZE:15MB}
 
 springdoc:
   api-docs:

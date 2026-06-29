@@ -555,6 +555,14 @@ public class PaymentOrderService {
                 .actorName(booking.getMentee().getFullName())
                 .bookingStartTime(booking.getSelectedStartTime())
                 .bookingEndTime(booking.getSelectedEndTime())
+                .learningGoalTitle(booking.getLearningGoalTitle())
+                .learningGoalDescription(booking.getLearningGoalDescription())
+                .serviceTitle(booking.getServiceTitleSnapshot())
+                .serviceDurationMinutes(booking.getServiceDurationSnapshot())
+                .serviceFree(booking.getServiceIsFreeSnapshot())
+                .servicePriceScoin(booking.getServicePriceScoinSnapshot())
+                .serviceExpectedOutcome(booking.getServiceExpectedOutcomeSnapshot())
+                .mentorResponseNote(booking.getMentorResponseNote())
                 .createdAt(DateTimeUtil.now())
                 .build());
     }

@@ -178,10 +178,11 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Mentor đã chấp nhận yêu cầu đặt lịch của bạn"),
-                contains("Vui lòng hoàn tất thanh toán trong vòng 2 giờ")
+                eq("[SkillSwap] Mentor đã chấp nhận lịch"),
+                contains("Hoàn tất thanh toán trong vòng 2 giờ"),
+                contains("Hoàn tất thanh toán trong vòng 2 giờ")
         );
     }
 
@@ -194,9 +195,10 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Yêu cầu đặt lịch của bạn đã bị từ chối"),
+                eq("[SkillSwap] Yêu cầu đặt lịch bị từ chối"),
+                contains("Busy"),
                 contains("Busy")
         );
     }
@@ -210,9 +212,10 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(mentorUser.getEmail()),
-                eq("[SkillSwap] Mentee đã hủy lịch mentoring"),
+                eq("[SkillSwap] Mentee đã hủy lịch"),
+                contains("Changed my mind"),
                 contains("Changed my mind")
         );
     }
@@ -227,9 +230,10 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailService, timeout(2_000).times(1)).sendSimpleEmail(
+        verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Mentor đã hủy lịch mentoring"),
+                eq("[SkillSwap] Mentor đã hủy lịch"),
+                contains("Emergency"),
                 contains("Emergency")
         );
     }
@@ -237,7 +241,7 @@ class BookingEmailNotificationTest {
     @Test
     void emailSendFailure_shouldNotRollbackBooking() {
         doThrow(new RuntimeException("SMTP Connection Error")).when(emailService)
-                .sendSimpleEmail(anyString(), anyString(), anyString());
+                .sendHtmlEmail(anyString(), anyString(), anyString(), anyString());
 
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         

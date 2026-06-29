@@ -24,6 +24,14 @@ public class BookingEmailNotificationEvent {
     private final String actorName;
     private final LocalDateTime bookingStartTime;
     private final LocalDateTime bookingEndTime;
+    private final String learningGoalTitle;
+    private final String learningGoalDescription;
+    private final String serviceTitle;
+    private final Integer serviceDurationMinutes;
+    private final Boolean serviceFree;
+    private final Integer servicePriceScoin;
+    private final String serviceExpectedOutcome;
+    private final String mentorResponseNote;
     private final String reason;
     private final String meetingLink;
     private final LocalDateTime paymentDeadline;

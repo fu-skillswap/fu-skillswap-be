@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mail.service;
 
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -10,6 +12,8 @@ import org.springframework.mail.MailSendException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -61,5 +65,22 @@ class EmailServiceTest {
 
         // Ensure that exception is caught and does not crash the calling thread
         assertDoesNotThrow(() -> emailService.sendSimpleEmail("test@test.com", "Subject", "Body"));
+    }
+
+    @Test
+    void sendHtmlEmail_shouldSendMimeMessage_whenEnabled() throws Exception {
+        ReflectionTestUtils.setField(emailService, "mailEnabled", true);
+        ReflectionTestUtils.setField(emailService, "senderEmail", "no-reply@skillswap.com");
+        MimeMessage mimeMessage = new MimeMessage(Session.getInstance(new Properties()));
+        when(javaMailSender.createMimeMessage()).thenReturn(mimeMessage);
+
+        emailService.sendHtmlEmail("test@test.com", "HTML Subject", "<h1>Hello</h1>", "Hello");
+
+        ArgumentCaptor<MimeMessage> messageCaptor = ArgumentCaptor.forClass(MimeMessage.class);
+        verify(javaMailSender, times(1)).send(messageCaptor.capture());
+        MimeMessage sentMessage = messageCaptor.getValue();
+        assertEquals("HTML Subject", sentMessage.getSubject());
+        assertEquals("no-reply@skillswap.com", sentMessage.getFrom()[0].toString());
+        assertEquals("test@test.com", sentMessage.getAllRecipients()[0].toString());
     }
 }

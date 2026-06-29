@@ -228,7 +228,7 @@ class MentorVerificationServiceUploadTest {
         MentorVerificationDocumentUploadRequest uploadRequest1 = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "fake", "proof.jpg", "image/jpeg", 4L * 1024L * 1024L + 1L
+                "fake", "proof.jpg", "image/jpeg", 15L * 1024L * 1024L + 1L
         );
         assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest1))
                 .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
@@ -300,7 +300,7 @@ class MentorVerificationServiceUploadTest {
                 "mentor-verification/user-123/proof-jpg",
                 "proof.jpg",
                 "image/jpeg",
-                4L * 1024L * 1024L + 1L
+                15L * 1024L * 1024L + 1L
         );
 
         assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))

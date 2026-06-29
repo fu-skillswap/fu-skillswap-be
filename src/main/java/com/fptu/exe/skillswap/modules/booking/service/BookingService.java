@@ -71,6 +71,14 @@ public class BookingService {
             BookingStatus.ACCEPTED,
             BookingStatus.PAID
     );
+    private static final List<BookingStatus> BOOKING_LIST_PAID_PRIORITY_STATUSES = List.of(
+            BookingStatus.PAID,
+            BookingStatus.ACCEPTED
+    );
+    private static final List<BookingStatus> BOOKING_LIST_CANCELLED_PRIORITY_STATUSES = List.of(
+            BookingStatus.CANCELLED_BY_MENTEE,
+            BookingStatus.CANCELLED_BY_MENTOR
+    );
 
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
@@ -197,14 +205,30 @@ public class BookingService {
 
         BookingListRequest safeRequest = request == null ? new BookingListRequest() : request;
         BookingViewRole role = safeRequest.getRole() == null ? BookingViewRole.MENTEE : safeRequest.getRole();
-        Pageable pageable = bookingPageable(safeRequest);
+        Pageable pageable = safeRequest.getStatus() == null
+                ? bookingPriorityPageable(safeRequest)
+                : bookingPageable(safeRequest);
 
         Page<Booking> page = switch (role) {
             case MENTEE -> safeRequest.getStatus() == null
-                    ? bookingRepository.findByMenteeId(currentUserId, pageable)
+                    ? bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+                            currentUserId,
+                            BOOKING_LIST_PAID_PRIORITY_STATUSES,
+                            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+                            BookingStatus.PENDING,
+                            BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
+                            pageable
+                    )
                     : bookingRepository.findByMenteeIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
             case MENTOR -> safeRequest.getStatus() == null
-                    ? bookingRepository.findByMentorProfileUserId(currentUserId, pageable)
+                    ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
+                            currentUserId,
+                            BOOKING_LIST_PAID_PRIORITY_STATUSES,
+                            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+                            BookingStatus.PENDING,
+                            BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
+                            pageable
+                    )
                     : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
         };
 
@@ -342,6 +366,14 @@ public class BookingService {
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
+                .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .paymentDeadline(now.plusMinutes(PAYMENT_WINDOW_MINUTES))
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -389,6 +421,14 @@ public class BookingService {
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
+                .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .reason(savedBooking.getRejectReason())
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -855,6 +895,12 @@ public class BookingService {
         return PageRequest.of(page, size, Sort.by(direction, sortBy));
     }
 
+    private Pageable bookingPriorityPageable(BookingListRequest request) {
+        int page = Math.max(request.getPage(), 0);
+        int size = Math.min(Math.max(request.getSize(), 1), 20);
+        return PageRequest.of(page, size);
+    }
+
     private Pageable adminBookingPageable(AdminBookingListRequest request) {
         int page = Math.max(request.getPage(), 0);
         int size = Math.min(Math.max(request.getSize(), 1), 100);
@@ -1109,6 +1155,14 @@ public class BookingService {
                 .actorName(savedBooking.getMentorProfile().getUser().getFullName())
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
+                .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .reason(savedBooking.getCancelReason())
                 .createdAt(DateTimeUtil.now())
                 .build());
@@ -1177,6 +1231,14 @@ public class BookingService {
                 .actorName(savedBooking.getMentee().getFullName())
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
+                .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .reason(savedBooking.getCancelReason())
                 .createdAt(DateTimeUtil.now())
                 .build());

@@ -46,7 +46,7 @@ public class MentorVerificationService {
     private static final Set<String> SUPPORTED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "application/pdf");
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
-    private static final long MAX_DOCUMENT_SIZE_BYTES = 4L * 1024L * 1024L;
+    private static final long MAX_DOCUMENT_SIZE_BYTES = 15L * 1024L * 1024L;
     private static final Pattern PUBLIC_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]+$");
 
     @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
@@ -380,7 +380,7 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước file không hợp lệ");
         }
         if (request.sizeBytes() > MAX_DOCUMENT_SIZE_BYTES) {
-            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 4MB");
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 15MB");
         }
         String contentType = canonicalizeContentType(request.contentType());
         if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {

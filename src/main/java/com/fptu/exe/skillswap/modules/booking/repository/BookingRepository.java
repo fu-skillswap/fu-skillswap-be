@@ -26,11 +26,71 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findByMenteeId(UUID menteeUserId, Pageable pageable);
 
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+            order by
+                case
+                    when booking.status in :paidStatuses then 0
+                    when booking.status = :awaitingPaymentStatus then 1
+                    when booking.status = :pendingStatus then 2
+                    when booking.status in :cancelledStatuses then 3
+                    else 4
+                end asc,
+                booking.selectedStartTime desc,
+                booking.createdAt desc,
+                booking.id asc
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    Page<Booking> findMyMenteeBookingsOrderedByDashboardPriority(
+            @Param("menteeUserId") UUID menteeUserId,
+            @Param("paidStatuses") Collection<BookingStatus> paidStatuses,
+            @Param("awaitingPaymentStatus") BookingStatus awaitingPaymentStatus,
+            @Param("pendingStatus") BookingStatus pendingStatus,
+            @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            Pageable pageable
+    );
+
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findByMenteeIdAndStatus(UUID menteeUserId, BookingStatus status, Pageable pageable);
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findByMentorProfileUserId(UUID mentorUserId, Pageable pageable);
+
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+            order by
+                case
+                    when booking.status in :paidStatuses then 0
+                    when booking.status = :awaitingPaymentStatus then 1
+                    when booking.status = :pendingStatus then 2
+                    when booking.status in :cancelledStatuses then 3
+                    else 4
+                end asc,
+                booking.selectedStartTime desc,
+                booking.createdAt desc,
+                booking.id asc
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    Page<Booking> findMyMentorBookingsOrderedByDashboardPriority(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("paidStatuses") Collection<BookingStatus> paidStatuses,
+            @Param("awaitingPaymentStatus") BookingStatus awaitingPaymentStatus,
+            @Param("pendingStatus") BookingStatus pendingStatus,
+            @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            Pageable pageable
+    );
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status, Pageable pageable);
