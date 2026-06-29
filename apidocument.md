@@ -254,6 +254,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `campusId`, `campusName`
   - `programId`, `programName`
   - `specializationId`, `specializationName`
+  - `matchScore` (%)
   - `helpTopicTags`
 
 ### GET `/api/mentors/{mentorUserId}`

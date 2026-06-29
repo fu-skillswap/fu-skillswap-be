@@ -281,8 +281,8 @@ public class AcademicService {
             if (request.getGraduationYear() < 2000 || request.getGraduationYear() > currentYear) {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không hợp lệ");
             }
-            if (request.getIntakeYear() != null && request.getGraduationYear() < request.getIntakeYear()) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không thể nhỏ hơn năm nhập học");
+            if (request.getIntakeYear() != null && request.getGraduationYear() < request.getIntakeYear() + 2) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp phải lớn hơn năm nhập học ít nhất 2 năm");
             }
         }
     }

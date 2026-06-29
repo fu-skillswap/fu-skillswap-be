@@ -93,6 +93,10 @@ public class MentorDiscoveryService {
     private static final BigDecimal QUALITY_EXPERIENCED_SESSIONS_BONUS = decimal(5);
     private static final BigDecimal ACTIVE_SERVICE_BONUS_SCORE = decimal(5);
     private static final BigDecimal HAS_AVAILABILITY_BONUS_SCORE = decimal(15);
+    private static final BigDecimal MAX_SEARCH_PERSONALIZATION_SCORE = decimal(100);
+    private static final BigDecimal MAX_SEARCH_QUALITY_SCORE = decimal(35);
+    private static final BigDecimal MAX_PERCENTAGE_SCORE = decimal(100);
+    private static final int MAX_SEARCH_SERVICE_BONUS_COUNT = 3;
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -221,32 +225,31 @@ public class MentorDiscoveryService {
                 Set.of(MentorTagType.HELP_TOPIC)
         );
 
-        List<MentorService> activeServices = relevanceSort
-                ? loadActiveServicesByMentorIds(candidateIds)
-                : List.of();
-        Map<UUID, List<MentorService>> servicesByMentor = relevanceSort
-                ? groupServicesByMentor(activeServices)
-                : Map.of();
-        Set<UUID> mentorsWithAvailability = relevanceSort
-                ? loadMentorsWithAvailability(candidateIds, currentTime())
-                : Set.of();
+        List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
+        Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
+        Set<UUID> mentorsWithAvailability = loadMentorsWithAvailability(candidateIds, currentTime());
 
         List<MentorDiscoveryCardResponse> content;
         if (relevanceSort) {
             List<RankedSearchCandidate> rankedCandidates = rows.stream()
-                    .map(row -> new RankedSearchCandidate(
-                            row,
-                            helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                            servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                            calculateSearchScore(
-                                    row,
-                                    menteeProfile,
-                                    normalizedKeyword,
-                                    helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                                    servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                                    mentorsWithAvailability.contains(row.mentorUserId())
-                            )
-                    ))
+                    .map(row -> {
+                        List<MentorTagResponse> helpTopics = helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of());
+                        List<MentorService> services = servicesByMentor.getOrDefault(row.mentorUserId(), List.of());
+                        BigDecimal rawScore = calculateSearchScore(
+                                row,
+                                menteeProfile,
+                                normalizedKeyword,
+                                helpTopics,
+                                services,
+                                mentorsWithAvailability.contains(row.mentorUserId())
+                        );
+                        return new RankedSearchCandidate(
+                                row,
+                                helpTopics,
+                                rawScore,
+                                calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size())
+                        );
+                    })
                     .sorted(Comparator
                             .comparing(RankedSearchCandidate::score).reversed()
                             .thenComparing(candidate -> defaultDecimal(candidate.row().ratingAverage()), Comparator.reverseOrder())
@@ -258,11 +261,24 @@ public class MentorDiscoveryService {
             int fromIndex = Math.min(requestedPage * requestedSize, rankedCandidates.size());
             int toIndex = Math.min(fromIndex + requestedSize, rankedCandidates.size());
             content = rankedCandidates.subList(fromIndex, toIndex).stream()
-                    .map(candidate -> toCardResponse(candidate.row(), candidate.helpTopics()))
+                    .map(candidate -> toCardResponse(candidate.row(), candidate.helpTopics(), candidate.matchScore()))
                     .toList();
         } else {
             content = rows.stream()
-                    .map(row -> toCardResponse(row, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of())))
+                    .map(row -> {
+                        List<MentorTagResponse> helpTopics = helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of());
+                        List<MentorService> services = servicesByMentor.getOrDefault(row.mentorUserId(), List.of());
+                        BigDecimal rawScore = calculateSearchScore(
+                                row,
+                                menteeProfile,
+                                normalizedKeyword,
+                                helpTopics,
+                                services,
+                                mentorsWithAvailability.contains(row.mentorUserId())
+                        );
+                        BigDecimal matchScore = calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size());
+                        return toCardResponse(row, helpTopics, matchScore);
+                    })
                     .toList();
         }
 
@@ -560,7 +576,9 @@ public class MentorDiscoveryService {
         if (mentorUserIds == null || mentorUserIds.isEmpty()) {
             return Collections.emptySet();
         }
-        return new java.util.HashSet<>(mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, now));
+        return new java.util.HashSet<>(Optional.ofNullable(
+                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, now)
+        ).orElse(List.of()));
     }
 
     private List<MentorService> loadActiveServicesByMentorIds(Collection<UUID> mentorUserIds) {
@@ -759,6 +777,49 @@ public class MentorDiscoveryService {
         return score;
     }
 
+    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount) {
+        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount);
+        if (maxScore.compareTo(BigDecimal.ZERO) <= 0) {
+            return ZERO;
+        }
+
+        BigDecimal percentage = rawScore.multiply(BigDecimal.valueOf(100))
+                .divide(maxScore, 2, RoundingMode.HALF_UP);
+        if (percentage.compareTo(BigDecimal.ZERO) < 0) {
+            return ZERO;
+        }
+        if (percentage.compareTo(MAX_PERCENTAGE_SCORE) > 0) {
+            return MAX_PERCENTAGE_SCORE;
+        }
+        return percentage;
+    }
+
+    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount) {
+        int tokenCount = tokenizeSearchText(normalizedKeyword).size();
+        int cappedServiceCount = Math.min(Math.max(activeServiceCount, 0), MAX_SEARCH_SERVICE_BONUS_COUNT);
+
+        BigDecimal maxScore = MAX_SEARCH_PERSONALIZATION_SCORE
+                .add(MAX_SEARCH_QUALITY_SCORE)
+                .add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(cappedServiceCount)))
+                .add(HAS_AVAILABILITY_BONUS_SCORE);
+
+        if (tokenCount <= 0) {
+            return maxScore.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return maxScore
+                .add(HEADLINE_EXACT_BONUS)
+                .add(SUBJECTS_PHRASE_BONUS)
+                .add(decimal(50))
+                .add(decimal(tokenCount * 8))
+                .add(decimal(tokenCount * 10))
+                .add(decimal(tokenCount * 12))
+                .add(decimal(30))
+                .add(VERIFIED_RECENT_7D_BONUS)
+                .add(SESSION_VELOCITY_HIGH_BONUS)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
     private int countTokenMatches(List<String> fields, List<String> tokens) {
         if (fields == null || fields.isEmpty() || tokens == null || tokens.isEmpty()) {
             return 0;
@@ -797,6 +858,14 @@ public class MentorDiscoveryService {
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
+        return toCardResponse(row, helpTopicTags, null);
+    }
+
+    private MentorDiscoveryCardResponse toCardResponse(
+            MentorDiscoveryQueryRow row,
+            List<MentorTagResponse> helpTopicTags,
+            BigDecimal matchScore
+    ) {
         BigDecimal rating = defaultDecimal(row.ratingAverage());
         int reviews = defaultInteger(row.reviewCount());
         BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
@@ -819,6 +888,7 @@ public class MentorDiscoveryService {
                 .programName(row.programName())
                 .specializationId(row.specializationId())
                 .specializationName(row.specializationName())
+                .matchScore(matchScore)
                 .helpTopicTags(helpTopicTags.stream().limit(5).toList())
                 .build();
     }
@@ -1093,8 +1163,8 @@ public class MentorDiscoveryService {
     private record RankedSearchCandidate(
             MentorDiscoveryQueryRow row,
             List<MentorTagResponse> helpTopics,
-            List<MentorService> services,
-            BigDecimal score
+            BigDecimal score,
+            BigDecimal matchScore
     ) {
     }
 }

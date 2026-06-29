@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
@@ -110,6 +112,30 @@ class AcademicProfileFlowIntegrationTest {
         assertEquals(9, studentProfileRepository.findById(active.getId()).orElseThrow().getSemester());
         assertEquals(9, studentProfileRepository.findById(capped.getId()).orElseThrow().getSemester());
         assertEquals(9, studentProfileRepository.findById(alumni.getId()).orElseThrow().getSemester());
+    }
+
+    @Test
+    void updateStudentProfile_shouldRejectGraduationYearLessThanIntakePlusTwoYears() {
+        var campus = campusRepository.findAll().getFirst();
+        var program = academicProgramRepository.findAll().getFirst();
+        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
+
+        BaseException exception = assertThrows(BaseException.class, () -> academicService.updateStudentProfile(
+                user.getId(),
+                StudentProfileRequest.builder()
+                        .studentCode("SE190128")
+                        .campusId(campus.getId())
+                        .programId(program.getId())
+                        .specializationId(specialization.getId())
+                        .semester(9)
+                        .intakeYear(2024)
+                        .isAlumni(true)
+                        .graduationYear(2025)
+                        .bio("Invalid graduation timeline")
+                        .build()
+        ));
+
+        assertEquals("Năm tốt nghiệp phải lớn hơn năm nhập học ít nhất 2 năm", exception.getMessage());
     }
 
     private User createUser(String email) {

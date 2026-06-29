@@ -174,6 +174,9 @@ class MentorDiscoveryServiceTest {
         assertEquals(1, response.getContent().size());
         assertEquals("Mentor Full Name", response.getContent().getFirst().displayName());
         assertEquals(new BigDecimal("5.00"), response.getContent().getFirst().ratingAverage());
+        assertNotNull(response.getContent().getFirst().matchScore());
+        assertTrue(response.getContent().getFirst().matchScore().compareTo(BigDecimal.ZERO) >= 0);
+        assertTrue(response.getContent().getFirst().matchScore().compareTo(new BigDecimal("100.00")) <= 0);
     }
 
     @Test
@@ -319,6 +322,8 @@ class MentorDiscoveryServiceTest {
 
         assertEquals(2, response.getContent().size());
         assertEquals(mentorUserId, response.getContent().getFirst().mentorUserId());
+        assertNotNull(response.getContent().getFirst().matchScore());
+        assertTrue(response.getContent().getFirst().matchScore().compareTo(response.getContent().get(1).matchScore()) >= 0);
     }
 
     @Test
@@ -356,6 +361,7 @@ class MentorDiscoveryServiceTest {
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
 
         assertEquals(1, response.getContent().size());
+        assertNotNull(response.getContent().getFirst().matchScore());
         verify(mentorProfileRepository).findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
                 eq(null), eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)

@@ -49,6 +49,8 @@ public record MentorDiscoveryCardResponse(
         UUID specializationId,
         @Schema(description = "Tên chuyên ngành", example = "Kỹ thuật phần mềm")
         String specializationName,
+        @Schema(description = "Điểm phù hợp theo ngữ cảnh search hiện tại, đã quy đổi theo phần trăm 0-100", example = "87.50")
+        BigDecimal matchScore,
         @Schema(description = "Danh sách chủ đề hướng dẫn/help topics mà mentor hỗ trợ")
         List<MentorTagResponse> helpTopicTags
 ) {
