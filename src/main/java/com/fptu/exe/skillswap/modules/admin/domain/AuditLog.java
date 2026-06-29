@@ -6,6 +6,8 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -43,9 +45,11 @@ public class AuditLog {
     private UUID entityId;
 
     @Column(name = "old_value", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String oldValue;
 
     @Column(name = "new_value", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String newValue;
 
     @Column(name = "ip_address", length = 100)

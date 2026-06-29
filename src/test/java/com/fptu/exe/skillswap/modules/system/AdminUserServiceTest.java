@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.mockito.ArgumentCaptor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -108,6 +109,26 @@ class AdminUserServiceTest {
         verify(userRepository).save(targetUser);
         verify(auditLogRepository).save(any(AuditLog.class));
         verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void changeUserStatus_banReasonWithQuotes_shouldSerializeAuditJsonSafely() {
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(targetUser));
+        when(userRepository.findRoleCodesByUserId(userId)).thenReturn(List.of(RoleCode.MENTEE));
+        when(userSessionRepository.findByUserIdAndIsRevokedFalse(userId)).thenReturn(List.of());
+
+        String reason = "Vi phạm \"nội quy\"\nCần khóa tạm thời";
+
+        adminUserService.changeUserStatus(adminId, userId, true, reason);
+
+        ArgumentCaptor<AuditLog> auditLogCaptor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogRepository).save(auditLogCaptor.capture());
+
+        AuditLog savedAuditLog = auditLogCaptor.getValue();
+        assertNotNull(savedAuditLog.getNewValue());
+        assertTrue(savedAuditLog.getNewValue().contains("\\\"nội quy\\\""));
+        assertTrue(savedAuditLog.getNewValue().contains("Cần khóa tạm thời"));
     }
 
     @Test
