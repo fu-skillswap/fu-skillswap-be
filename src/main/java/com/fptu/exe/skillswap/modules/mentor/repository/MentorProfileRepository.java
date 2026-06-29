@@ -327,13 +327,27 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       SELECT 1 FROM mentor_tags mt2
                       JOIN tags t ON t.id = mt2.tag_id
                       WHERE mt2.mentor_user_id = mp.user_id
-                        AND to_tsvector('simple', coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,''))
+                        AND to_tsvector(
+                            'simple',
+                            translate(
+                                lower(coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,'')),
+                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
+                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
+                            )
+                        )
                             @@ plainto_tsquery('simple', :keyword)
                   )
                   OR EXISTS (
                       SELECT 1 FROM mentor_services ms
                       WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
-                        AND to_tsvector('simple', coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,''))
+                        AND to_tsvector(
+                            'simple',
+                            translate(
+                                lower(coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,'')),
+                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
+                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
+                            )
+                        )
                             @@ plainto_tsquery('simple', :keyword)
                   )
               )
@@ -386,13 +400,27 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       SELECT 1 FROM mentor_tags mt2
                       JOIN tags t ON t.id = mt2.tag_id
                       WHERE mt2.mentor_user_id = mp.user_id
-                        AND to_tsvector('simple', coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,''))
+                        AND to_tsvector(
+                            'simple',
+                            translate(
+                                lower(coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,'')),
+                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
+                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
+                            )
+                        )
                             @@ plainto_tsquery('simple', :keyword)
                   )
                   OR EXISTS (
                       SELECT 1 FROM mentor_services ms
                       WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
-                        AND to_tsvector('simple', coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,''))
+                        AND to_tsvector(
+                            'simple',
+                            translate(
+                                lower(coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,'')),
+                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
+                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
+                            )
+                        )
                             @@ plainto_tsquery('simple', :keyword)
                   )
               )
