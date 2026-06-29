@@ -121,4 +121,16 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             where slot.id = :slotId
             """)
     Optional<MentorAvailabilitySlot> findByIdForUpdate(@Param("slotId") UUID slotId);
+
+    @Query("""
+            select distinct slot.mentorProfile.userId
+            from MentorAvailabilitySlot slot
+            where slot.mentorProfile.userId in :mentorUserIds
+              and slot.isActive = true
+              and slot.startTime >= :now
+            """)
+    List<UUID> findMentorUserIdsWithActiveSlotsInFuture(
+            @Param("mentorUserIds") java.util.Collection<UUID> mentorUserIds,
+            @Param("now") LocalDateTime now
+    );
 }

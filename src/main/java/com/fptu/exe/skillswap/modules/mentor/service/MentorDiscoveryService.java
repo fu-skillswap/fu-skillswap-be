@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
@@ -90,6 +91,8 @@ public class MentorDiscoveryService {
     private static final BigDecimal QUALITY_HIGH_RATING_BONUS = decimal(8);
     private static final BigDecimal QUALITY_CREDIBLE_REVIEWS_BONUS = decimal(5);
     private static final BigDecimal QUALITY_EXPERIENCED_SESSIONS_BONUS = decimal(5);
+    private static final BigDecimal ACTIVE_SERVICE_BONUS_SCORE = decimal(5);
+    private static final BigDecimal HAS_AVAILABILITY_BONUS_SCORE = decimal(15);
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -97,6 +100,7 @@ public class MentorDiscoveryService {
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityService mentorAvailabilityService;
     private final SessionFeedbackRepository sessionFeedbackRepository;
+    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final DataSource dataSource;
 
     private volatile Boolean postgresDetected = null;
@@ -223,6 +227,9 @@ public class MentorDiscoveryService {
         Map<UUID, List<MentorService>> servicesByMentor = relevanceSort
                 ? groupServicesByMentor(activeServices)
                 : Map.of();
+        Set<UUID> mentorsWithAvailability = relevanceSort
+                ? loadMentorsWithAvailability(candidateIds, currentTime())
+                : Set.of();
 
         List<MentorDiscoveryCardResponse> content;
         if (relevanceSort) {
@@ -231,7 +238,14 @@ public class MentorDiscoveryService {
                             row,
                             helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                             servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
-                            calculateSearchScore(row, menteeProfile, normalizedKeyword, helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()), servicesByMentor.getOrDefault(row.mentorUserId(), List.of()))
+                            calculateSearchScore(
+                                    row,
+                                    menteeProfile,
+                                    normalizedKeyword,
+                                    helpTopicsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                    servicesByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                    mentorsWithAvailability.contains(row.mentorUserId())
+                            )
                     ))
                     .sorted(Comparator
                             .comparing(RankedSearchCandidate::score).reversed()
@@ -288,13 +302,24 @@ public class MentorDiscoveryService {
             return List.of();
         }
 
+        List<UUID> candidateIds = candidates.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList();
         Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(
-                candidates.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList(),
+                candidateIds,
                 Set.of(MentorTagType.HELP_TOPIC)
         );
 
+        List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
+        Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
+        Set<UUID> mentorsWithAvailability = loadMentorsWithAvailability(candidateIds, now);
+
         return candidates.stream()
-                .map(candidate -> toRecommendation(candidate, helpTopicsByMentor.getOrDefault(candidate.mentorUserId(), List.of()), menteeProfile))
+                .map(candidate -> toRecommendation(
+                        candidate,
+                        helpTopicsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
+                        servicesByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
+                        mentorsWithAvailability.contains(candidate.mentorUserId()),
+                        menteeProfile
+                ))
                 .sorted(Comparator
                         .comparing(MentorRecommendationResponse::matchScore).reversed()
                         .thenComparing(response -> defaultInteger(response.mentor().completedSessions()), Comparator.reverseOrder())
@@ -411,10 +436,12 @@ public class MentorDiscoveryService {
     private MentorRecommendationResponse toRecommendation(
             MentorDiscoveryQueryRow candidate,
             List<MentorTagResponse> helpTopicTags,
+            List<MentorService> services,
+            boolean hasAvailability,
             StudentProfile menteeProfile
     ) {
         List<String> reasons = new ArrayList<>();
-        BigDecimal score = calculateMatchScore(candidate, menteeProfile, reasons);
+        BigDecimal score = calculateMatchScore(candidate, menteeProfile, services, hasAvailability, reasons);
 
         BigDecimal maxScore = SAME_PROGRAM_SCORE
                 .add(SAME_SPECIALIZATION_SCORE)
@@ -422,7 +449,9 @@ public class MentorDiscoveryService {
                 .add(MENTOR_ALUMNI_SCORE)
                 .add(QUALITY_HIGH_RATING_BONUS)
                 .add(QUALITY_CREDIBLE_REVIEWS_BONUS)
-                .add(QUALITY_EXPERIENCED_SESSIONS_BONUS);
+                .add(QUALITY_EXPERIENCED_SESSIONS_BONUS)
+                .add(HAS_AVAILABILITY_BONUS_SCORE)
+                .add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(3)));
 
         BigDecimal percentageScore = BigDecimal.ZERO;
         if (maxScore.compareTo(BigDecimal.ZERO) > 0) {
@@ -444,7 +473,13 @@ public class MentorDiscoveryService {
                 .build();
     }
 
-    private BigDecimal calculateMatchScore(MentorDiscoveryQueryRow candidate, StudentProfile menteeProfile, List<String> reasons) {
+    private BigDecimal calculateMatchScore(
+            MentorDiscoveryQueryRow candidate,
+            StudentProfile menteeProfile,
+            List<MentorService> services,
+            boolean hasAvailability,
+            List<String> reasons
+    ) {
         BigDecimal baseScore = ZERO;
 
         if (menteeProfile != null) {
@@ -491,6 +526,15 @@ public class MentorDiscoveryService {
             baseScore = baseScore.add(QUALITY_EXPERIENCED_SESSIONS_BONUS);
         }
 
+        if (services != null && !services.isEmpty()) {
+            baseScore = baseScore.add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(services.size())));
+            reasons.add("Có " + services.size() + " dịch vụ đang hoạt động");
+        }
+        if (hasAvailability) {
+            baseScore = baseScore.add(HAS_AVAILABILITY_BONUS_SCORE);
+            reasons.add("Có lịch rảnh khả dụng");
+        }
+
         return baseScore.setScale(2, RoundingMode.HALF_UP);
     }
 
@@ -510,6 +554,13 @@ public class MentorDiscoveryService {
                 .forEach(mentorTag -> result.computeIfAbsent(mentorTag.getId().getMentorUserId(), ignored -> new ArrayList<>())
                         .add(toTagResponse(mentorTag)));
         return result;
+    }
+
+    private Set<UUID> loadMentorsWithAvailability(Collection<UUID> mentorUserIds, LocalDateTime now) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return new java.util.HashSet<>(mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, now));
     }
 
     private List<MentorService> loadActiveServicesByMentorIds(Collection<UUID> mentorUserIds) {
@@ -566,11 +617,23 @@ public class MentorDiscoveryService {
             StudentProfile menteeProfile,
             String normalizedKeyword,
             List<MentorTagResponse> helpTopics,
-            List<MentorService> services
+            List<MentorService> services,
+            boolean hasAvailability
     ) {
+        BigDecimal extraBonus = ZERO;
+        if (services != null && !services.isEmpty()) {
+            extraBonus = extraBonus.add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(services.size())));
+        }
+        if (hasAvailability) {
+            extraBonus = extraBonus.add(HAS_AVAILABILITY_BONUS_SCORE);
+        }
+
         List<String> tokens = tokenizeSearchText(normalizedKeyword);
         if (tokens.isEmpty()) {
-            return calculatePersonalizationScore(row, menteeProfile).add(calculateSearchQualityScore(row, menteeProfile));
+            return calculatePersonalizationScore(row, menteeProfile)
+                    .add(calculateSearchQualityScore(row, menteeProfile))
+                    .add(extraBonus)
+                    .setScale(2, RoundingMode.HALF_UP);
         }
 
         BigDecimal score = ZERO;
@@ -644,6 +707,7 @@ public class MentorDiscoveryService {
 
         score = score.add(calculatePersonalizationScore(row, menteeProfile));
         score = score.add(calculateSearchQualityScore(row, menteeProfile));
+        score = score.add(extraBonus);
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 

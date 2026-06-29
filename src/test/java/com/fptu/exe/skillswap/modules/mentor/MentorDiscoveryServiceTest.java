@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
@@ -78,6 +79,9 @@ class MentorDiscoveryServiceTest {
 
     @Mock
     private MentorAvailabilityService mentorAvailabilityService;
+
+    @Mock
+    private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
 
     @Mock
     private SessionFeedbackRepository sessionFeedbackRepository;
@@ -388,11 +392,11 @@ class MentorDiscoveryServiceTest {
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
         assertEquals(1, recommendations.size());
-        // Phase S3: matchScore now converted to percentage of max theoretical score (118.00).
+        // Phase S3: matchScore now converted to percentage of max theoretical score (148.00).
         // Raw breakdown: campus(+10) + program(+40) + spec(+30) + equalSemester(+10)
         //          + highRating≥4.5(+8) + reviews≥5(+5) = 103
-        // Percentage: 103 * 100 / 118 = 87.29%
-        assertEquals(new BigDecimal("87.29"), recommendations.getFirst().matchScore());
+        // Percentage: 103 * 100 / 148 = 69.59%
+        assertEquals(new BigDecimal("69.59"), recommendations.getFirst().matchScore());
         assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 
