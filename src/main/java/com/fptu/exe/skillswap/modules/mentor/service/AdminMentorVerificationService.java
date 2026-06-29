@@ -23,6 +23,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificatio
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationChecklistResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;
+import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
@@ -35,6 +36,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -86,6 +88,7 @@ public class AdminMentorVerificationService {
     private final AcademicService academicService;
     private final MentorProfileService mentorProfileService;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorVerificationQueueItemResponse> getQueue(AdminMentorVerificationQueueFilterRequest filterRequest) {
@@ -208,6 +211,12 @@ public class AdminMentorVerificationService {
                 "MENTOR_VERIFICATION",
                 request.getId()
         );
+        publishMentorVerificationEmail(
+                MentorVerificationEmailNotificationEvent.EventType.NEEDS_REVISION_EMAIL,
+                request,
+                reviewer,
+                normalizedNote
+        );
         return mapDetail(request, adminUserId);
     }
 
@@ -259,7 +268,35 @@ public class AdminMentorVerificationService {
                 "MENTOR_VERIFICATION",
                 request.getId()
         );
+        publishMentorVerificationEmail(
+                MentorVerificationEmailNotificationEvent.EventType.APPROVED_EMAIL,
+                request,
+                reviewer,
+                normalizedReviewNote
+        );
         return mapDetail(request, adminUserId);
+    }
+
+    private void publishMentorVerificationEmail(
+            MentorVerificationEmailNotificationEvent.EventType eventType,
+            MentorVerificationRequest request,
+            User reviewer,
+            String reviewNote
+    ) {
+        User mentor = request == null ? null : request.getMentor();
+        if (mentor == null || mentor.getEmail() == null || mentor.getEmail().isBlank()) {
+            return;
+        }
+        eventPublisher.publishEvent(MentorVerificationEmailNotificationEvent.builder()
+                .eventType(eventType)
+                .requestId(request.getId())
+                .recipientEmail(mentor.getEmail())
+                .recipientName(mentor.getFullName())
+                .reviewerName(reviewer == null ? null : reviewer.getFullName())
+                .reviewNote(reviewNote)
+                .submittedAt(request.getSubmittedAt())
+                .reviewedAt(request.getReviewedAt())
+                .build());
     }
 
     @Transactional

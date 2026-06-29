@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStorageKind;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
@@ -34,6 +35,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -71,6 +73,8 @@ class AdminMentorVerificationServiceTest {
     private MentorProfileService mentorProfileService;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AdminMentorVerificationService adminMentorVerificationService;
@@ -200,6 +204,12 @@ class AdminMentorVerificationServiceTest {
                 eq("MENTOR_VERIFICATION"),
                 eq(request.getId())
         );
+        ArgumentCaptor<MentorVerificationEmailNotificationEvent> emailEventCaptor =
+                ArgumentCaptor.forClass(MentorVerificationEmailNotificationEvent.class);
+        verify(eventPublisher).publishEvent(emailEventCaptor.capture());
+        assertThat(emailEventCaptor.getValue().getEventType())
+                .isEqualTo(MentorVerificationEmailNotificationEvent.EventType.APPROVED_EMAIL);
+        assertThat(emailEventCaptor.getValue().getRecipientEmail()).isEqualTo("mentor@test.com");
     }
 
     @Test
@@ -237,6 +247,7 @@ class AdminMentorVerificationServiceTest {
                 eq("MENTOR_VERIFICATION"),
                 eq(request.getId())
         );
+        verify(eventPublisher, never()).publishEvent(any(MentorVerificationEmailNotificationEvent.class));
     }
 
     @Test
@@ -274,6 +285,13 @@ class AdminMentorVerificationServiceTest {
                 eq("MENTOR_VERIFICATION"),
                 eq(request.getId())
         );
+        ArgumentCaptor<MentorVerificationEmailNotificationEvent> emailEventCaptor =
+                ArgumentCaptor.forClass(MentorVerificationEmailNotificationEvent.class);
+        verify(eventPublisher).publishEvent(emailEventCaptor.capture());
+        assertThat(emailEventCaptor.getValue().getEventType())
+                .isEqualTo(MentorVerificationEmailNotificationEvent.EventType.NEEDS_REVISION_EMAIL);
+        assertThat(emailEventCaptor.getValue().getRecipientEmail()).isEqualTo("mentor@test.com");
+        assertThat(emailEventCaptor.getValue().getReviewNote()).isEqualTo("Need more info");
     }
 
     @Test
