@@ -134,6 +134,30 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void changeUserStatus_banWithSpecialCharactersInReason() {
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(targetUser));
+        when(userRepository.findRoleCodesByUserId(userId)).thenReturn(List.of(RoleCode.MENTEE));
+
+        UserSession s1 = new UserSession();
+        s1.setRevoked(false);
+        List<UserSession> sessions = List.of(s1);
+        when(userSessionRepository.findByUserIdAndIsRevokedFalse(userId)).thenReturn(sessions);
+
+        String specialReason = "Lý do \"vi phạm\" điều khoản\nXuống dòng và có ký tự đặc biệt \\ / tab \t";
+        SystemUserResponse response = adminUserService.changeUserStatus(adminId, userId, true, specialReason);
+
+        assertNotNull(response);
+        assertEquals(UserStatus.BANNED, targetUser.getStatus());
+        verify(auditLogRepository).save(org.mockito.Mockito.argThat(auditLog -> {
+            assertNotNull(auditLog.getNewValue());
+            assertTrue(auditLog.getNewValue().contains("vi phạm"));
+            assertTrue(auditLog.getNewValue().contains("\\n"));
+            return true;
+        }));
+    }
+
+    @Test
     void changeUserStatus_selfBan_shouldThrowException() {
         BaseException ex = assertThrows(BaseException.class, () ->
                 adminUserService.changeUserStatus(adminId, adminId, true, "Self ban")

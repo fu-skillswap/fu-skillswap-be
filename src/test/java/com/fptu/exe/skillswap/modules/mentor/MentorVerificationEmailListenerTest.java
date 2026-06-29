@@ -33,9 +33,9 @@ class MentorVerificationEmailListenerTest {
 
         verify(emailService).sendHtmlEmail(
                 eq("mentor@test.com"),
-                eq("[SkillSwap] Hồ sơ mentor đã được duyệt"),
-                contains("Hồ sơ mentor đã được duyệt"),
-                contains("Hồ sơ mentor đã được duyệt")
+                eq("[SkillSwap] Hồ sơ mentor của bạn đã được duyệt"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
+                contains("Hồ sơ mentor của bạn đã được duyệt")
         );
     }
 
@@ -58,7 +58,7 @@ class MentorVerificationEmailListenerTest {
         verify(emailService).sendHtmlEmail(
                 eq("mentor@test.com"),
                 eq("[SkillSwap] Cần bổ sung hồ sơ mentor"),
-                contains("Cần bổ sung minh chứng chuyên môn"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
                 contains("Cần bổ sung minh chứng chuyên môn")
         );
     }

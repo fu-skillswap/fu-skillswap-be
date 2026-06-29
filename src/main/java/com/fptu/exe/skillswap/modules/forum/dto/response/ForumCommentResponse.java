@@ -12,6 +12,7 @@ public record ForumCommentResponse(
         UUID authorUserId,
         String authorFullName,
         String authorAvatarUrl,
+        String authorRole,
         String content,
         String status,
         Integer reportCount,

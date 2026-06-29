@@ -22,9 +22,11 @@ import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.AuditLogJsonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Map;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -570,18 +572,17 @@ public class BookingRescheduleService {
                                    String reason) {
         User adminUser = userRepository.findById(adminUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy admin thực hiện override"));
-        String oldValue = String.format(
-                "{\"status\":\"%s\",\"bookingId\":\"%s\",\"from\":\"%s\",\"to\":\"%s\"}",
-                previousStatus == null ? "" : previousStatus.name(),
-                request.getBooking().getId(),
-                request.getPreviousSelectedStartTime(),
-                request.getProposedSelectedStartTime()
-        );
-        String newValue = String.format(
-                "{\"status\":\"%s\",\"reason\":\"%s\",\"adminOverride\":true}",
-                action == AuditAction.APPROVE ? BookingRescheduleStatus.ACCEPTED.name() : BookingRescheduleStatus.REJECTED.name(),
-                reason == null ? "" : reason.replace("\"", "'")
-        );
+        String oldValue = AuditLogJsonUtil.toJson(Map.of(
+                "status", previousStatus == null ? "" : previousStatus.name(),
+                "bookingId", request.getBooking().getId().toString(),
+                "from", request.getPreviousSelectedStartTime() == null ? "" : request.getPreviousSelectedStartTime().toString(),
+                "to", request.getProposedSelectedStartTime() == null ? "" : request.getProposedSelectedStartTime().toString()
+        ));
+        String newValue = AuditLogJsonUtil.toJson(Map.of(
+                "status", action == AuditAction.APPROVE ? BookingRescheduleStatus.ACCEPTED.name() : BookingRescheduleStatus.REJECTED.name(),
+                "reason", reason == null ? "" : reason,
+                "adminOverride", true
+        ));
         auditLogRepository.save(AuditLog.builder()
                 .actor(adminUser)
                 .action(action)

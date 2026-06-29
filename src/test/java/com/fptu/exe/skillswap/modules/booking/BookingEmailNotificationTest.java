@@ -180,8 +180,8 @@ class BookingEmailNotificationTest {
 
         verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Mentor đã chấp nhận lịch"),
-                contains("Hoàn tất thanh toán trong vòng 2 giờ"),
+                eq("[SkillSwap] Mentor đã chấp nhận lịch của bạn"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
                 contains("Hoàn tất thanh toán trong vòng 2 giờ")
         );
     }
@@ -197,8 +197,8 @@ class BookingEmailNotificationTest {
 
         verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
-                eq("[SkillSwap] Yêu cầu đặt lịch bị từ chối"),
-                contains("Busy"),
+                eq("[SkillSwap] Yêu cầu đặt lịch của bạn đã bị mentor từ chối"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
                 contains("Busy")
         );
     }
@@ -215,7 +215,7 @@ class BookingEmailNotificationTest {
         verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(mentorUser.getEmail()),
                 eq("[SkillSwap] Mentee đã hủy lịch"),
-                contains("Changed my mind"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
                 contains("Changed my mind")
         );
     }
@@ -233,7 +233,7 @@ class BookingEmailNotificationTest {
         verify(emailService, timeout(2_000).times(1)).sendHtmlEmail(
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã hủy lịch"),
-                contains("Emergency"),
+                contains("'Segoe UI', Arial, Helvetica, sans-serif"),
                 contains("Emergency")
         );
     }

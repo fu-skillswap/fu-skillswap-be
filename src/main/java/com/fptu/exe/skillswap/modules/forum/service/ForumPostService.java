@@ -335,6 +335,19 @@ public class ForumPostService {
                 .build();
     }
 
+    private String determineAuthorRole(java.util.Set<RoleCode> roles) {
+        if (roles == null) {
+            return "MENTEE";
+        }
+        if (roles.contains(RoleCode.MENTOR)) {
+            return "MENTOR";
+        }
+        if (roles.contains(RoleCode.MENTEE)) {
+            return "MENTEE";
+        }
+        return "MENTEE";
+    }
+
     private ForumCommentResponse toCommentResponse(ForumComment comment) {
         return ForumCommentResponse.builder()
                 .commentId(comment.getId())
@@ -342,6 +355,7 @@ public class ForumPostService {
                 .authorUserId(comment.getAuthorUser().getId())
                 .authorFullName(comment.getAuthorUser().getFullName())
                 .authorAvatarUrl(comment.getAuthorUser().getAvatarUrl())
+                .authorRole(determineAuthorRole(comment.getAuthorUser().getRoles()))
                 .content(comment.getContent())
                 .status(comment.getStatus().name())
                 .reportCount(defaultInt(comment.getReportCount()))

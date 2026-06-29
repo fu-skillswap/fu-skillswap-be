@@ -26,6 +26,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -311,6 +312,19 @@ public class AdminForumModerationService {
                 .build();
     }
 
+    private String determineAuthorRole(java.util.Set<RoleCode> roles) {
+        if (roles == null) {
+            return "MENTEE";
+        }
+        if (roles.contains(RoleCode.MENTOR)) {
+            return "MENTOR";
+        }
+        if (roles.contains(RoleCode.MENTEE)) {
+            return "MENTEE";
+        }
+        return "MENTEE";
+    }
+
     private ForumCommentResponse toCommentResponse(ForumComment comment) {
         return ForumCommentResponse.builder()
                 .commentId(comment.getId())
@@ -318,6 +332,7 @@ public class AdminForumModerationService {
                 .authorUserId(comment.getAuthorUser().getId())
                 .authorFullName(comment.getAuthorUser().getFullName())
                 .authorAvatarUrl(comment.getAuthorUser().getAvatarUrl())
+                .authorRole(determineAuthorRole(comment.getAuthorUser().getRoles()))
                 .content(comment.getContent())
                 .status(comment.getStatus().name())
                 .reportCount(comment.getReportCount() == null ? 0 : comment.getReportCount())

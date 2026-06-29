@@ -20,6 +20,7 @@ import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.AuditLogJsonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -140,8 +141,11 @@ public class AdminUserService {
                 .action(AuditAction.UPDATE)
                 .entityType("USER")
                 .entityId(userId)
-                .oldValue(String.format("{\"status\":\"%s\"}", oldStatus))
-                .newValue(String.format("{\"status\":\"%s\",\"reason\":\"%s\"}", user.getStatus(), reason == null ? "" : reason))
+                .oldValue(AuditLogJsonUtil.toJson(Map.of("status", oldStatus.name())))
+                .newValue(AuditLogJsonUtil.toJson(Map.of(
+                        "status", user.getStatus().name(),
+                        "reason", reason == null ? "" : reason
+                )))
                 .build();
         auditLogRepository.save(auditLog);
 
