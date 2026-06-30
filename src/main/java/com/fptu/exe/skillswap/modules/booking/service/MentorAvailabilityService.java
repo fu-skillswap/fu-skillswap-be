@@ -414,7 +414,9 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn hoạt động");
         }
 
-        List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service);
+        List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service).stream()
+                .filter(ServiceSlotCandidateItemResponse::isSelectable)
+                .toList();
         return ServiceSlotCandidatesResponse.builder()
                 .slotId(slotId)
                 .serviceId(serviceId)
