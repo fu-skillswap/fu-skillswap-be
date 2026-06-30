@@ -86,6 +86,9 @@ class MentorDiscoveryServiceTest {
     @Mock
     private SessionFeedbackRepository sessionFeedbackRepository;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
+
     @InjectMocks
     private MentorDiscoveryService mentorDiscoveryService;
 
@@ -555,6 +558,39 @@ class MentorDiscoveryServiceTest {
     private void stubEmptyCandidateRelations() {
         when(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(any(), any()))
                 .thenReturn(Collections.emptyList());
+    }
+
+    @Test
+    void searchMentors_fuzzySearchFallback_shouldCorrectSpelling() {
+        com.fptu.exe.skillswap.modules.catalog.domain.Tag tag = new com.fptu.exe.skillswap.modules.catalog.domain.Tag();
+        tag.setNameVi("Spring Boot");
+        tag.setNameEn("Spring Boot");
+        
+        when(tagRepository.findAll()).thenReturn(List.of(tag));
+        when(mentorServiceRepository.findAllActiveServiceTitles()).thenReturn(Collections.emptyList());
+        
+        mentorDiscoveryService.refreshKeywordsCache();
+        
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setKeyword("springbot");
+        
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
+        when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
+                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(Collections.emptyList()))
+          .thenReturn(new PageImpl<>(List.of(mentorUserId)));
+          
+        List<MentorDiscoveryQueryRow> rows = List.of(discoveryRow(mentorUserId, "Headline", "Expertise", "Subjects", "Bio", campus.getId(), academicProgram.getId(), specialization.getId(), 8, false));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId))).thenReturn(rows);
+        stubEmptyCandidateRelations();
+        
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+        
+        assertNotNull(response);
+        assertFalse(response.getContent().isEmpty());
+        assertEquals(1, response.getContent().size());
+        assertEquals("Mentor " + mentorUserId, response.getContent().get(0).displayName());
     }
 }
 

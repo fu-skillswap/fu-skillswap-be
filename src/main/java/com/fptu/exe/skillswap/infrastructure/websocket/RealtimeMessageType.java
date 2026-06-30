@@ -9,6 +9,7 @@ public final class RealtimeMessageType {
     public static final String CHAT_MESSAGE_CREATED = "CHAT_MESSAGE_CREATED";
     public static final String NEW_NOTIFICATION = "NEW_NOTIFICATION";
     public static final String NOTIFICATION_BADGE_UPDATED = "NOTIFICATION_BADGE_UPDATED";
+    public static final String BOOKING_STATUS_UPDATED = "BOOKING_STATUS_UPDATED";
 
     private RealtimeMessageType() {
     }

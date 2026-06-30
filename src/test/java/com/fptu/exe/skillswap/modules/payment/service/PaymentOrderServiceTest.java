@@ -125,6 +125,11 @@ class PaymentOrderServiceTest {
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .servicePriceScoinSnapshot(100)
                 .build();
+        java.util.Map<CreditOriginType, Integer> defaultBalances = new java.util.EnumMap<>(CreditOriginType.class);
+        for (CreditOriginType type : CreditOriginType.values()) {
+            defaultBalances.put(type, 1000000);
+        }
+        org.mockito.Mockito.lenient().when(creditLedgerService.getAvailableBalanceByOrigin(any())).thenReturn(defaultBalances);
     }
 
     // ─── Helper ──────────────────────────────────────────────────────────────────

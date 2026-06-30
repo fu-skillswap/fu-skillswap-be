@@ -375,9 +375,18 @@ public class PaymentOrderService {
     }
 
     private int reserveUserCredit(UUID currentUserId, PaymentOrder order, int amountAfterCampaign) {
+        var balances = creditLedgerService.getAvailableBalanceByOrigin(currentUserId);
+        int availableCredit = balances.entrySet().stream()
+                .filter(e -> List.of(CreditOriginType.CAMPAIGN_BONUS, CreditOriginType.COUPON_BONUS, CreditOriginType.REFUND, CreditOriginType.MANUAL).contains(e.getKey()))
+                .mapToInt(e -> e.getValue())
+                .sum();
+        int reserveAmount = Math.max(0, Math.min(amountAfterCampaign, availableCredit));
+        if (reserveAmount <= 0) {
+            return 0;
+        }
         var reservedEntries = creditLedgerService.reserveCredit(
                 currentUserId,
-                amountAfterCampaign,
+                reserveAmount,
                 LedgerSourceType.PAYMENT_ORDER,
                 order.getId(),
                 List.of(CreditOriginType.CAMPAIGN_BONUS, CreditOriginType.COUPON_BONUS, CreditOriginType.REFUND, CreditOriginType.MANUAL),
@@ -506,6 +515,24 @@ public class PaymentOrderService {
                                          String providerEventId,
                                          String providerStatus) {
         if (order.getCreditFinalizedAt() == null) {
+            if (order.getRemainingPayableScoin() != null && order.getRemainingPayableScoin() > 0) {
+                creditLedgerService.issueCredit(
+                        order.getPayerUserId(),
+                        CreditOriginType.MANUAL,
+                        LedgerSourceType.PAYMENT_ORDER,
+                        order.getId(),
+                        order.getRemainingPayableScoin(),
+                        "PayOS deposit for payment order " + order.getOrderCode()
+                );
+                creditLedgerService.reserveCredit(
+                        order.getPayerUserId(),
+                        order.getRemainingPayableScoin(),
+                        LedgerSourceType.PAYMENT_ORDER,
+                        order.getId(),
+                        List.of(CreditOriginType.MANUAL),
+                        "Reserve PayOS deposit for payment order " + order.getOrderCode()
+                );
+            }
             creditLedgerService.consumeReservedCredit(
                     order.getPayerUserId(),
                     LedgerSourceType.PAYMENT_ORDER,
@@ -543,14 +570,23 @@ public class PaymentOrderService {
         sessionService.createForAcceptedBooking(booking);
         conversationService.createDirectForAcceptedBooking(booking);
 
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                booking.getId(),
+                booking.getMentee().getId(),
                 booking.getMentorProfile().getUserId(),
-                NotificationType.BOOKING_PAYMENT_CONFIRMED,
+                booking.getStatus(),
+                "Thanh toán thành công. Lịch học đã được xác nhận.",
+                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : com.fptu.exe.skillswap.shared.util.DateTimeUtil.now()
+        ));
+
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+                booking.getMentorProfile().getUserId(),
+                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_CONFIRMED,
                 "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
                 booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
                 "BOOKING",
                 booking.getId()
-        );
+        ));
 
         eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                 .bookingId(booking.getId())

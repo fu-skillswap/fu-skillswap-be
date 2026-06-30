@@ -67,6 +67,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class MentorDiscoveryService {
@@ -106,6 +109,10 @@ public class MentorDiscoveryService {
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final DataSource dataSource;
+    private final TagRepository tagRepository;
+
+    private volatile List<String> cachedKeywords = new java.util.ArrayList<>();
+    private final Object cacheLock = new Object();
 
     private volatile Boolean postgresDetected = null;
 
@@ -203,6 +210,42 @@ public class MentorDiscoveryService {
                     currentTime(),
                     searchPageable
             );
+        }
+
+        if (hasKeyword && candidatePage.isEmpty()) {
+            String corrected = correctSpelling(normalizedKeyword);
+            if (!corrected.equals(normalizedKeyword)) {
+                log.info("Original search keyword '{}' produced 0 results. Fallback fuzzy search using corrected spelling: '{}'", normalizedKeyword, corrected);
+                String fallbackKeywordPattern = toLikePattern(corrected);
+                String fallbackNormalizedKeywordPattern = toLikePattern(corrected);
+                
+                if (isPostgresDataSource()) {
+                    candidatePage = findCandidatesByFts(
+                            corrected,
+                            safeRequest,
+                            tagIds,
+                            requestedPage,
+                            requestedSize,
+                            relevanceSort
+                    );
+                } else {
+                    candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                            MentorStatus.ACTIVE,
+                            MentorTagType.HELP_TOPIC,
+                            safeRequest.getCampusId(),
+                            safeRequest.getSpecializationId(),
+                            safeRequest.getTeachingMode(),
+                            hasTagFilter(safeRequest.getTagIds()),
+                            tagIds,
+                            fallbackKeywordPattern,
+                            fallbackNormalizedKeywordPattern,
+                            ACCENTED_CHARACTERS,
+                            PLAIN_CHARACTERS,
+                            currentTime(),
+                            searchPageable
+                    );
+                }
+            }
         }
 
         List<UUID> candidateIds = candidatePage.getContent();
@@ -1159,6 +1202,120 @@ public class MentorDiscoveryService {
     private static BigDecimal decimal(String value) {
         return new BigDecimal(value).setScale(2, RoundingMode.HALF_UP);
     }
+
+    @jakarta.annotation.PostConstruct
+    public void initCache() {
+        refreshKeywordsCache();
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedRate = 300000)
+    public void refreshKeywordsCache() {
+        try {
+            if (tagRepository == null || mentorServiceRepository == null) {
+                return;
+            }
+            List<String> tags = tagRepository.findAll().stream()
+                    .flatMap(tag -> Arrays.stream(new String[]{tag.getNameVi(), tag.getNameEn()}))
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::normalizeSearchText)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+
+            List<String> serviceTitles = mentorServiceRepository.findAllActiveServiceTitles().stream()
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::normalizeSearchText)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+
+            List<String> merged = new ArrayList<>();
+            merged.addAll(tags);
+            merged.addAll(serviceTitles);
+            List<String> deduplicated = merged.stream().distinct().collect(Collectors.toList());
+
+            synchronized (cacheLock) {
+                this.cachedKeywords = deduplicated;
+            }
+            log.info("Refreshed search keywords cache: {} keywords", deduplicated.size());
+        } catch (Exception ex) {
+            log.warn("Failed to refresh search keywords cache", ex);
+        }
+    }
+
+    private int calculateLevenshteinDistance(String s1, String s2) {
+        int[] dp = new int[s2.length() + 1];
+        for (int j = 0; j <= s2.length(); j++) {
+            dp[j] = j;
+        }
+        for (int i = 1; i <= s1.length(); i++) {
+            int prev = dp[0];
+            dp[0] = i;
+            for (int j = 1; j <= s2.length(); j++) {
+                int temp = dp[j];
+                if (s1.charAt(i - 1) == s2.charAt(j - 1)) {
+                    dp[j] = prev;
+                } else {
+                    dp[j] = Math.min(Math.min(dp[j - 1], dp[j]), prev) + 1;
+                }
+                prev = temp;
+            }
+        }
+        return dp[s2.length()];
+    }
+
+    private String correctSpelling(String normalizedKeyword) {
+        if (normalizedKeyword == null || normalizedKeyword.isBlank()) {
+            return normalizedKeyword;
+        }
+        List<String> tokens = tokenizeSearchText(normalizedKeyword);
+        if (tokens.isEmpty()) {
+            return normalizedKeyword;
+        }
+
+        List<String> candidates;
+        synchronized (cacheLock) {
+            candidates = new ArrayList<>(this.cachedKeywords);
+        }
+        if (candidates.isEmpty()) {
+            return normalizedKeyword;
+        }
+
+        List<String> correctedTokens = new ArrayList<>();
+        boolean modified = false;
+
+        for (String token : tokens) {
+            if (token.length() > 30) {
+                correctedTokens.add(token);
+                continue;
+            }
+
+            String bestMatch = token;
+            int bestDistance = Integer.MAX_VALUE;
+
+            for (String candidate : candidates) {
+                if (Math.abs(token.length() - candidate.length()) > 2) {
+                    continue;
+                }
+                int distance = calculateLevenshteinDistance(token, candidate);
+                int dynamicThreshold = Math.max(2, candidate.length() / 6);
+                if (distance <= dynamicThreshold && distance < bestDistance) {
+                    bestDistance = distance;
+                    bestMatch = candidate;
+                }
+            }
+
+            if (!bestMatch.equals(token)) {
+                modified = true;
+            }
+            correctedTokens.add(bestMatch);
+        }
+
+        if (modified) {
+            return String.join(" ", correctedTokens);
+        }
+        return normalizedKeyword;
+    }
+
+
 
     private record RankedSearchCandidate(
             MentorDiscoveryQueryRow row,

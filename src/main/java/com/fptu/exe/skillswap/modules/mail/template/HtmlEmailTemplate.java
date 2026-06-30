@@ -69,10 +69,22 @@ public final class HtmlEmailTemplate {
                                 <div style="font-size:13px;font-weight:800;color:#0b3a67;text-transform:uppercase;letter-spacing:.4px;font-family:__FONT_STACK__;">Bước tiếp theo</div>
                                 <div style="margin-top:8px;font-size:15px;line-height:1.6;color:#173b59;font-family:__FONT_STACK__;">%s</div>
                               </div>
-                              <div style="text-align:center;margin:30px 0 18px;">
+                              <div style="text-align:center;margin:30px 0 24px;">
                                 <a href="%s" style="display:inline-block;background:#0b3a67;color:#ffffff;text-decoration:none;font-weight:800;border-radius:999px;padding:14px 28px;font-size:15px;font-family:__FONT_STACK__;">%s</a>
                               </div>
-                              <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#697f91;text-align:center;font-family:__FONT_STACK__;">Website: <a href="%s" style="color:#0b3a67;font-family:__FONT_STACK__;">%s</a></p>
+                              <hr style="border:0;border-top:1px solid #d4e3ef;margin:30px 0 20px;">
+                              <div style="font-size:15px;line-height:1.6;color:#314b61;font-family:__FONT_STACK__;">
+                                Best regards,<br>
+                                <strong>SkillSwap Team</strong>
+                              </div>
+                              <div style="margin-top:18px;text-align:left;font-family:__FONT_STACK__;">
+                                <a href="https://www.facebook.com/skillswap.fptedu" style="display:inline-block;margin-right:12px;text-decoration:none;" target="_blank">
+                                  <img src="https://img.icons8.com/color/48/facebook-new.png" width="24" height="24" alt="Facebook" style="display:block;border:0;">
+                                </a>
+                                <a href="https://www.tiktok.com/@skillswap.fptu?_r=1&_t=ZS-97dweZeVLIy" style="display:inline-block;text-decoration:none;" target="_blank">
+                                  <img src="https://img.icons8.com/color/48/tiktok.png" width="24" height="24" alt="TikTok" style="display:block;border:0;">
+                                </a>
+                              </div>
                             </td>
                           </tr>
                           <tr>
@@ -106,9 +118,7 @@ public final class HtmlEmailTemplate {
                 model.detailRowsHtml() == null ? "" : model.detailRowsHtml(),
                 escape(model.nextStep()),
                 escapedCtaUrl,
-                escape(model.ctaLabel()),
-                escapedCtaUrl,
-                escapedCtaUrl
+                escape(model.ctaLabel())
         );
     }
 

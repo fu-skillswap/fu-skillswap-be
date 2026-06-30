@@ -21,6 +21,7 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
     @EntityGraph(attributePaths = {"helpTopics"})
     List<MentorService> findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(List<UUID> mentorUserIds);
 
+
     @EntityGraph(attributePaths = {"helpTopics"})
     List<MentorService> findByMentorProfileUserIdOrderByCreatedAtAsc(UUID mentorUserId);
 
@@ -29,4 +30,7 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
 
     @EntityGraph(attributePaths = {"helpTopics"})
     Optional<MentorService> findByIdAndMentorProfileUserIdAndIsActiveTrue(UUID id, UUID mentorUserId);
+
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.title FROM MentorService s WHERE s.isActive = true")
+    List<String> findAllActiveServiceTitles();
 }

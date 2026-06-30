@@ -582,14 +582,8 @@ class BookingServiceTest {
         assertNotNull(booking.getCompletedAt());
         assertEquals(booking.getSelectedStartTime(), booking.getActualStartTime());
         assertEquals(booking.getSelectedEndTime(), booking.getActualEndTime());
-        verify(notificationService).createNotification(
-                eq(menteeId),
-                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED),
-                eq("Mentor đã xác nhận hoàn tất buổi mentoring"),
-                eq("Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong 24 giờ."),
-                eq("BOOKING"),
-                eq(booking.getId())
-        );
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
     @Test
@@ -867,14 +861,8 @@ class BookingServiceTest {
         assertEquals(BookingStatus.REJECTED, booking.getStatus());
         assertFalse(slot.isBooked());
         verify(bookingRepository).saveAll(any());
-        verify(notificationService).createNotification(
-                eq(menteeId),
-                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED),
-                any(),
-                any(),
-                eq("BOOKING"),
-                eq(booking.getId())
-        );
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
     @Test
@@ -1059,14 +1047,8 @@ class BookingServiceTest {
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.REJECTED, staleBooking.getStatus());
         verify(bookingRepository).saveAll(any());
-        verify(notificationService).createNotification(
-                eq(menteeId),
-                eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED),
-                any(),
-                any(),
-                eq("BOOKING"),
-                eq(staleBooking.getId())
-        );
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
     @Test

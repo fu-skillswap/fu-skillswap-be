@@ -185,14 +185,23 @@ public class BookingService {
                 .servicePriceScoinSnapshot(mentorService.getPriceScoin())
                 .build());
 
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 mentorProfile.getUserId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_CREATED,
                 "Bạn có yêu cầu đặt lịch mới",
                 mentee.getFullName() + " đã gửi yêu cầu đặt lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
-        );
+        ));
+
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Yêu cầu đặt lịch mới đã được gửi.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
 
         return toBookingResponse(savedBooking);
     }
@@ -347,44 +356,44 @@ public class BookingService {
             sessionService.createForAcceptedBooking(savedBooking);
             conversationService.createDirectForAcceptedBooking(savedBooking);
 
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     savedBooking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu học miễn phí",
                     savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring miễn phí của bạn. Buổi học đã được xác nhận.",
                     "BOOKING",
                     savedBooking.getId()
-            );
+            ));
 
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     savedBooking.getMentorProfile().getUserId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_CONFIRMED,
                     "Lịch học miễn phí của bạn đã được xác nhận",
                     "Bạn đã chấp nhận lịch học miễn phí với " + savedBooking.getMentee().getFullName() + ".",
                     "BOOKING",
                     savedBooking.getId()
-            );
+            ));
         } else {
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     savedBooking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán",
                     savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng 2 giờ.",
                     "BOOKING",
                     savedBooking.getId()
-            );
+            ));
         }
 
         for (Booking pendingBooking : pendingBookings) {
             if (!pendingBooking.getId().equals(booking.getId())) {
-                notificationService.createNotification(
+                eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                         pendingBooking.getMentee().getId(),
                         com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED,
                         "Yêu cầu đặt lịch không còn khả dụng",
                         "Khung giờ này đã được mentor chấp nhận cho một yêu cầu khác.",
                         "BOOKING",
                         pendingBooking.getId()
-                );
+                ));
             }
         }
 
@@ -450,6 +459,29 @@ public class BookingService {
                     .build());
         }
 
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                isFree ? "Mentor đã chấp nhận yêu cầu học miễn phí. Buổi học đã được xác nhận."
+                       : "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
+
+        for (Booking pendingBooking : pendingBookings) {
+            if (!pendingBooking.getId().equals(booking.getId())) {
+                eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                        pendingBooking.getId(),
+                        pendingBooking.getMentee().getId(),
+                        pendingBooking.getMentorProfile().getUserId(),
+                        BookingStatus.REJECTED,
+                        "Yêu cầu đặt lịch không còn khả dụng.",
+                        pendingBooking.getUpdatedAt() != null ? pendingBooking.getUpdatedAt() : DateTimeUtil.now()
+                ));
+            }
+        }
+
         return toBookingResponse(savedBooking);
     }
 
@@ -476,14 +508,14 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
 
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REJECTED,
                 "Yêu cầu đặt lịch đã bị từ chối",
                 savedBooking.getMentorProfile().getUser().getFullName() + " đã từ chối yêu cầu đặt lịch của bạn.",
                 "BOOKING",
                 savedBooking.getId()
-        );
+        ));
 
         eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
                 .bookingId(savedBooking.getId())
@@ -504,6 +536,15 @@ public class BookingService {
                 .reason(savedBooking.getRejectReason())
                 .createdAt(DateTimeUtil.now())
                 .build());
+
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Yêu cầu đặt lịch đã bị từ chối.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
 
         return toBookingResponse(savedBooking);
     }
@@ -539,15 +580,24 @@ public class BookingService {
         Booking savedBooking = bookingRepository.save(booking);
 
         if (meetingChanged) {
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     savedBooking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.MEETING_LINK_UPDATED,
                     "Thông tin buổi học đã được cập nhật",
                     savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
                     "BOOKING",
                     savedBooking.getId()
-            );
+            ));
         }
+
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Thông tin phòng học đã được cập nhật.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
 
         return toBookingResponse(savedBooking);
     }
@@ -609,14 +659,23 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
         settlementService.releaseForBooking(savedBooking);
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
                 "Mentor đã xác nhận hoàn tất buổi mentoring",
                 "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong 24 giờ.",
                 "BOOKING",
                 savedBooking.getId()
-        );
+        ));
+
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Mentor đã xác nhận hoàn tất buổi học.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
 
         return toBookingResponse(savedBooking);
     }
@@ -660,6 +719,14 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Mentee xác nhận hoàn tất buổi học thành công.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
         return toBookingResponse(savedBooking);
     }
 
@@ -697,6 +764,14 @@ public class BookingService {
         booking.setCompletionOutcome(BookingCompletionOutcome.REVIEW_PENDING_DECISION);
 
         Booking savedBooking = bookingRepository.save(booking);
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Buổi học đã được báo cáo vấn đề và đang được xem xét.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
         return BookingIssueResponse.builder()
                 .bookingId(savedBooking.getId())
                 .status(savedBooking.getStatus())
@@ -1154,14 +1229,22 @@ public class BookingService {
         }
         bookingRepository.saveAll(pendingBookings);
         for (Booking booking : pendingBookings) {
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     booking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED,
                     "Yêu cầu đặt lịch không còn hiệu lực",
                     buildAutoRejectedMessage(reason),
                     "BOOKING",
                     booking.getId()
-            );
+            ));
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                    booking.getId(),
+                    booking.getMentee().getId(),
+                    booking.getMentorProfile().getUserId(),
+                    booking.getStatus(),
+                    "Yêu cầu đặt lịch không còn hiệu lực.",
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+            ));
         }
     }
 
@@ -1210,14 +1293,14 @@ public class BookingService {
         sessionService.cancelForBooking(bookingId);
         paymentOrderService.handleMentorCancellation(savedBooking);
 
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTOR,
                 "Mentor đã hủy lịch",
                 savedBooking.getMentorProfile().getUser().getFullName() + " đã hủy lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
-        );
+        ));
 
         eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
                 .bookingId(savedBooking.getId())
@@ -1239,6 +1322,14 @@ public class BookingService {
                 .createdAt(DateTimeUtil.now())
                 .build());
 
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Mentor đã hủy lịch học.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
         return toBookingResponse(savedBooking);
     }
 
@@ -1286,14 +1377,14 @@ public class BookingService {
             paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
         }
 
-        notificationService.createNotification(
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentorProfile().getUserId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_CANCELLED_BY_MENTEE,
                 "Mentee đã hủy lịch",
                 savedBooking.getMentee().getFullName() + " đã hủy lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
-        );
+        ));
 
         eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
                 .bookingId(savedBooking.getId())
@@ -1315,6 +1406,14 @@ public class BookingService {
                 .createdAt(DateTimeUtil.now())
                 .build());
 
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                savedBooking.getId(),
+                savedBooking.getMentee().getId(),
+                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getStatus(),
+                "Mentee đã hủy lịch học.",
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+        ));
         return toBookingResponse(savedBooking);
     }
 
@@ -1339,14 +1438,22 @@ public class BookingService {
         }
         bookingRepository.saveAll(staleBookings);
         for (Booking booking : staleBookings) {
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     booking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi trước giờ bắt đầu. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
                     "BOOKING",
                     booking.getId()
-            );
+            ));
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                    booking.getId(),
+                    booking.getMentee().getId(),
+                    booking.getMentorProfile().getUserId(),
+                    booking.getStatus(),
+                    "Yêu cầu đặt lịch đã hết hạn.",
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+            ));
         }
         return staleBookings.size();
     }
@@ -1374,14 +1481,22 @@ public class BookingService {
         }
         bookingRepository.saveAll(staleBookings);
         for (Booking booking : staleBookings) {
-            notificationService.createNotification(
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                     booking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn thanh toán",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng 2 giờ.",
                     "BOOKING",
                     booking.getId()
-            );
+            ));
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
+                    booking.getId(),
+                    booking.getMentee().getId(),
+                    booking.getMentorProfile().getUserId(),
+                    booking.getStatus(),
+                    "Yêu cầu đặt lịch đã hết hạn thanh toán.",
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+            ));
         }
         return staleBookings.size();
     }

@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -39,6 +40,7 @@ import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -83,7 +85,13 @@ class BookingNotificationIntegrationTest {
     private BookingService bookingService;
 
     @Autowired
+    private BookingRepository bookingRepository;
+
+    @Autowired
     private NotificationService notificationService;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository notificationRepository;
 
     @Autowired
     private PaymentOrderService paymentOrderService;
@@ -104,6 +112,26 @@ class BookingNotificationIntegrationTest {
     private MentorProfile mentorProfile;
     private MentorAvailabilitySlot testSlot;
     private com.fptu.exe.skillswap.modules.mentor.domain.MentorService mentorService;
+
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    @AfterEach
+    void tearDown() {
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
+        jdbcTemplate.execute("TRUNCATE TABLE bookings");
+        jdbcTemplate.execute("TRUNCATE TABLE notifications");
+        jdbcTemplate.execute("TRUNCATE TABLE credit_ledger_entries");
+        jdbcTemplate.execute("TRUNCATE TABLE credit_ledger_accounts");
+        jdbcTemplate.execute("TRUNCATE TABLE mentor_availability_slots");
+        jdbcTemplate.execute("TRUNCATE TABLE mentor_availability_rules");
+        jdbcTemplate.execute("TRUNCATE TABLE mentor_services");
+        jdbcTemplate.execute("TRUNCATE TABLE student_profiles");
+        jdbcTemplate.execute("TRUNCATE TABLE mentor_profiles");
+        jdbcTemplate.execute("TRUNCATE TABLE user_roles");
+        jdbcTemplate.execute("TRUNCATE TABLE users");
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
+    }
 
     @BeforeEach
     void setUp() {
@@ -198,6 +226,8 @@ class BookingNotificationIntegrationTest {
     void createBooking_shouldNotifyMentor() {
         CreateBookingRequest req = bookingRequest("Help", "Desc");
         BookingResponse booking = bookingService.createBooking(mentee1.getId(), req);
+        commitTransaction();
+        awaitAsyncNotifications();
 
         var notis = notificationService.getMyNotifications(mentorUser.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(1, notis.size());
@@ -216,6 +246,8 @@ class BookingNotificationIntegrationTest {
 
         // Mentor accepts b1
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
+        commitTransaction();
+        awaitAsyncNotifications();
 
         // Mentee1 should get ACCEPTED
         var mentee1Notis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
@@ -244,8 +276,13 @@ class BookingNotificationIntegrationTest {
     @Test
     void rejectBooking_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
+        commitTransaction();
+        awaitAsyncNotifications();
+
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         bookingService.rejectBooking(mentorUser.getId(), b1.bookingId(), new RejectBookingRequest("No time", "Sorry"));
+        commitTransaction();
+        awaitAsyncNotifications();
 
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, menteeNotis.size());
@@ -258,11 +295,15 @@ class BookingNotificationIntegrationTest {
     @Test
     void menteeCancelBooking_shouldNotifyMentor() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
-        
+        commitTransaction();
+        awaitAsyncNotifications();
+
         // Before cancel, mentor has 1 request created noti
         long unreadBefore = notificationService.getMyUnreadCount(mentorUser.getId());
         
         bookingService.cancelBookingByMentee(mentee1.getId(), b1.bookingId(), new CancelBookingRequest("Change plan"));
+        commitTransaction();
+        awaitAsyncNotifications();
         
         var mentorNotis = notificationService.getMyNotifications(mentorUser.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, mentorNotis.size());
@@ -276,11 +317,15 @@ class BookingNotificationIntegrationTest {
     void mentorCancelBooking_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
-        
+        commitTransaction();
+        awaitAsyncNotifications();
+
         // Before cancel, mentee has 1 accepted noti
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         
         bookingService.cancelBookingByMentor(mentorUser.getId(), b1.bookingId(), new CancelBookingRequest("Sick"));
+        commitTransaction();
+        awaitAsyncNotifications();
         
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, menteeNotis.size());
@@ -295,10 +340,14 @@ class BookingNotificationIntegrationTest {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
         paymentOrderService.checkout(mentee1.getId(), new PaymentCheckoutRequest(b1.bookingId(), null));
-        
+        commitTransaction();
+        awaitAsyncNotifications();
+
         long unreadBefore = notificationService.getMyUnreadCount(mentee1.getId());
         
         bookingService.saveMeetingLink(mentorUser.getId(), b1.bookingId(), new SaveMeetingLinkRequest(MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test", null));
+        commitTransaction();
+        awaitAsyncNotifications();
         
         var menteeNotis = notificationService.getMyNotifications(mentee1.getId(), true, PageRequest.of(0, 10)).getContent();
         assertEquals(unreadBefore + 1, menteeNotis.size());
@@ -330,6 +379,22 @@ class BookingNotificationIntegrationTest {
                 title,
                 description
         );
+    }
+
+    private void awaitAsyncNotifications() {
+        try {
+            Thread.sleep(150);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void commitTransaction() {
+        if (org.springframework.test.context.transaction.TestTransaction.isActive()) {
+            org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+            org.springframework.test.context.transaction.TestTransaction.end();
+            org.springframework.test.context.transaction.TestTransaction.start();
+        }
     }
 }
 

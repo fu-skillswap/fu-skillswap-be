@@ -59,6 +59,8 @@ class BookingRescheduleServiceTest {
     private AuditLogRepository auditLogRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private BookingRescheduleService bookingRescheduleService;
     private UUID menteeId;
@@ -77,7 +79,8 @@ class BookingRescheduleServiceTest {
                 bookingSlotValidator,
                 notificationService,
                 auditLogRepository,
-                userRepository
+                userRepository,
+                eventPublisher
         );
 
         menteeId = UUID.randomUUID();
@@ -177,8 +180,8 @@ class BookingRescheduleServiceTest {
         assertEquals(proposedSlot.getId(), booking.getSlot().getId());
         assertEquals(1, booking.getRescheduleCount());
         verify(bookingSlotValidator).validateServiceAttachedToSlot(eq(proposedSlot.getId()), eq(booking.getService().getId()));
-        verify(notificationService).createNotification(eq(menteeId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
-        verify(notificationService, never()).createNotification(eq(mentorId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
     @Test
@@ -218,7 +221,7 @@ class BookingRescheduleServiceTest {
 
         assertEquals("ACCEPTED", response.status());
         verify(auditLogRepository).save(any());
-        verify(notificationService, times(2)).createNotification(any(UUID.class), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_ACCEPTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+        verify(eventPublisher, times(2)).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
     }
 
     @Test
@@ -249,8 +252,8 @@ class BookingRescheduleServiceTest {
         );
 
         assertEquals("REJECTED", response.status());
-        verify(notificationService).createNotification(eq(mentorId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_REJECTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
-        verify(notificationService, never()).createNotification(eq(menteeId), eq(com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_RESCHEDULE_REJECTED), any(), any(), eq("BOOKING"), eq(booking.getId()));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
     @Test
