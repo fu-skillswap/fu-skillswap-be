@@ -30,6 +30,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             where booking.mentee.id = :menteeUserId
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             order by
                 case
                     when booking.status in :paidStatuses then 0
@@ -45,6 +46,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select count(booking.id)
             from Booking booking
             where booking.mentee.id = :menteeUserId
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findMyMenteeBookingsOrderedByDashboardPriority(
@@ -53,11 +55,32 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("awaitingPaymentStatus") BookingStatus awaitingPaymentStatus,
             @Param("pendingStatus") BookingStatus pendingStatus,
             @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            @Param("startTimeStart") LocalDateTime startTimeStart,
+            @Param("startTimeEnd") LocalDateTime startTimeEnd,
             Pageable pageable
     );
 
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+              and booking.status = :status
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+              and booking.status = :status
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
+            """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
-    Page<Booking> findByMenteeIdAndStatus(UUID menteeUserId, BookingStatus status, Pageable pageable);
+    Page<Booking> findMyMenteeBookingsByStatusAndDateRange(
+            @Param("menteeUserId") UUID menteeUserId,
+            @Param("status") BookingStatus status,
+            @Param("startTimeStart") LocalDateTime startTimeStart,
+            @Param("startTimeEnd") LocalDateTime startTimeEnd,
+            Pageable pageable
+    );
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findByMentorProfileUserId(UUID mentorUserId, Pageable pageable);
@@ -66,6 +89,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             where booking.mentorProfile.userId = :mentorUserId
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             order by
                 case
                     when booking.status in :paidStatuses then 0
@@ -81,6 +105,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select count(booking.id)
             from Booking booking
             where booking.mentorProfile.userId = :mentorUserId
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     Page<Booking> findMyMentorBookingsOrderedByDashboardPriority(
@@ -89,11 +114,32 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("awaitingPaymentStatus") BookingStatus awaitingPaymentStatus,
             @Param("pendingStatus") BookingStatus pendingStatus,
             @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            @Param("startTimeStart") LocalDateTime startTimeStart,
+            @Param("startTimeEnd") LocalDateTime startTimeEnd,
             Pageable pageable
     );
 
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+              and booking.status = :status
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+              and booking.status = :status
+              and booking.selectedStartTime between :startTimeStart and :startTimeEnd
+            """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
-    Page<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status, Pageable pageable);
+    Page<Booking> findMyMentorBookingsByStatusAndDateRange(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("status") BookingStatus status,
+            @Param("startTimeStart") LocalDateTime startTimeStart,
+            @Param("startTimeEnd") LocalDateTime startTimeEnd,
+            Pageable pageable
+    );
 
     @Override
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})

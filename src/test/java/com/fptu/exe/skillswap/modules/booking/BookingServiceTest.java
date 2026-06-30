@@ -747,7 +747,7 @@ class BookingServiceTest {
         request.setRole(BookingViewRole.MENTOR);
         request.setStatus(BookingStatus.ACCEPTED);
 
-        when(bookingRepository.findByMentorProfileUserIdAndStatus(eq(mentorId), eq(BookingStatus.ACCEPTED), any(Pageable.class)))
+        when(bookingRepository.findMyMentorBookingsByStatusAndDateRange(eq(mentorId), eq(BookingStatus.ACCEPTED), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));
 
         PageResponse<BookingResponse> response = bookingService.getMyBookings(mentorId, request);
@@ -768,6 +768,8 @@ class BookingServiceTest {
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(booking)));
 
@@ -781,6 +783,8 @@ class BookingServiceTest {
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 any(Pageable.class)
         );
     }
@@ -797,6 +801,8 @@ class BookingServiceTest {
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(booking)));
 
@@ -810,6 +816,8 @@ class BookingServiceTest {
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 any(Pageable.class)
         );
     }

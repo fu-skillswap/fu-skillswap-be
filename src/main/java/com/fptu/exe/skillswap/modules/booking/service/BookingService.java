@@ -218,6 +218,9 @@ public class BookingService {
                 ? bookingPriorityPageable(safeRequest)
                 : bookingPageable(safeRequest);
 
+        LocalDateTime startTimeStart = DateTimeUtil.now().minusDays(7);
+        LocalDateTime startTimeEnd = DateTimeUtil.now().plusDays(7);
+
         Page<Booking> page = switch (role) {
             case MENTEE -> safeRequest.getStatus() == null
                     ? bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
@@ -226,9 +229,11 @@ public class BookingService {
                             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                             BookingStatus.PENDING,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
+                            startTimeStart,
+                            startTimeEnd,
                             pageable
                     )
-                    : bookingRepository.findByMenteeIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
+                    : bookingRepository.findMyMenteeBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
             case MENTOR -> safeRequest.getStatus() == null
                     ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
                             currentUserId,
@@ -236,9 +241,11 @@ public class BookingService {
                             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                             BookingStatus.PENDING,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
+                            startTimeStart,
+                            startTimeEnd,
                             pageable
                     )
-                    : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
+                    : bookingRepository.findMyMentorBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
         };
 
         java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
