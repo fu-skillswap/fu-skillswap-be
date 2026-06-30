@@ -30,8 +30,8 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             join fetch mp.user u
             where slot.mentorProfile.userId = :mentorUserId
               and slot.isActive = true
-              and slot.startTime >= :startTime
               and slot.startTime < :endTime
+              and slot.endTime > :startTime
             order by slot.startTime asc
             """)
     List<MentorAvailabilitySlot> findVisibleSlotsByMentorUserId(
@@ -85,8 +85,8 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             left join fetch ss.service
             where slot.mentorProfile.userId = :mentorUserId
               and slot.isActive = true
-              and slot.startTime >= :startTime
-              and slot.startTime <= :endTime
+              and slot.startTime < :endTime
+              and slot.endTime > :startTime
             order by slot.startTime asc
             """)
     List<MentorAvailabilitySlot> findMyManagedSlotsWithServices(

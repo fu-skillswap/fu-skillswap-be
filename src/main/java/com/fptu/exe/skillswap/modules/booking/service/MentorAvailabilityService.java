@@ -322,10 +322,10 @@ public class MentorAvailabilityService {
             LocalDate today = LocalDate.now(APP_ZONE);
             LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
             start = mondayThisWeek.atStartOfDay();
-            end = mondayThisWeek.plusDays(14).atTime(LocalTime.MAX);
+            end = mondayThisWeek.plusDays(15).atStartOfDay();
         } else {
             start = fromDate.atStartOfDay();
-            end = toDate != null ? toDate.atTime(LocalTime.MAX) : start.toLocalDate().plusDays(14).atTime(LocalTime.MAX);
+            end = toDate != null ? toDate.plusDays(1).atStartOfDay() : start.toLocalDate().plusDays(15).atStartOfDay();
         }
 
         return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, start, end).stream()
