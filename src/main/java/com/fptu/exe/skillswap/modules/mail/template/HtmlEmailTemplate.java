@@ -73,11 +73,16 @@ public final class HtmlEmailTemplate {
                                 <a href="%s" style="display:inline-block;background:#0b3a67;color:#ffffff;text-decoration:none;font-weight:800;border-radius:999px;padding:14px 28px;font-size:15px;font-family:__FONT_STACK__;">%s</a>
                               </div>
                               <hr style="border:0;border-top:1px solid #d4e3ef;margin:30px 0 20px;">
-                              <div style="font-size:15px;line-height:1.6;color:#314b61;font-family:__FONT_STACK__;">
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style="padding:22px 34px;background:#062b4f;color:#d7eaf8;text-align:center;font-family:__FONT_STACK__;">
+                              <div style="font-size:15px;line-height:1.6;color:#ffffff;font-family:__FONT_STACK__;">
                                 Best regards,<br>
                                 <strong>SkillSwap Team</strong>
                               </div>
-                              <div style="margin-top:18px;text-align:left;font-family:__FONT_STACK__;">
+                              
+                              <div style="margin-top:18px;text-align:center;font-family:__FONT_STACK__;">
                                 <a href="https://www.facebook.com/skillswap.fptedu" style="display:inline-block;margin-right:12px;text-decoration:none;" target="_blank">
                                   <img src="https://img.icons8.com/color/48/facebook-new.png" width="24" height="24" alt="Facebook" style="display:block;border:0;">
                                 </a>
@@ -85,11 +90,7 @@ public final class HtmlEmailTemplate {
                                   <img src="https://img.icons8.com/color/48/tiktok.png" width="24" height="24" alt="TikTok" style="display:block;border:0;">
                                 </a>
                               </div>
-                            </td>
-                          </tr>
-                          <tr>
-                            <td style="padding:22px 34px;background:#062b4f;color:#d7eaf8;text-align:center;font-family:__FONT_STACK__;">
-                              <div style="font-size:14px;font-weight:800;color:#ffffff;font-family:__FONT_STACK__;">SkillSwap</div>
+                              
                               <div style="margin-top:8px;font-size:12px;line-height:1.6;font-family:__FONT_STACK__;">Email tự động từ hệ thống. Vui lòng không trả lời trực tiếp email này.</div>
                             </td>
                           </tr>

@@ -288,9 +288,19 @@ public class PaymentOrderService {
         if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không gắn với mentor hợp lệ");
         }
+        if (booking.getStatus() == BookingStatus.PAID) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking này đã được thanh toán trước đó");
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE
+                || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR
+                || booking.getStatus() == BookingStatus.REJECTED
+                || booking.getStatus() == BookingStatus.EXPIRED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Booking đã kết thúc ở trạng thái " + booking.getStatus() + " và không thể thanh toán");
+        }
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
                 && booking.getStatus() != BookingStatus.ACCEPTED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán");
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.getStatus() + ")");
         }
     }
 
@@ -559,10 +569,12 @@ public class PaymentOrderService {
         }
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
                 && booking.getStatus() != BookingStatus.ACCEPTED) {
-            throw new BaseException(
-                    ErrorCode.RESOURCE_CONFLICT,
-                    "Booking hiện không còn ở trạng thái chờ thanh toán để xác nhận"
-            );
+            // Booking đã bị huỷ/hết hạn trước khi webhook đến — ghi log cảnh báo nhưng không throw
+            // để tránh rollback transaction và khiến PayOS retry lặp vô tận.
+            log.warn("finalizePaidBooking: booking {} ở trạng thái {} không thể chuyển sang PAID. " +
+                            "Payment order vẫn được ghi nhận PAID nhưng booking sẽ không được cập nhật.",
+                    booking.getId(), booking.getStatus());
+            return;
         }
         booking.setStatus(BookingStatus.PAID);
         bookingRepository.save(booking);

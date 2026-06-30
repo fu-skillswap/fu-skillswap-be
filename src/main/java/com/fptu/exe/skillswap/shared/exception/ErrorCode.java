@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.shared.exception;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
@@ -32,6 +31,10 @@ public enum ErrorCode {
     USER_NOT_FOUND(404, "USER_2003", "error.user.not_found", "Không tìm thấy người dùng"),
     NOT_FOUND(404, "SYS_0003", "error.sys.not_found", "Không tìm thấy tài nguyên"),
 
+    // Payment
+    PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang có sự cố, vui lòng thử lại sau"),
+    INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
+
     // Validation
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
 
@@ -47,4 +50,3 @@ public enum ErrorCode {
         this.message = message;
     }
 }
-

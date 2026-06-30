@@ -69,7 +69,7 @@ public class SdkPayOsGateway implements PayOsGateway {
                     toLocalDateTime(response.getExpiredAt())
             );
         } catch (PayOSException ex) {
-            throw new BaseException(ErrorCode.DATABASE_ERROR,
+            throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
                     "Không thể tạo link thanh toán PayOS lúc này: " + safeProviderMessage(ex));
         }
     }
@@ -86,7 +86,7 @@ public class SdkPayOsGateway implements PayOsGateway {
                     parseDateTime(paymentLink.getCanceledAt())
             );
         } catch (PayOSException ex) {
-            throw new BaseException(ErrorCode.DATABASE_ERROR,
+            throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
                     "Không thể đồng bộ trạng thái thanh toán PayOS: " + safeProviderMessage(ex));
         }
     }

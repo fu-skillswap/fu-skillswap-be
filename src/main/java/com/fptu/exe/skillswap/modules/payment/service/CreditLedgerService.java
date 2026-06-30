@@ -99,7 +99,7 @@ public class CreditLedgerService {
             remaining -= applied;
         }
         if (remaining > 0) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Số credit hiện có không đủ để áp dụng cho checkout");
+            throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE, "Số credit khả dụng không đủ để thanh toán đơn hàng này");
         }
         return entryRepository.findByAccountIdAndSourceTypeAndSourceIdAndEntryType(
                 account.getId(), sourceType, sourceId, LedgerEntryType.RESERVE
