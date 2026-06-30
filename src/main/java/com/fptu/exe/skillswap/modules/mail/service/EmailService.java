@@ -26,6 +26,9 @@ public class EmailService {
     @Value("${application.mail.from:no-reply@skillswap.asia}")
     private String senderEmail;
 
+    @Value("${application.mail.from-name:SkillSwap}")
+    private String senderName;
+
     public void sendSimpleEmail(String to, String subject, String body) {
         if (!mailEnabled) {
             log.info("Email service is disabled. Skipping email to: {}, subject: {}", to, subject);
@@ -34,7 +37,11 @@ public class EmailService {
 
         try {
             SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(senderEmail);
+            if (org.springframework.util.StringUtils.hasText(senderName)) {
+                message.setFrom(senderName + " <" + senderEmail + ">");
+            } else {
+                message.setFrom(senderEmail);
+            }
             message.setTo(to);
             message.setSubject(subject);
             message.setText(body);
@@ -60,7 +67,11 @@ public class EmailService {
                     MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
                     MAIL_ENCODING
             );
-            helper.setFrom(senderEmail);
+            if (org.springframework.util.StringUtils.hasText(senderName)) {
+                helper.setFrom(senderEmail, senderName);
+            } else {
+                helper.setFrom(senderEmail);
+            }
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(plainTextFallback == null ? "" : plainTextFallback, htmlBody);

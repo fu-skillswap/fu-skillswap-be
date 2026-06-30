@@ -109,6 +109,7 @@ application:
   mail:
     enabled: ${APPLICATION_MAIL_ENABLED:false}
     from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
+    from-name: ${APPLICATION_MAIL_FROM_NAME:SkillSwap}
   swagger:
     # Set APPLICATION_SWAGGER_ENABLED=false in production to block public Swagger/OpenAPI access.
     # Default true for local development convenience.
