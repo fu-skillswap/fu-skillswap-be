@@ -100,6 +100,9 @@ class BookingFlowIntegrationTest {
     @Autowired
     private PaymentOrderService paymentOrderService;
 
+    @Autowired
+    private com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService creditLedgerService;
+
     private User menteeUser;
     private User mentorUser;
     private MentorProfile mentorProfile;
@@ -114,6 +117,14 @@ class BookingFlowIntegrationTest {
                 .status(UserStatus.ACTIVE)
                 .build());
         completeAcademicProfile(menteeUser.getId(), "SE190001");
+        creditLedgerService.issueCredit(
+                menteeUser.getId(),
+                com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL,
+                com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL,
+                UUID.randomUUID(),
+                1000,
+                "Add test credit"
+        );
 
         // Create Mentor
         mentorUser = userRepository.save(User.builder()
@@ -139,8 +150,8 @@ class BookingFlowIntegrationTest {
                         .title("Java Programming")
                         .description("Java basics")
                         .durationMinutes(60)
-                        .isFree(true)
-                        .priceScoin(0)
+                        .isFree(false)
+                        .priceScoin(100)
                         .isActive(true)
                         .build()
         );

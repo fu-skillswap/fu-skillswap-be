@@ -437,4 +437,39 @@ class PaymentOrderServiceTest {
         verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
         verify(paymentOrderRepository, never()).save(any());
     }
+
+    @Test
+    void checkout_freeService_shouldThrowBadRequest() {
+        User menteeUser = new User();
+        menteeUser.setId(menteeId);
+        menteeUser.setFullName("Mentee");
+
+        User mentorUser = new User();
+        mentorUser.setId(mentorId);
+        mentorUser.setFullName("Mentor");
+
+        MentorProfile mentorProfile = new MentorProfile();
+        mentorProfile.setUserId(mentorId);
+        mentorProfile.setUser(mentorUser);
+
+        Booking freeBooking = Booking.builder()
+                .id(UUID.randomUUID())
+                .mentee(menteeUser)
+                .mentorProfile(mentorProfile)
+                .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
+                .serviceIsFreeSnapshot(true)
+                .servicePriceScoinSnapshot(0)
+                .build();
+
+        when(bookingRepository.findByIdForSessionUpdate(freeBooking.getId())).thenReturn(Optional.of(freeBooking));
+
+        PaymentCheckoutRequest request = new PaymentCheckoutRequest(freeBooking.getId(), null);
+
+        BaseException exception = assertThrows(BaseException.class, () -> 
+                paymentOrderService.checkout(menteeId, request)
+        );
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+        assertEquals("Không cần thanh toán cho dịch vụ miễn phí", exception.getMessage());
+    }
 }

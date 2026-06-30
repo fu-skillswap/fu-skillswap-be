@@ -154,8 +154,8 @@ class BookingConcurrencyIntegrationTest {
                     .title("Spring Transaction Mentoring")
                     .description("Support Java backend and transaction handling")
                     .durationMinutes(60)
-                    .isFree(true)
-                    .priceScoin(0)
+                    .isFree(false)
+                    .priceScoin(100)
                     .isActive(true)
                     .build());
 

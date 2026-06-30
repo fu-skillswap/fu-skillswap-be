@@ -1178,4 +1178,62 @@ class BookingServiceTest {
     private LocalDateTime testNow() {
         return DateTimeUtil.now();
     }
+
+    @Test
+    void acceptBooking_freeService_transitionsToPaidImmediately() {
+        Booking booking = bookingForDecision(BookingStatus.PENDING);
+        booking.setServiceIsFreeSnapshot(true);
+        booking.setServicePriceScoinSnapshot(0);
+        slot.setBooked(false);
+
+        org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+                eq(slot.getId()),
+                eq(BookingStatus.PENDING),
+                eq(booking.getSelectedStartTime()),
+                eq(booking.getSelectedEndTime())
+        )).thenReturn(List.of(booking));
+        org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
+
+        assertEquals(BookingStatus.PAID, response.status());
+        assertEquals("Accepted", booking.getMentorResponseNote());
+        assertNotNull(booking.getAcceptedAt());
+        assertTrue(slot.isBooked());
+
+        verify(sessionService).createForAcceptedBooking(any(Booking.class));
+        verify(conversationService).createDirectForAcceptedBooking(any(Booking.class));
+    }
+
+    @Test
+    void acceptBooking_paidService_transitionsToAwaitingPayment() {
+        Booking booking = bookingForDecision(BookingStatus.PENDING);
+        booking.setServiceIsFreeSnapshot(false);
+        booking.setServicePriceScoinSnapshot(150);
+        slot.setBooked(false);
+
+        org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+                eq(slot.getId()),
+                eq(BookingStatus.PENDING),
+                eq(booking.getSelectedStartTime()),
+                eq(booking.getSelectedEndTime())
+        )).thenReturn(List.of(booking));
+        org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
+
+        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
+
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
+        assertEquals("Accepted", booking.getMentorResponseNote());
+        assertNotNull(booking.getAcceptedAt());
+        assertTrue(slot.isBooked());
+
+        verify(sessionService, never()).createForAcceptedBooking(any(Booking.class));
+        verify(conversationService, never()).createDirectForAcceptedBooking(any(Booking.class));
+    }
 }

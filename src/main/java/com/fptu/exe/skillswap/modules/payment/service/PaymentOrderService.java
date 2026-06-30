@@ -71,6 +71,11 @@ public class PaymentOrderService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         validateCheckoutOwnership(currentUserId, booking);
 
+        if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
+                || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
+        }
+
         PaymentOrder existingOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
         PaymentAttempt latestAttempt = existingOrder == null
                 ? null

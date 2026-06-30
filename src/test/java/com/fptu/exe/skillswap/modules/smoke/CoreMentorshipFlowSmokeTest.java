@@ -79,6 +79,7 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
     @Autowired private com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService mentorProfileService;
     @Autowired private PaymentOrderService paymentOrderService;
+    @Autowired private com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService creditLedgerService;
     
     @Autowired private CampusRepository campusRepository;
     @Autowired private AcademicProgramRepository programRepository;
@@ -104,7 +105,18 @@ class CoreMentorshipFlowSmokeTest {
         user.setFullName(name);
         user.setStatus(UserStatus.ACTIVE);
         user.setRoles(roles);
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        if (roles.contains(RoleCode.MENTEE)) {
+            creditLedgerService.issueCredit(
+                    saved.getId(),
+                    com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL,
+                    com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL,
+                    UUID.randomUUID(),
+                    5000,
+                    "Smoke test grant"
+            );
+        }
+        return saved;
     }
 
     private void completeAcademic(UUID userId, String mssv) {
@@ -262,8 +274,8 @@ class CoreMentorshipFlowSmokeTest {
                 .title("Spring Boot Mentoring")
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
-                .isFree(true)
-                .priceScoin(0)
+                .isFree(false)
+                .priceScoin(100)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
@@ -363,8 +375,8 @@ class CoreMentorshipFlowSmokeTest {
                 .title("Spring Boot Mentoring")
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
-                .isFree(true)
-                .priceScoin(0)
+                .isFree(false)
+                .priceScoin(100)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()

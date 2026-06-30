@@ -43,8 +43,18 @@ public class BookingEmailListener {
     }
 
     private EmailContent buildContent(BookingEmailNotificationEvent event) {
+        boolean isFree = Boolean.TRUE.equals(event.getServiceFree());
         return switch (event.getEventType()) {
-            case BOOKING_ACCEPTED_EMAIL -> new EmailContent(
+            case BOOKING_ACCEPTED_EMAIL -> isFree
+                    ? new EmailContent(
+                    "[SkillSwap] Lịch học miễn phí của bạn đã được xác nhận",
+                    "Mentor đã chấp nhận yêu cầu đặt lịch của bạn",
+                    "Lịch học miễn phí của bạn đã được mentor chấp nhận và hệ thống đã xác nhận lịch thành công.",
+                    "Đã xác nhận",
+                    "Chuẩn bị nội dung cho buổi học và truy cập phòng học đúng giờ.",
+                    "Xem chi tiết lịch học"
+            )
+                    : new EmailContent(
                     "[SkillSwap] Mentor đã chấp nhận lịch của bạn",
                     "Mentor đã chấp nhận yêu cầu đặt lịch của bạn",
                     "Lịch mentoring của bạn đã được mentor chấp nhận. Vui lòng hoàn tất thanh toán trong vòng 2 giờ để hệ thống xác nhận lịch.",
@@ -52,7 +62,16 @@ public class BookingEmailListener {
                     "Hoàn tất thanh toán trong vòng 2 giờ để giữ lịch mentoring này.",
                     "Truy cập SkillSwap"
             );
-            case BOOKING_PAID_CONFIRMED_EMAIL -> new EmailContent(
+            case BOOKING_PAID_CONFIRMED_EMAIL -> isFree
+                    ? new EmailContent(
+                    "[SkillSwap] Lịch học miễn phí của bạn đã được xác nhận",
+                    "Lịch học miễn phí đã được xác nhận",
+                    "Lịch mentoring miễn phí của bạn đã được xác nhận thành công.",
+                    "Đã xác nhận",
+                    "Hãy chuẩn bị nội dung cho buổi mentoring và theo dõi lịch trong SkillSwap.",
+                    "Xem lịch mentoring"
+            )
+                    : new EmailContent(
                     "[SkillSwap] Lịch mentoring đã được thanh toán và hệ thống đã xác nhận lịch",
                     "Mentee đã hoàn tất thanh toán",
                     "Lịch mentoring đã được xác nhận sau khi hệ thống ghi nhận thanh toán thành công.",
@@ -154,11 +173,16 @@ public class BookingEmailListener {
     }
 
     private String buildIntro(BookingEmailNotificationEvent event, EmailContent content, String actorName) {
+        boolean isFree = Boolean.TRUE.equals(event.getServiceFree());
         if (event.getEventType() == BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL) {
-            return actorName + " đã chấp nhận yêu cầu mentoring của bạn. SkillSwap đã giữ lịch tạm thời để bạn hoàn tất thanh toán.";
+            return isFree
+                    ? "Mentor " + actorName + " đã chấp nhận yêu cầu học miễn phí của bạn. Lịch học đã được xác nhận thành công."
+                    : actorName + " đã chấp nhận yêu cầu mentoring của bạn. SkillSwap đã giữ lịch tạm thời để bạn hoàn tất thanh toán.";
         }
         if (event.getEventType() == BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL) {
-            return "Mentee " + actorName + " đã hoàn tất thanh toán. Lịch mentoring đã được xác nhận trên hệ thống.";
+            return isFree
+                    ? "Lịch học miễn phí với " + actorName + " đã được xác nhận thành công."
+                    : "Mentee " + actorName + " đã hoàn tất thanh toán. Lịch mentoring đã được xác nhận trên hệ thống.";
         }
         return content.summary();
     }

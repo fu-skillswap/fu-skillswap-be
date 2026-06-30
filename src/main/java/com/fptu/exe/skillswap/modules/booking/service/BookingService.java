@@ -319,7 +319,14 @@ public class BookingService {
                 selectedEndTime
         );
 
-        booking.setStatus(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
+                || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0);
+
+        if (isFree) {
+            booking.setStatus(BookingStatus.PAID);
+        } else {
+            booking.setStatus(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        }
         booking.setAcceptedAt(now);
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
         slot.setBooked(true);
@@ -336,14 +343,37 @@ public class BookingService {
         bookingRepository.saveAll(pendingBookings);
         Booking savedBooking = bookingRepository.save(booking);
 
-        notificationService.createNotification(
-                savedBooking.getMentee().getId(),
-                com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
-                "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán",
-                savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng 2 giờ.",
-                "BOOKING",
-                savedBooking.getId()
-        );
+        if (isFree) {
+            sessionService.createForAcceptedBooking(savedBooking);
+            conversationService.createDirectForAcceptedBooking(savedBooking);
+
+            notificationService.createNotification(
+                    savedBooking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
+                    "Mentor đã chấp nhận yêu cầu học miễn phí",
+                    savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring miễn phí của bạn. Buổi học đã được xác nhận.",
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+
+            notificationService.createNotification(
+                    savedBooking.getMentorProfile().getUserId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_CONFIRMED,
+                    "Lịch học miễn phí của bạn đã được xác nhận",
+                    "Bạn đã chấp nhận lịch học miễn phí với " + savedBooking.getMentee().getFullName() + ".",
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+        } else {
+            notificationService.createNotification(
+                    savedBooking.getMentee().getId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
+                    "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán",
+                    savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng 2 giờ.",
+                    "BOOKING",
+                    savedBooking.getId()
+            );
+        }
 
         for (Booking pendingBooking : pendingBookings) {
             if (!pendingBooking.getId().equals(booking.getId())) {
@@ -358,25 +388,67 @@ public class BookingService {
             }
         }
 
-        eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
-                .bookingId(savedBooking.getId())
-                .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
-                .recipientEmail(savedBooking.getMentee().getEmail())
-                .recipientName(savedBooking.getMentee().getFullName())
-                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
-                .bookingStartTime(savedBooking.getSelectedStartTime())
-                .bookingEndTime(savedBooking.getSelectedEndTime())
-                .learningGoalTitle(savedBooking.getLearningGoalTitle())
-                .learningGoalDescription(savedBooking.getLearningGoalDescription())
-                .serviceTitle(savedBooking.getServiceTitleSnapshot())
-                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
-                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
-                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
-                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
-                .mentorResponseNote(savedBooking.getMentorResponseNote())
-                .paymentDeadline(now.plusMinutes(PAYMENT_WINDOW_MINUTES))
-                .createdAt(DateTimeUtil.now())
-                .build());
+        if (isFree) {
+            // Email cho Mentee
+            eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                    .bookingId(savedBooking.getId())
+                    .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
+                    .recipientEmail(savedBooking.getMentee().getEmail())
+                    .recipientName(savedBooking.getMentee().getFullName())
+                    .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                    .bookingStartTime(savedBooking.getSelectedStartTime())
+                    .bookingEndTime(savedBooking.getSelectedEndTime())
+                    .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                    .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                    .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                    .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                    .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                    .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                    .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                    .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .createdAt(DateTimeUtil.now())
+                    .build());
+
+            // Email cho Mentor
+            eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                    .bookingId(savedBooking.getId())
+                    .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
+                    .recipientEmail(savedBooking.getMentorProfile().getUser().getEmail())
+                    .recipientName(savedBooking.getMentorProfile().getUser().getFullName())
+                    .actorName(savedBooking.getMentee().getFullName())
+                    .bookingStartTime(savedBooking.getSelectedStartTime())
+                    .bookingEndTime(savedBooking.getSelectedEndTime())
+                    .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                    .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                    .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                    .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                    .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                    .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                    .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                    .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .createdAt(DateTimeUtil.now())
+                    .build());
+        } else {
+            eventPublisher.publishEvent(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.builder()
+                    .bookingId(savedBooking.getId())
+                    .eventType(com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
+                    .recipientEmail(savedBooking.getMentee().getEmail())
+                    .recipientName(savedBooking.getMentee().getFullName())
+                    .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                    .bookingStartTime(savedBooking.getSelectedStartTime())
+                    .bookingEndTime(savedBooking.getSelectedEndTime())
+                    .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                    .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                    .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                    .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                    .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                    .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                    .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                    .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .paymentDeadline(now.plusMinutes(PAYMENT_WINDOW_MINUTES))
+                    .createdAt(DateTimeUtil.now())
+                    .build());
+        }
 
         return toBookingResponse(savedBooking);
     }
