@@ -66,7 +66,8 @@ public class BookingService {
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
     private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 24;
-    private static final long PAYMENT_WINDOW_MINUTES = 120;
+    private static final long PAYMENT_WINDOW_MINUTES = 360;
+    private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.ACCEPTED,
@@ -207,7 +208,7 @@ public class BookingService {
         return toBookingResponse(savedBooking);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PageResponse<BookingResponse> getMyBookings(UUID currentUserId, BookingListRequest request) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -249,6 +250,8 @@ public class BookingService {
                     : bookingRepository.findMyMentorBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
         };
 
+        recoverAwaitingPaymentBookings(page.getContent());
+
         java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsByBookingIds(bookingIds)
@@ -269,7 +272,7 @@ public class BookingService {
                 .build();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public BookingResponse getBookingDetail(UUID currentUserId, UUID bookingId) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -281,6 +284,7 @@ public class BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
+        recoverAwaitingPaymentBooking(booking);
 
         return toBookingResponse(booking);
     }
@@ -399,7 +403,9 @@ public class BookingService {
                     savedBooking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán",
-                    savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng 2 giờ.",
+                    savedBooking.getMentorProfile().getUser().getFullName()
+                            + " đã chấp nhận lịch mentoring của bạn. Vui lòng hoàn tất thanh toán trong vòng "
+                            + PAYMENT_DEADLINE_TEXT + ".",
                     "BOOKING",
                     savedBooking.getId()
             ));
@@ -475,7 +481,7 @@ public class BookingService {
                     .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
                     .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                     .mentorResponseNote(savedBooking.getMentorResponseNote())
-                    .paymentDeadline(now.plusMinutes(PAYMENT_WINDOW_MINUTES))
+                    .paymentDeadline(resolvePaymentDeadline(savedBooking))
                     .createdAt(DateTimeUtil.now())
                     .build());
         }
@@ -1239,6 +1245,47 @@ public class BookingService {
         return status == BookingStatus.PAID || status == BookingStatus.ACCEPTED;
     }
 
+    private void recoverAwaitingPaymentBookings(List<Booking> bookings) {
+        if (bookings == null || bookings.isEmpty()) {
+            return;
+        }
+        for (Booking booking : bookings) {
+            recoverAwaitingPaymentBooking(booking);
+        }
+    }
+
+    private void recoverAwaitingPaymentBooking(Booking booking) {
+        if (booking == null || booking.getId() == null || booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
+            return;
+        }
+        paymentOrderService.synchronizeProviderStatusForBooking(booking.getId());
+    }
+
+    private LocalDateTime resolvePaymentDeadline(Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+        LocalDateTime acceptedDeadline = booking.getAcceptedAt() == null
+                ? null
+                : booking.getAcceptedAt().plusMinutes(PAYMENT_WINDOW_MINUTES);
+        LocalDateTime startDeadline = booking.getSelectedStartTime();
+        if (startDeadline == null && booking.getSlot() != null) {
+            startDeadline = booking.getSlot().getStartTime();
+        }
+        if (acceptedDeadline == null) {
+            return startDeadline;
+        }
+        if (startDeadline == null) {
+            return acceptedDeadline;
+        }
+        return acceptedDeadline.isBefore(startDeadline) ? acceptedDeadline : startDeadline;
+    }
+
+    private boolean isPaymentDeadlineReached(Booking booking, LocalDateTime now) {
+        LocalDateTime deadline = resolvePaymentDeadline(booking);
+        return deadline != null && !deadline.isAfter(now);
+    }
+
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {
         if (slot == null || slot.getId() == null) {
             return;
@@ -1518,10 +1565,11 @@ public class BookingService {
     @Transactional
     public int expireAwaitingPaymentBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        LocalDateTime acceptedBefore = now.minusMinutes(PAYMENT_WINDOW_MINUTES);
-        List<UUID> staleBookingIds = bookingRepository.findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(
+        LocalDateTime acceptedAtCutoff = now.minusMinutes(PAYMENT_WINDOW_MINUTES);
+        List<UUID> staleBookingIds = bookingRepository.findAwaitingPaymentExpiryCandidates(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-                acceptedBefore
+                acceptedAtCutoff,
+                now
         ).stream().map(Booking::getId).toList();
         if (staleBookingIds.isEmpty()) {
             return 0;
@@ -1531,13 +1579,13 @@ public class BookingService {
             Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
             if (booking == null
                     || booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                    || booking.getAcceptedAt() == null
-                    || booking.getAcceptedAt().isAfter(acceptedBefore)) {
+                    || !isPaymentDeadlineReached(booking, now)) {
                 continue;
             }
             booking.setStatus(BookingStatus.EXPIRED);
             booking.setRejectedAt(now);
-            booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng 2 giờ.");
+            booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng "
+                    + PAYMENT_DEADLINE_TEXT + ".");
             if (booking.getSlot() != null
                     && booking.getSlot().getStartTime() != null
                     && now.isBefore(booking.getSlot().getStartTime())) {
@@ -1555,7 +1603,8 @@ public class BookingService {
                     booking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn thanh toán",
-                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng 2 giờ.",
+                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng "
+                            + PAYMENT_DEADLINE_TEXT + ".",
                     "BOOKING",
                     booking.getId()
             ));

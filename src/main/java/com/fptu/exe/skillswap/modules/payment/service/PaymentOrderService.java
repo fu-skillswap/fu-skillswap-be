@@ -199,12 +199,10 @@ public class PaymentOrderService {
         PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(verified.providerOrderCode())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
                         "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
-        PaymentOrder orderSnapshot = paymentOrderRepository.findById(attempt.getPaymentOrderId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(orderSnapshot.getBookingId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
 
         String providerEventId = resolveProviderEventId(verified);
         if (StringUtils.hasText(providerEventId)
@@ -249,6 +247,23 @@ public class PaymentOrderService {
             trySynchronizeProviderStatus(order, latestAttempt);
         }
         return toResponse(order, latestAttempt);
+    }
+
+    @Transactional
+    public void synchronizeProviderStatusForBooking(UUID bookingId) {
+        if (bookingId == null) {
+            return;
+        }
+        PaymentOrder order = paymentOrderRepository.findByBookingId(bookingId).orElse(null);
+        if (order == null) {
+            return;
+        }
+        PaymentAttempt latestAttempt = paymentAttemptRepository
+                .findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())
+                .orElse(null);
+        if (latestAttempt != null) {
+            trySynchronizeProviderStatus(order, latestAttempt);
+        }
     }
 
     @Transactional
@@ -340,6 +355,17 @@ public class PaymentOrderService {
         paymentOrderRepository.save(order);
     }
 
+    private void expireAwaitingPaymentOrder(PaymentOrder order) {
+        if (order == null || isFinal(order.getStatus())) {
+            return;
+        }
+        order.setStatus(PaymentOrderStatus.EXPIRED);
+        order.setFailedAt(DateTimeUtil.now());
+        rollbackReservedCredit(order);
+        couponService.voidRedemption(order.getId());
+        paymentOrderRepository.save(order);
+    }
+
     @Transactional
     public void expireAwaitingPayment(Booking booking) {
         if (booking == null || booking.getId() == null) {
@@ -350,7 +376,7 @@ public class PaymentOrderService {
             return;
         }
         if (isAwaitingPayment(order.getStatus())) {
-            cancelAwaitingPaymentOrder(order);
+            expireAwaitingPaymentOrder(order);
         }
     }
 
@@ -480,6 +506,7 @@ public class PaymentOrderService {
                     ? ""
                     : paymentLink.providerStatus().toUpperCase(Locale.ROOT);
             switch (providerStatus) {
+                case "PAID", "SUCCESS", "00" -> synchronizePaidProviderStatus(order, attempt, paymentLink);
                 case "CANCELLED" -> {
                     if (!isFinal(order.getStatus())) {
                         order.setStatus(PaymentOrderStatus.CANCELLED);
@@ -513,7 +540,7 @@ public class PaymentOrderService {
                 default -> paymentAttemptRepository.save(attempt);
             }
             paymentOrderRepository.save(order);
-        } catch (BaseException ex) {
+        } catch (Exception ex) {
             log.warn("Không thể đồng bộ trạng thái PayOS cho paymentOrderId={}: {}", order.getId(), ex.getMessage());
         }
     }
@@ -533,6 +560,35 @@ public class PaymentOrderService {
                 order.getId(),
                 "Rollback reserved credit for payment order " + order.getOrderCode()
         );
+    }
+
+    private void synchronizePaidProviderStatus(PaymentOrder order,
+                                               PaymentAttempt attempt,
+                                               PayOsGateway.PaymentLinkDetails paymentLink) {
+        PaymentAttempt lockedAttempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(attempt.getProviderOrderCode())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                        "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
+        PaymentOrder lockedOrder = paymentOrderRepository.findByIdForUpdate(lockedAttempt.getPaymentOrderId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(lockedOrder.getBookingId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+
+        lockedOrder.setProviderOrderCode(lockedAttempt.getProviderOrderCode());
+        lockedOrder.setProviderPaymentLinkId(paymentLink.providerPaymentLinkId());
+        lockedOrder.setProviderStatus(paymentLink.providerStatus());
+        lockedAttempt.setProviderPaymentLinkId(paymentLink.providerPaymentLinkId());
+        lockedAttempt.setProviderStatus(paymentLink.providerStatus());
+
+        if (lockedOrder.getStatus() != PaymentOrderStatus.PAID) {
+            finalizeInternalPayment(lockedOrder, lockedAttempt, lockedAttempt.getProviderTransactionId(),
+                    lockedAttempt.getProviderEventId(), paymentLink.providerStatus(), lockedBooking);
+            paymentOrderRepository.save(lockedOrder);
+        } else {
+            paymentAttemptRepository.save(lockedAttempt);
+        }
+
+        copyOrderState(order, lockedOrder);
+        copyAttemptState(attempt, lockedAttempt);
     }
 
     private void finalizeInternalPayment(PaymentOrder order,
@@ -706,6 +762,29 @@ public class PaymentOrderService {
             return verified.providerPaymentLinkId() + ":" + verified.providerOrderCode();
         }
         return verified.providerOrderCode();
+    }
+
+    private void copyOrderState(PaymentOrder target, PaymentOrder source) {
+        target.setStatus(source.getStatus());
+        target.setProviderOrderCode(source.getProviderOrderCode());
+        target.setProviderPaymentLinkId(source.getProviderPaymentLinkId());
+        target.setProviderStatus(source.getProviderStatus());
+        target.setProviderTransactionId(source.getProviderTransactionId());
+        target.setProviderEventId(source.getProviderEventId());
+        target.setPaidAt(source.getPaidAt());
+        target.setCancelledAt(source.getCancelledAt());
+        target.setFailedAt(source.getFailedAt());
+        target.setCreditFinalizedAt(source.getCreditFinalizedAt());
+    }
+
+    private void copyAttemptState(PaymentAttempt target, PaymentAttempt source) {
+        target.setStatus(source.getStatus());
+        target.setProviderOrderCode(source.getProviderOrderCode());
+        target.setProviderPaymentLinkId(source.getProviderPaymentLinkId());
+        target.setProviderTransactionId(source.getProviderTransactionId());
+        target.setProviderEventId(source.getProviderEventId());
+        target.setProviderStatus(source.getProviderStatus());
+        target.setFailureReason(source.getFailureReason());
     }
 
     private PaymentCheckoutResponse toResponse(PaymentOrder order, PaymentAttempt attempt) {

@@ -823,6 +823,32 @@ class BookingServiceTest {
     }
 
     @Test
+    void getMyBookings_awaitingPaymentBooking_shouldTriggerPaymentRecovery() {
+        Booking awaitingPayment = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        Booking paid = bookingForDecision(BookingStatus.PAID);
+        paid.setId(UUID.randomUUID());
+
+        BookingListRequest request = new BookingListRequest();
+        request.setRole(BookingViewRole.MENTEE);
+
+        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+                eq(menteeId),
+                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(awaitingPayment, paid)));
+
+        bookingService.getMyBookings(menteeId, request);
+
+        verify(paymentOrderService).synchronizeProviderStatusForBooking(awaitingPayment.getId());
+        verify(paymentOrderService, never()).synchronizeProviderStatusForBooking(paid.getId());
+    }
+
+    @Test
     void getAdminBookings_shouldUseSearchForAdminAndMapResponse() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
         AdminBookingListRequest request = new AdminBookingListRequest();
@@ -849,6 +875,17 @@ class BookingServiceTest {
         );
 
         assertEquals(ErrorCode.UNAUTHORIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void getBookingDetail_awaitingPaymentBooking_shouldTriggerPaymentRecovery() {
+        Booking booking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+
+        BookingResponse response = bookingService.getBookingDetail(menteeId, booking.getId());
+
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
+        verify(paymentOrderService).synchronizeProviderStatusForBooking(booking.getId());
     }
 
     @Test
@@ -1057,6 +1094,54 @@ class BookingServiceTest {
         verify(bookingRepository).saveAll(any());
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
+    }
+
+    @Test
+    void expireAwaitingPaymentBookings_afterSixHours_shouldExpireBookingAndPaymentOrder() {
+        Booking staleBooking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        staleBooking.setAcceptedAt(DateTimeUtil.now().minusHours(7));
+        staleBooking.setSelectedStartTime(DateTimeUtil.now().plusHours(2));
+        staleBooking.setSelectedEndTime(DateTimeUtil.now().plusHours(3));
+        slot.setStartTime(staleBooking.getSelectedStartTime());
+
+        when(bookingRepository.findAwaitingPaymentExpiryCandidates(
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).thenReturn(List.of(staleBooking));
+        when(bookingRepository.findByIdForSessionUpdate(staleBooking.getId())).thenReturn(Optional.of(staleBooking));
+        when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int expiredCount = bookingService.expireAwaitingPaymentBookings();
+
+        assertEquals(1, expiredCount);
+        assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
+        assertTrue(staleBooking.getRejectReason().contains("6 giờ hoặc trước giờ bắt đầu"));
+        verify(paymentOrderService).expireAwaitingPayment(staleBooking);
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+    }
+
+    @Test
+    void expireAwaitingPaymentBookings_beforeSixHoursButStartTimeReached_shouldExpireBooking() {
+        Booking staleBooking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
+        staleBooking.setAcceptedAt(DateTimeUtil.now().minusHours(1));
+        staleBooking.setSelectedStartTime(DateTimeUtil.now().minusMinutes(1));
+        staleBooking.setSelectedEndTime(DateTimeUtil.now().plusMinutes(59));
+        slot.setStartTime(staleBooking.getSelectedStartTime());
+
+        when(bookingRepository.findAwaitingPaymentExpiryCandidates(
+                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class)
+        )).thenReturn(List.of(staleBooking));
+        when(bookingRepository.findByIdForSessionUpdate(staleBooking.getId())).thenReturn(Optional.of(staleBooking));
+        when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        int expiredCount = bookingService.expireAwaitingPaymentBookings();
+
+        assertEquals(1, expiredCount);
+        assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
+        verify(paymentOrderService).expireAwaitingPayment(staleBooking);
     }
 
     @Test

@@ -374,6 +374,23 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(BookingStatus status, LocalDateTime acceptedAtBefore);
 
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and (
+                    booking.acceptedAt <= :acceptedAtCutoff
+                    or booking.selectedStartTime <= :startTimeCutoff
+              )
+            order by booking.acceptedAt asc, booking.selectedStartTime asc, booking.id asc
+            """)
+    List<Booking> findAwaitingPaymentExpiryCandidates(
+            @Param("status") BookingStatus status,
+            @Param("acceptedAtCutoff") LocalDateTime acceptedAtCutoff,
+            @Param("startTimeCutoff") LocalDateTime startTimeCutoff
+    );
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update Booking b

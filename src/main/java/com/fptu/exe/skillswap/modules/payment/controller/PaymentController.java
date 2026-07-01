@@ -45,7 +45,7 @@ public class PaymentController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
 
-    @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS mới là nguồn chốt PAID; endpoint này chỉ trả trạng thái backend hiện tại và đồng bộ soft status từ provider nếu cần.")
+    @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS vẫn là nguồn chốt chính; nếu webhook bị trễ hoặc miss, backend sẽ fallback đồng bộ từ PayOS và tự finalize khi provider đã xác nhận PAID/SUCCESS.")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me/payment-orders/{bookingId}")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByBookingId(
