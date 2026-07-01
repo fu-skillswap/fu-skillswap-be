@@ -174,12 +174,7 @@ public class MentorAvailabilityService {
         if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
             services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
         } else {
-            services = mentorServiceRepository.findAllById(request.serviceIds());
-            for (MentorService service : services) {
-                if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
-                    throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
-                }
-            }
+            services = resolveManagedServices(mentorUserId, request.serviceIds());
         }
 
         if (!services.isEmpty()) {
@@ -188,6 +183,7 @@ public class MentorAvailabilityService {
                     .toList();
             replaceSlotServices(savedSlot, slotServices);
         }
+        touchMentorActivity(mentorProfile, now());
 
         return toManagedSlotResponse(savedSlot);
     }
@@ -245,12 +241,7 @@ public class MentorAvailabilityService {
         if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
             services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
         } else {
-            services = mentorServiceRepository.findAllById(request.serviceIds());
-            for (MentorService service : services) {
-                if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
-                    throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
-                }
-            }
+            services = resolveManagedServices(mentorUserId, request.serviceIds());
         }
 
         if (!services.isEmpty()) {
@@ -259,6 +250,7 @@ public class MentorAvailabilityService {
                     .toList();
             replaceSlotServices(slot, slotServices);
         }
+        touchMentorActivity(slot.getMentorProfile(), now());
 
         MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
         return toManagedSlotResponse(updatedSlot);
@@ -310,6 +302,7 @@ public class MentorAvailabilityService {
             rule.setActive(false);
             mentorAvailabilityRuleRepository.save(rule);
         }
+        touchMentorActivity(slot.getMentorProfile(), now());
     }
 
     @Transactional(readOnly = true)
@@ -871,6 +864,33 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ mentor đã được xác thực mới có thể cấu hình lịch rảnh");
         }
         return mentorProfile;
+    }
+
+    private List<MentorService> resolveManagedServices(UUID mentorUserId, Collection<UUID> requestedServiceIds) {
+        List<MentorService> services = mentorServiceRepository.findAllById(requestedServiceIds);
+
+        Set<UUID> missingServiceIds = requestedServiceIds.stream()
+                .filter(serviceId -> services.stream().noneMatch(service -> service.getId().equals(serviceId)))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (!missingServiceIds.isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều dịch vụ không tồn tại");
+        }
+
+        for (MentorService service : services) {
+            if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
+                throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
+            }
+        }
+        return services;
+    }
+
+    private void touchMentorActivity(MentorProfile mentorProfile, LocalDateTime activityTime) {
+        if (mentorProfile == null || activityTime == null) {
+            return;
+        }
+        if (mentorProfile.getLastActiveAt() == null || mentorProfile.getLastActiveAt().isBefore(activityTime)) {
+            mentorProfile.setLastActiveAt(activityTime);
+        }
     }
 
     private UpsertAvailabilityRuleRequest validateRuleRequest(UpsertAvailabilityRuleRequest request) {

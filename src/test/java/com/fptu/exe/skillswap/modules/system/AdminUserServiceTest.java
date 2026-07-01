@@ -155,6 +155,24 @@ class AdminUserServiceTest {
     }
 
     @Test
+    void changeUserStatus_unbanNotificationFailure_shouldNotRollbackPrimaryAction() {
+        targetUser.setStatus(UserStatus.BANNED);
+        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(targetUser));
+        when(userRepository.findRoleCodesByUserId(userId)).thenReturn(List.of(RoleCode.MENTEE));
+        doThrow(new RuntimeException("notification failed"))
+                .when(notificationService)
+                .createNotification(eq(userId), any(), any(), any(), any(), eq(userId));
+
+        SystemUserResponse response = adminUserService.changeUserStatus(adminId, userId, false, "Recovered");
+
+        assertNotNull(response);
+        assertEquals(UserStatus.ACTIVE, targetUser.getStatus());
+        verify(userRepository).save(targetUser);
+        verify(auditLogRepository).save(any(AuditLog.class));
+    }
+
+    @Test
     void changeUserStatus_banWithSpecialCharactersInReason() {
         when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
         when(userRepository.findById(userId)).thenReturn(Optional.of(targetUser));

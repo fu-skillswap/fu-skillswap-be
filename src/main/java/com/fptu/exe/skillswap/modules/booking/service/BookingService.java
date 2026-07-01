@@ -351,6 +351,16 @@ public class BookingService {
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
         slot.setBooked(true);
 
+        MentorProfile mentorProfile = booking.getMentorProfile();
+        if (mentorProfile != null) {
+            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            entityManager.refresh(lockedProfile);
+            lockedProfile.setTotalAcceptedBookings(defaultInteger(lockedProfile.getTotalAcceptedBookings()) + 1);
+            touchMentorActivity(lockedProfile, now);
+            mentorProfileRepository.save(lockedProfile);
+        }
+
         for (Booking pendingBooking : pendingBookings) {
             if (pendingBooking.getId().equals(booking.getId())) {
                 continue;
@@ -514,6 +524,7 @@ public class BookingService {
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
             entityManager.refresh(lockedProfile);
             lockedProfile.setTotalRejectedBookings(defaultInteger(lockedProfile.getTotalRejectedBookings()) + 1);
+            touchMentorActivity(lockedProfile, DateTimeUtil.now());
             mentorProfileRepository.save(lockedProfile);
         }
 
@@ -668,6 +679,15 @@ public class BookingService {
             }
         }
 
+        MentorProfile mentorProfile = booking.getMentorProfile();
+        if (mentorProfile != null) {
+            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+            entityManager.refresh(lockedProfile);
+            touchMentorActivity(lockedProfile, now);
+            mentorProfileRepository.save(lockedProfile);
+        }
+
         Booking savedBooking = bookingRepository.save(booking);
         settlementService.releaseForBooking(savedBooking);
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
@@ -726,6 +746,7 @@ public class BookingService {
             entityManager.refresh(lockedProfile);
             lockedProfile.setTotalCompletedSessions(defaultInteger(lockedProfile.getTotalCompletedSessions()) + 1);
             lockedProfile.setTotalSessions(defaultInteger(lockedProfile.getTotalSessions()) + 1);
+            touchMentorActivity(lockedProfile, now);
             mentorProfileRepository.save(lockedProfile);
         }
 
@@ -1231,6 +1252,15 @@ public class BookingService {
         slot.setBooked(hasAcceptedBookings);
     }
 
+    private void touchMentorActivity(MentorProfile mentorProfile, LocalDateTime activityTime) {
+        if (mentorProfile == null || activityTime == null) {
+            return;
+        }
+        if (mentorProfile.getLastActiveAt() == null || mentorProfile.getLastActiveAt().isBefore(activityTime)) {
+            mentorProfile.setLastActiveAt(activityTime);
+        }
+    }
+
     private int defaultInteger(Integer value) {
         return value == null ? 0 : value;
     }
@@ -1310,6 +1340,8 @@ public class BookingService {
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
             entityManager.refresh(lockedProfile);
             applyMentorCancellationPenalty(lockedProfile, minutesUntilStart, now);
+            lockedProfile.setTotalMentorCancelledBookings(defaultInteger(lockedProfile.getTotalMentorCancelledBookings()) + 1);
+            touchMentorActivity(lockedProfile, now);
             mentorProfileRepository.save(lockedProfile);
         }
 

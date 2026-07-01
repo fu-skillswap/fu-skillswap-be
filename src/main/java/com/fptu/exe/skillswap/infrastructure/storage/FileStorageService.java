@@ -18,23 +18,30 @@ import java.util.UUID;
 @Service
 public class FileStorageService {
 
+    private static final String STORAGE_NOT_READY_MESSAGE = "Dịch vụ lưu trữ tệp hiện chưa sẵn sàng. Vui lòng kiểm tra cấu hình application.upload.dir và quyền ghi thư mục.";
+
     @Value("${application.upload.dir:./uploads/files}")
     private String uploadDir;
 
     private Path uploadPath;
+    private volatile boolean storageReady;
 
     @PostConstruct
     public void init() {
         uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(uploadPath);
+            storageReady = true;
             log.info("File storage initialized at {}", uploadPath);
         } catch (IOException e) {
-            throw new IllegalStateException("Không thể khởi tạo thư mục lưu tệp tại: " + uploadPath, e);
+            storageReady = false;
+            log.error("File storage initialization failed at {}", uploadPath, e);
         }
     }
 
     public String store(MultipartFile file) throws IOException {
+        ensureStorageReady();
+
         String originalFilename = file.getOriginalFilename();
         String extension = (originalFilename != null && originalFilename.contains("."))
                 ? originalFilename.substring(originalFilename.lastIndexOf("."))
@@ -57,6 +64,8 @@ public class FileStorageService {
     }
 
     public InputStream loadAsStream(String relativePath) throws IOException {
+        ensureStorageReady();
+
         String filename = Paths.get(relativePath).getFileName().toString();
         Path filePath = uploadPath.resolve(filename).normalize();
 
@@ -72,6 +81,10 @@ public class FileStorageService {
     }
 
     public void delete(String relativePath) {
+        if (!storageReady || uploadPath == null) {
+            log.warn("Skipped deleting file because storage is not ready: {}", relativePath);
+            return;
+        }
         try {
             String filename = Paths.get(relativePath).getFileName().toString();
             Path filePath = uploadPath.resolve(filename).normalize();
@@ -83,6 +96,12 @@ public class FileStorageService {
             log.info("File deleted: {}", filePath);
         } catch (IOException e) {
             log.warn("Could not delete file: {}, reason={}", relativePath, e.getMessage());
+        }
+    }
+
+    private void ensureStorageReady() {
+        if (!storageReady || uploadPath == null) {
+            throw new IllegalStateException(STORAGE_NOT_READY_MESSAGE);
         }
     }
 }

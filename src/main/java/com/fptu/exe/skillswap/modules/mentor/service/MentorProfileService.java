@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -83,6 +84,7 @@ public class MentorProfileService {
         profile.setLinkedinUrl(cleanNullable(request.linkedinUrl()));
         profile.setGithubUrl(cleanNullable(request.githubUrl()));
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
+        touchMentorActivity(profile, LocalDateTime.now());
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
         replaceHelpTopics(savedProfile, helpTopics);
@@ -245,6 +247,15 @@ public class MentorProfileService {
 
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityTime) {
+        if (profile == null || activityTime == null) {
+            return;
+        }
+        if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(activityTime)) {
+            profile.setLastActiveAt(activityTime);
+        }
     }
 
     private void requireUserId(UUID userId) {

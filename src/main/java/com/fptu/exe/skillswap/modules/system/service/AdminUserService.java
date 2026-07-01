@@ -28,8 +28,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +43,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminUserService {
 
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "lastLoginAt", "fullName", "email", "status");
@@ -125,14 +129,7 @@ public class AdminUserService {
 
         userRepository.save(user);
         if (!ban && oldStatus == UserStatus.BANNED) {
-            notificationService.createNotification(
-                    userId,
-                    NotificationType.ACCOUNT_UNLOCKED,
-                    "Tài khoản của bạn đã được mở lại",
-                    "Bạn có thể đăng nhập và tiếp tục sử dụng SkillSwap bình thường.",
-                    "USER",
-                    userId
-            );
+            notifyAccountUnlockedSafely(userId);
         }
 
         // Save Audit Log
@@ -161,6 +158,35 @@ public class AdminUserService {
                 .createdAt(user.getCreatedAt())
                 .academicProfile(buildAcademicResponse(profile))
                 .build();
+    }
+
+    private void notifyAccountUnlockedSafely(UUID userId) {
+        Runnable notificationTask = () -> {
+            try {
+                notificationService.createNotification(
+                        userId,
+                        NotificationType.ACCOUNT_UNLOCKED,
+                        "Tài khoản của bạn đã được mở lại",
+                        "Bạn có thể đăng nhập và tiếp tục sử dụng SkillSwap bình thường.",
+                        "USER",
+                        userId
+                );
+            } catch (Exception ex) {
+                log.warn("Failed to create account unlocked notification for user {}", userId, ex);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notificationTask.run();
+                }
+            });
+            return;
+        }
+
+        notificationTask.run();
     }
 
     private Pageable buildPageable(AdminUserListRequest request) {

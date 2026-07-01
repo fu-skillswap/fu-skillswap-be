@@ -63,6 +63,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                       and mt.id.tagId in :tagIds
               ))
             order by mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last,
+                     mp.totalAcceptedBookings desc nulls last, mp.lastActiveAt desc nulls last,
                      mp.updatedAt desc nulls last, mp.userId asc
             """,
             countQuery = """
@@ -160,6 +161,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                    function('translate', lower(coalesce(mp.supportingSubjects, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(sp.bio, '')) like :keywordPattern or
                    function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.searchDocument, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.searchDocument, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(campus.name, '')) like :keywordPattern or
                    function('translate', lower(coalesce(campus.name, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(program.nameVi, '')) like :keywordPattern or
@@ -240,6 +243,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                    function('translate', lower(coalesce(mp.supportingSubjects, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(sp.bio, '')) like :keywordPattern or
                    function('translate', lower(coalesce(sp.bio, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                   lower(coalesce(mp.searchDocument, '')) like :keywordPattern or
+                   function('translate', lower(coalesce(mp.searchDocument, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(campus.name, '')) like :keywordPattern or
                    function('translate', lower(coalesce(campus.name, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
                    lower(coalesce(program.nameVi, '')) like :keywordPattern or
@@ -302,6 +307,14 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             LEFT JOIN student_profiles sp ON sp.user_id = mp.user_id
             WHERE mp.status = 'ACTIVE'
               AND u.status = 'ACTIVE'
+              AND EXISTS (
+                  SELECT 1 FROM user_roles urm
+                  WHERE urm.user_id = u.id AND urm.role = 'MENTOR'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_roles ura
+                  WHERE ura.user_id = u.id AND ura.role IN ('ADMIN', 'SYSTEM_ADMIN')
+              )
               AND mp.is_available = true
               AND (mp.booking_suspended_until IS NULL OR mp.booking_suspended_until <= CAST(:now AS timestamp))
               AND mp.verified_at IS NOT NULL
@@ -321,38 +334,22 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                   WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
                     AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
               ))
-              AND (
-                  mp.search_vector @@ plainto_tsquery('simple', :keyword)
-                  OR EXISTS (
-                      SELECT 1 FROM mentor_tags mt2
-                      JOIN tags t ON t.id = mt2.tag_id
-                      WHERE mt2.mentor_user_id = mp.user_id
-                        AND to_tsvector(
-                            'simple',
-                            translate(
-                                lower(coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,'')),
-                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
-                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
-                            )
-                        )
-                            @@ plainto_tsquery('simple', :keyword)
-                  )
-                  OR EXISTS (
-                      SELECT 1 FROM mentor_services ms
-                      WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
-                        AND to_tsvector(
-                            'simple',
-                            translate(
-                                lower(coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,'')),
-                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
-                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
-                            )
-                        )
-                            @@ plainto_tsquery('simple', :keyword)
-                  )
-              )
-            ORDER BY mp.average_rating DESC NULLS LAST,
+              AND mp.search_vector @@ plainto_tsquery('simple', :keyword)
+            ORDER BY (
+                        COALESCE(ts_rank_cd(mp.search_vector, plainto_tsquery('simple', :keyword)), 0) * 100
+                        + LEAST(COALESCE(mp.total_accepted_bookings, 0), 40) * 0.03
+                        - LEAST(COALESCE(mp.total_rejected_bookings, 0), 40) * 0.01
+                        - LEAST(COALESCE(mp.total_mentor_cancelled_bookings, 0), 20) * 0.08
+                        + CASE
+                            WHEN mp.last_active_at >= CAST(:now AS timestamp) - INTERVAL '14 days' THEN 1.20
+                            WHEN mp.last_active_at >= CAST(:now AS timestamp) - INTERVAL '30 days' THEN 0.60
+                            ELSE 0
+                          END
+                     ) DESC,
+                     mp.average_rating DESC NULLS LAST,
                      mp.total_completed_sessions DESC NULLS LAST,
+                     mp.total_accepted_bookings DESC NULLS LAST,
+                     mp.last_active_at DESC NULLS LAST,
                      mp.verified_at DESC NULLS LAST,
                      mp.user_id ASC
             LIMIT :limitSize OFFSET :offsetVal
@@ -375,6 +372,14 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             LEFT JOIN student_profiles sp ON sp.user_id = mp.user_id
             WHERE mp.status = 'ACTIVE'
               AND u.status = 'ACTIVE'
+              AND EXISTS (
+                  SELECT 1 FROM user_roles urm
+                  WHERE urm.user_id = u.id AND urm.role = 'MENTOR'
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM user_roles ura
+                  WHERE ura.user_id = u.id AND ura.role IN ('ADMIN', 'SYSTEM_ADMIN')
+              )
               AND mp.is_available = true
               AND (mp.booking_suspended_until IS NULL OR mp.booking_suspended_until <= CAST(:now AS timestamp))
               AND mp.verified_at IS NOT NULL
@@ -394,36 +399,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                   WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
                     AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
               ))
-              AND (
-                  mp.search_vector @@ plainto_tsquery('simple', :keyword)
-                  OR EXISTS (
-                      SELECT 1 FROM mentor_tags mt2
-                      JOIN tags t ON t.id = mt2.tag_id
-                      WHERE mt2.mentor_user_id = mp.user_id
-                        AND to_tsvector(
-                            'simple',
-                            translate(
-                                lower(coalesce(t.name_vi,'') || ' ' || coalesce(t.name_en,'') || ' ' || coalesce(t.code,'')),
-                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
-                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
-                            )
-                        )
-                            @@ plainto_tsquery('simple', :keyword)
-                  )
-                  OR EXISTS (
-                      SELECT 1 FROM mentor_services ms
-                      WHERE ms.mentor_user_id = mp.user_id AND ms.is_active = true
-                        AND to_tsvector(
-                            'simple',
-                            translate(
-                                lower(coalesce(ms.title,'') || ' ' || coalesce(ms.description,'') || ' ' || coalesce(ms.expected_outcome,'')),
-                                'àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ',
-                                'aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy'
-                            )
-                        )
-                            @@ plainto_tsquery('simple', :keyword)
-                  )
-              )
+              AND mp.search_vector @@ plainto_tsquery('simple', :keyword)
             """, nativeQuery = true)
     long countDiscoverableCandidatesByFts(
             @Param("keyword") String keyword,
@@ -458,6 +434,10 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 specialization.nameVi,
                 sp.semester,
                 sp.isAlumni,
+                mp.totalAcceptedBookings,
+                mp.totalRejectedBookings,
+                mp.totalMentorCancelledBookings,
+                mp.lastActiveAt,
                 null
             )
             from MentorProfile mp
@@ -475,6 +455,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 mp.userId, u.fullName, u.avatarUrl, mp.headline, mp.expertiseDescription, mp.supportingSubjects,
                 sp.bio, mp.isAvailable, mp.averageRating, mp.totalReviews, mp.totalCompletedSessions, mp.teachingMode, mp.verifiedAt,
                 campus.id, campus.name, program.id, program.nameVi, specialization.id, specialization.nameVi, sp.semester, sp.isAlumni,
+                mp.totalAcceptedBookings, mp.totalRejectedBookings, mp.totalMentorCancelledBookings, mp.lastActiveAt,
                 null
             )
             from MentorProfile mp
@@ -502,7 +483,12 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
               )
-            order by mp.verifiedAt desc nulls last, mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last, mp.updatedAt desc nulls last
+            order by mp.totalAcceptedBookings desc nulls last,
+                     mp.lastActiveAt desc nulls last,
+                     mp.verifiedAt desc nulls last,
+                     mp.averageRating desc nulls last,
+                     mp.totalCompletedSessions desc nulls last,
+                     mp.updatedAt desc nulls last
             """)
     List<MentorDiscoveryQueryRow> findRecommendationCandidatesSortedByRelevance(
             @Param("mentorStatus") MentorStatus mentorStatus,

@@ -19,6 +19,7 @@ import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -78,6 +79,7 @@ public class MentorServiceManagementService {
                 .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
 
+        touchMentorActivity(mentorProfile, LocalDateTime.now());
         return toResponse(mentorServiceRepository.save(service));
     }
 
@@ -96,6 +98,7 @@ public class MentorServiceManagementService {
         service.setFree(Boolean.TRUE.equals(request.isFree()));
         service.setPriceScoin(normalizePriceScoin(request.isFree(), request.priceScoin()));
         replaceHelpTopics(service, helpTopics);
+        touchMentorActivity(mentorProfile, LocalDateTime.now());
 
         return toResponse(mentorServiceRepository.save(service));
     }
@@ -109,6 +112,7 @@ public class MentorServiceManagementService {
 
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
         service.setActive(active);
+        touchMentorActivity(mentorProfile, LocalDateTime.now());
         return toResponse(mentorServiceRepository.save(service));
     }
 
@@ -117,6 +121,7 @@ public class MentorServiceManagementService {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
         service.setActive(false);
+        touchMentorActivity(mentorProfile, LocalDateTime.now());
         return toResponse(mentorServiceRepository.save(service));
     }
 
@@ -254,6 +259,15 @@ public class MentorServiceManagementService {
 
     private Integer defaultInteger(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityTime) {
+        if (profile == null || activityTime == null) {
+            return;
+        }
+        if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(activityTime)) {
+            profile.setLastActiveAt(activityTime);
+        }
     }
 
     private ActiveFilterMode resolveActiveFilter(String activeFilter) {

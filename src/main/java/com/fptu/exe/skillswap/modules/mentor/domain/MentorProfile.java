@@ -16,7 +16,8 @@ import java.util.UUID;
     @Index(name = "idx_mentor_profiles_avg_rating", columnList = "average_rating"),
     @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
     @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode"),
-    @Index(name = "idx_mentor_profiles_booking_suspended_until", columnList = "booking_suspended_until")
+    @Index(name = "idx_mentor_profiles_booking_suspended_until", columnList = "booking_suspended_until"),
+    @Index(name = "idx_mentor_profiles_last_active_at", columnList = "last_active_at")
 })
 @Getter
 @Setter
@@ -47,6 +48,9 @@ public class MentorProfile {
 
     @Column(name = "supporting_subjects", columnDefinition = "TEXT")
     private String supportingSubjects;
+
+    @Column(name = "search_document", columnDefinition = "TEXT")
+    private String searchDocument;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "teaching_mode", length = 20)
@@ -88,6 +92,14 @@ public class MentorProfile {
     @Builder.Default
     private Integer totalRejectedBookings = 0;
 
+    @Column(name = "total_accepted_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalAcceptedBookings = 0;
+
+    @Column(name = "total_mentor_cancelled_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalMentorCancelledBookings = 0;
+
     @Column(name = "late_cancellation_penalty_points", nullable = false, precision = 6, scale = 2)
     @Builder.Default
     private BigDecimal lateCancellationPenaltyPoints = BigDecimal.ZERO;
@@ -101,6 +113,9 @@ public class MentorProfile {
 
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
+
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "verified_by", foreignKey = @ForeignKey(name = "fk_mentor_profiles_verifier"))

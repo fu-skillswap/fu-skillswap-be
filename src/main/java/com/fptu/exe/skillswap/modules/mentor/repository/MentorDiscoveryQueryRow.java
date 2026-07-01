@@ -28,6 +28,10 @@ public record MentorDiscoveryQueryRow(
         String specializationName,
         Integer semester,
         Boolean alumni,
+        Integer acceptedBookingCount,
+        Integer rejectedBookingCount,
+        Integer mentorCancelledBookingCount,
+        LocalDateTime lastActiveAt,
         Double matchScore
 ) {
 }

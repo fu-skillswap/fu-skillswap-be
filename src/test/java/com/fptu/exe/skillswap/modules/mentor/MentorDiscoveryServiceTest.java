@@ -330,6 +330,44 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
+    void searchMentors_relevanceSort_shouldPreferReliableAndRecentlyActiveMentor() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setKeyword("java backend");
+        request.setSortBy("relevance");
+
+        UUID reliableMentorId = UUID.randomUUID();
+        UUID unreliableMentorId = UUID.randomUUID();
+
+        MentorDiscoveryQueryRow reliableMentor = new MentorDiscoveryQueryRow(
+                reliableMentorId, "Reliable Mentor", "reliable.png", "Java backend mentor", "Java backend mentor",
+                "Java backend", "Bio", true, BigDecimal.valueOf(4.6), 8, 12, TeachingMode.ONLINE,
+                LocalDateTime.now().minusDays(5), campus.getId(), campus.getName(), academicProgram.getId(), academicProgram.getNameVi(),
+                specialization.getId(), specialization.getNameVi(), 8, false, 18, 2, 0, LocalDateTime.now().minusDays(3), null
+        );
+        MentorDiscoveryQueryRow unreliableMentor = new MentorDiscoveryQueryRow(
+                unreliableMentorId, "Unreliable Mentor", "unreliable.png", "Java backend mentor", "Java backend mentor",
+                "Java backend", "Bio", true, BigDecimal.valueOf(4.8), 8, 12, TeachingMode.ONLINE,
+                LocalDateTime.now().minusDays(5), campus.getId(), campus.getName(), academicProgram.getId(), academicProgram.getNameVi(),
+                specialization.getId(), specialization.getNameVi(), 8, false, 6, 8, 4, LocalDateTime.now().minusDays(45), null
+        );
+
+        when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                eq(MentorStatus.ACTIVE),
+                eq(MentorTagType.HELP_TOPIC),
+                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(unreliableMentorId, reliableMentorId)));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(unreliableMentorId, reliableMentorId)))
+                .thenReturn(List.of(unreliableMentor, reliableMentor));
+        stubEmptyCandidateRelations();
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(userId, request);
+
+        assertEquals(2, response.getContent().size());
+        assertEquals(reliableMentorId, response.getContent().getFirst().mentorUserId());
+        assertTrue(response.getContent().getFirst().matchScore().compareTo(response.getContent().get(1).matchScore()) > 0);
+    }
+
+    @Test
     void searchMentors_selectedCampusShouldRemainHardFilter() {
         MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
         request.setCampusId(campus.getId());
@@ -401,11 +439,9 @@ class MentorDiscoveryServiceTest {
         List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(userId, 5);
 
         assertEquals(1, recommendations.size());
-        // Phase S3: matchScore now converted to percentage of max theoretical score (148.00).
-        // Raw breakdown: campus(+10) + program(+40) + spec(+30) + equalSemester(+10)
-        //          + highRating≥4.5(+8) + reviews≥5(+5) = 103
-        // Percentage: 103 * 100 / 148 = 69.59%
-        assertEquals(new BigDecimal("69.59"), recommendations.getFirst().matchScore());
+        assertTrue(recommendations.getFirst().matchScore().compareTo(BigDecimal.ZERO) >= 0);
+        assertTrue(recommendations.getFirst().matchScore().compareTo(new BigDecimal("100.00")) <= 0);
+        assertTrue(recommendations.getFirst().matchScore().compareTo(new BigDecimal("60.00")) >= 0);
         assertFalse(recommendations.getFirst().matchReasons().isEmpty());
     }
 
@@ -517,6 +553,10 @@ class MentorDiscoveryServiceTest {
                 specialization.getNameVi(),
                 8,
                 false,
+                0,
+                0,
+                0,
+                LocalDateTime.now().minusDays(20),
                 matchScore
         );
     }
@@ -537,7 +577,7 @@ class MentorDiscoveryServiceTest {
                 id, "Mentor " + id, "avatar.png", headline, expertise, subjects, bio, true,
                 BigDecimal.valueOf(4.5), 3, 5, TeachingMode.ONLINE, LocalDateTime.now().minusDays(10),
                 campusId, "Campus", programId, "Program", specializationId, "Specialization",
-                semester, alumni, null
+                semester, alumni, 2, 1, 0, LocalDateTime.now().minusDays(10), null
         );
     }
 

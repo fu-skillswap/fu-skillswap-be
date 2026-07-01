@@ -174,15 +174,15 @@ class MentorAvailabilityServiceTest {
 
     @Test
     void createSlotDirectly_withServices_assignsCompositeIdsIntoManagedSlotCollection() {
+        UUID serviceId = UUID.randomUUID();
         CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
                 LocalDateTime.now().plusDays(1),
                 LocalDateTime.now().plusDays(1).plusHours(2),
                 "Note",
-                List.of(UUID.randomUUID())
+                List.of(serviceId)
         );
 
         MentorService mentorService = new MentorService();
-        UUID serviceId = UUID.randomUUID();
         mentorService.setId(serviceId);
         mentorService.setMentorProfile(mentorProfile);
         mentorService.setActive(true);
@@ -217,6 +217,29 @@ class MentorAvailabilityServiceTest {
         assertEquals(slotId, binding.getId().getSlotId());
         assertEquals(serviceId, binding.getId().getServiceId());
         verify(availabilitySlotServiceRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void createSlotDirectly_withMissingServiceIds_shouldThrowBadRequest() {
+        UUID requestedServiceId = UUID.randomUUID();
+        CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(1),
+                LocalDateTime.now().plusDays(1).plusHours(2),
+                "Note",
+                List.of(requestedServiceId)
+        );
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
+                .thenReturn(Optional.of(mentorProfile));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+                .thenReturn(false);
+        when(mentorServiceRepository.findAllById(request.serviceIds()))
+                .thenReturn(List.of());
+
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
+
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
     }
 
     @Test
@@ -284,6 +307,40 @@ class MentorAvailabilityServiceTest {
         // Act & Assert
         BaseException ex = assertThrows(BaseException.class, () ->
                 mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void updateSlotDirectly_withMissingServiceIds_shouldThrowBadRequest() {
+        UUID slotId = UUID.randomUUID();
+        UUID missingServiceId = UUID.randomUUID();
+        UpdateAvailabilitySlotRequest request = new UpdateAvailabilitySlotRequest(
+                LocalDateTime.now().plusDays(2),
+                LocalDateTime.now().plusDays(2).plusHours(2),
+                "Updated Note",
+                List.of(missingServiceId)
+        );
+
+        MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .rule(rule)
+                .startTime(LocalDateTime.now().plusDays(1))
+                .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .isActive(true)
+                .isBooked(false)
+                .build();
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, request.startTime(), request.endTime()))
+                .thenReturn(false);
+        when(mentorServiceRepository.findAllById(request.serviceIds()))
+                .thenReturn(List.of());
+
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
+
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
     }
 

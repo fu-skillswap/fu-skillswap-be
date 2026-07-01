@@ -97,9 +97,23 @@ public class MentorDiscoveryService {
     private static final BigDecimal ACTIVE_SERVICE_BONUS_SCORE = decimal(5);
     private static final BigDecimal HAS_AVAILABILITY_BONUS_SCORE = decimal(15);
     private static final BigDecimal MAX_SEARCH_PERSONALIZATION_SCORE = decimal(100);
-    private static final BigDecimal MAX_SEARCH_QUALITY_SCORE = decimal(35);
+    private static final BigDecimal MAX_SEARCH_QUALITY_SCORE = decimal(38);
     private static final BigDecimal MAX_PERCENTAGE_SCORE = decimal(100);
     private static final int MAX_SEARCH_SERVICE_BONUS_COUNT = 3;
+    private static final BigDecimal BAYESIAN_PRIOR_RATING = decimal("4.50");
+    private static final int BAYESIAN_MIN_REVIEWS = 5;
+    private static final BigDecimal RATING_QUALITY_MULTIPLIER = decimal("3.00");
+    private static final BigDecimal MAX_REVIEW_VOLUME_SCORE = decimal("5.00");
+    private static final BigDecimal MAX_SESSION_VOLUME_SCORE = decimal("5.00");
+    private static final BigDecimal ACCEPTANCE_RATE_PRIOR = decimal("0.75");
+    private static final int ACCEPTANCE_RATE_PRIOR_DECISIONS = 6;
+    private static final BigDecimal MAX_ACCEPTANCE_RATE_SCORE = decimal("6.00");
+    private static final BigDecimal CANCELLATION_RELIABILITY_PRIOR = decimal("0.90");
+    private static final int CANCELLATION_RELIABILITY_PRIOR_ACCEPTANCES = 4;
+    private static final BigDecimal MAX_CANCELLATION_RELIABILITY_SCORE = decimal("4.00");
+    private static final BigDecimal RECENT_ACTIVITY_14D_BONUS = decimal("3.00");
+    private static final BigDecimal RECENT_ACTIVITY_30D_BONUS = decimal("1.50");
+    private static final BigDecimal MAX_RECOMMENDATION_QUALITY_SCORE = decimal(38);
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
@@ -506,11 +520,9 @@ public class MentorDiscoveryService {
                 .add(SAME_SPECIALIZATION_SCORE)
                 .add(SAME_CAMPUS_SCORE)
                 .add(MENTOR_ALUMNI_SCORE)
-                .add(QUALITY_HIGH_RATING_BONUS)
-                .add(QUALITY_CREDIBLE_REVIEWS_BONUS)
-                .add(QUALITY_EXPERIENCED_SESSIONS_BONUS)
+                .add(MAX_RECOMMENDATION_QUALITY_SCORE)
                 .add(HAS_AVAILABILITY_BONUS_SCORE)
-                .add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(3)));
+                .add(serviceBonusScore(MAX_SEARCH_SERVICE_BONUS_COUNT));
 
         BigDecimal percentageScore = BigDecimal.ZERO;
         if (maxScore.compareTo(BigDecimal.ZERO) > 0) {
@@ -576,17 +588,27 @@ public class MentorDiscoveryService {
         int reviews = defaultInteger(candidate.reviewCount());
         int completedSessions = defaultInteger(candidate.completedSessions());
         if (rating.compareTo(BigDecimal.valueOf(4.5)) >= 0) {
-            baseScore = baseScore.add(QUALITY_HIGH_RATING_BONUS);
+            reasons.add("Được đánh giá cao từ mentee");
         }
         if (reviews >= 5) {
-            baseScore = baseScore.add(QUALITY_CREDIBLE_REVIEWS_BONUS);
+            reasons.add("Có lượng đánh giá đủ tin cậy");
         }
         if (completedSessions >= 10) {
-            baseScore = baseScore.add(QUALITY_EXPERIENCED_SESSIONS_BONUS);
+            reasons.add("Đã có kinh nghiệm mentoring thực tế");
         }
+        if (calculateAcceptanceRate(candidate).compareTo(decimal("0.80")) >= 0) {
+            reasons.add("Tỷ lệ chấp nhận yêu cầu ổn định");
+        }
+        if (calculateNonCancellationRate(candidate).compareTo(decimal("0.90")) >= 0) {
+            reasons.add("Ít hủy lịch sau khi đã nhận");
+        }
+        if (isRecentlyActive(candidate)) {
+            reasons.add("Hoạt động gần đây");
+        }
+        baseScore = baseScore.add(calculateSearchQualityScore(candidate, menteeProfile));
 
         if (services != null && !services.isEmpty()) {
-            baseScore = baseScore.add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(services.size())));
+            baseScore = baseScore.add(serviceBonusScore(services.size()));
             reasons.add("Có " + services.size() + " dịch vụ đang hoạt động");
         }
         if (hasAvailability) {
@@ -683,7 +705,7 @@ public class MentorDiscoveryService {
     ) {
         BigDecimal extraBonus = ZERO;
         if (services != null && !services.isEmpty()) {
-            extraBonus = extraBonus.add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(services.size())));
+            extraBonus = extraBonus.add(serviceBonusScore(services.size()));
         }
         if (hasAvailability) {
             extraBonus = extraBonus.add(HAS_AVAILABILITY_BONUS_SCORE);
@@ -810,14 +832,11 @@ public class MentorDiscoveryService {
         int reviews = defaultInteger(row.reviewCount());
         int completedSessions = defaultInteger(row.completedSessions());
 
-        score = score.add(rating.multiply(BigDecimal.valueOf(2)));
-        score = score.add(BigDecimal.valueOf(Math.min(reviews, 10)));
-        score = score.add(BigDecimal.valueOf(Math.min(completedSessions, 100) / 10.0).setScale(2, RoundingMode.HALF_UP));
-
-        if (menteeProfile != null && Boolean.TRUE.equals(row.alumni())) {
-            score = score.add(decimal(5));
-        }
-        return score;
+        score = score.add(calculateBayesianRating(rating, reviews).multiply(RATING_QUALITY_MULTIPLIER));
+        score = score.add(boundedLogScore(reviews, 10, MAX_REVIEW_VOLUME_SCORE));
+        score = score.add(boundedLogScore(completedSessions, 50, MAX_SESSION_VOLUME_SCORE));
+        score = score.add(calculateBehaviorScore(row));
+        return score.setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount) {
@@ -843,7 +862,7 @@ public class MentorDiscoveryService {
 
         BigDecimal maxScore = MAX_SEARCH_PERSONALIZATION_SCORE
                 .add(MAX_SEARCH_QUALITY_SCORE)
-                .add(ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(cappedServiceCount)))
+                .add(serviceBonusScore(cappedServiceCount))
                 .add(HAS_AVAILABILITY_BONUS_SCORE);
 
         if (tokenCount <= 0) {
@@ -861,6 +880,51 @@ public class MentorDiscoveryService {
                 .add(VERIFIED_RECENT_7D_BONUS)
                 .add(SESSION_VELOCITY_HIGH_BONUS)
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateBehaviorScore(MentorDiscoveryQueryRow row) {
+        BigDecimal score = ZERO;
+        score = score.add(calculateAcceptanceRate(row).multiply(MAX_ACCEPTANCE_RATE_SCORE));
+        score = score.add(calculateNonCancellationRate(row).multiply(MAX_CANCELLATION_RELIABILITY_SCORE));
+
+        if (row.lastActiveAt() != null) {
+            LocalDateTime now = currentTime();
+            if (!row.lastActiveAt().isBefore(now.minusDays(14))) {
+                score = score.add(RECENT_ACTIVITY_14D_BONUS);
+            } else if (!row.lastActiveAt().isBefore(now.minusDays(30))) {
+                score = score.add(RECENT_ACTIVITY_30D_BONUS);
+            }
+        }
+
+        return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateAcceptanceRate(MentorDiscoveryQueryRow row) {
+        int accepted = defaultInteger(row.acceptedBookingCount());
+        int rejected = defaultInteger(row.rejectedBookingCount());
+        return calculateBayesianRate(
+                accepted,
+                accepted + rejected,
+                ACCEPTANCE_RATE_PRIOR,
+                ACCEPTANCE_RATE_PRIOR_DECISIONS
+        );
+    }
+
+    private BigDecimal calculateNonCancellationRate(MentorDiscoveryQueryRow row) {
+        int accepted = defaultInteger(row.acceptedBookingCount());
+        int cancelled = Math.min(defaultInteger(row.mentorCancelledBookingCount()), accepted);
+        return calculateBayesianRate(
+                Math.max(accepted - cancelled, 0),
+                accepted,
+                CANCELLATION_RELIABILITY_PRIOR,
+                CANCELLATION_RELIABILITY_PRIOR_ACCEPTANCES
+        );
+    }
+
+    private boolean isRecentlyActive(MentorDiscoveryQueryRow row) {
+        return row != null
+                && row.lastActiveAt() != null
+                && !row.lastActiveAt().isBefore(currentTime().minusDays(30));
     }
 
     private int countTokenMatches(List<String> fields, List<String> tokens) {
@@ -1189,6 +1253,53 @@ public class MentorDiscoveryService {
 
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? ZERO : value;
+    }
+
+    private BigDecimal calculateBayesianRating(BigDecimal rating, int reviewCount) {
+        BigDecimal safeRating = defaultDecimal(rating);
+        int boundedReviews = Math.max(reviewCount, 0);
+        BigDecimal reviewWeight = BigDecimal.valueOf(boundedReviews);
+        BigDecimal minReviews = BigDecimal.valueOf(BAYESIAN_MIN_REVIEWS);
+        BigDecimal denominator = reviewWeight.add(minReviews);
+        if (denominator.compareTo(BigDecimal.ZERO) <= 0) {
+            return BAYESIAN_PRIOR_RATING;
+        }
+        return safeRating.multiply(reviewWeight)
+                .add(BAYESIAN_PRIOR_RATING.multiply(minReviews))
+                .divide(denominator, 4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateBayesianRate(int positiveCount, int totalCount, BigDecimal priorRate, int priorWeight) {
+        int safePositive = Math.max(positiveCount, 0);
+        int safeTotal = Math.max(totalCount, 0);
+        int safePriorWeight = Math.max(priorWeight, 0);
+        if (safeTotal == 0 && safePriorWeight == 0) {
+            return ZERO;
+        }
+
+        BigDecimal observed = BigDecimal.valueOf(Math.min(safePositive, safeTotal));
+        BigDecimal weightedPrior = priorRate.multiply(BigDecimal.valueOf(safePriorWeight));
+        BigDecimal denominator = BigDecimal.valueOf(safeTotal + safePriorWeight);
+        if (denominator.compareTo(BigDecimal.ZERO) <= 0) {
+            return ZERO;
+        }
+
+        return observed.add(weightedPrior)
+                .divide(denominator, 4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal boundedLogScore(int value, int saturationPoint, BigDecimal maxScore) {
+        if (value <= 0 || saturationPoint <= 0 || maxScore.compareTo(BigDecimal.ZERO) <= 0) {
+            return ZERO;
+        }
+        double bounded = Math.min(Math.max(value, 0), saturationPoint);
+        double ratio = Math.log1p(bounded) / Math.log1p(saturationPoint);
+        return maxScore.multiply(BigDecimal.valueOf(ratio)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal serviceBonusScore(int activeServiceCount) {
+        int cappedServiceCount = Math.min(Math.max(activeServiceCount, 0), MAX_SEARCH_SERVICE_BONUS_COUNT);
+        return ACTIVE_SERVICE_BONUS_SCORE.multiply(BigDecimal.valueOf(cappedServiceCount));
     }
 
     private Integer defaultInteger(Integer value) {
