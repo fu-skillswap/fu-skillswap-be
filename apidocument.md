@@ -934,7 +934,102 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Request body:
   - `AdminNoteRequest` nullable
 
-## 18. System Admin / Admin User Management
+## 18. Forum
+
+### User forum
+
+### GET `/api/forum/posts`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Query params:
+  - `page`, `size`
+  - `keyword`
+  - `helpTopicId`
+  - `mine`
+
+### GET `/api/forum/posts/{postId}`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+
+### POST `/api/forum/posts`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Request body:
+  - `ForumPostUpsertRequest`
+
+### PUT `/api/forum/posts/{postId}`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: cập nhật bài viết forum của chính tôi.
+- Request body:
+  - `ForumPostUpsertRequest`
+
+### DELETE `/api/forum/posts/{postId}`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: xóa mềm bài viết forum của chính tôi.
+
+### GET `/api/forum/posts/{postId}/comments`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Query params:
+  - `page`, `size`
+
+### POST `/api/forum/posts/{postId}/comments`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Request body:
+  - `ForumCommentUpsertRequest`
+
+### PUT `/api/forum/comments/{commentId}`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: cập nhật comment forum của chính tôi.
+- Request body:
+  - `ForumCommentUpsertRequest`
+
+### DELETE `/api/forum/comments/{commentId}`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: xóa mềm comment forum của chính tôi.
+
+### PUT `/api/forum/posts/{postId}/reaction`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: upsert reaction cho bài viết forum.
+- Request body:
+  - `ForumReactionRequest`
+
+### DELETE `/api/forum/posts/{postId}/reaction`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Mục đích: bỏ reaction của tôi khỏi bài viết forum.
+
+### POST `/api/forum/reports`
+- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
+- Request body:
+  - `ForumReportCreateRequest`
+
+### Admin forum moderation
+
+### GET `/api/admin/forum/reports`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Query params:
+  - `page`, `size`
+  - `keyword`
+  - `status`
+  - `targetType`
+
+### GET `/api/admin/forum/reports/{reportId}`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+
+### POST `/api/admin/forum/reports/{reportId}/resolve`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Request body:
+  - `ForumReportResolveRequest`
+
+### GET `/api/admin/forum/posts`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+
+### GET `/api/admin/forum/comments`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+
+### POST `/api/admin/forum/posts/{postId}/restore`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+
+### POST `/api/admin/forum/comments/{commentId}/restore`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+
+## 19. System Admin / Admin User Management
 
 ### POST `/api/system/users/admin-role/grant`
 - Auth: `bearerAuth`, role `SYSTEM_ADMIN`
@@ -996,7 +1091,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `UnbanUserRequest`
     - `reason`
 
-## 19. Admin Mentors
+## 20. Admin Mentors
 
 ### GET `/api/admin/mentors`
 - Auth: `bearerAuth`, role `ADMIN`
@@ -1012,7 +1107,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Auth: `bearerAuth`, role `ADMIN`
 - Response: `AdminMentorDetailResponse`
 
-## 20. Realtime WebSocket
+## 21. Realtime WebSocket
 
 - Endpoint handshake: `wss://api.skillswap.asia/ws?token=<accessToken>`
 - Kênh hiện tại là **raw WebSocket**, không phải SockJS/STOMP.
@@ -1055,7 +1150,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `unreadCount`
   - `eventKind`
 
-## 21. Core status enums
+## 22. Core status enums
 
 ### BookingStatus
 
@@ -1154,7 +1249,7 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - `PAYOUT_REQUEST`
 - `REFUND`
 
-## 22. Ghi chú thực dụng cho FE
+## 23. Ghi chú thực dụng cho FE
 
 - `GET /api/auth/me` là API đầu tiên sau login.
 - Mentor verification flow:
@@ -1177,4 +1272,5 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Wallet:
   - mỗi ví chỉ trả số dư hiện tại và 15 giao dịch gần nhất
 - Forum:
-  - hiện **chưa thấy controller/API forum nào trong code**
+  - user flow: `posts` -> `comments` -> `reaction` -> `reports`
+  - admin flow: `reports` -> `resolve` hoặc `restore`

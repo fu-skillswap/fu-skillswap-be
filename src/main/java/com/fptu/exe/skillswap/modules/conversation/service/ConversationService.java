@@ -274,13 +274,7 @@ public class ConversationService {
 
     @Transactional(readOnly = true)
     public long getTotalUnreadCount(UUID userId) {
-        java.util.List<ConversationParticipant> myParticipations = participantRepository.findByUserId(userId);
-        long totalUnread = 0;
-        for (ConversationParticipant cp : myParticipations) {
-            java.time.LocalDateTime lastRead = cp.getLastReadAt() != null ? cp.getLastReadAt() : cp.getJoinedAt();
-            totalUnread += messageRepository.countUnreadMessages(cp.getConversation().getId(), userId, lastRead);
-        }
-        return totalUnread;
+        return messageRepository.countTotalUnreadMessages(userId);
     }
 
     @Transactional(readOnly = true)

@@ -34,4 +34,14 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     """)
     java.util.List<Object[]> countUnreadMessagesBatch(@org.springframework.data.repository.query.Param("conversationIds") java.util.List<UUID> conversationIds,
                                                     @org.springframework.data.repository.query.Param("userId") UUID userId);
+
+    @org.springframework.data.jpa.repository.Query("""
+        select count(m)
+        from Message m
+        join ConversationParticipant cp on cp.conversation.id = m.conversation.id
+        where cp.user.id = :userId
+          and (m.sender is null or m.sender.id <> :userId)
+          and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt)
+    """)
+    long countTotalUnreadMessages(@org.springframework.data.repository.query.Param("userId") UUID userId);
 }

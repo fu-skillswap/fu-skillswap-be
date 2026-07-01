@@ -35,6 +35,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -51,12 +56,15 @@ public class AdminForumModerationService {
     @Transactional(readOnly = true)
     public PageResponse<ForumReportResponse> getReports(AdminForumReportListRequest request) {
         Pageable pageable = PageRequest.of(defaultPage(request.page()), defaultSize(request.size()), Sort.by(Sort.Direction.ASC, "createdAt"));
-        Page<ForumReportResponse> page = forumReportRepository.searchReports(
+        Page<ForumReport> reports = forumReportRepository.searchReports(
                 request.status(),
                 request.targetType(),
                 toKeywordPattern(request.keyword()),
                 pageable
-        ).map(this::toReportResponse);
+        );
+        Map<UUID, ForumPost> postsById = loadReportedPosts(reports.getContent());
+        Map<UUID, ForumComment> commentsById = loadReportedComments(reports.getContent());
+        Page<ForumReportResponse> page = reports.map(report -> toReportResponse(report, postsById, commentsById));
         return toReportPageResponse(page);
     }
 
@@ -64,7 +72,7 @@ public class AdminForumModerationService {
     public ForumReportResponse getReportDetail(UUID reportId) {
         ForumReport report = forumReportRepository.findById(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy forum report"));
-        return toReportResponse(report);
+        return toReportResponse(report, Collections.emptyMap(), Collections.emptyMap());
     }
 
     @Transactional
@@ -85,7 +93,7 @@ public class AdminForumModerationService {
             case DISMISS -> dismissReport(adminUserId, report, request.reviewNote());
             default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Action moderation không hợp lệ");
         }
-        return toReportResponse(report);
+        return toReportResponse(report, Collections.emptyMap(), Collections.emptyMap());
     }
 
     @Transactional(readOnly = true)
@@ -232,7 +240,9 @@ public class AdminForumModerationService {
         forumReportRepository.save(report);
     }
 
-    private ForumReportResponse toReportResponse(ForumReport report) {
+    private ForumReportResponse toReportResponse(ForumReport report,
+                                                 Map<UUID, ForumPost> postsById,
+                                                 Map<UUID, ForumComment> commentsById) {
         String targetStatus = null;
         String targetTitle = null;
         String targetContentPreview = null;
@@ -240,7 +250,10 @@ public class AdminForumModerationService {
         String targetAuthorFullName = null;
 
         if (report.getTargetType() == com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType.POST) {
-            ForumPost post = forumPostRepository.findById(report.getTargetId()).orElse(null);
+            ForumPost post = postsById.get(report.getTargetId());
+            if (post == null) {
+                post = forumPostRepository.findById(report.getTargetId()).orElse(null);
+            }
             if (post != null) {
                 targetStatus = post.getStatus().name();
                 targetTitle = post.getTitle();
@@ -249,7 +262,10 @@ public class AdminForumModerationService {
                 targetAuthorFullName = post.getAuthorUser().getFullName();
             }
         } else if (report.getTargetType() == com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType.COMMENT) {
-            ForumComment comment = forumCommentRepository.findById(report.getTargetId()).orElse(null);
+            ForumComment comment = commentsById.get(report.getTargetId());
+            if (comment == null) {
+                comment = forumCommentRepository.findById(report.getTargetId()).orElse(null);
+            }
             if (comment != null) {
                 targetStatus = comment.getStatus().name();
                 targetContentPreview = trimPreview(comment.getContent());
@@ -277,6 +293,34 @@ public class AdminForumModerationService {
                 .resolvedAt(report.getResolvedAt())
                 .createdAt(report.getCreatedAt())
                 .build();
+    }
+
+    private Map<UUID, ForumPost> loadReportedPosts(Collection<ForumReport> reports) {
+        List<UUID> postIds = reports.stream()
+                .filter(report -> report.getTargetType() == com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType.POST)
+                .map(ForumReport::getTargetId)
+                .distinct()
+                .toList();
+        if (postIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, ForumPost> postsById = new HashMap<>();
+        forumPostRepository.findByIdIn(postIds).forEach(post -> postsById.put(post.getId(), post));
+        return postsById;
+    }
+
+    private Map<UUID, ForumComment> loadReportedComments(Collection<ForumReport> reports) {
+        List<UUID> commentIds = reports.stream()
+                .filter(report -> report.getTargetType() == com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType.COMMENT)
+                .map(ForumReport::getTargetId)
+                .distinct()
+                .toList();
+        if (commentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, ForumComment> commentsById = new HashMap<>();
+        forumCommentRepository.findByIdIn(commentIds).forEach(comment -> commentsById.put(comment.getId(), comment));
+        return commentsById;
     }
 
     private ForumPostResponse toPostResponse(ForumPost post, UUID currentUserId) {

@@ -90,7 +90,7 @@ class PayoutServiceTest {
                 .bankAccountNumberMaskedSnapshot("******7890")
                 .build();
 
-        when(payoutRequestRepository.findById(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
+        when(payoutRequestRepository.findByIdForUpdate(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
         when(payoutRequestRepository.save(any(PayoutRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         PayoutRequestResponse response = payoutService.approve(UUID.randomUUID(), payoutRequestId, "ok");
@@ -115,7 +115,7 @@ class PayoutServiceTest {
                 .bankAccountNumberMaskedSnapshot("******7890")
                 .build();
 
-        when(payoutRequestRepository.findById(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
+        when(payoutRequestRepository.findByIdForUpdate(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
         when(payoutRequestRepository.save(any(PayoutRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         PayoutRequestResponse response = payoutService.reject(UUID.randomUUID(), payoutRequestId, "reject");

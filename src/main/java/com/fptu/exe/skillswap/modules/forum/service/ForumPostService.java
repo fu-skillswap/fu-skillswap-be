@@ -41,6 +41,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -70,7 +74,15 @@ public class ForumPostService {
                 keywordPattern,
                 pageable
         );
-        return toPostPageResponse(postPage.map(post -> toPostResponse(post, currentUser.getId())));
+        Set<UUID> reactedPostIds = loadReactedPostIds(
+                currentUser.getId(),
+                postPage.getContent().stream().map(ForumPost::getId).toList()
+        );
+        return toPostPageResponse(postPage.map(post -> toPostResponse(
+                post,
+                reactedPostIds.contains(post.getId()),
+                reactedPostIds.contains(post.getId()) ? ForumReactionType.LIKE.name() : null
+        )));
     }
 
     @Transactional(readOnly = true)
@@ -315,6 +327,14 @@ public class ForumPostService {
         Optional<ForumPostReaction> reaction = currentUserId == null
                 ? Optional.empty()
                 : forumPostReactionRepository.findByPostIdAndUserId(post.getId(), currentUserId);
+        return toPostResponse(
+                post,
+                reaction.isPresent(),
+                reaction.map(value -> value.getReactionType().name()).orElse(null)
+        );
+    }
+
+    private ForumPostResponse toPostResponse(ForumPost post, boolean reactedByCurrentUser, String myReactionType) {
         return ForumPostResponse.builder()
                 .postId(post.getId())
                 .authorUserId(post.getAuthorUser().getId())
@@ -328,11 +348,18 @@ public class ForumPostService {
                 .reactionCount(defaultInt(post.getReactionCount()))
                 .reportCount(defaultInt(post.getReportCount()))
                 .lastActivityAt(post.getLastActivityAt())
-                .reactedByCurrentUser(reaction.isPresent())
-                .myReactionType(reaction.map(value -> value.getReactionType().name()).orElse(null))
+                .reactedByCurrentUser(reactedByCurrentUser)
+                .myReactionType(myReactionType)
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .build();
+    }
+
+    private Set<UUID> loadReactedPostIds(UUID currentUserId, Collection<UUID> postIds) {
+        if (currentUserId == null || postIds == null || postIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(forumPostReactionRepository.findReactedPostIdsByUserIdAndPostIdIn(currentUserId, postIds));
     }
 
     private String determineAuthorRole(java.util.Set<RoleCode> roles) {

@@ -48,6 +48,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -252,10 +253,13 @@ public class BookingService {
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsByBookingIds(bookingIds)
                 : java.util.Collections.emptyMap();
+        java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
+                ? sessionService.findByBookingIds(bookingIds)
+                : java.util.Collections.emptyMap();
 
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream()
-                        .map(b -> toBookingResponse(b, bookingToConvMap))
+                        .map(b -> toBookingResponse(b, bookingToConvMap, sessionsByBookingId))
                         .toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -800,9 +804,12 @@ public class BookingService {
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsByBookingIds(bookingIds)
                 : java.util.Collections.emptyMap();
+        java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
+                ? sessionService.findByBookingIds(bookingIds)
+                : java.util.Collections.emptyMap();
 
         return PageResponse.<BookingResponse>builder()
-                .content(page.getContent().stream().map(b -> toBookingResponse(b, bookingToConvMap)).toList())
+                .content(page.getContent().stream().map(b -> toBookingResponse(b, bookingToConvMap, sessionsByBookingId)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -915,13 +922,24 @@ public class BookingService {
     }
 
     private BookingResponse toBookingResponse(Booking booking, java.util.Map<UUID, UUID> bookingToConversationMap) {
+        return toBookingResponse(booking, bookingToConversationMap, null);
+    }
+
+    private BookingResponse toBookingResponse(Booking booking,
+                                              java.util.Map<UUID, UUID> bookingToConversationMap,
+                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId) {
         User mentee = booking.getMentee();
         MentorProfile mentorProfile = booking.getMentorProfile();
         User mentorUser = mentorProfile == null ? null : mentorProfile.getUser();
         MentorService mentorService = booking.getService();
         MentorAvailabilitySlot slot = booking.getSlot();
 
-        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService != null ? sessionService.findByBookingId(booking.getId()) : null;
+        com.fptu.exe.skillswap.modules.session.domain.Session session = null;
+        if (sessionsByBookingId != null) {
+            session = sessionsByBookingId.get(booking.getId());
+        } else if (sessionService != null) {
+            session = sessionService.findByBookingId(booking.getId());
+        }
 
         MeetingPlatform platform = session != null ? session.getMeetingPlatform() : booking.getMeetingPlatform();
         String link = session != null ? session.getMeetingLink() : booking.getMeetingLink();
@@ -1468,14 +1486,23 @@ public class BookingService {
     @Transactional
     public int expireAwaitingPaymentBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        List<Booking> staleBookings = bookingRepository.findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(
+        LocalDateTime acceptedBefore = now.minusMinutes(PAYMENT_WINDOW_MINUTES);
+        List<UUID> staleBookingIds = bookingRepository.findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-                now.minusMinutes(PAYMENT_WINDOW_MINUTES)
-        );
-        if (staleBookings.isEmpty()) {
+                acceptedBefore
+        ).stream().map(Booking::getId).toList();
+        if (staleBookingIds.isEmpty()) {
             return 0;
         }
-        for (Booking booking : staleBookings) {
+        List<Booking> staleBookings = new ArrayList<>();
+        for (UUID bookingId : staleBookingIds) {
+            Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
+            if (booking == null
+                    || booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
+                    || booking.getAcceptedAt() == null
+                    || booking.getAcceptedAt().isAfter(acceptedBefore)) {
+                continue;
+            }
             booking.setStatus(BookingStatus.EXPIRED);
             booking.setRejectedAt(now);
             booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng 2 giờ.");
@@ -1485,6 +1512,10 @@ public class BookingService {
                 refreshSlotBookedFlag(booking.getSlot());
             }
             paymentOrderService.expireAwaitingPayment(booking);
+            staleBookings.add(booking);
+        }
+        if (staleBookings.isEmpty()) {
+            return 0;
         }
         bookingRepository.saveAll(staleBookings);
         for (Booking booking : staleBookings) {

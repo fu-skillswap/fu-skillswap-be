@@ -30,12 +30,12 @@ public class CouponService {
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Coupon resolveCoupon(String couponCode) {
         if (couponCode == null || couponCode.isBlank()) {
             return null;
         }
-        Coupon coupon = couponRepository.findByCode(couponCode.trim().toUpperCase(Locale.ROOT))
+        Coupon coupon = couponRepository.findByCodeForUpdate(couponCode.trim().toUpperCase(Locale.ROOT))
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy coupon"));
         if (coupon.getStatus() != CouponStatus.ACTIVE) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon hiện không khả dụng");
@@ -57,17 +57,7 @@ public class CouponService {
         if (coupon.getMinOrderValueScoin() != null && grossScoin < coupon.getMinOrderValueScoin()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Giá trị đơn hàng chưa đạt mức tối thiểu của coupon");
         }
-        long totalUsed = couponRedemptionRepository.countByCouponIdAndStatusIn(coupon.getId(), ACTIVE_REDEMPTION_STATUSES);
-        if (coupon.getQuotaTotal() != null && totalUsed >= coupon.getQuotaTotal()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon đã hết quota");
-        }
-        if (userId != null && coupon.getQuotaPerUser() != null) {
-            long perUser = couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(
-                    coupon.getId(), userId, ACTIVE_REDEMPTION_STATUSES);
-            if (perUser >= coupon.getQuotaPerUser()) {
-                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã dùng coupon này quá số lần cho phép");
-            }
-        }
+        validateQuotaAvailability(coupon, userId);
         if (!coupon.getApplicableServiceIds().isEmpty()
                 && (booking == null || booking.getService() == null
                 || booking.getService().getId() == null
@@ -88,16 +78,19 @@ public class CouponService {
         if (coupon == null) {
             return null;
         }
+        Coupon lockedCoupon = couponRepository.findByIdForUpdate(coupon.getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy coupon"));
+        validateQuotaAvailability(lockedCoupon, redeemerUserId);
         CouponRedemption existing = couponRedemptionRepository.findByPaymentOrderId(paymentOrderId).orElse(null);
         if (existing != null) {
-            existing.setCouponId(coupon.getId());
+            existing.setCouponId(lockedCoupon.getId());
             existing.setRedeemerUserId(redeemerUserId);
             existing.setStatus(CouponRedemptionStatus.RESERVED);
             existing.setDiscountScoin(discountScoin);
             return couponRedemptionRepository.save(existing);
         }
         return couponRedemptionRepository.save(CouponRedemption.builder()
-                .couponId(coupon.getId())
+                .couponId(lockedCoupon.getId())
                 .paymentOrderId(paymentOrderId)
                 .redeemerUserId(redeemerUserId)
                 .status(CouponRedemptionStatus.RESERVED)
@@ -141,5 +134,19 @@ public class CouponService {
                 yield Math.min(discount, grossScoin);
             }
         };
+    }
+
+    private void validateQuotaAvailability(Coupon coupon, UUID userId) {
+        long totalUsed = couponRedemptionRepository.countByCouponIdAndStatusIn(coupon.getId(), ACTIVE_REDEMPTION_STATUSES);
+        if (coupon.getQuotaTotal() != null && totalUsed >= coupon.getQuotaTotal()) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon đã hết quota");
+        }
+        if (userId != null && coupon.getQuotaPerUser() != null) {
+            long perUser = couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(
+                    coupon.getId(), userId, ACTIVE_REDEMPTION_STATUSES);
+            if (perUser >= coupon.getQuotaPerUser()) {
+                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã dùng coupon này quá số lần cho phép");
+            }
+        }
     }
 }

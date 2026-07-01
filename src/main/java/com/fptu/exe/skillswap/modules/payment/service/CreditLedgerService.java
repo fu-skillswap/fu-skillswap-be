@@ -10,8 +10,8 @@ import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerAccountRepo
 import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerEntryRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,22 +34,20 @@ public class CreditLedgerService {
         if (userId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "userId không được để trống");
         }
-        return accountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.USER_CREDIT, userId)
-                .orElseGet(() -> accountRepository.save(CreditLedgerAccount.builder()
-                        .ownerType(LedgerAccountType.USER_CREDIT)
-                        .ownerId(userId)
-                        .accountCode("CREDIT_USER_" + userId)
-                        .build()));
+        return ensureAccount(LedgerAccountType.USER_CREDIT, userId, "CREDIT_USER_" + userId);
     }
 
     @Transactional
     public CreditLedgerAccount ensurePlatformAccount() {
-        return accountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID)
-                .orElseGet(() -> accountRepository.save(CreditLedgerAccount.builder()
-                        .ownerType(LedgerAccountType.PLATFORM_SETTLEMENT)
-                        .ownerId(PLATFORM_OWNER_ID)
-                        .accountCode("CREDIT_PLATFORM")
-                        .build()));
+        return ensureAccount(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID, "CREDIT_PLATFORM");
+    }
+
+    @Transactional
+    public CreditLedgerAccount getUserAccountForUpdate(UUID userId) {
+        if (userId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "userId không được để trống");
+        }
+        return lockAccount(LedgerAccountType.USER_CREDIT, userId, "CREDIT_USER_" + userId);
     }
 
     @Transactional(readOnly = true)
@@ -84,7 +82,7 @@ public class CreditLedgerService {
         if (amountScoin <= 0) {
             return List.of();
         }
-        CreditLedgerAccount account = ensureUserAccount(userId);
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
         int remaining = amountScoin;
         for (CreditOriginType originType : priorityOrigins) {
             if (remaining <= 0) {
@@ -108,7 +106,7 @@ public class CreditLedgerService {
 
     @Transactional
     public void consumeReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
-        CreditLedgerAccount account = ensureUserAccount(userId);
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
         if (entryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), sourceType, sourceId, LedgerEntryType.CONSUME
         ).isPresent()) {
@@ -133,7 +131,7 @@ public class CreditLedgerService {
 
     @Transactional
     public void releaseReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
-        CreditLedgerAccount account = ensureUserAccount(userId);
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
         if (entryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), sourceType, sourceId, LedgerEntryType.RELEASE
         ).isPresent()) {
@@ -166,7 +164,7 @@ public class CreditLedgerService {
         if (amountScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Số credit phát hành phải lớn hơn 0");
         }
-        CreditLedgerAccount account = ensureUserAccount(userId);
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
         return entryRepository.save(CreditLedgerEntry.builder()
                 .accountId(account.getId())
                 .entryType(LedgerEntryType.ISSUE)
@@ -189,7 +187,7 @@ public class CreditLedgerService {
         if (amountScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Số credit hoàn trả phải lớn hơn 0");
         }
-        CreditLedgerAccount account = ensureUserAccount(userId);
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
         entryRepository.save(CreditLedgerEntry.builder()
                 .accountId(account.getId())
                 .entryType(LedgerEntryType.REFUND)
@@ -200,6 +198,35 @@ public class CreditLedgerService {
                 .balanceEffectScoin(amountScoin)
                 .memo(memo)
                 .build());
+    }
+
+    private CreditLedgerAccount ensureAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        return accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                .orElseGet(() -> createAccount(ownerType, ownerId, accountCode));
+    }
+
+    private CreditLedgerAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        CreditLedgerAccount existing = accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        ensureAccount(ownerType, ownerId, accountCode);
+        return accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa credit account"));
+    }
+
+    private CreditLedgerAccount createAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        try {
+            return accountRepository.save(CreditLedgerAccount.builder()
+                    .ownerType(ownerType)
+                    .ownerId(ownerId)
+                    .accountCode(accountCode)
+                    .build());
+        } catch (DataIntegrityViolationException ex) {
+            return accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                    .orElseThrow(() -> ex);
+        }
     }
 
     private void reserve(UUID accountId,

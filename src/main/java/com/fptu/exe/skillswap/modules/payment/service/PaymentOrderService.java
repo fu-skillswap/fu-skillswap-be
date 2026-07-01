@@ -34,15 +34,27 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentOrderService {
+
+    private static final long PAYOS_MAX_SAFE_ORDER_CODE = 9_007_199_254_740_991L;
+    private static final long PROVIDER_ORDER_CODE_EPOCH_MILLIS = LocalDateTime.of(2025, 1, 1, 0, 0)
+            .atZone(ZoneId.of(DateTimeUtil.ZONE_HCM))
+            .toInstant()
+            .toEpochMilli();
+    private static final int PROVIDER_ORDER_CODE_SEQUENCE_MOD = 10_000;
+    private static final AtomicLong PROVIDER_ORDER_CODE_LAST_BUCKET = new AtomicLong(-1L);
+    private static final AtomicInteger PROVIDER_ORDER_CODE_SEQUENCE = new AtomicInteger(0);
 
     private final BookingRepository bookingRepository;
     private final PaymentOrderRepository paymentOrderRepository;
@@ -167,7 +179,7 @@ public class PaymentOrderService {
             couponService.reserveCoupon(coupon, savedOrder.getId(), currentUserId, couponDiscountScoin);
         }
         if (savedOrder.getStatus() == PaymentOrderStatus.PAID) {
-            finalizeInternalPayment(savedOrder, attempt, null, null, "PAID");
+            finalizeInternalPayment(savedOrder, attempt, null, null, "PAID", booking);
             savedOrder = paymentOrderRepository.save(savedOrder);
         }
         return toResponse(savedOrder, attempt);
@@ -187,6 +199,10 @@ public class PaymentOrderService {
         PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(verified.providerOrderCode())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
                         "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
+        PaymentOrder orderSnapshot = paymentOrderRepository.findById(attempt.getPaymentOrderId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(orderSnapshot.getBookingId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
 
@@ -196,7 +212,7 @@ public class PaymentOrderService {
                 || paymentAttemptRepository.existsByProviderEventId(providerEventId))) {
             return toResponse(order, attempt);
         }
-        if (isFinal(order.getStatus())) {
+        if (order.getStatus() == PaymentOrderStatus.PAID) {
             return toResponse(order, attempt);
         }
 
@@ -212,7 +228,7 @@ public class PaymentOrderService {
         attempt.setProviderOrderCode(verified.providerOrderCode());
         attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
         attempt.setProviderStatus("PAID");
-        finalizeInternalPayment(order, attempt, verified.providerTransactionId(), providerEventId, "PAID");
+        finalizeInternalPayment(order, attempt, verified.providerTransactionId(), providerEventId, "PAID", lockedBooking);
         order = paymentOrderRepository.save(order);
         return toResponse(order, attempt);
     }
@@ -240,7 +256,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -263,7 +279,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -329,7 +345,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -523,7 +539,8 @@ public class PaymentOrderService {
                                          PaymentAttempt attempt,
                                          String providerTransactionId,
                                          String providerEventId,
-                                         String providerStatus) {
+                                         String providerStatus,
+                                         Booking lockedBooking) {
         if (order.getCreditFinalizedAt() == null) {
             if (order.getRemainingPayableScoin() != null && order.getRemainingPayableScoin() > 0) {
                 creditLedgerService.issueCredit(
@@ -558,11 +575,13 @@ public class PaymentOrderService {
         order.setProviderStatus(providerStatus);
         order.setPaidAt(order.getPaidAt() == null ? DateTimeUtil.now() : order.getPaidAt());
         markAttemptFinalState(attempt, PaymentAttemptStatus.SUCCEEDED, providerTransactionId, providerEventId, providerStatus, null);
-        finalizePaidBooking(order);
+        finalizePaidBooking(order, lockedBooking);
     }
 
-    private void finalizePaidBooking(PaymentOrder order) {
-        Booking booking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+    private void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
+        Booking booking = lockedBooking != null
+                ? lockedBooking
+                : bookingRepository.findByIdForSessionUpdate(order.getBookingId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         if (booking.getStatus() == BookingStatus.PAID) {
             return;
@@ -571,8 +590,9 @@ public class PaymentOrderService {
                 && booking.getStatus() != BookingStatus.ACCEPTED) {
             // Booking đã bị huỷ/hết hạn trước khi webhook đến — ghi log cảnh báo nhưng không throw
             // để tránh rollback transaction và khiến PayOS retry lặp vô tận.
+            compensateCapturedPaymentForTerminalBooking(booking, order);
             log.warn("finalizePaidBooking: booking {} ở trạng thái {} không thể chuyển sang PAID. " +
-                            "Payment order vẫn được ghi nhận PAID nhưng booking sẽ không được cập nhật.",
+                            "Payment order vẫn được ghi nhận PAID và hệ thống đã chạy bù trừ nội bộ nếu cần.",
                     booking.getId(), booking.getStatus());
             return;
         }
@@ -618,6 +638,18 @@ public class PaymentOrderService {
                 .mentorResponseNote(booking.getMentorResponseNote())
                 .createdAt(DateTimeUtil.now())
                 .build());
+    }
+
+    private void compensateCapturedPaymentForTerminalBooking(Booking booking, PaymentOrder order) {
+        if (booking == null || order == null) {
+            return;
+        }
+        switch (booking.getStatus()) {
+            case CANCELLED_BY_MENTEE -> settlementService.handlePaidBookingCancelledByMentee(booking, order, false);
+            case CANCELLED_BY_MENTOR, REJECTED, EXPIRED -> settlementService.handlePaidBookingCancelledByMentor(booking, order);
+            default -> {
+            }
+        }
     }
 
     private void markAttemptFinalState(PaymentAttempt attempt,
@@ -710,11 +742,37 @@ public class PaymentOrderService {
     }
 
     private long generateProviderOrderCode(UUID id, int attemptNo) {
-        long base = id.getMostSignificantBits() & Long.MAX_VALUE;
-        long candidate = base + attemptNo;
-        if (candidate <= 0) {
-            candidate = Math.abs(id.getLeastSignificantBits()) + attemptNo;
+        while (true) {
+            long bucket = Math.max(0L, System.currentTimeMillis() - PROVIDER_ORDER_CODE_EPOCH_MILLIS);
+            int sequence = nextProviderOrderCodeSequence(bucket);
+            long candidate = bucket * PROVIDER_ORDER_CODE_SEQUENCE_MOD + sequence;
+            if (candidate > 0 && candidate <= PAYOS_MAX_SAFE_ORDER_CODE) {
+                return candidate;
+            }
         }
-        return candidate;
+    }
+
+    private int nextProviderOrderCodeSequence(long bucket) {
+        while (true) {
+            long lastBucket = PROVIDER_ORDER_CODE_LAST_BUCKET.get();
+            if (lastBucket != bucket) {
+                if (PROVIDER_ORDER_CODE_LAST_BUCKET.compareAndSet(lastBucket, bucket)) {
+                    PROVIDER_ORDER_CODE_SEQUENCE.set(Math.floorMod(attemptNoSeed(bucket), PROVIDER_ORDER_CODE_SEQUENCE_MOD));
+                }
+                continue;
+            }
+
+            int current = PROVIDER_ORDER_CODE_SEQUENCE.getAndIncrement();
+            if (current < PROVIDER_ORDER_CODE_SEQUENCE_MOD) {
+                return current;
+            }
+
+            Thread.yield();
+        }
+    }
+
+    private int attemptNoSeed(long bucket) {
+        long mixed = bucket ^ (bucket >>> 17) ^ (bucket >>> 31);
+        return (int) Math.floorMod(mixed, PROVIDER_ORDER_CODE_SEQUENCE_MOD);
     }
 }

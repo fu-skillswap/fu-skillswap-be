@@ -14,6 +14,8 @@ import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
+import java.util.List;
 
 @Repository
 public interface ForumPostRepository extends JpaRepository<ForumPost, UUID> {
@@ -65,6 +67,9 @@ public interface ForumPostRepository extends JpaRepository<ForumPost, UUID> {
 
     @EntityGraph(attributePaths = {"authorUser", "helpTopic"})
     Optional<ForumPost> findById(UUID id);
+
+    @EntityGraph(attributePaths = {"authorUser", "helpTopic"})
+    List<ForumPost> findByIdIn(Collection<UUID> ids);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ForumPost p where p.id = :id")

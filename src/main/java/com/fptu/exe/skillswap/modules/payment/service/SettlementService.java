@@ -20,6 +20,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.SettlementEntryReposito
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,22 +48,12 @@ public class SettlementService {
         if (mentorUserId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
         }
-        return settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId)
-                .orElseGet(() -> settlementAccountRepository.save(SettlementAccount.builder()
-                        .ownerType(LedgerAccountType.MENTOR_SETTLEMENT)
-                        .ownerId(mentorUserId)
-                        .accountCode("SETTLEMENT_MENTOR_" + mentorUserId)
-                        .build()));
+        return ensureAccount(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId, "SETTLEMENT_MENTOR_" + mentorUserId);
     }
 
     @Transactional
     public SettlementAccount ensurePlatformAccount() {
-        return settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID)
-                .orElseGet(() -> settlementAccountRepository.save(SettlementAccount.builder()
-                        .ownerType(LedgerAccountType.PLATFORM_SETTLEMENT)
-                        .ownerId(PLATFORM_OWNER_ID)
-                        .accountCode("SETTLEMENT_PLATFORM")
-                        .build()));
+        return ensureAccount(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID, "SETTLEMENT_PLATFORM");
     }
 
     @Transactional
@@ -80,11 +71,11 @@ public class SettlementService {
         if (booking.getCompletionOutcome() == BookingCompletionOutcome.REVIEW_PENDING_DECISION) {
             return;
         }
-        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
-        SettlementAccount mentorAccount = ensureMentorAccount(booking.getMentorProfile().getUserId());
+        SettlementAccount mentorAccount = lockMentorAccount(booking.getMentorProfile().getUserId());
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 mentorAccount.getId(),
                 LedgerSourceType.BOOKING,
@@ -105,7 +96,7 @@ public class SettlementService {
                 ? grossScoin - commissionScoin
                 : paymentOrder.getMentorNetScoin());
 
-        SettlementAccount platformAccount = ensurePlatformAccount();
+        SettlementAccount platformAccount = lockPlatformAccount();
 
         settlementEntryRepository.save(SettlementEntry.builder()
                 .accountId(mentorAccount.getId())
@@ -145,7 +136,7 @@ public class SettlementService {
             return;
         }
 
-        var creditAccount = creditLedgerService.ensureUserAccount(booking.getMentee().getId());
+        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.getMentee().getId());
         boolean refundAlreadyRecorded = creditLedgerEntryRepository
                 .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                         creditAccount.getId(),
@@ -190,8 +181,8 @@ public class SettlementService {
             );
         }
 
-        SettlementAccount mentorAccount = ensureMentorAccount(paymentOrder.getMentorUserId());
-        SettlementAccount platformAccount = ensurePlatformAccount();
+        SettlementAccount mentorAccount = lockMentorAccount(paymentOrder.getMentorUserId());
+        SettlementAccount platformAccount = lockPlatformAccount();
 
         if (mentorShare > 0) {
             settlementEntryRepository.save(SettlementEntry.builder()
@@ -235,7 +226,7 @@ public class SettlementService {
             return;
         }
 
-        var creditAccount = creditLedgerService.ensureUserAccount(booking.getMentee().getId());
+        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.getMentee().getId());
         boolean refundAlreadyRecorded = creditLedgerEntryRepository
                 .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                         creditAccount.getId(),
@@ -280,7 +271,7 @@ public class SettlementService {
         if (amountScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "amountScoin phải lớn hơn 0");
         }
-        SettlementAccount account = ensureMentorAccount(mentorUserId);
+        SettlementAccount account = lockMentorAccount(mentorUserId);
         int available = settlementEntryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();
         if (available < amountScoin) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Số dư settlement chưa đủ để tạo payout request");
@@ -305,7 +296,7 @@ public class SettlementService {
 
     @Transactional
     public void voidPayoutHold(UUID mentorUserId, UUID payoutRequestId, String memo) {
-        SettlementAccount account = ensureMentorAccount(mentorUserId);
+        SettlementAccount account = lockMentorAccount(mentorUserId);
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.VOID
         ).isPresent()) {
@@ -326,7 +317,7 @@ public class SettlementService {
 
     @Transactional
     public void finalizePayout(UUID mentorUserId, UUID payoutRequestId, String memo) {
-        SettlementAccount account = ensureMentorAccount(mentorUserId);
+        SettlementAccount account = lockMentorAccount(mentorUserId);
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.PAID_OUT
         ).isPresent()) {
@@ -343,5 +334,45 @@ public class SettlementService {
                 .balanceEffectScoin(0)
                 .memo(memo)
                 .build()));
+    }
+
+    private SettlementAccount ensureAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        return settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                .orElseGet(() -> createAccount(ownerType, ownerId, accountCode));
+    }
+
+    private SettlementAccount lockMentorAccount(UUID mentorUserId) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
+        }
+        return lockAccount(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId, "SETTLEMENT_MENTOR_" + mentorUserId);
+    }
+
+    private SettlementAccount lockPlatformAccount() {
+        return lockAccount(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID, "SETTLEMENT_PLATFORM");
+    }
+
+    private SettlementAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        SettlementAccount existing = settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                .orElse(null);
+        if (existing != null) {
+            return existing;
+        }
+        ensureAccount(ownerType, ownerId, accountCode);
+        return settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa settlement account"));
+    }
+
+    private SettlementAccount createAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
+        try {
+            return settlementAccountRepository.save(SettlementAccount.builder()
+                    .ownerType(ownerType)
+                    .ownerId(ownerId)
+                    .accountCode(accountCode)
+                    .build());
+        } catch (DataIntegrityViolationException ex) {
+            return settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+                    .orElseThrow(() -> ex);
+        }
     }
 }

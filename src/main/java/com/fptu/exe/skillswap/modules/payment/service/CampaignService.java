@@ -40,7 +40,7 @@ public class CampaignService {
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CampaignCreditApplication resolveCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
         if (userId == null || booking == null || amountAfterCouponScoin <= 0) {
             return CampaignCreditApplication.none();
@@ -51,7 +51,11 @@ public class CampaignService {
         StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(userId).orElse(null);
 
         CampaignCreditApplication bestMatch = CampaignCreditApplication.none();
-        for (Campaign campaign : campaignRepository.findByStatus(CampaignStatus.ACTIVE)) {
+        for (UUID campaignId : campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)) {
+            Campaign campaign = campaignRepository.findByIdForUpdate(campaignId).orElse(null);
+            if (campaign == null) {
+                continue;
+            }
             if (!isWithinWindow(campaign) || !matchesAudience(campaign, user, studentProfile, booking)) {
                 continue;
             }

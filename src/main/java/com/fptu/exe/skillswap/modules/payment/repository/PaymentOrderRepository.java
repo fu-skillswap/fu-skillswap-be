@@ -15,6 +15,10 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
 
     Optional<PaymentOrder> findByBookingId(UUID bookingId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select po from PaymentOrder po where po.bookingId = :bookingId")
+    Optional<PaymentOrder> findByBookingIdForUpdate(@Param("bookingId") UUID bookingId);
+
     Optional<PaymentOrder> findByOrderCode(String orderCode);
 
     Optional<PaymentOrder> findByProviderOrderCode(String providerOrderCode);

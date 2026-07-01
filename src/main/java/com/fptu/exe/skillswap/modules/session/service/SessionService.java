@@ -13,8 +13,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -55,6 +61,15 @@ public class SessionService {
     public Session findByBookingId(UUID bookingId) {
         return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, bookingId)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, Session> findByBookingIds(Collection<UUID> bookingIds) {
+        if (bookingIds == null || bookingIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Session> sessions = sessionRepository.findBySourceTypeAndSourceIdIn(SessionSourceType.BOOKING, bookingIds);
+        return sessions.stream().collect(Collectors.toMap(Session::getSourceId, Function.identity(), (left, right) -> left));
     }
 
     @Transactional

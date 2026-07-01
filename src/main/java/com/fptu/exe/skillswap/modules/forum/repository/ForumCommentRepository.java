@@ -14,6 +14,8 @@ import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.Collection;
+import java.util.List;
 
 @Repository
 public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID> {
@@ -43,6 +45,9 @@ public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID
 
     @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
     Optional<ForumComment> findById(UUID id);
+
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
+    List<ForumComment> findByIdIn(Collection<UUID> ids);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from ForumComment c where c.id = :id")

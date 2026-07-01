@@ -297,18 +297,7 @@ class ConversationServiceUnitTest {
     @Test
     void getTotalUnreadCount_shouldAccumulateUnreadCounts() {
         UUID userId = UUID.randomUUID();
-        UUID convId1 = UUID.randomUUID();
-        UUID convId2 = UUID.randomUUID();
-
-        Conversation conv1 = Conversation.builder().id(convId1).build();
-        Conversation conv2 = Conversation.builder().id(convId2).build();
-
-        ConversationParticipant cp1 = ConversationParticipant.builder().conversation(conv1).joinedAt(LocalDateTime.now()).build();
-        ConversationParticipant cp2 = ConversationParticipant.builder().conversation(conv2).joinedAt(LocalDateTime.now()).build();
-
-        when(participantRepository.findByUserId(userId)).thenReturn(List.of(cp1, cp2));
-        when(messageRepository.countUnreadMessages(eq(convId1), eq(userId), any())).thenReturn(3L);
-        when(messageRepository.countUnreadMessages(eq(convId2), eq(userId), any())).thenReturn(4L);
+        when(messageRepository.countTotalUnreadMessages(userId)).thenReturn(7L);
 
         long total = conversationService.getTotalUnreadCount(userId);
         assertEquals(7L, total);

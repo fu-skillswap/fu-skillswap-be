@@ -32,8 +32,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
+import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -202,7 +205,7 @@ class PaymentOrderServiceTest {
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMenteeCancellation(booking, false);
@@ -225,7 +228,7 @@ class PaymentOrderServiceTest {
                 .status(PaymentOrderStatus.PAID)
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMenteeCancellation(booking, true);
@@ -245,7 +248,7 @@ class PaymentOrderServiceTest {
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMentorCancellation(booking);
@@ -267,7 +270,7 @@ class PaymentOrderServiceTest {
                 .status(PaymentOrderStatus.PAID)
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMentorCancellation(booking);
@@ -304,6 +307,7 @@ class PaymentOrderServiceTest {
         // Gateway returns verified result (HMAC is correct per SdkPayOsGateway)
         when(payOsGateway.verifyWebhook(webhookRequest)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-1"));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -381,6 +385,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
+                .bookingId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -397,6 +402,8 @@ class PaymentOrderServiceTest {
 
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-dup"));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         // Simulate already-processed event
         when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(true);
@@ -417,6 +424,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
+                .bookingId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -433,6 +441,8 @@ class PaymentOrderServiceTest {
 
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-final"));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentOrderRepository.existsByProviderEventId(any())).thenReturn(false);
         when(paymentAttemptRepository.existsByProviderEventId(any())).thenReturn(false);
@@ -476,5 +486,19 @@ class PaymentOrderServiceTest {
 
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
         assertEquals("Không cần thanh toán cho dịch vụ miễn phí", exception.getMessage());
+    }
+
+    @Test
+    void generateProviderOrderCode_shouldStayWithinPayOsSafeIntegerRangeAndRemainUnique() throws Exception {
+        Method method = PaymentOrderService.class.getDeclaredMethod("generateProviderOrderCode", UUID.class, int.class);
+        method.setAccessible(true);
+
+        Set<Long> generated = new HashSet<>();
+        for (int i = 0; i < 1000; i++) {
+            long value = (long) method.invoke(paymentOrderService, UUID.randomUUID(), 1);
+            assertTrue(value > 0);
+            assertTrue(value <= 9_007_199_254_740_991L);
+            assertTrue(generated.add(value), "Duplicate providerOrderCode generated: " + value);
+        }
     }
 }

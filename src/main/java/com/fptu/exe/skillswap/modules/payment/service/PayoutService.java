@@ -59,7 +59,7 @@ public class PayoutService {
 
     @Transactional
     public PayoutRequestResponse approve(UUID adminUserId, UUID payoutRequestId, String note) {
-        PayoutRequest payoutRequest = load(payoutRequestId);
+        PayoutRequest payoutRequest = loadForUpdate(payoutRequestId);
         if (payoutRequest.getStatus() != PayoutRequestStatus.REQUESTED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể duyệt payout request đang REQUESTED");
         }
@@ -74,7 +74,7 @@ public class PayoutService {
 
     @Transactional
     public PayoutRequestResponse reject(UUID adminUserId, UUID payoutRequestId, String note) {
-        PayoutRequest payoutRequest = load(payoutRequestId);
+        PayoutRequest payoutRequest = loadForUpdate(payoutRequestId);
         PayoutRequestStatus currentStatus = payoutRequest.getStatus();
         if (currentStatus != PayoutRequestStatus.REQUESTED && currentStatus != PayoutRequestStatus.APPROVED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể từ chối payout request đang chờ xử lý");
@@ -92,7 +92,7 @@ public class PayoutService {
 
     @Transactional
     public PayoutRequestResponse markPaid(UUID adminUserId, UUID payoutRequestId, String note) {
-        PayoutRequest payoutRequest = load(payoutRequestId);
+        PayoutRequest payoutRequest = loadForUpdate(payoutRequestId);
         if (payoutRequest.getStatus() != PayoutRequestStatus.APPROVED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể đánh dấu paid cho payout request đã duyệt");
         }
@@ -137,6 +137,11 @@ public class PayoutService {
 
     private PayoutRequest load(UUID payoutRequestId) {
         return payoutRequestRepository.findById(payoutRequestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payout request"));
+    }
+
+    private PayoutRequest loadForUpdate(UUID payoutRequestId) {
+        return payoutRequestRepository.findByIdForUpdate(payoutRequestId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payout request"));
     }
 
