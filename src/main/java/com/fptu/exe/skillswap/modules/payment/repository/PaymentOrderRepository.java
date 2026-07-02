@@ -39,6 +39,8 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
 
     boolean existsByProviderEventId(String providerEventId);
 
+    long countByPayerUserId(UUID payerUserId);
+
     @Query("""
             select coalesce(sum(po.campaignCreditScoin), 0)
             from PaymentOrder po

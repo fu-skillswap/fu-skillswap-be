@@ -64,4 +64,20 @@ public interface UserRepository extends JpaRepository<User, UUID> {
             @Param("systemAdminRole") RoleCode systemAdminRole,
             Pageable pageable
     );
+
+    @Query("""
+            select u
+            from User u
+            where u.id = :userId
+              and (:menteeRole member of u.roles or :mentorRole member of u.roles)
+              and :adminRole not member of u.roles
+              and :systemAdminRole not member of u.roles
+            """)
+    Optional<User> findAdminVisibleUserById(
+            @Param("userId") UUID userId,
+            @Param("menteeRole") RoleCode menteeRole,
+            @Param("mentorRole") RoleCode mentorRole,
+            @Param("adminRole") RoleCode adminRole,
+            @Param("systemAdminRole") RoleCode systemAdminRole
+    );
 }

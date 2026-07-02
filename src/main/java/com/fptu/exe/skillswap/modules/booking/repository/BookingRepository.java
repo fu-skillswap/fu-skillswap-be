@@ -207,6 +207,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMenteeIdAndStatus(UUID menteeId, BookingStatus status);
 
+    long countByMenteeId(UUID menteeId);
+
+    long countByMentorProfileUserId(UUID mentorUserId);
+
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
 
     boolean existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(

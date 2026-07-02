@@ -98,6 +98,21 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(adminMentorVerificationService.refreshLock(principal.getPublicId(), requestId));
     }
 
+    @Operation(summary = "Giải phóng verification lock", description = "Owner hiện tại của soft lock có thể tự release lock; SYSTEM_ADMIN có thể force release lock của admin khác mà không đổi status của request.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Release lock thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền release lock này"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy request")
+    })
+    @PostMapping("/{requestId}/lock/release")
+    public ApiResponse<AdminMentorVerificationLockResponse> releaseLock(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID requestId
+    ) {
+        return ApiResponse.success(adminMentorVerificationService.releaseLock(principal.getPublicId(), java.util.Set.copyOf(principal.getRoles()), requestId));
+    }
+
     @Operation(summary = "Yêu cầu chỉnh sửa verification", description = "Đưa mentor verification request về trạng thái cần chỉnh sửa để mentor tiếp tục sửa trên chính request hiện tại thay vì tạo lại từ đầu. FE admin dùng khi reviewer muốn mentor bổ sung hoặc sửa document/profile.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Yêu cầu chỉnh sửa thành công"),

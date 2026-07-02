@@ -12,6 +12,7 @@ import org.springframework.web.method.annotation.MethodArgumentConversionNotSupp
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -98,6 +99,18 @@ public class GlobalExceptionHandler {
             return buildResponse(ErrorCode.UNSUPPORTED_MEDIA_TYPE, error.message(), List.of(error));
         }
         return buildResponse(ErrorCode.INVALID_INPUT, "Body request không hợp lệ hoặc không đúng định dạng mà API hỗ trợ");
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        String message = ErrorCode.METHOD_NOT_ALLOWED.getMessage();
+        if (ex.getSupportedHttpMethods() != null && !ex.getSupportedHttpMethods().isEmpty()) {
+            String supportedMethods = ex.getSupportedHttpMethods().stream()
+                    .map(method -> method.name())
+                    .collect(Collectors.joining(", "));
+            message = message + ". Hỗ trợ: " + supportedMethods;
+        }
+        return buildResponse(ErrorCode.METHOD_NOT_ALLOWED, message);
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

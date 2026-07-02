@@ -471,6 +471,14 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 ### POST `/api/admin/mentor-verification/requests/{requestId}/lock/refresh`
 - Auth: `bearerAuth`, role `ADMIN`
 
+### POST `/api/admin/mentor-verification/requests/{requestId}/lock/release`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: giải phóng soft lock của một mentor verification request mà không đổi `status`.
+- Rule:
+  - owner hiện tại của lock được tự release
+  - `SYSTEM_ADMIN` được force release lock của admin khác
+  - chỉ clear `lockedBy`, `lockedAt`, `lockExpiresAt`
+
 ### POST `/api/admin/mentor-verification/requests/{requestId}/request-revision`
 - Auth: `bearerAuth`, role `ADMIN`
 - Request body:
@@ -796,6 +804,9 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 
 ### PATCH `/api/me/notifications/read-all`
 - Auth: `bearerAuth`
+- Ghi chú:
+  - chỉ hỗ trợ HTTP `PATCH`
+  - nếu FE gọi `PUT` hoặc method khác, backend trả `405 Method Not Allowed`
 
 ## 15. Wallet
 
@@ -1029,6 +1040,250 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 ### POST `/api/admin/forum/comments/{commentId}/restore`
 - Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
 
+### Admin dashboard
+
+### GET `/api/admin/dashboard/overview`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: snapshot tổng quan cho admin dashboard.
+- Response:
+  - `AdminDashboardOverviewResponse`
+    - `snapshotAt`
+    - `users`
+      - `total`
+      - `active`
+      - `banned`
+      - `deleted`
+      - `menteeOnly`
+      - `mentor`
+    - `mentorVerification`
+      - `draft`
+      - `pendingReview`
+      - `needsRevision`
+      - `approved`
+      - `rejected`
+      - `withdrawn`
+    - `bookings`
+      - map raw `BookingStatus` -> count
+    - `forumReports`
+      - map raw `ForumReportStatus` -> count
+    - `payoutRequests`
+      - map raw `PayoutRequestStatus` -> count
+    - `paymentOrders`
+      - map raw `PaymentOrderStatus` -> count
+    - `emailOutbox`
+      - map raw `NotificationStatus` -> count
+
+### GET `/api/admin/dashboard/queues`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: trả queue vận hành ưu tiên cho admin dashboard.
+- Response:
+  - `AdminDashboardQueuesResponse`
+    - `snapshotAt`
+    - `items[]`
+      - `key`
+      - `label`
+      - `count`
+      - `severity`
+      - `targetPath`
+      - `priorityOrder`
+- Ghi chú:
+  - queue cố định phase 3 gồm:
+    - `mentor_verification_pending_review`
+    - `booking_under_review`
+    - `forum_reports_open`
+    - `payout_requests_requested`
+    - `payment_orders_failed`
+    - `email_outbox_failed`
+    - `bookings_accepted_awaiting_payment`
+
+### GET `/api/admin/dashboard/timeseries`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: trả timeseries 30 ngày gần nhất theo `Asia/Ho_Chi_Minh`.
+- Response:
+  - `AdminDashboardTimeseriesResponse`
+    - `timezone`
+    - `fromDate`
+    - `toDate`
+    - `points[]`
+      - `date`
+      - `usersCreated`
+      - `mentorVerificationSubmitted`
+      - `bookingsCreated`
+      - `paymentOrdersPaid`
+      - `forumReportsCreated`
+      - `payoutRequestsCreated`
+
+### GET `/api/admin/dashboard/queue-items`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: drill-down từng queue sang danh sách case cụ thể để admin xử lý trực tiếp trong workbench.
+- Query params:
+  - `queueKey` bắt buộc
+  - `page`, `size`, `sortBy`, `direction`
+  - `assignedToMe` `boolean`
+  - `unassignedOnly` `boolean`
+- Response:
+  - `PageResponse<AdminQueueCaseItemResponse>`
+    - `queueKey`
+    - `caseType`
+    - `caseId`
+    - `title`
+    - `subtitle`
+    - `status`
+    - `severity`
+    - `createdAt`
+    - `updatedAt`
+    - `ageMinutes`
+    - `assignedAdminUserId`
+    - `assignedAdminDisplayName`
+    - `assignedAt`
+    - `detailPath`
+    - `availableActions`
+- Ghi chú:
+  - `detailPath` luôn trỏ sang detail API hiện có của domain tương ứng
+  - default sort là `createdAt ASC` để item cũ hơn nổi lên trước
+
+### GET `/api/admin/audit-logs`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: duyệt audit logs nội bộ theo actor, entity, action và khoảng thời gian.
+- Query params:
+  - `page`, `size`, `sortBy`, `direction`
+  - `actorUserId`
+  - `entityType`
+  - `entityId`
+  - `action`
+  - `from`
+  - `to`
+- Response:
+  - `PageResponse<AdminAuditLogItemResponse>`
+    - `auditLogId`
+    - `createdAt`
+    - `actorUserId`
+    - `actorDisplayName`
+    - `entityType`
+    - `entityId`
+    - `action`
+    - `oldValue` (raw JSON/string từ DB)
+    - `newValue` (raw JSON/string từ DB)
+    - `ipAddress`
+    - `userAgent`
+
+### GET `/api/admin/notes`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: lấy admin notes nội bộ theo target.
+- Query params:
+  - `page`, `size`, `sortBy`, `direction`
+  - `targetType`
+  - `targetId`
+- Response:
+  - `PageResponse<AdminNoteResponse>`
+    - `noteId`
+    - `targetType`
+    - `targetId`
+    - `note`
+    - `adminUserId`
+    - `adminDisplayName`
+    - `createdAt`
+
+### POST `/api/admin/notes`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: tạo admin note nội bộ dạng append-only.
+- Request body:
+  - `AdminNoteCreateRequest`
+    - `targetType`
+      - supported phase 3: `USER`, `MENTOR`, `MENTOR_VERIFICATION_REQUEST`, `BOOKING`, `FORUM_REPORT`, `PAYOUT_REQUEST`, `PAYMENT_ORDER`, `EMAIL_OUTBOX`
+    - `targetId`
+    - `note`
+- Response:
+  - `AdminNoteResponse`
+
+### GET `/api/admin/email-outbox`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: xem email outbox nội bộ để chẩn đoán pending/failed/sent.
+- Query params:
+  - `page`, `size`, `sortBy`, `direction`
+  - `status`
+  - `templateCode`
+  - `toEmail`
+  - `from`
+  - `to`
+- Response:
+  - `PageResponse<AdminEmailOutboxItemResponse>`
+    - `emailOutboxId`
+    - `toEmail`
+    - `subject`
+    - `templateCode`
+    - `status`
+    - `retryCount`
+    - `createdAt`
+    - `sentAt`
+    - `lastErrorPreview`
+
+### GET `/api/admin/email-outbox/{emailOutboxId}`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: xem chi tiết body và lỗi đầy đủ của một email outbox.
+- Response:
+  - `AdminEmailOutboxDetailResponse`
+    - giữ toàn bộ field của item response
+    - thêm `body`
+    - thêm `lastError`
+
+### POST `/api/admin/email-outbox/{emailOutboxId}/retry`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: retry lại email outbox đang `FAILED` bằng cách reset chính row hiện tại về `PENDING`.
+- Rule:
+  - chỉ retry được khi status hiện tại là `FAILED`
+  - `PENDING` hoặc `SENT` sẽ trả `409 Conflict`
+  - backend không tạo row outbox mới trong phase 3
+- Response:
+  - `AdminEmailOutboxDetailResponse`
+
+### GET `/api/admin/cases/{caseType}/{caseId}/ownership`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: lấy owner hiện tại của case vận hành.
+- Response:
+  - `AdminCaseOwnershipResponse`
+    - `caseType`
+    - `caseId`
+    - `assigned`
+    - `assignedAdminUserId`
+    - `assignedAdminDisplayName`
+    - `assignedAt`
+
+### POST `/api/admin/cases/{caseType}/{caseId}/assign`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: assign case cho chính admin đang gọi.
+- Rule:
+  - chưa assign -> assign cho caller
+  - caller đang giữ sẵn -> idempotent success
+  - admin khác đang giữ -> `409 Conflict`
+- Response:
+  - `AdminCaseOwnershipResponse`
+
+### POST `/api/admin/cases/{caseType}/{caseId}/unassign`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: gỡ ownership của case.
+- Rule:
+  - owner hiện tại được unassign
+  - `SYSTEM_ADMIN` được force unassign
+  - admin khác không phải owner -> `403 Forbidden`
+- Response:
+  - `AdminCaseOwnershipResponse`
+
+### GET `/api/admin/cases/{caseType}/{caseId}/activity`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: lấy operator activity nội bộ của một case. Đây không phải full business timeline của domain.
+- Query params:
+  - `page`, `size`
+- Response:
+  - `PageResponse<AdminCaseActivityItemResponse>`
+    - `eventType`
+    - `occurredAt`
+    - `actorUserId`
+    - `actorDisplayName`
+    - `title`
+    - `description`
+    - `source`
+
 ## 19. System Admin / Admin User Management
 
 ### POST `/api/system/users/admin-role/grant`
@@ -1078,6 +1333,44 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
     - `lastLoginAt`
     - `createdAt`
     - `academicProfile.claimedStudentCode`
+
+### GET `/api/admin/users/{userId}/summary`
+- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
+- Mục đích: entrypoint summary cho FE admin xem nhanh identity, academic, mentor và activity counts của một visible user.
+- Response:
+  - `AdminUserSummaryResponse`
+    - `userId`
+    - `email`
+    - `fullName`
+    - `avatarUrl`
+    - `status`
+    - `roles`
+    - `lastLoginAt`
+    - `createdAt`
+    - `academicProfile`
+      - `studentCode`
+      - `campusCode`
+      - `campusName`
+      - `programCode`
+      - `programName`
+      - `specializationCode`
+      - `specializationName`
+      - `semester`
+      - `isAlumni`
+    - `mentorProfile`
+      - `exists`
+      - `mentorStatus`
+      - `isAvailable`
+      - `verifiedAt`
+      - `headline`
+      - `averageRating`
+      - `totalCompletedSessions`
+    - `activitySummary`
+      - `menteeBookingCount`
+      - `mentorBookingCount`
+      - `paymentOrderCount`
+      - `payoutRequestCount`
+      - `forumReportCreatedCount`
 
 ### POST `/api/admin/users/{userId}/ban`
 - Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`

@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.system.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
 import com.fptu.exe.skillswap.modules.system.dto.request.BanUserRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryResponse;
+import com.fptu.exe.skillswap.modules.admin.service.AdminUserSummaryService;
 import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.system.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.system.dto.request.UnbanUserRequest;
@@ -34,6 +36,7 @@ import java.util.UUID;
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
+    private final AdminUserSummaryService adminUserSummaryService;
 
     @Operation(
             summary = "Lấy danh sách visible users",
@@ -49,6 +52,21 @@ public class AdminUserController {
             @ParameterObject @ModelAttribute AdminUserListRequest request
     ) {
         return ApiResponse.success(adminUserService.getVisibleUsers(request));
+    }
+
+    @Operation(
+            summary = "Lấy summary của một visible user",
+            description = "Trả về snapshot gọn của user để FE admin có một entrypoint duy nhất xem identity, academic profile, mentor profile và activity counts mà không phải tự ráp từ nhiều danh sách."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy user summary thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy visible user")
+    })
+    @GetMapping("/{userId}/summary")
+    public ApiResponse<AdminUserSummaryResponse> getUserSummary(@PathVariable UUID userId) {
+        return ApiResponse.success(adminUserSummaryService.getSummary(userId));
     }
 
     @Operation(summary = "Khóa user", description = "Chuyển trạng thái tài khoản của một visible user sang banned. FE admin dùng trong flow moderation khi cần chặn user sử dụng hệ thống và phải lưu lại lý do thao tác.")

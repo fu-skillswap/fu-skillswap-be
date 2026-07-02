@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.admin.domain.AdminCaseActivityEventType;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -50,6 +52,8 @@ import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -89,6 +93,7 @@ public class AdminMentorVerificationService {
     private final MentorProfileService mentorProfileService;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final AdminAuditWriterService adminAuditWriterService;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorVerificationQueueItemResponse> getQueue(AdminMentorVerificationQueueFilterRequest filterRequest) {
@@ -174,6 +179,38 @@ public class AdminMentorVerificationService {
         request.setLockExpiresAt(now.plusMinutes(LOCK_TTL_MINUTES));
         mentorVerificationRequestRepository.save(request);
 
+        return mapLockStatus(request, adminUserId);
+    }
+
+    @Transactional
+    public AdminMentorVerificationLockResponse releaseLock(UUID adminUserId, Set<com.fptu.exe.skillswap.shared.constant.RoleCode> roles, UUID requestId) {
+        getRequiredUser(adminUserId);
+        MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(requestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
+        if (request.getLockedBy() == null && request.getLockedAt() == null && request.getLockExpiresAt() == null) {
+            return mapLockStatus(request, adminUserId);
+        }
+
+        boolean isOwner = isLockedBy(request, adminUserId);
+        boolean isSystemAdmin = roles != null && roles.contains(com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN);
+        if (!isOwner && !isSystemAdmin) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền giải phóng lock này");
+        }
+
+        Map<String, Object> oldValue = new java.util.LinkedHashMap<>();
+        oldValue.put("lockedByAdminId", request.getLockedBy() == null ? null : request.getLockedBy().getId());
+        oldValue.put("lockedAt", request.getLockedAt());
+        oldValue.put("lockExpiresAt", request.getLockExpiresAt());
+        clearLock(request);
+        mentorVerificationRequestRepository.save(request);
+        adminAuditWriterService.writeOperatorEvent(
+                adminUserId,
+                "MENTOR_VERIFICATION_REQUEST",
+                requestId,
+                AdminCaseActivityEventType.VERIFICATION_LOCK_RELEASED.name(),
+                oldValue,
+                java.util.Collections.emptyMap()
+        );
         return mapLockStatus(request, adminUserId);
     }
 

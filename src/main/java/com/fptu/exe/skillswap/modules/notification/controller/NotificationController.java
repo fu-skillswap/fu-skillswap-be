@@ -71,7 +71,7 @@ public class NotificationController {
 
     @Operation(
             summary = "Đánh dấu tất cả notification đã đọc",
-            description = "Đánh dấu tất cả notification là đã đọc cho user hiện tại. FE dùng khi có action đọc hết trong notification center."
+            description = "Đánh dấu tất cả notification là đã đọc cho user hiện tại. FE dùng khi có action đọc hết trong notification center. Endpoint này chỉ hỗ trợ HTTP PATCH."
     )
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(

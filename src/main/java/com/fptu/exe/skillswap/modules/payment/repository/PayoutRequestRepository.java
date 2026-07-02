@@ -25,6 +25,8 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, UU
 
     boolean existsByMentorUserIdAndStatusIn(UUID mentorUserId, java.util.Collection<PayoutRequestStatus> statuses);
 
+    long countByMentorUserId(UUID mentorUserId);
+
     @Query(value = """
             select payoutRequest
             from PayoutRequest payoutRequest

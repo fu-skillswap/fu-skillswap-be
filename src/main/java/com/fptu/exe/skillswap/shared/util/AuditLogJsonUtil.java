@@ -7,7 +7,7 @@ import java.util.Map;
 
 public final class AuditLogJsonUtil {
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().findAndRegisterModules();
 
     private AuditLogJsonUtil() {
     }

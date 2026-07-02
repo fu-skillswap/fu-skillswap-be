@@ -45,4 +45,7 @@ public interface ForumReportRepository extends JpaRepository<ForumReport, UUID> 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ForumReport r where r.id = :id")
     Optional<ForumReport> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("select count(r.id) from ForumReport r where r.reporterUser.id = :reporterUserId")
+    long countCreatedByReporterUserId(@Param("reporterUserId") UUID reporterUserId);
 }
