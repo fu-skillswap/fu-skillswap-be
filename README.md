@@ -409,6 +409,26 @@ Rule:
 - Revoke `ADMIN` trả tài khoản về role mặc định `MENTEE`; role `MENTOR` không được tự khôi phục sau khi thu hồi admin.
 - `ADMIN` không gọi được API thuộc `/api/system/**`.
 
+### Admin Operations Workbench (Phase 3)
+
+Nhóm API hỗ trợ giao diện workbench vận hành tập trung cho Admin:
+
+- **Dashboard & Queue Workbench**:
+  - `GET /api/admin/dashboard/overview`: Lấy snapshot tổng quan vận hành, bổ sung theo dõi `emailOutbox` theo NotificationStatus.
+  - `GET /api/admin/dashboard/queues`: Lấy 7 queue card vận hành cố định được phân chia theo độ ưu tiên (Severity).
+  - `GET /api/admin/dashboard/timeseries`: Lấy chuỗi dữ liệu 30 ngày cho các hoạt động vận hành.
+  - `GET /api/admin/dashboard/queue-items`: Lấy danh sách chi tiết các case thuộc queue workbench, hỗ trợ lọc `assignedToMe` và `unassignedOnly`.
+- **Case Ownership & Assignment**:
+  - `GET /api/admin/cases/{caseType}/{caseId}/ownership`: Kiểm tra xem ai đang giữ ownership xử lý case.
+  - `POST /api/admin/cases/{caseType}/{caseId}/assign`: Admin nhận ownership xử lý case (trả `409` nếu admin khác đã giữ).
+  - `POST /api/admin/cases/{caseType}/{caseId}/unassign`: Gỡ ownership của case (chỉ owner hoặc `SYSTEM_ADMIN` mới được gỡ).
+- **Operator Activity Stream**:
+  - `GET /api/admin/cases/{caseType}/{caseId}/activity`: Lấy dòng thời gian lịch sử tương tác nội bộ của admin (notes, audit logs, assignment events) của case.
+- **Safe Operations & Notes**:
+  - `POST /api/admin/email-outbox/{emailOutboxId}/retry`: Gửi lại email bị lỗi (FAILED) bằng cách reset trạng thái về PENDING.
+  - `POST /api/admin/mentor-verification/requests/{requestId}/lock/release`: Giải phóng lock duyệt hồ sơ của mentor verification request.
+  - `POST /api/admin/notes`: Cho phép viết note trực tiếp lên email lỗi với targetType là `EMAIL_OUTBOX`.
+
 ## Mentor Verification State
 
 Trạng thái request:
