@@ -614,6 +614,7 @@ class BookingServiceTest {
         assertEquals("Done", booking.getMenteeNote());
         assertEquals(3, mentorProfile.getTotalCompletedSessions());
         assertEquals(3, mentorProfile.getTotalSessions());
+        verify(settlementService).releaseForBooking(booking);
     }
 
     @Test

@@ -695,7 +695,6 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
-        settlementService.releaseForBooking(savedBooking);
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
@@ -757,6 +756,7 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        settlementService.releaseForBooking(savedBooking);
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
