@@ -911,6 +911,17 @@ Semantic question codes:
 
 ## 16. Payment / PayOS
 
+> [!NOTE]
+> **Cơ chế Phụ thu (Surcharge) & Hoa hồng (Commission)**:
+> - **Đối với Mentee**: Mọi giá dịch vụ hiển thị cho Mentee (Discovery, Detail, Slot Availability) đã tự động cộng thêm **10% phụ thu**.
+> - **Đối với Mentor**: Mentor tự quản lý dịch vụ vẫn nhìn thấy giá gốc ban đầu họ nhập ($P$). Khi buổi học hoàn tất, Mentor chịu **10% chiết khấu hoa hồng** trên giá gốc.
+> - **Ví dụ thực tế**: Mentor nhập giá gốc 100 Scoin.
+>   - Mentee nhìn thấy giá dịch vụ là **110 Scoin** (được hiển thị tại `priceScoin`).
+>   - Khi Checkout, Mentee thanh toán tổng cộng **110 Scoin** (trước coupon/credit).
+>   - Mentor thực nhận về ví: **90 Scoin**.
+>   - Nền tảng (Platform) thu chênh lệch hoa hồng: **20 Scoin** (10 Scoin phụ thu từ Mentee + 10 Scoin chiết khấu từ Mentor).
+>   - Đối với dịch vụ miễn phí (giá gốc = 0), phụ thu và hoa hồng đều bằng 0.
+
 ### POST `/api/me/payment-orders/checkout`
 - Auth: `bearerAuth`
 - Mục đích: tạo payment order cho booking và trả hosted payment link.
