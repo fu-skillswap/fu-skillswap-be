@@ -1,8 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -27,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Collections;
@@ -64,6 +64,8 @@ class MentorVerificationServiceUploadTest {
     private StoredFileRepository storedFileRepository;
     @Mock
     private com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
+    @Mock
+    private ObjectProvider<R2DocumentStorageService> r2StorageProvider;
     private MentorVerificationService serviceWithCloudinary;
     private UUID userId;
     private User user;
@@ -114,7 +116,8 @@ class MentorVerificationServiceUploadTest {
                 mentorProfileService,
                 userRepository,
                 storedFileRepository,
-                storageSecurityProperties
+                storageSecurityProperties,
+                r2StorageProvider
         );
         ReflectionTestUtils.setField(serviceWithCloudinary, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedStudentProfile", false);

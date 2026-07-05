@@ -52,6 +52,15 @@ public class MentorProfile {
     @Column(name = "search_document", columnDefinition = "TEXT")
     private String searchDocument;
 
+    @Column(name = "foundation_support_level")
+    private Integer foundationSupportLevel;
+
+    @Column(name = "output_review_support_level")
+    private Integer outputReviewSupportLevel;
+
+    @Column(name = "direction_support_level")
+    private Integer directionSupportLevel;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "teaching_mode", length = 20)
     private TeachingMode teachingMode;

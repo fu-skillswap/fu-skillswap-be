@@ -36,8 +36,9 @@ public class BookingEligibilityPolicy {
                 && mentorProfile.isAvailable()
                 && trimToNull(mentorProfile.getHeadline()) != null
                 && trimToNull(mentorProfile.getExpertiseDescription()) != null
-                && mentorProfile.getTeachingMode() != null
-                && mentorProfile.getSessionDuration() != null;
+                && mentorProfile.getFoundationSupportLevel() != null
+                && mentorProfile.getOutputReviewSupportLevel() != null
+                && mentorProfile.getDirectionSupportLevel() != null;
     }
 
     private boolean hasAnyRole(User user, RoleCode... roles) {

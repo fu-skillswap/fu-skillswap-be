@@ -156,6 +156,9 @@ class BookingNotificationIntegrationTest {
                 .isAvailable(true)
                 .headline("Spring Boot Mentor")
                 .expertiseDescription("Support Java")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());

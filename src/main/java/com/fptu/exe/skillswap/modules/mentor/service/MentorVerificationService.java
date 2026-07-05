@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
+import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -20,10 +21,13 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.LocalDateTime;
@@ -67,6 +71,7 @@ public class MentorVerificationService {
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
+    private final ObjectProvider<R2DocumentStorageService> r2StorageProvider;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -124,6 +129,42 @@ public class MentorVerificationService {
         MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
         return mapDocumentResponse(document);
+    }
+
+    @Transactional
+    public MentorVerificationRequestResponse uploadDocument(
+            UUID userId,
+            VerificationDocumentType documentType,
+            MultipartFile file
+    ) {
+        requireUserId(userId);
+        MentorVerificationRequest verificationRequest = findEditableRequestForUpdate(userId);
+        validateMultipartUploadInput(documentType, file);
+        enforceDocumentCountLimit(verificationRequest.getId(), documentType);
+
+        User user = getRequiredUser(userId);
+        StoredFile storedFile = storeVerificationFile(user, documentType, file);
+
+        int nextVersion = mentorVerificationDocumentRepository
+                .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(verificationRequest.getId(), documentType)
+                .stream()
+                .map(MentorVerificationDocument::getVersion)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+
+        MentorVerificationDocument document = MentorVerificationDocument.builder()
+                .request(verificationRequest)
+                .documentType(documentType)
+                .status(VerificationDocumentStatus.UPLOADED)
+                .storageKind(resolveStorageKind(file.getContentType()))
+                .storedFile(storedFile)
+                .isActive(true)
+                .version(nextVersion)
+                .uploadedBy(user)
+                .build();
+
+        mentorVerificationDocumentRepository.save(document);
+        return buildResponse(verificationRequest);
     }
 
     @Transactional
@@ -573,7 +614,11 @@ public class MentorVerificationService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
         }
-        String contentType = canonicalizeContentType(request.contentType());
+        return resolveStorageKind(request.contentType());
+    }
+
+    private VerificationStorageKind resolveStorageKind(String rawContentType) {
+        String contentType = canonicalizeContentType(rawContentType);
         if ("application/pdf".equals(contentType)) {
             return VerificationStorageKind.DOCUMENT;
         }
@@ -687,6 +732,48 @@ public class MentorVerificationService {
             return null;
         }
         return value.trim();
+    }
+
+    private StoredFile storeVerificationFile(User user, VerificationDocumentType documentType, MultipartFile file) {
+        R2DocumentStorageService storageService = r2StorageProvider.getIfAvailable();
+        if (storageService == null) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình R2 để upload minh chứng");
+        }
+        try {
+            R2DocumentStorageService.R2UploadResult uploadResult = storageService.upload(
+                    file,
+                    "mentor-verification/" + user.getId() + "/" + documentType.name().toLowerCase()
+            );
+            return storedFileRepository.save(StoredFile.builder()
+                    .owner(user)
+                    .purpose(FilePurpose.VERIFICATION_DOCUMENT)
+                    .originalName(sanitizeFilename(trimToNull(file.getOriginalFilename())))
+                    .storageProvider("R2")
+                    .storageKey(uploadResult.objectKey())
+                    .publicUrl(uploadResult.fileUrl())
+                    .mimeType(canonicalizeContentType(file.getContentType()))
+                    .sizeBytes(file.getSize())
+                    .build());
+        } catch (IOException ex) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Upload minh chứng mentor thất bại");
+        }
+    }
+
+    private void validateMultipartUploadInput(VerificationDocumentType documentType, MultipartFile file) {
+        if (documentType == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
+        }
+        maxFilesFor(documentType);
+        if (file == null || file.isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "File minh chứng không được để trống");
+        }
+        if (file.getSize() <= 0 || file.getSize() > MAX_DOCUMENT_SIZE_BYTES) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 15MB");
+        }
+        String contentType = canonicalizeContentType(file.getContentType());
+        if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
+        }
     }
 
     private boolean hasActiveAdminLock(MentorVerificationRequest request) {

@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.catalog.controller;
 
 import com.fptu.exe.skillswap.modules.catalog.dto.response.HelpTopicResponse;
 import com.fptu.exe.skillswap.modules.catalog.service.CatalogService;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileOptionsResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,5 +32,17 @@ public class CatalogController {
     @GetMapping("/help-topics")
     public ApiResponse<List<HelpTopicResponse>> getHelpTopics() {
         return ApiResponse.success(catalogService.getHelpTopics());
+    }
+
+    @Operation(
+            summary = "Lấy option cho mentor profile",
+            description = "Trả về label mức support 1..4 cho foundation, output review và direction. FE dùng để render form mentor profile mà không cần fix cứng wording."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách option mentor profile")
+    })
+    @GetMapping("/mentor-profile-options")
+    public ApiResponse<MentorProfileOptionsResponse> getMentorProfileOptions() {
+        return ApiResponse.success(catalogService.getMentorProfileOptions());
     }
 }

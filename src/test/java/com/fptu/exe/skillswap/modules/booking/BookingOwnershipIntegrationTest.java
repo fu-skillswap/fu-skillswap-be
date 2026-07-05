@@ -136,6 +136,9 @@ class BookingOwnershipIntegrationTest {
                 .isAvailable(true)
                 .headline("Ownership Mentor")
                 .expertiseDescription("Ownership test mentor")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());

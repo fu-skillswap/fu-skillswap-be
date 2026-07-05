@@ -1,7 +1,9 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.request;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -23,10 +25,6 @@ public record MentorProfileUpsertRequest(
         @Size(max = 1000, message = "Mô tả chuyên môn không được quá 1000 ký tự")
         String expertiseDescription,
 
-        @Schema(example = "Cơ sở dữ liệu, Lập trình Java, Kiến trúc API", nullable = true)
-        @Size(max = 1000, message = "Các môn học có thể hỗ trợ không được quá 1000 ký tự")
-        String supportingSubjects,
-
         @Schema(description = "Mentor co dang san sang nhan mentee khong. Neu null khi tao moi se mac dinh true.")
         Boolean isAvailable,
 
@@ -35,16 +33,28 @@ public record MentorProfileUpsertRequest(
         @Size(max = 20, message = "Không được chọn quá 20 chủ đề hỗ trợ")
         List<@NotNull(message = "Chủ đề hỗ trợ không hợp lệ") UUID> helpTopicIds,
 
-        @Schema(example = "ONLINE", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull(message = "Hình thức mentoring không được để trống")
-        TeachingMode teachingMode,
+        @Schema(description = "Danh sách môn - điểm mentor dùng làm tín hiệu matching", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotEmpty(message = "Danh sách môn - điểm không được để trống")
+        @Size(max = 20, message = "Không được nhập quá 20 môn - điểm")
+        List<@Valid MentorSubjectResultRequest> subjectResults,
 
-        @Schema(example = "60", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull(message = "Thời lượng phiên mentoring không được để trống")
-        Integer sessionDuration,
+        @Schema(description = "Mentor có thể giúp mentee lấy gốc tới mức nào, 1-4", example = "3", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull(message = "Mức hỗ trợ lấy gốc không được để trống")
+        @Min(value = 1, message = "Mức hỗ trợ lấy gốc phải từ 1 đến 4")
+        @Max(value = 4, message = "Mức hỗ trợ lấy gốc phải từ 1 đến 4")
+        Integer foundationSupportLevel,
 
-        @Schema(example = "https://www.linkedin.com/in/example")
-        String linkedinUrl,
+        @Schema(description = "Mentor có thể review bài nộp/project/CV/report tới mức nào, 1-4", example = "3", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull(message = "Mức hỗ trợ review output không được để trống")
+        @Min(value = 1, message = "Mức hỗ trợ review output phải từ 1 đến 4")
+        @Max(value = 4, message = "Mức hỗ trợ review output phải từ 1 đến 4")
+        Integer outputReviewSupportLevel,
+
+        @Schema(description = "Mentor có thể hỗ trợ định hướng/OJT/career tới mức nào, 1-4", example = "2", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull(message = "Mức hỗ trợ định hướng không được để trống")
+        @Min(value = 1, message = "Mức hỗ trợ định hướng phải từ 1 đến 4")
+        @Max(value = 4, message = "Mức hỗ trợ định hướng phải từ 1 đến 4")
+        Integer directionSupportLevel,
 
         @Schema(example = "https://github.com/example")
         String githubUrl,

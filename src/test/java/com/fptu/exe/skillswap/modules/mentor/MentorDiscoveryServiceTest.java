@@ -25,8 +25,12 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardRes
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.modules.matching.service.MentoringMatchProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -89,6 +93,18 @@ class MentorDiscoveryServiceTest {
     @Mock
     private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
 
+    @Mock
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
+
+    @Mock
+    private MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
+
+    @Mock
+    private MentorAchievementRepository mentorAchievementRepository;
+
+    @Mock
+    private MentoringMatchProfileService mentoringMatchProfileService;
+
     @InjectMocks
     private MentorDiscoveryService mentorDiscoveryService;
 
@@ -137,6 +153,9 @@ class MentorDiscoveryServiceTest {
                 .headline("headline")
                 .expertiseDescription("expertise")
                 .supportingSubjects("subjects")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .isAvailable(true)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
@@ -145,6 +164,13 @@ class MentorDiscoveryServiceTest {
                 .totalReviews(4)
                 .totalCompletedSessions(5)
                 .build();
+
+        org.mockito.Mockito.lenient().when(mentorSubjectResultRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(any()))
+                .thenReturn(List.of());
+        org.mockito.Mockito.lenient().when(mentorFeaturedProjectRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(any()))
+                .thenReturn(List.of());
+        org.mockito.Mockito.lenient().when(mentorAchievementRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(any()))
+                .thenReturn(List.of());
     }
 
     @Test
@@ -165,7 +191,7 @@ class MentorDiscoveryServiceTest {
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(Collections.singletonList(mentorUserId)));
 
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
@@ -196,7 +222,7 @@ class MentorDiscoveryServiceTest {
 
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                eq(null), eq(null), eq(null), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(mentorUserId)));
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
                 .thenReturn(List.of(otherMajorMentor));
@@ -207,7 +233,7 @@ class MentorDiscoveryServiceTest {
         assertEquals(1, response.getContent().size());
         verify(mentorProfileRepository).findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                eq(null), eq(null), eq(null), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         );
     }
 
@@ -312,7 +338,7 @@ class MentorDiscoveryServiceTest {
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(fallbackMentorUserId, mentorUserId)));
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(fallbackMentorUserId, mentorUserId)))
                 .thenReturn(List.of(weakerMentor, keywordStrongMentor));
@@ -340,13 +366,13 @@ class MentorDiscoveryServiceTest {
 
         MentorDiscoveryQueryRow reliableMentor = new MentorDiscoveryQueryRow(
                 reliableMentorId, "Reliable Mentor", "reliable.png", "Java backend mentor", "Java backend mentor",
-                "Java backend", "Bio", true, BigDecimal.valueOf(4.6), 8, 12, TeachingMode.ONLINE,
+                "Java backend", "Bio", 3, 3, 2, true, BigDecimal.valueOf(4.6), 8, 12,
                 LocalDateTime.now().minusDays(5), campus.getId(), campus.getName(), academicProgram.getId(), academicProgram.getNameVi(),
                 specialization.getId(), specialization.getNameVi(), 8, false, 18, 2, 0, LocalDateTime.now().minusDays(3), null
         );
         MentorDiscoveryQueryRow unreliableMentor = new MentorDiscoveryQueryRow(
                 unreliableMentorId, "Unreliable Mentor", "unreliable.png", "Java backend mentor", "Java backend mentor",
-                "Java backend", "Bio", true, BigDecimal.valueOf(4.8), 8, 12, TeachingMode.ONLINE,
+                "Java backend", "Bio", 2, 2, 1, true, BigDecimal.valueOf(4.8), 8, 12,
                 LocalDateTime.now().minusDays(5), campus.getId(), campus.getName(), academicProgram.getId(), academicProgram.getNameVi(),
                 specialization.getId(), specialization.getNameVi(), 8, false, 6, 8, 4, LocalDateTime.now().minusDays(45), null
         );
@@ -354,7 +380,7 @@ class MentorDiscoveryServiceTest {
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE),
                 eq(MentorTagType.HELP_TOPIC),
-                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(unreliableMentorId, reliableMentorId)));
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(unreliableMentorId, reliableMentorId)))
                 .thenReturn(List.of(unreliableMentor, reliableMentor));
@@ -374,14 +400,14 @@ class MentorDiscoveryServiceTest {
 
         when(mentorProfileRepository.findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC), eq(campus.getId()),
-                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+                eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of()));
 
         mentorDiscoveryService.searchMentors(userId, request);
 
         verify(mentorProfileRepository).findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC), eq(campus.getId()),
-                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+                eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         );
     }
 
@@ -393,7 +419,7 @@ class MentorDiscoveryServiceTest {
 
         when(mentorProfileRepository.findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                eq(null), eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(mentorUserId)));
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(mentorUserId)))
                 .thenReturn(List.of(discoveryRow(mentorUserId, BigDecimal.ZERO, 0, 3.0)));
@@ -405,7 +431,7 @@ class MentorDiscoveryServiceTest {
         assertNotNull(response.getContent().getFirst().matchScore());
         verify(mentorProfileRepository).findDiscoverableCandidateIds(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                eq(null), eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
+                eq(null), eq(null), anyBoolean(), anyList(), any(), any(Pageable.class)
         );
     }
 
@@ -539,11 +565,13 @@ class MentorDiscoveryServiceTest {
                 "Java expertise",
                 "Java subjects",
                 "Java mentor bio",
+                3,
+                3,
+                2,
                 true,
                 rating,
                 reviewCount,
                 5,
-                TeachingMode.ONLINE,
                 LocalDateTime.now().minusDays(10),
                 campus.getId(),
                 campus.getName(),
@@ -574,8 +602,8 @@ class MentorDiscoveryServiceTest {
             boolean alumni
     ) {
         return new MentorDiscoveryQueryRow(
-                id, "Mentor " + id, "avatar.png", headline, expertise, subjects, bio, true,
-                BigDecimal.valueOf(4.5), 3, 5, TeachingMode.ONLINE, LocalDateTime.now().minusDays(10),
+                id, "Mentor " + id, "avatar.png", headline, expertise, subjects, bio, 3, 3, 2, true,
+                BigDecimal.valueOf(4.5), 3, 5, LocalDateTime.now().minusDays(10),
                 campusId, "Campus", programId, "Program", specializationId, "Specialization",
                 semester, alumni, 2, 1, 0, LocalDateTime.now().minusDays(10), null
         );
@@ -588,7 +616,7 @@ class MentorDiscoveryServiceTest {
         List<UUID> ids = rows.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList();
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                eq(request.getCampusId()), eq(request.getSpecializationId()), eq(request.getTeachingMode()),
+                eq(request.getCampusId()), eq(request.getSpecializationId()),
                 anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(ids));
         when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(ids)).thenReturn(rows);
@@ -617,7 +645,7 @@ class MentorDiscoveryServiceTest {
         when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.of(studentProfile));
         when(mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                 eq(MentorStatus.ACTIVE), eq(MentorTagType.HELP_TOPIC),
-                any(), any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
+                any(), any(), anyBoolean(), anyList(), anyString(), anyString(), anyString(), anyString(), any(), any(Pageable.class)
         )).thenReturn(new PageImpl<>(Collections.emptyList()))
           .thenReturn(new PageImpl<>(List.of(mentorUserId)));
           

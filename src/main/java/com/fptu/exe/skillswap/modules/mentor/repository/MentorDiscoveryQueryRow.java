@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.repository;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -14,11 +12,13 @@ public record MentorDiscoveryQueryRow(
         String expertiseDescription,
         String supportingSubjects,
         String bio,
+        Integer foundationSupportLevel,
+        Integer outputReviewSupportLevel,
+        Integer directionSupportLevel,
         Boolean isAvailable,
         BigDecimal ratingAverage,
         Integer reviewCount,
         Integer completedSessions,
-        TeachingMode teachingMode,
         LocalDateTime verifiedAt,
         UUID campusId,
         String campusName,

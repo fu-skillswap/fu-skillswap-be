@@ -21,14 +21,21 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlot
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+import com.fptu.exe.skillswap.modules.matching.service.MentoringMatchProfileService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -96,6 +103,10 @@ public class MentorDiscoveryService {
     private static final BigDecimal QUALITY_EXPERIENCED_SESSIONS_BONUS = decimal(5);
     private static final BigDecimal ACTIVE_SERVICE_BONUS_SCORE = decimal(5);
     private static final BigDecimal HAS_AVAILABILITY_BONUS_SCORE = decimal(15);
+    private static final BigDecimal CAPABILITY_MATCH_MULTIPLIER = decimal("8.00");
+    private static final BigDecimal MENTOR_FIT_SUBJECT_BONUS = decimal("12.00");
+    private static final BigDecimal MENTOR_FIT_ALUMNI_BONUS = decimal("12.00");
+    private static final BigDecimal DURATION_PREFERENCE_LIGHT_BONUS = decimal("3.00");
     private static final BigDecimal MAX_SEARCH_PERSONALIZATION_SCORE = decimal(100);
     private static final BigDecimal MAX_SEARCH_QUALITY_SCORE = decimal(38);
     private static final BigDecimal MAX_PERCENTAGE_SCORE = decimal(100);
@@ -124,6 +135,10 @@ public class MentorDiscoveryService {
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final DataSource dataSource;
     private final TagRepository tagRepository;
+    private final MentorSubjectResultRepository mentorSubjectResultRepository;
+    private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
+    private final MentorAchievementRepository mentorAchievementRepository;
+    private final MentoringMatchProfileService mentoringMatchProfileService;
 
     private volatile List<String> cachedKeywords = new java.util.ArrayList<>();
     private final Object cacheLock = new Object();
@@ -138,6 +153,7 @@ public class MentorDiscoveryService {
 
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
+        MenteeMatchingFeatures menteeFeatures = mentoringMatchProfileService.latestFeatures(currentUserId);
         List<UUID> tagIds = normalizedTagIds(safeRequest.getTagIds());
 
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
@@ -202,7 +218,6 @@ public class MentorDiscoveryService {
                     MentorTagType.HELP_TOPIC,
                     safeRequest.getCampusId(),
                     safeRequest.getSpecializationId(),
-                    safeRequest.getTeachingMode(),
                     hasTagFilter(safeRequest.getTagIds()),
                     tagIds,
                     keywordPattern,
@@ -218,7 +233,6 @@ public class MentorDiscoveryService {
                     MentorTagType.HELP_TOPIC,
                     safeRequest.getCampusId(),
                     safeRequest.getSpecializationId(),
-                    safeRequest.getTeachingMode(),
                     hasTagFilter(safeRequest.getTagIds()),
                     tagIds,
                     currentTime(),
@@ -248,7 +262,6 @@ public class MentorDiscoveryService {
                             MentorTagType.HELP_TOPIC,
                             safeRequest.getCampusId(),
                             safeRequest.getSpecializationId(),
-                            safeRequest.getTeachingMode(),
                             hasTagFilter(safeRequest.getTagIds()),
                             tagIds,
                             fallbackKeywordPattern,
@@ -281,6 +294,9 @@ public class MentorDiscoveryService {
                 candidateIds,
                 Set.of(MentorTagType.HELP_TOPIC)
         );
+        Map<UUID, List<MentorSubjectResultResponse>> subjectResultsByMentor = loadSubjectResultsByMentor(candidateIds);
+        Map<UUID, List<MentorFeaturedProjectResponse>> featuredProjectsByMentor = loadFeaturedProjectsByMentor(candidateIds);
+        Map<UUID, List<MentorAchievementResponse>> achievementsByMentor = loadAchievementsByMentor(candidateIds);
 
         List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
         Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
@@ -295,8 +311,12 @@ public class MentorDiscoveryService {
                         BigDecimal rawScore = calculateSearchScore(
                                 row,
                                 menteeProfile,
+                                menteeFeatures,
                                 normalizedKeyword,
                                 helpTopics,
+                                subjectResultsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                featuredProjectsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                achievementsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 services,
                                 mentorsWithAvailability.contains(row.mentorUserId())
                         );
@@ -318,7 +338,14 @@ public class MentorDiscoveryService {
             int fromIndex = Math.min(requestedPage * requestedSize, rankedCandidates.size());
             int toIndex = Math.min(fromIndex + requestedSize, rankedCandidates.size());
             content = rankedCandidates.subList(fromIndex, toIndex).stream()
-                    .map(candidate -> toCardResponse(candidate.row(), candidate.helpTopics(), candidate.matchScore()))
+                    .map(candidate -> toCardResponse(
+                            candidate.row(),
+                            candidate.helpTopics(),
+                            candidate.matchScore(),
+                            subjectResultsByMentor.getOrDefault(candidate.row().mentorUserId(), List.of()),
+                            featuredProjectsByMentor.getOrDefault(candidate.row().mentorUserId(), List.of()),
+                            achievementsByMentor.getOrDefault(candidate.row().mentorUserId(), List.of())
+                    ))
                     .toList();
         } else {
             content = rows.stream()
@@ -328,13 +355,24 @@ public class MentorDiscoveryService {
                         BigDecimal rawScore = calculateSearchScore(
                                 row,
                                 menteeProfile,
+                                menteeFeatures,
                                 normalizedKeyword,
                                 helpTopics,
+                                subjectResultsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                featuredProjectsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                achievementsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 services,
                                 mentorsWithAvailability.contains(row.mentorUserId())
                         );
                         BigDecimal matchScore = calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size());
-                        return toCardResponse(row, helpTopics, matchScore);
+                        return toCardResponse(
+                                row,
+                                helpTopics,
+                                matchScore,
+                                subjectResultsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                featuredProjectsByMentor.getOrDefault(row.mentorUserId(), List.of()),
+                                achievementsByMentor.getOrDefault(row.mentorUserId(), List.of())
+                        );
                     })
                     .toList();
         }
@@ -357,6 +395,7 @@ public class MentorDiscoveryService {
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
         StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
+        MenteeMatchingFeatures menteeFeatures = mentoringMatchProfileService.latestFeatures(currentUserId);
         LocalDateTime now = currentTime();
         boolean richProfile = menteeProfile != null
                 && menteeProfile.getProgram() != null
@@ -380,6 +419,9 @@ public class MentorDiscoveryService {
                 candidateIds,
                 Set.of(MentorTagType.HELP_TOPIC)
         );
+        Map<UUID, List<MentorSubjectResultResponse>> subjectResultsByMentor = loadSubjectResultsByMentor(candidateIds);
+        Map<UUID, List<MentorFeaturedProjectResponse>> featuredProjectsByMentor = loadFeaturedProjectsByMentor(candidateIds);
+        Map<UUID, List<MentorAchievementResponse>> achievementsByMentor = loadAchievementsByMentor(candidateIds);
 
         List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
         Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
@@ -389,9 +431,13 @@ public class MentorDiscoveryService {
                 .map(candidate -> toRecommendation(
                         candidate,
                         helpTopicsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
+                        subjectResultsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
+                        featuredProjectsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
+                        achievementsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
                         servicesByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
                         mentorsWithAvailability.contains(candidate.mentorUserId()),
-                        menteeProfile
+                        menteeProfile,
+                        menteeFeatures
                 ))
                 .sorted(Comparator
                         .comparing(MentorRecommendationResponse::matchScore).reversed()
@@ -410,6 +456,9 @@ public class MentorDiscoveryService {
                 Set.of(MentorTagType.HELP_TOPIC)
         );
         List<MentorTagResponse> mentorTags = tagsByMentor.getOrDefault(mentorUserId, List.of());
+        List<MentorSubjectResultResponse> subjectResults = loadSubjectResultsByMentor(List.of(mentorUserId)).getOrDefault(mentorUserId, List.of());
+        List<MentorFeaturedProjectResponse> featuredProjects = loadFeaturedProjectsByMentor(List.of(mentorUserId)).getOrDefault(mentorUserId, List.of());
+        List<MentorAchievementResponse> achievements = loadAchievementsByMentor(List.of(mentorUserId)).getOrDefault(mentorUserId, List.of());
         List<MentorServiceResponse> services = mentorServiceRepository
                 .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId)
                 .stream()
@@ -426,7 +475,10 @@ public class MentorDiscoveryService {
 
         boolean hasCompletedProfile = mentorProfile.getHeadline() != null && !mentorProfile.getHeadline().isBlank()
                 && mentorProfile.getExpertiseDescription() != null && !mentorProfile.getExpertiseDescription().isBlank()
-                && mentorProfile.getTeachingMode() != null && mentorProfile.getSessionDuration() != null;
+                && mentorProfile.getFoundationSupportLevel() != null
+                && mentorProfile.getOutputReviewSupportLevel() != null
+                && mentorProfile.getDirectionSupportLevel() != null
+                && !subjectResults.isEmpty();
         boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::active);
         boolean canRequestBooking = mentorProfile.isAvailable() && mentorProfile.getVerifiedAt() != null
                 && (mentorProfile.getBookingSuspendedUntil() == null || mentorProfile.getBookingSuspendedUntil().isBefore(LocalDateTime.now()))
@@ -439,14 +491,17 @@ public class MentorDiscoveryService {
                 .headline(mentorProfile.getHeadline())
                 .bio(studentProfile == null ? null : studentProfile.getBio())
                 .expertiseDescription(mentorProfile.getExpertiseDescription())
-                .supportingSubjects(mentorProfile.getSupportingSubjects())
+                .subjectResults(subjectResults)
+                .foundationSupportLevel(mentorProfile.getFoundationSupportLevel())
+                .outputReviewSupportLevel(mentorProfile.getOutputReviewSupportLevel())
+                .directionSupportLevel(mentorProfile.getDirectionSupportLevel())
+                .featuredProjects(featuredProjects)
+                .achievements(achievements)
                 .isAvailable(mentorProfile.isAvailable())
                 .bookingSuspendedUntil(mentorProfile.getBookingSuspendedUntil())
                 .ratingAverage(displayRating)
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
-                .teachingMode(mentorProfile.getTeachingMode())
-                .defaultSessionDuration(mentorProfile.getSessionDuration())
                 .verifiedAt(mentorProfile.getVerifiedAt())
                 .campusId(campus == null ? null : campus.getId())
                 .campusName(campus == null ? null : campus.getName())
@@ -457,7 +512,6 @@ public class MentorDiscoveryService {
                 .semester(studentProfile == null ? null : studentProfile.getSemester())
                 .alumni(studentProfile != null && studentProfile.isAlumni())
                 .portfolioUrl(mentorProfile.getPortfolioUrl())
-                .linkedinUrl(mentorProfile.getLinkedinUrl())
                 .githubUrl(mentorProfile.getGithubUrl())
                 .helpTopicTags(filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
                 .services(services)
@@ -509,12 +563,16 @@ public class MentorDiscoveryService {
     private MentorRecommendationResponse toRecommendation(
             MentorDiscoveryQueryRow candidate,
             List<MentorTagResponse> helpTopicTags,
+            List<MentorSubjectResultResponse> subjectResults,
+            List<MentorFeaturedProjectResponse> featuredProjects,
+            List<MentorAchievementResponse> achievements,
             List<MentorService> services,
             boolean hasAvailability,
-            StudentProfile menteeProfile
+            StudentProfile menteeProfile,
+            MenteeMatchingFeatures menteeFeatures
     ) {
         List<String> reasons = new ArrayList<>();
-        BigDecimal score = calculateMatchScore(candidate, menteeProfile, services, hasAvailability, reasons);
+        BigDecimal score = calculateMatchScore(candidate, menteeProfile, menteeFeatures, services, hasAvailability, reasons);
 
         BigDecimal maxScore = SAME_PROGRAM_SCORE
                 .add(SAME_SPECIALIZATION_SCORE)
@@ -538,7 +596,7 @@ public class MentorDiscoveryService {
         }
 
         return MentorRecommendationResponse.builder()
-                .mentor(toCardResponse(candidate, helpTopicTags))
+                .mentor(toCardResponse(candidate, helpTopicTags, null, subjectResults, featuredProjects, achievements))
                 .matchScore(percentageScore)
                 .matchReasons(reasons.stream().limit(3).toList())
                 .build();
@@ -547,6 +605,7 @@ public class MentorDiscoveryService {
     private BigDecimal calculateMatchScore(
             MentorDiscoveryQueryRow candidate,
             StudentProfile menteeProfile,
+            MenteeMatchingFeatures menteeFeatures,
             List<MentorService> services,
             boolean hasAvailability,
             List<String> reasons
@@ -606,6 +665,10 @@ public class MentorDiscoveryService {
             reasons.add("Hoạt động gần đây");
         }
         baseScore = baseScore.add(calculateSearchQualityScore(candidate, menteeProfile));
+        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeFeatures, reasons);
+        if (capabilityScore.compareTo(BigDecimal.ZERO) > 0) {
+            baseScore = baseScore.add(capabilityScore);
+        }
 
         if (services != null && !services.isEmpty()) {
             baseScore = baseScore.add(serviceBonusScore(services.size()));
@@ -670,6 +733,66 @@ public class MentorDiscoveryService {
         return grouped;
     }
 
+    private Map<UUID, List<MentorSubjectResultResponse>> loadSubjectResultsByMentor(Collection<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<MentorSubjectResultResponse>> result = new HashMap<>();
+        mentorSubjectResultRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(mentorUserIds)
+                .forEach(subjectResult -> result.computeIfAbsent(subjectResult.getMentorProfile().getUserId(), ignored -> new ArrayList<>())
+                        .add(MentorSubjectResultResponse.builder()
+                                .id(subjectResult.getId())
+                                .subjectCode(subjectResult.getSubjectCode())
+                                .subjectName(subjectResult.getSubjectName())
+                                .scoreValue(subjectResult.getScoreValue())
+                                .displayOrder(subjectResult.getDisplayOrder())
+                                .build()));
+        return result;
+    }
+
+    private Map<UUID, List<MentorFeaturedProjectResponse>> loadFeaturedProjectsByMentor(Collection<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<MentorFeaturedProjectResponse>> result = new HashMap<>();
+        mentorFeaturedProjectRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(mentorUserIds)
+                .forEach(project -> result.computeIfAbsent(project.getMentorProfile().getUserId(), ignored -> new ArrayList<>())
+                        .add(MentorFeaturedProjectResponse.builder()
+                                .id(project.getId())
+                                .title(project.getTitle())
+                                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
+                                .content(project.getContent())
+                                .projectDescription(project.getProjectDescription())
+                                .liveDemoUrl(project.getLiveDemoUrl())
+                                .displayOrder(project.getDisplayOrder())
+                                .createdAt(project.getCreatedAt())
+                                .updatedAt(project.getUpdatedAt())
+                                .build()));
+        return result;
+    }
+
+    private Map<UUID, List<MentorAchievementResponse>> loadAchievementsByMentor(Collection<UUID> mentorUserIds) {
+        if (mentorUserIds == null || mentorUserIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<MentorAchievementResponse>> result = new HashMap<>();
+        mentorAchievementRepository.findByMentorProfileUserIdInOrderByMentorProfileUserIdAscDisplayOrderAscCreatedAtAsc(mentorUserIds)
+                .forEach(achievement -> result.computeIfAbsent(achievement.getMentorProfile().getUserId(), ignored -> new ArrayList<>())
+                        .add(MentorAchievementResponse.builder()
+                                .id(achievement.getId())
+                                .title(achievement.getTitle())
+                                .awardDescription(achievement.getAwardDescription())
+                                .achievedAt(achievement.getAchievedAt())
+                                .productHeader(achievement.getProductHeader())
+                                .productDescription(achievement.getProductDescription())
+                                .demoUrl(achievement.getDemoUrl())
+                                .displayOrder(achievement.getDisplayOrder())
+                                .createdAt(achievement.getCreatedAt())
+                                .updatedAt(achievement.getUpdatedAt())
+                                .build()));
+        return result;
+    }
+
     private String normalizeSearchText(String value) {
         if (value == null || value.isBlank()) {
             return "";
@@ -698,8 +821,12 @@ public class MentorDiscoveryService {
     private BigDecimal calculateSearchScore(
             MentorDiscoveryQueryRow row,
             StudentProfile menteeProfile,
+            MenteeMatchingFeatures menteeFeatures,
             String normalizedKeyword,
             List<MentorTagResponse> helpTopics,
+            List<MentorSubjectResultResponse> subjectResults,
+            List<MentorFeaturedProjectResponse> featuredProjects,
+            List<MentorAchievementResponse> achievements,
             List<MentorService> services,
             boolean hasAvailability
     ) {
@@ -715,6 +842,7 @@ public class MentorDiscoveryService {
         if (tokens.isEmpty()) {
             return calculatePersonalizationScore(row, menteeProfile)
                     .add(calculateSearchQualityScore(row, menteeProfile))
+                    .add(calculateCapabilityScore(row, menteeFeatures, null))
                     .add(extraBonus)
                     .setScale(2, RoundingMode.HALF_UP);
         }
@@ -747,22 +875,60 @@ public class MentorDiscoveryService {
                 .flatMap(tag -> Arrays.stream(new String[]{tag.nameVi(), tag.nameEn(), tag.code()}))
                 .filter(value -> value != null && !value.isBlank())
                 .toList();
+        List<String> subjectFields = subjectResults == null ? List.of() : subjectResults.stream()
+                .flatMap(subject -> Arrays.stream(new String[]{
+                        subject.subjectCode(),
+                        subject.subjectName(),
+                        subject.scoreValue() == null ? null : subject.scoreValue().toPlainString()
+                }))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        List<String> projectFields = featuredProjects == null ? List.of() : featuredProjects.stream()
+                .flatMap(project -> Arrays.stream(new String[]{
+                        project.title(),
+                        project.content(),
+                        project.projectDescription(),
+                        project.liveDemoUrl()
+                }))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        List<String> achievementFields = achievements == null ? List.of() : achievements.stream()
+                .flatMap(achievement -> Arrays.stream(new String[]{
+                        achievement.title(),
+                        achievement.awardDescription(),
+                        achievement.productHeader(),
+                        achievement.productDescription(),
+                        achievement.demoUrl()
+                }))
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
         List<String> serviceFields = services == null ? List.of() : services.stream()
                 .flatMap(service -> Arrays.stream(new String[]{service.getTitle(), service.getDescription(), service.getExpectedOutcome()}))
                 .filter(value -> value != null && !value.isBlank())
                 .toList();
 
-        if (containsPhrase(profileFields, exactKeyword) || containsPhrase(tagFields, exactKeyword) || containsPhrase(serviceFields, exactKeyword)) {
+        if (containsPhrase(profileFields, exactKeyword)
+                || containsPhrase(tagFields, exactKeyword)
+                || containsPhrase(subjectFields, exactKeyword)
+                || containsPhrase(projectFields, exactKeyword)
+                || containsPhrase(achievementFields, exactKeyword)
+                || containsPhrase(serviceFields, exactKeyword)) {
             score = score.add(decimal(50));
         }
 
         int profileMatches = countTokenMatches(profileFields, tokens);
         int tagMatches = countTokenMatches(tagFields, tokens);
+        int subjectMatches = countTokenMatches(subjectFields, tokens);
+        int projectMatches = countTokenMatches(projectFields, tokens);
+        int achievementMatches = countTokenMatches(achievementFields, tokens);
         int serviceMatches = countTokenMatches(serviceFields, tokens);
-        int totalMatches = profileMatches + tagMatches + serviceMatches;
+        int totalMatches = profileMatches + tagMatches + subjectMatches + projectMatches + achievementMatches + serviceMatches;
 
         score = score.add(decimal(profileMatches * 8));
         score = score.add(decimal(tagMatches * 10));
+        score = score.add(decimal(subjectMatches * 12));
+        score = score.add(decimal(projectMatches * 10));
+        score = score.add(decimal(achievementMatches * 8));
         score = score.add(decimal(serviceMatches * 12));
 
         if (totalMatches > 0) {
@@ -790,8 +956,60 @@ public class MentorDiscoveryService {
 
         score = score.add(calculatePersonalizationScore(row, menteeProfile));
         score = score.add(calculateSearchQualityScore(row, menteeProfile));
+        score = score.add(calculateCapabilityScore(row, menteeFeatures, null));
         score = score.add(extraBonus);
         return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateCapabilityScore(
+            MentorDiscoveryQueryRow candidate,
+            MenteeMatchingFeatures menteeFeatures,
+            List<String> reasons
+    ) {
+        if (menteeFeatures == null || !menteeFeatures.hasAnySignal()) {
+            return ZERO;
+        }
+        BigDecimal score = ZERO;
+        score = score.add(levelAlignmentScore(menteeFeatures.foundationNeedLevel(), candidate.foundationSupportLevel()));
+        score = score.add(levelAlignmentScore(menteeFeatures.outputReviewNeedLevel(), candidate.outputReviewSupportLevel()));
+        score = score.add(levelAlignmentScore(menteeFeatures.directionNeedLevel(), candidate.directionSupportLevel()));
+
+        String mentorFitCode = menteeFeatures.mentorFitCode();
+        if ("MENTOR_FIT_SUBJECT_MATCH".equals(mentorFitCode)
+                && (defaultInteger(candidate.foundationSupportLevel()) >= 3 || defaultInteger(candidate.outputReviewSupportLevel()) >= 3)) {
+            score = score.add(MENTOR_FIT_SUBJECT_BONUS);
+            addReason(reasons, "Khớp kiểu mentor mạnh đúng phần đang cần");
+        }
+        if ("MENTOR_FIT_RECENT_ALUMNI".equals(mentorFitCode) && Boolean.TRUE.equals(candidate.alumni())) {
+            score = score.add(MENTOR_FIT_ALUMNI_BONUS);
+            addReason(reasons, "Khớp nhu cầu góc nhìn alumni/OJT");
+        }
+        if ("MENTOR_FIT_SIMILAR_EXPERIENCE".equals(mentorFitCode) && defaultInteger(candidate.completedSessions()) > 0) {
+            score = score.add(decimal("8.00"));
+            addReason(reasons, "Mentor đã có trải nghiệm mentoring thực tế");
+        }
+        if (menteeFeatures.durationPreferenceCode() != null) {
+            score = score.add(DURATION_PREFERENCE_LIGHT_BONUS);
+        }
+        if (score.compareTo(BigDecimal.ZERO) > 0) {
+            addReason(reasons, "Khớp nhu cầu mentoring đã khai báo");
+        }
+        return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal levelAlignmentScore(Integer needLevel, Integer supportLevel) {
+        if (needLevel == null || supportLevel == null) {
+            return ZERO;
+        }
+        int gap = Math.max(0, needLevel - supportLevel);
+        int aligned = Math.max(0, needLevel - gap);
+        return CAPABILITY_MATCH_MULTIPLIER.multiply(BigDecimal.valueOf(aligned)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private void addReason(List<String> reasons, String reason) {
+        if (reasons != null && reason != null && reasons.stream().noneMatch(reason::equals)) {
+            reasons.add(reason);
+        }
     }
 
     private BigDecimal calculatePersonalizationScore(MentorDiscoveryQueryRow candidate, StudentProfile menteeProfile) {
@@ -965,13 +1183,16 @@ public class MentorDiscoveryService {
     }
 
     private MentorDiscoveryCardResponse toCardResponse(MentorDiscoveryQueryRow row, List<MentorTagResponse> helpTopicTags) {
-        return toCardResponse(row, helpTopicTags, null);
+        return toCardResponse(row, helpTopicTags, null, List.of(), List.of(), List.of());
     }
 
     private MentorDiscoveryCardResponse toCardResponse(
             MentorDiscoveryQueryRow row,
             List<MentorTagResponse> helpTopicTags,
-            BigDecimal matchScore
+            BigDecimal matchScore,
+            List<MentorSubjectResultResponse> subjectResults,
+            List<MentorFeaturedProjectResponse> featuredProjects,
+            List<MentorAchievementResponse> achievements
     ) {
         BigDecimal rating = defaultDecimal(row.ratingAverage());
         int reviews = defaultInteger(row.reviewCount());
@@ -982,12 +1203,16 @@ public class MentorDiscoveryService {
                 .avatarUrl(row.avatarUrl())
                 .headline(row.headline())
                 .expertiseDescription(row.expertiseDescription())
-                .supportingSubjects(row.supportingSubjects())
+                .subjectResults(subjectResults)
+                .foundationSupportLevel(row.foundationSupportLevel())
+                .outputReviewSupportLevel(row.outputReviewSupportLevel())
+                .directionSupportLevel(row.directionSupportLevel())
+                .featuredProjects(featuredProjects.stream().limit(2).toList())
+                .achievements(achievements.stream().limit(2).toList())
                 .isAvailable(row.isAvailable())
                 .ratingAverage(displayRating)
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(row.completedSessions()))
-                .teachingMode(row.teachingMode())
                 .verifiedAt(row.verifiedAt())
                 .campusId(row.campusId())
                 .campusName(row.campusName())
@@ -1076,8 +1301,6 @@ public class MentorDiscoveryService {
                 && hasText(mentorProfile.getHeadline())
                 && hasText(mentorProfile.getExpertiseDescription())
                 && mentorProfile.isAvailable()
-                && mentorProfile.getTeachingMode() != null
-                && mentorProfile.getSessionDuration() != null
                 && !isBookingSuspended(mentorProfile);
     }
 
@@ -1196,7 +1419,6 @@ public class MentorDiscoveryService {
             int requestedSize,
             boolean relevanceSort
     ) {
-        String teachingModeStr = safeRequest.getTeachingMode() == null ? null : safeRequest.getTeachingMode().name();
         boolean hasTagFilter = hasTagFilter(safeRequest.getTagIds());
         String tagIdsArray = tagIds.isEmpty()
                 ? "{00000000-0000-0000-0000-000000000000}"
@@ -1210,7 +1432,6 @@ public class MentorDiscoveryService {
                 normalizedKeyword,
                 safeRequest.getCampusId(),
                 safeRequest.getSpecializationId(),
-                teachingModeStr,
                 hasTagFilter,
                 tagIdsArray,
                 now,
@@ -1222,7 +1443,6 @@ public class MentorDiscoveryService {
                 normalizedKeyword,
                 safeRequest.getCampusId(),
                 safeRequest.getSpecializationId(),
-                teachingModeStr,
                 hasTagFilter,
                 tagIdsArray,
                 now

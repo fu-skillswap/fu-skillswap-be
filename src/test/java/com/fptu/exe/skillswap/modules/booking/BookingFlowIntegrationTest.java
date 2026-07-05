@@ -140,6 +140,9 @@ class BookingFlowIntegrationTest {
                 .isAvailable(true)
                 .headline("Spring Boot Mentor")
                 .expertiseDescription("Support Java backend and database mentoring")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());

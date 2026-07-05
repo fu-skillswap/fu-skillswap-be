@@ -80,6 +80,9 @@ class MentorAvailabilityWindowIntegrationTest {
                 .isAvailable(true)
                 .headline("Night Shift Mentor")
                 .expertiseDescription("Supports overlapping slot visibility checks")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());
@@ -133,7 +136,7 @@ class MentorAvailabilityWindowIntegrationTest {
         List<MentorManagedAvailabilitySlotResponse> responses = mentorAvailabilityService.getMySlots(
                 mentorUser.getId(),
                 queryStartDate,
-                queryStartDate.plusDays(7)
+                queryStartDate.plusDays(6)
         );
 
         assertEquals(1, responses.size());
@@ -146,7 +149,7 @@ class MentorAvailabilityWindowIntegrationTest {
         List<MentorAvailabilitySlotResponse> responses = mentorAvailabilityService.getAvailableSlots(
                 mentorProfile,
                 queryStartDate,
-                queryStartDate.plusDays(7)
+                queryStartDate.plusDays(6)
         );
 
         assertEquals(1, responses.size());

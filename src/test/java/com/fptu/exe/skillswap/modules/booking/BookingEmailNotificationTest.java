@@ -100,6 +100,9 @@ class BookingEmailNotificationTest {
                 .isAvailable(true)
                 .headline("Email Mentor")
                 .expertiseDescription("Support Email")
+                .foundationSupportLevel(3)
+                .outputReviewSupportLevel(3)
+                .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
                 .build());

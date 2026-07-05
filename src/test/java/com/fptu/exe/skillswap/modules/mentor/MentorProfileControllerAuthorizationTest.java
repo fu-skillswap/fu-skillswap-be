@@ -2,8 +2,8 @@ package com.fptu.exe.skillswap.modules.mentor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -18,6 +18,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
@@ -83,12 +84,12 @@ class MentorProfileControllerAuthorizationTest {
         return new MentorProfileUpsertRequest(
                 "Backend Mentor",
                 "Hỗ trợ Java và Spring Boot",
-                "EXE101, SWP391",
                 true,
                 List.of(UUID.randomUUID()),
-                TeachingMode.ONLINE,
-                60,
-                "https://linkedin.com/in/test",
+                List.of(new MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
+                3,
+                3,
+                2,
                 "https://github.com/test",
                 "https://portfolio.example.com",
                 "0912345678"

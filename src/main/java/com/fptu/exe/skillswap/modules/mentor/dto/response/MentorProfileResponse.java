@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.response;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -31,8 +30,6 @@ public record MentorProfileResponse(
         String headline,
         @Schema(description = "Main expertise description shown to mentees", example = "Mình có kinh nghiệm xây dựng REST API với Spring Boot, PostgreSQL và triển khai Docker.")
         String expertiseDescription,
-        @Schema(description = "Optional supporting subjects or topics written as free text", nullable = true, example = "PRJ301, SWP391, REST API, PostgreSQL")
-        String supportingSubjects,
         @Schema(description = "Whether the mentor is currently available for new mentee bookings", example = "true")
         Boolean isAvailable,
         @Schema(description = "Temporary booking suspension end time if the mentor is under booking penalty", nullable = true, example = "2026-06-27T10:00:00")
@@ -43,18 +40,24 @@ public record MentorProfileResponse(
         LocalDateTime verifiedAt,
         @Schema(description = "Selected help topics that describe what the mentor can support")
         List<MentorTagResponse> helpTopics,
-        @Schema(description = "LinkedIn URL", nullable = true, example = "https://www.linkedin.com/in/example")
-        String linkedinUrl,
+        @Schema(description = "Môn - điểm mentor dùng cho peer matching")
+        List<MentorSubjectResultResponse> subjectResults,
+        @Schema(description = "Mức mentor có thể giúp mentee lấy gốc, 1-4", example = "3")
+        Integer foundationSupportLevel,
+        @Schema(description = "Mức mentor có thể review bài nộp/project/CV/report, 1-4", example = "3")
+        Integer outputReviewSupportLevel,
+        @Schema(description = "Mức mentor có thể hỗ trợ định hướng/OJT/career, 1-4", example = "2")
+        Integer directionSupportLevel,
+        @Schema(description = "Dự án tiêu biểu optional của mentor")
+        List<MentorFeaturedProjectResponse> featuredProjects,
+        @Schema(description = "Học vấn và giải thưởng optional của mentor")
+        List<MentorAchievementResponse> achievements,
         @Schema(description = "GitHub URL", nullable = true, example = "https://github.com/example")
         String githubUrl,
         @Schema(description = "Portfolio URL", nullable = true, example = "https://example.dev")
         String portfolioUrl,
         @Schema(example = "0912345678")
         String phoneNumber,
-        @Schema(description = "Teaching mode exposed to discovery and booking", example = "ONLINE")
-        TeachingMode teachingMode,
-        @Schema(description = "Default session duration in minutes", example = "60")
-        Integer sessionDuration,
         @Schema(description = "Average mentor rating shown in mentor-facing and discovery surfaces", example = "4.80")
         BigDecimal ratingAverage,
         @Schema(description = "Total number of public or stored reviews for this mentor", example = "12")
@@ -75,6 +78,9 @@ public record MentorProfileResponse(
                 .isAvailable(true)
                 .lateCancellationPenaltyPoints(BigDecimal.ZERO)
                 .helpTopics(List.of())
+                .subjectResults(List.of())
+                .featuredProjects(List.of())
+                .achievements(List.of())
                 .build();
     }
 }

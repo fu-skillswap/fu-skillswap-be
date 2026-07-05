@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.request;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
@@ -61,12 +60,12 @@ class MentorProfileUpsertRequestValidationTest {
         return new MentorProfileUpsertRequest(
                 "Backend Developer | Spring Boot Mentor",
                 "Mình có kinh nghiệm xây dựng REST API với Spring Boot.",
-                "Java, REST API",
                 true,
                 List.of(UUID.randomUUID()),
-                TeachingMode.ONLINE,
-                60,
-                "https://linkedin.com/in/example",
+                List.of(new MentorSubjectResultRequest("PRJ301", "Java Web Application Development", java.math.BigDecimal.valueOf(8.5))),
+                3,
+                3,
+                2,
                 "https://github.com/example",
                 "https://example.dev",
                 phoneNumber

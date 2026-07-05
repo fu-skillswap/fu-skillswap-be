@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
@@ -20,12 +20,14 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -115,8 +117,8 @@ public class MentorVerificationController {
     }
 
     @Operation(
-            summary = "Gắn metadata verification document",
-            description = "Lưu metadata của verification document vào request hiện tại sau khi FE đã upload file thật lên dịch vụ lưu trữ ngoài được backend chấp nhận. API này nhận JSON metadata chứ không phải multipart upload trực tiếp, và backend vẫn kiểm tra content type, file size, host nguồn và quota theo từng loại document."
+            summary = "Upload verification document",
+            description = "Nhận multipart file minh chứng, backend upload lên R2 và lưu metadata vào request hiện tại. Quota: FPTU_AFFILIATION_PROOF tối đa 1 file, EXPERTISE_PROOF tối đa 3 file."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
@@ -124,15 +126,17 @@ public class MentorVerificationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File vượt quá giới hạn cho phép"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
-    @PostMapping(path = "/documents", consumes = "application/json")
+    @PostMapping(path = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody MentorVerificationDocumentUploadRequest request
+            @RequestParam VerificationDocumentType documentType,
+            @RequestPart("file") MultipartFile file
     ) {
         ensureAuthenticated(principal);
         MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
                 principal.getPublicId(),
-                request
+                documentType,
+                file
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }

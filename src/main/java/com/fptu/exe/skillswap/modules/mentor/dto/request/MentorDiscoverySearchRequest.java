@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.request;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import org.springframework.data.domain.Sort;
@@ -19,7 +18,7 @@ public class MentorDiscoverySearchRequest {
     private String sortBy = "relevance";
     @Schema(description = "Chiều sắp xếp", example = "DESC", defaultValue = "DESC")
     private Sort.Direction direction = Sort.Direction.DESC;
-    @Schema(description = "Từ khóa tìm theo headline, profile, môn hỗ trợ và service", example = "spring boot")
+    @Schema(description = "Từ khóa tìm theo headline, profile, môn - điểm, help topics, project, achievement và service", example = "OJT CV project")
     private String keyword;
     @Schema(description = "Danh sách help topic ID để lọc")
     private List<UUID> tagIds;
@@ -27,6 +26,4 @@ public class MentorDiscoverySearchRequest {
     private UUID campusId;
     @Schema(description = "Lọc theo specialization ID")
     private UUID specializationId;
-    @Schema(description = "Lọc theo hình thức mentoring")
-    private TeachingMode teachingMode;
 }

@@ -121,7 +121,67 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 - Mục đích: lấy help topics dùng cho mentor profile, mentor service, discovery filter.
 - Response: `List<HelpTopicResponse>`
 
-## 5. Mentor Profile
+### GET `/api/catalog/mentor-profile-options`
+- Auth: Public
+- Mục đích: lấy label mức support 1..4 để FE render form mentor profile.
+- Response:
+  - `foundationSupportLevels`
+  - `outputReviewSupportLevels`
+  - `directionSupportLevels`
+
+## 5. Mentee Matching Profile
+
+### GET `/api/me/matching-profile`
+- Auth: `bearerAuth`
+- Mục đích: lấy trạng thái trả lời active questionnaire và normalized features cho Smart Matching.
+- Response:
+  - `exists`
+  - `currentActivationCompleted`
+  - `latestAnsweredAt`
+  - `activeActivationId`, `activeVersionId`, `activeVersionNumber`
+  - `foundationNeedLevel`
+  - `outputReviewNeedLevel`
+  - `directionNeedLevel`
+  - `mentorFitCode`
+  - `durationPreferenceCode`
+  - `latestAnswerCodes`
+
+### GET `/api/me/matching-profile/questionnaire`
+- Auth: `bearerAuth`
+- Mục đích: lấy 5 câu hỏi nhu cầu mentoring đang active.
+- Response:
+  - `activationId`
+  - `versionId`
+  - `versionNumber`
+  - `phase` = `ACTIVE`
+  - `questions[]`
+
+Semantic question codes:
+- `Q1_FOUNDATION_LEVEL`
+- `Q2_OUTPUT_REVIEW_LEVEL`
+- `Q3_DIRECTION_LEVEL`
+- `Q4_MENTOR_FIT`
+- `Q5_DURATION_PREFERENCE`
+
+### PUT `/api/me/matching-profile`
+- Auth: `bearerAuth`
+- Mục đích: lưu 5 câu trả lời nhu cầu mentoring.
+- Request body:
+  - `phase` `string` optional/compatibility
+  - `question1AnswerCode`
+  - `question2AnswerCode`
+  - `question3AnswerCode`
+  - `question4AnswerCode`
+  - `question5AnswerCode`
+
+### Admin questionnaire APIs
+- `GET /api/admin/mentoring-questionnaire/versions`
+- `GET /api/admin/mentoring-questionnaire/versions/{versionId}`
+- `POST /api/admin/mentoring-questionnaire/versions`
+- `POST /api/admin/mentoring-questionnaire/activate`
+- `GET /api/admin/mentoring-questionnaire/active`
+
+## 6. Mentor Profile
 
 ### GET `/api/me/mentor-profile`
 - Auth: `bearerAuth`
@@ -132,16 +192,17 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
     - `requiredFieldsCompleted`
     - `userId`, `email`, `displayName`, `avatarUrl`
     - `mentorStatus`
-    - `headline`, `expertiseDescription`, `supportingSubjects`
+    - `headline`, `expertiseDescription`
     - `isAvailable`
     - `bookingSuspendedUntil`
     - `lateCancellationPenaltyPoints`
     - `verifiedAt`
     - `helpTopics`
-    - `linkedinUrl`, `githubUrl`, `portfolioUrl`
+    - `subjectResults`
+    - `foundationSupportLevel`, `outputReviewSupportLevel`, `directionSupportLevel`
+    - `featuredProjects`, `achievements`
+    - `githubUrl`, `portfolioUrl`
     - `phoneNumber`
-    - `teachingMode`
-    - `sessionDuration`
     - `ratingAverage`, `reviewCount`, `completedSessions`
     - `createdAt`, `updatedAt`
 
@@ -152,17 +213,23 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `MentorProfileUpsertRequest`
     - `headline` `string`
     - `expertiseDescription` `string`
-    - `supportingSubjects` `string` nullable
     - `isAvailable` `boolean` nullable
     - `helpTopicIds` `List<UUID>`
-    - `teachingMode` `TeachingMode`
-    - `sessionDuration` `integer`
-    - `linkedinUrl` `string` nullable
+    - `subjectResults` `List<{subjectCode, subjectName, scoreValue}>`
+    - `foundationSupportLevel` `integer` 1..4
+    - `outputReviewSupportLevel` `integer` 1..4
+    - `directionSupportLevel` `integer` 1..4
     - `githubUrl` `string` nullable
     - `portfolioUrl` `string` nullable
     - `phoneNumber` `string`
 
-## 6. Mentor Services
+### Mentor optional profile items
+- `GET/POST/PUT/DELETE /api/me/mentor-projects`
+- `PUT /api/me/mentor-projects/{projectId}/picture`
+- `GET/POST/PUT/DELETE /api/me/mentor-achievements`
+- `featuredProjects` và `achievements` là optional, không bắt buộc để submit verification.
+
+## 7. Mentor Services
 
 ### GET `/api/me/mentor-services`
 - Auth: `bearerAuth`, role `MENTOR`
@@ -234,22 +301,26 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `tagIds`
   - `campusId`
   - `specializationId`
-  - `teachingMode`
 - Ghi chú:
   - `sortBy=relevance` là default cho discovery.
   - Hệ thống không dùng `isAvailable` như filter query chính thức ở endpoint này.
+  - Search/ranking đọc câu trả lời mentee, help topics, môn - điểm, support levels, project, achievement và service text.
 - Response: `PageResponse<MentorDiscoveryCardResponse>`
   - `mentorUserId`
   - `displayName`
   - `avatarUrl`
   - `headline`
   - `expertiseDescription`
-  - `supportingSubjects`
+  - `subjectResults`
+  - `foundationSupportLevel`
+  - `outputReviewSupportLevel`
+  - `directionSupportLevel`
+  - `featuredProjects`
+  - `achievements`
   - `isAvailable`
   - `ratingAverage`
   - `reviewCount`
   - `completedSessions`
-  - `teachingMode`
   - `verifiedAt`
   - `campusId`, `campusName`
   - `programId`, `programName`
@@ -267,21 +338,24 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
   - `headline`
   - `bio`
   - `expertiseDescription`
-  - `supportingSubjects`
+  - `subjectResults`
+  - `foundationSupportLevel`
+  - `outputReviewSupportLevel`
+  - `directionSupportLevel`
+  - `featuredProjects`
+  - `achievements`
   - `isAvailable`
   - `bookingSuspendedUntil`
   - `ratingAverage`
   - `reviewCount`
   - `completedSessions`
-  - `teachingMode`
-  - `defaultSessionDuration`
   - `verifiedAt`
   - `campusId`, `campusName`
   - `programId`, `programName`
   - `specializationId`, `specializationName`
   - `semester`
   - `alumni`
-  - `portfolioUrl`, `linkedinUrl`, `githubUrl`
+  - `portfolioUrl`, `githubUrl`
   - `helpTopicTags`
   - `services`
 
@@ -379,18 +453,17 @@ Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trê
 
 ### POST `/api/me/mentor-verification/documents`
 - Auth: `bearerAuth`
-- Content-Type: `application/json`
-- Mục đích: lưu metadata của file minh chứng sau khi FE upload file lên Cloudinary.
-- Request body:
-  - `MentorVerificationDocumentUploadRequest`
-    - `documentType` `VerificationDocumentType`
-      - `FPTU_AFFILIATION_PROOF`
-      - `EXPERTISE_PROOF`
-    - `fileUrl` `string`
-    - `publicId` `string`
-    - `originalFilename` `string`
-    - `contentType` `string`
-    - `sizeBytes` `Long`
+- Content-Type: `multipart/form-data`
+- Mục đích: backend nhận file minh chứng, upload lên R2 và lưu metadata.
+- Form data:
+  - `documentType` `VerificationDocumentType`
+    - `FPTU_AFFILIATION_PROOF`
+    - `EXPERTISE_PROOF`
+  - `file` `MultipartFile`
+- Giới hạn:
+  - `FPTU_AFFILIATION_PROOF`: tối đa 1 file active.
+  - `EXPERTISE_PROOF`: tối đa 3 file active.
+  - Hỗ trợ JPG, PNG, PDF, tối đa 15MB.
 - Response: `MentorVerificationRequestResponse`
 
 ### POST `/api/me/mentor-verification/submit`

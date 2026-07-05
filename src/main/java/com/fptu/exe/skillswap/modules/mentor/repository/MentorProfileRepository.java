@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -44,8 +43,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.teachingMode is not null
-              and mp.sessionDuration is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -54,7 +51,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
-              and (:teachingMode is null or mp.teachingMode = :teachingMode)
               and (:hasTagFilter = false or exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -84,8 +80,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.teachingMode is not null
-              and mp.sessionDuration is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -94,7 +88,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
-              and (:teachingMode is null or mp.teachingMode = :teachingMode)
               and (:hasTagFilter = false or exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -108,7 +101,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("teachingMode") TeachingMode teachingMode,
             @Param("hasTagFilter") boolean hasTagFilter,
             @Param("tagIds") List<UUID> tagIds,
             @Param("now") LocalDateTime now,
@@ -132,8 +124,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.teachingMode is not null
-              and mp.sessionDuration is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -142,7 +132,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
-              and (:teachingMode is null or mp.teachingMode = :teachingMode)
               and (:hasTagFilter = false or exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -183,6 +172,42 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                                )
                    ) or
                    exists (
+                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr_search
+                         where msr_search.mentorProfile.userId = mp.userId and
+                               (
+                                   lower(coalesce(msr_search.subjectCode, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(msr_search.subjectCode, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(msr_search.subjectName, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(msr_search.subjectName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                               )
+                   ) or
+                   exists (
+                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject mfp_search
+                         where mfp_search.mentorProfile.userId = mp.userId and
+                               (
+                                   lower(coalesce(mfp_search.title, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(mfp_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(mfp_search.content, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(mfp_search.content, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(mfp_search.projectDescription, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(mfp_search.projectDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                               )
+                   ) or
+                   exists (
+                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement ma_search
+                         where ma_search.mentorProfile.userId = mp.userId and
+                               (
+                                   lower(coalesce(ma_search.title, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ma_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(ma_search.awardDescription, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ma_search.awardDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(ma_search.productHeader, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ma_search.productHeader, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                   lower(coalesce(ma_search.productDescription, '')) like :keywordPattern or
+                                   function('translate', lower(coalesce(ma_search.productDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                               )
+                   ) or
+                   exists (
                          select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
                          where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
                                (
@@ -214,8 +239,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.teachingMode is not null
-              and mp.sessionDuration is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -224,7 +247,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
-              and (:teachingMode is null or mp.teachingMode = :teachingMode)
               and (:hasTagFilter = false or exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
@@ -265,6 +287,42 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                               )
                    ) or
                   exists (
+                        select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr_search
+                        where msr_search.mentorProfile.userId = mp.userId and
+                              (
+                                  lower(coalesce(msr_search.subjectCode, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(msr_search.subjectCode, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(msr_search.subjectName, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(msr_search.subjectName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                              )
+                   ) or
+                  exists (
+                        select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject mfp_search
+                        where mfp_search.mentorProfile.userId = mp.userId and
+                              (
+                                  lower(coalesce(mfp_search.title, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(mfp_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(mfp_search.content, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(mfp_search.content, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(mfp_search.projectDescription, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(mfp_search.projectDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                              )
+                   ) or
+                  exists (
+                        select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement ma_search
+                        where ma_search.mentorProfile.userId = mp.userId and
+                              (
+                                  lower(coalesce(ma_search.title, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ma_search.title, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(ma_search.awardDescription, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ma_search.awardDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(ma_search.productHeader, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ma_search.productHeader, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
+                                  lower(coalesce(ma_search.productDescription, '')) like :keywordPattern or
+                                  function('translate', lower(coalesce(ma_search.productDescription, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
+                              )
+                   ) or
+                  exists (
                         select 1 from com.fptu.exe.skillswap.modules.mentor.domain.MentorService ms_search
                         where ms_search.mentorProfile.userId = mp.userId and ms_search.isActive = true and
                               (
@@ -283,7 +341,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("teachingMode") TeachingMode teachingMode,
             @Param("hasTagFilter") boolean hasTagFilter,
             @Param("tagIds") List<UUID> tagIds,
             @Param("keywordPattern") String keywordPattern,
@@ -320,15 +377,12 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND mp.teaching_mode IS NOT NULL
-              AND mp.session_duration IS NOT NULL
               AND EXISTS (
                   SELECT 1 FROM mentor_tags mt0
                   WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
               )
               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
-              AND (:teachingMode IS NULL OR mp.teaching_mode = CAST(:teachingMode AS varchar))
               AND (:hasTagFilter = false OR EXISTS (
                   SELECT 1 FROM mentor_tags mt1
                   WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
@@ -358,7 +412,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("keyword") String keyword,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("teachingMode") String teachingMode,
             @Param("hasTagFilter") boolean hasTagFilter,
             @Param("tagIds") String tagIds,
             @Param("now") LocalDateTime now,
@@ -385,15 +438,12 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND mp.teaching_mode IS NOT NULL
-              AND mp.session_duration IS NOT NULL
               AND EXISTS (
                   SELECT 1 FROM mentor_tags mt0
                   WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
               )
               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
-              AND (:teachingMode IS NULL OR mp.teaching_mode = CAST(:teachingMode AS varchar))
               AND (:hasTagFilter = false OR EXISTS (
                   SELECT 1 FROM mentor_tags mt1
                   WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
@@ -405,7 +455,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("keyword") String keyword,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("teachingMode") String teachingMode,
             @Param("hasTagFilter") boolean hasTagFilter,
             @Param("tagIds") String tagIds,
             @Param("now") LocalDateTime now);
@@ -420,11 +469,13 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 mp.expertiseDescription,
                 mp.supportingSubjects,
                 sp.bio,
+                mp.foundationSupportLevel,
+                mp.outputReviewSupportLevel,
+                mp.directionSupportLevel,
                 mp.isAvailable,
                 mp.averageRating,
                 mp.totalReviews,
                 mp.totalCompletedSessions,
-                mp.teachingMode,
                 mp.verifiedAt,
                 campus.id,
                 campus.name,
@@ -453,7 +504,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @Query("""
             select new com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow(
                 mp.userId, u.fullName, u.avatarUrl, mp.headline, mp.expertiseDescription, mp.supportingSubjects,
-                sp.bio, mp.isAvailable, mp.averageRating, mp.totalReviews, mp.totalCompletedSessions, mp.teachingMode, mp.verifiedAt,
+                sp.bio, mp.foundationSupportLevel, mp.outputReviewSupportLevel, mp.directionSupportLevel,
+                mp.isAvailable, mp.averageRating, mp.totalReviews, mp.totalCompletedSessions, mp.verifiedAt,
                 campus.id, campus.name, program.id, program.nameVi, specialization.id, specialization.nameVi, sp.semester, sp.isAlumni,
                 mp.totalAcceptedBookings, mp.totalRejectedBookings, mp.totalMentorCancelledBookings, mp.lastActiveAt,
                 null
@@ -475,8 +527,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.teachingMode is not null
-              and mp.sessionDuration is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt

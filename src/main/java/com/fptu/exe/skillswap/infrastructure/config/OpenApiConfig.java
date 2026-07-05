@@ -41,8 +41,8 @@ public class OpenApiConfig {
                             ## SkillSwap API Documentation - EXE201
                             
                             SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
-                            Backend hiện cung cấp REST API cho xác thực, hồ sơ, mentor service, availability,
-                            booking, notification và chat; realtime dùng raw WebSocket theo scope nhỏ.
+                            Backend hiện cung cấp REST API cho xác thực, hồ sơ, questionnaire nhu cầu mentoring,
+                            mentor service, availability, booking, notification và chat; realtime dùng raw WebSocket theo scope nhỏ.
                             
                             ### Realtime guide cho Frontend
                             - Dùng **REST API** để:
@@ -86,7 +86,8 @@ public class OpenApiConfig {
                         new Tag().name("Academic Catalog").description("Nhóm API trả dữ liệu danh mục campus, program và specialization để điền form onboarding hoặc form cập nhật hồ sơ học thuật. FE dùng các API này để đổ dropdown trước khi lưu Academic Profile."),
                         new Tag().name("Help Topic Catalog").description("Nhóm API trả danh sách help topics dùng trong mentor profile, mentor services và bộ lọc discovery. FE dùng khi cần danh sách chủ đề hỗ trợ để chọn trong form hoặc filter."),
                         new Tag().name("Academic Profile").description("Nhóm API tạo và cập nhật hồ sơ học thuật của user hiện tại. FE dùng ở bước onboarding và ở những luồng mà việc hoàn thành profile ảnh hưởng đến quyền sử dụng tính năng."),
-                        new Tag().name("Mentor Profile").description("Nhóm API tạo và duy trì hồ sơ mentor nền tảng, quyết định mentor đã đủ dữ liệu để verification hoặc xuất hiện trên discovery hay chưa. FE dùng trước khi user nộp mentor verification hoặc trước khi hiển thị mentor public."),
+                        new Tag().name("Mentee Matching Profile").description("Nhóm API lấy 5 câu hỏi nhu cầu mentoring và lưu câu trả lời flat của mentee để phục vụ Smart Matching."),
+                        new Tag().name("Mentor Profile").description("Nhóm API tạo và duy trì hồ sơ peer mentor: headline, mô tả, help topics, môn - điểm, 3 mức support, GitHub/portfolio và các mục project/achievement optional."),
                         new Tag().name("Mentor Services").description("Nhóm API để mentor tạo, cập nhật, bật tắt hoặc lưu trữ các dịch vụ mentoring cụ thể. FE dùng nhóm này để quản lý các gói/dịch vụ mà mentee có thể chọn khi booking."),
                         new Tag().name("Mentor Verification").description("Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review."),
                         new Tag().name("Mentor Discovery").description("Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking."),
@@ -106,6 +107,7 @@ public class OpenApiConfig {
                         new Tag().name("Admin - Email Outbox").description("Nhóm API để admin xem email outbox nội bộ, chẩn đoán delivery issue và retry lại các email đang FAILED."),
                         new Tag().name("Admin - Cases").description("Nhóm API workbench để admin nhận ownership case, gỡ ownership và xem operator activity nội bộ trên từng case vận hành."),
                         new Tag().name("Admin - Mentor Verification").description("Nhóm API cho admin review hồ sơ mentor verification, xem chi tiết request và xử lý quyết định theo cơ chế soft lock. FE admin dùng trong queue review và màn hình xử lý hồ sơ."),
+                        new Tag().name("Admin - Mentoring Questionnaire").description("Nhóm API admin tạo version mới và activate bộ 5 câu hỏi nhu cầu mentoring."),
                         new Tag().name("Admin - Mentors").description("Nhóm API vận hành nội bộ để xem danh sách mentor và chi tiết mentor. FE admin dùng trong các màn hình quản trị mentor."),
                         new Tag().name("Admin - Users").description("Nhóm API vận hành nội bộ để xem danh sách user visible và thay đổi trạng thái tài khoản như ban hoặc unban. FE admin dùng trong các màn moderation user."),
                         new Tag().name("Admin - Bookings").description("Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking."),
@@ -135,6 +137,7 @@ public class OpenApiConfig {
                     "Academic Catalog",
                     "Help Topic Catalog",
                     "Academic Profile",
+                    "Mentee Matching Profile",
                     "Mentor Profile",
                     "Mentor Services",
                     "Mentor Verification",
@@ -155,6 +158,7 @@ public class OpenApiConfig {
                     "Admin - Email Outbox",
                     "Admin - Cases",
                     "Admin - Mentor Verification",
+                    "Admin - Mentoring Questionnaire",
                     "Admin - Mentors",
                     "Admin - Users",
                     "Admin - Bookings",

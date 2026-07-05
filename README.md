@@ -294,6 +294,37 @@ Quy tắc hiện tại:
 
 FE dùng `GET /api/auth/me` để đọc `profileCompleted` và `hasStudentProfile`, từ đó quyết định cho user vào dashboard hay chuyển sang form hoàn thiện hồ sơ học thuật.
 
+### Mentee Matching Profile
+
+- `GET /api/me/matching-profile`
+- `GET /api/me/matching-profile/questionnaire`
+- `PUT /api/me/matching-profile`
+
+Backend dùng một bộ 5 câu hỏi nhu cầu mentoring đang active để phục vụ Smart Matching:
+
+- `Q1_FOUNDATION_LEVEL`: mức cần mentor giúp gỡ kiến thức nền.
+- `Q2_OUTPUT_REVIEW_LEVEL`: mức cần mentor review project, bài nộp, slide, CV hoặc sản phẩm.
+- `Q3_DIRECTION_LEVEL`: mức cần mentor hỗ trợ định hướng học, ngành, OJT hoặc career.
+- `Q4_MENTOR_FIT`: kiểu mentor hợp với mentee.
+- `Q5_DURATION_PREFERENCE`: thời lượng một buổi mentee muốn book, gồm `15`, `30`, `60`, `90` phút.
+
+`PUT /api/me/matching-profile` giữ payload flat để FE sửa ít:
+
+- `phase`: optional/compatibility, backend không dùng để tách bộ câu hỏi.
+- `question1AnswerCode`
+- `question2AnswerCode`
+- `question3AnswerCode`
+- `question4AnswerCode`
+- `question5AnswerCode`
+
+Admin quản lý version/activation qua:
+
+- `GET /api/admin/mentoring-questionnaire/versions`
+- `GET /api/admin/mentoring-questionnaire/versions/{versionId}`
+- `POST /api/admin/mentoring-questionnaire/versions`
+- `POST /api/admin/mentoring-questionnaire/activate`
+- `GET /api/admin/mentoring-questionnaire/active`
+
 ### Mentor Profile
 
 - `GET /api/me/mentor-profile`
@@ -303,16 +334,26 @@ FE dùng `GET /api/auth/me` để đọc `profileCompleted` và `hasStudentProfi
 
 `PUT /api/me/mentor-profile` lưu toàn bộ hồ sơ mentor trong một request. Các trường chính:
 
-- `headline`: bắt buộc, là câu định vị ngắn cho mentor, ví dụ `Backend Developer | Spring Boot Mentor`.
+- `headline`: bắt buộc, là câu định vị ngắn cho peer mentor.
 - `expertiseDescription`: bắt buộc, text tự do tối đa `1000` ký tự để mentor mô tả năng lực, kinh nghiệm, điểm mạnh và phạm vi có thể hỗ trợ.
-- `supportingSubjects`: tùy chọn, text tự do tối đa `1000` ký tự để mô tả các môn học có thể hỗ trợ.
 - `isAvailable`: tùy chọn khi cập nhật; nếu user tạo profile mới và không truyền field này thì backend mặc định `true`. Mentor có thể tự tắt/bật sau.
 - `helpTopicIds`: bắt buộc, danh sách chủ đề có thể hỗ trợ.
-- `teachingMode`: bắt buộc, một trong `ONLINE`, `OFFLINE`, `HYBRID`.
-- `sessionDuration`: bắt buộc, là thời lượng tối đa mentor nhận cho một buổi mentoring; chỉ nhận một trong `15`, `30`, `60`, `90`.
-- `linkedinUrl`, `githubUrl`, `portfolioUrl`: tùy chọn.
+- `subjectResults`: bắt buộc, danh sách `subjectCode`, `subjectName`, `scoreValue` theo thang điểm 0-10.
+- `foundationSupportLevel`: bắt buộc, mức mentor giúp mentee lấy gốc từ `1` đến `4`.
+- `outputReviewSupportLevel`: bắt buộc, mức mentor review bài nộp/project/CV/report từ `1` đến `4`.
+- `directionSupportLevel`: bắt buộc, mức mentor hỗ trợ định hướng/OJT/career từ `1` đến `4`.
+- `githubUrl`, `portfolioUrl`: tùy chọn.
+- `phoneNumber`: bắt buộc.
 
-`bio` chỉ còn nằm ở `StudentProfile` và được tái sử dụng làm phần giới thiệu chung trong mentor detail/discovery. `MentorProfile` hiện chỉ giữ `headline`, `expertiseDescription`, `supportingSubjects`, `helpTopicIds`, `teachingMode`, `sessionDuration`, `isAvailable` và các link cá nhân; các field cũ như `currentPosition`, `currentCompany`, `industry`, `yearsOfExperience` và `hourlyRate` đã bị loại khỏi contract và schema.
+Các field đã bỏ khỏi contract mentor profile/discovery: `supportingSubjects`, `teachingMode`, `sessionDuration`, `linkedinUrl`.
+
+Mentor có thể bổ sung mục optional:
+
+- `GET/POST/PUT/DELETE /api/me/mentor-projects`
+- `PUT /api/me/mentor-projects/{projectId}/picture`
+- `GET/POST/PUT/DELETE /api/me/mentor-achievements`
+
+`bio` chỉ còn nằm ở `StudentProfile` và được tái sử dụng làm phần giới thiệu chung trong mentor detail/discovery. Project và achievement không bắt buộc để submit verification.
 
 Avatar không cập nhật qua API này. Backend lấy avatar từ tài khoản người dùng, ví dụ Google login hoặc hồ sơ học thuật.
 
@@ -346,9 +387,9 @@ Các cấu hình liên quan:
 
 Upload document:
 
-- Ảnh `JPG`, `JPEG`, `PNG` lưu qua Cloudinary.
-- PDF lưu qua Cloudflare R2.
-- File upload qua BE tối đa `1MB`.
+- API nhận `multipart/form-data` gồm `documentType` và `file`, backend upload lên Cloudflare R2.
+- File hỗ trợ `JPG`, `JPEG`, `PNG`, `PDF`.
+- File upload qua BE tối đa `15MB`.
 - `FPTU_AFFILIATION_PROOF`: minh chứng là sinh viên/cựu sinh viên FPTU, tối đa `1` file đang hoạt động.
 - `EXPERTISE_PROOF`: minh chứng năng lực mentor, tối đa `3` file đang hoạt động.
 - API upload không dùng `isPrimary`; FE chỉ cần gửi `documentType` và `file`.

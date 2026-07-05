@@ -15,6 +15,9 @@ public record OnboardingStatusResponse(
         @Schema(description = "true nếu người dùng đã hoàn thành hồ sơ mentor", example = "false")
         boolean mentorProfileCompleted,
 
+        @Schema(description = "true nếu user đã trả lời active questionnaire nhu cầu mentoring hiện tại", example = "true")
+        boolean mentoringNeedsCompleted,
+
         @Schema(description = "Trạng thái xác thực mentor mới nhất: NOT_STARTED, PENDING_REVIEW, APPROVED, NEEDS_REVISION, REJECTED, etc.", example = "NOT_STARTED")
         String mentorVerificationStatus,
 

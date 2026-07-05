@@ -155,12 +155,12 @@ class MentorVerificationFlowIntegrationTest {
         mentorProfileService.upsertProfile(mentorId, new MentorProfileUpsertRequest(
                 "Super Mentor headline",
                 "I am an expert in java",
-                "Spring, Java",
                 true,
                 List.of(activeTag.getId()),
-                TeachingMode.ONLINE,
-                60,
-                "https://linkedin.com",
+                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
+                3,
+                3,
+                2,
                 "https://github.com",
                 "https://portfolio.com",
                 "0912345678"
@@ -560,12 +560,12 @@ class MentorVerificationFlowIntegrationTest {
         mentorProfileService.upsertProfile(mentorId, new MentorProfileUpsertRequest(
                 "Super Mentor headline",
                 "I am an expert in java",
-                "Spring, Java",
                 true,
                 List.of(activeTag.getId()),
-                TeachingMode.ONLINE,
-                60,
-                "https://linkedin.com/in/test",
+                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
+                3,
+                3,
+                2,
                 "https://github.com/test",
                 "https://portfolio.com/test",
                 "0912345678"
