@@ -54,16 +54,31 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
     private void seedCampus(CampusCode code, String name, String city) {
         Optional<Campus> existing = campusRepository.findByCode(code);
-        if (existing.isEmpty()) {
-            Campus campus = Campus.builder()
-                    .code(code)
-                    .name(name)
-                    .city(city)
-                    .isActive(true)
-                    .build();
-            campusRepository.save(campus);
-            log.info("Seeded Campus: {}", code);
+        if (existing.isPresent()) {
+            Campus campus = existing.get();
+            boolean changed = false;
+            if (!name.equals(campus.getName())) {
+                campus.setName(name);
+                changed = true;
+            }
+            if (city != null && !city.equals(campus.getCity())) {
+                campus.setCity(city);
+                changed = true;
+            }
+            if (changed) {
+                campusRepository.save(campus);
+                log.info("Updated Campus: {} (Name: {}, City: {})", code, name, city);
+            }
+            return;
         }
+        Campus campus = Campus.builder()
+                .code(code)
+                .name(name)
+                .city(city)
+                .isActive(true)
+                .build();
+        campusRepository.save(campus);
+        log.info("Seeded Campus: {}", code);
     }
 
     private void seedAcademicProgramsAndSpecializations() {
