@@ -86,6 +86,8 @@ class PaymentOrderServiceTest {
         paymentProperties.getPayos().setReturnUrl("https://skillswap.asia/payment/return");
         paymentProperties.getPayos().setCancelUrl("https://skillswap.asia/payment/cancel");
         paymentProperties.getPayos().setChecksumKey("test-checksum-key");
+        paymentProperties.setMenteeSurchargeBps(0);
+        paymentProperties.setMentorCommissionBps(0);
 
         paymentOrderService = new PaymentOrderService(
                 bookingRepository,
@@ -597,5 +599,56 @@ class PaymentOrderServiceTest {
             assertTrue(value <= 9_007_199_254_740_991L);
             assertTrue(generated.add(value), "Duplicate providerOrderCode generated: " + value);
         }
+    }
+
+    @Test
+    void checkout_withMenteeSurchargeAndMentorCommission_shouldApplyRatesCorrectly() {
+        PaymentProperties props = new PaymentProperties();
+        props.getPayos().setReturnUrl("https://skillswap.asia/payment/return");
+        props.getPayos().setCancelUrl("https://skillswap.asia/payment/cancel");
+        props.setMenteeSurchargeBps(1000); // 10%
+        props.setMentorCommissionBps(1000); // 10%
+
+        PaymentOrderService customService = new PaymentOrderService(
+                bookingRepository,
+                paymentOrderRepository,
+                paymentAttemptRepository,
+                couponService,
+                creditLedgerService,
+                campaignService,
+                props,
+                payOsGateway,
+                settlementService,
+                sessionService,
+                conversationService,
+                notificationService,
+                eventPublisher
+        );
+
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
+        when(couponService.resolveCoupon(null)).thenReturn(null);
+        // With surcharge-added price = 110
+        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(110)))
+                .thenReturn(CampaignService.CampaignCreditApplication.none());
+        when(creditLedgerService.reserveCredit(eq(menteeId), eq(110), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
+                .thenReturn(List.of(CreditLedgerEntry.builder()
+                        .amountScoin(110)
+                        .originType(CreditOriginType.MANUAL)
+                        .build()));
+        
+        ArgumentCaptor<PaymentOrder> orderCaptor = ArgumentCaptor.forClass(PaymentOrder.class);
+        when(paymentOrderRepository.save(orderCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
+        when(paymentAttemptRepository.countByPaymentOrderId(any())).thenReturn(0L);
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PaymentCheckoutResponse response = customService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, null));
+
+        assertNotNull(response);
+        PaymentOrder capturedOrder = orderCaptor.getValue();
+        assertEquals(110, capturedOrder.getGrossScoin());
+        assertEquals(90, capturedOrder.getMentorNetScoin());
+        assertEquals(20, capturedOrder.getCommissionScoin());
+        assertEquals(2000, capturedOrder.getCommissionRateBps()); // 10% + 10%
     }
 }

@@ -36,6 +36,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
 import com.fptu.exe.skillswap.modules.matching.service.MentoringMatchProfileService;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -139,6 +140,7 @@ public class MentorDiscoveryService {
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
     private final MentoringMatchProfileService mentoringMatchProfileService;
+    private final PaymentProperties paymentProperties;
 
     private volatile List<String> cachedKeywords = new java.util.ArrayList<>();
     private final Object cacheLock = new Object();
@@ -1256,7 +1258,7 @@ public class MentorDiscoveryService {
                 .description(mentorService.getDescription())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .free(mentorService.isFree())
-                .priceScoin(defaultInteger(mentorService.getPriceScoin()))
+                .priceScoin(defaultInteger(mentorService.getPriceScoin()) == 0 ? 0 : defaultInteger(mentorService.getPriceScoin()) + (defaultInteger(mentorService.getPriceScoin()) * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
                 .active(mentorService.isActive())
                 .helpTopics(helpTopics)
                 .createdAt(mentorService.getCreatedAt())

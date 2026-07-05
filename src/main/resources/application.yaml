@@ -103,6 +103,8 @@ application:
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
   payment:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
+    mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
+    mentor-commission-bps: ${PAYMENT_MENTOR_COMMISSION_BPS:1000}
     payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
     payos:
       client-id: ${PAYOS_CLIENT_ID:}

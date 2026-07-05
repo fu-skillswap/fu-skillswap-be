@@ -103,13 +103,15 @@ public class PaymentOrderService {
             return toResponse(existingOrder, latestAttempt);
         }
 
-        int basePriceScoin = resolveBasePriceScoin(booking);
-        int commissionRateBps = paymentProperties.getPlatformCommissionBps();
+        int originalPriceScoin = resolveBasePriceScoin(booking);
+        int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
+        int menteeSurchargeScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * menteeSurchargeBps) / 10_000;
+        int menteePayablePrice = originalPriceScoin + menteeSurchargeScoin;
 
         var coupon = couponService.resolveCoupon(request.couponCode());
-        couponService.validateApplicable(coupon, booking, currentUserId, basePriceScoin);
-        int couponDiscountScoin = couponService.calculateCouponDiscount(coupon, basePriceScoin);
-        int amountAfterCoupon = Math.max(0, basePriceScoin - couponDiscountScoin);
+        couponService.validateApplicable(coupon, booking, currentUserId, menteePayablePrice);
+        int couponDiscountScoin = couponService.calculateCouponDiscount(coupon, menteePayablePrice);
+        int amountAfterCoupon = Math.max(0, menteePayablePrice - couponDiscountScoin);
 
         CampaignService.CampaignCreditApplication campaignApplication =
                 campaignService.resolveCampaignCredit(currentUserId, booking, amountAfterCoupon);
@@ -118,14 +120,14 @@ public class PaymentOrderService {
 
         PaymentOrder draftOrder = existingOrder != null ? existingOrder : new PaymentOrder();
         prepareOrderForCheckout(draftOrder, booking, currentUserId, coupon, campaignApplication,
-                basePriceScoin, couponDiscountScoin, campaignCreditAppliedScoin, commissionRateBps);
+                originalPriceScoin, menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin);
 
         if (amountAfterCampaign > 0) {
             int userCredit = reserveUserCredit(currentUserId, draftOrder, amountAfterCampaign);
             draftOrder.setUserCreditScoin(userCredit);
             draftOrder.setRemainingPayableScoin(Math.max(0, amountAfterCampaign - userCredit));
             draftOrder.setStatus(draftOrder.getRemainingPayableScoin() > 0
-                    ? hasInternalCoverage(basePriceScoin, couponDiscountScoin, campaignCreditAppliedScoin, userCredit)
+                    ? hasInternalCoverage(menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin, userCredit)
                         ? PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT
                         : PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT
                     : PaymentOrderStatus.PAID);
@@ -385,10 +387,10 @@ public class PaymentOrderService {
                                          UUID currentUserId,
                                          Coupon coupon,
                                          CampaignService.CampaignCreditApplication campaignApplication,
-                                         int basePriceScoin,
+                                         int originalPriceScoin,
+                                         int menteePayablePrice,
                                          int couponDiscountScoin,
-                                         int campaignCreditAppliedScoin,
-                                         int commissionRateBps) {
+                                         int campaignCreditAppliedScoin) {
         UUID paymentOrderId = draftOrder.getId() != null ? draftOrder.getId() : UuidUtil.generateUuidV7();
         draftOrder.setId(paymentOrderId);
         if (!StringUtils.hasText(draftOrder.getOrderCode())) {
@@ -398,10 +400,18 @@ public class PaymentOrderService {
         draftOrder.setPayerUserId(currentUserId);
         draftOrder.setMentorUserId(booking.getMentorProfile().getUserId());
         draftOrder.setServiceId(booking.getService() == null ? null : booking.getService().getId());
-        draftOrder.setGrossScoin(basePriceScoin);
-        draftOrder.setCommissionRateBps(commissionRateBps);
-        draftOrder.setCommissionScoin(Math.max(0, (basePriceScoin * commissionRateBps) / 10_000));
-        draftOrder.setMentorNetScoin(Math.max(0, basePriceScoin - draftOrder.getCommissionScoin()));
+        
+        int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
+        int mentorCommissionBps = paymentProperties.getMentorCommissionBps();
+
+        int mentorCommissionScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * mentorCommissionBps) / 10_000;
+        int mentorNetScoin = Math.max(0, originalPriceScoin - mentorCommissionScoin);
+
+        draftOrder.setGrossScoin(menteePayablePrice);
+        draftOrder.setCommissionRateBps(menteeSurchargeBps + mentorCommissionBps);
+        draftOrder.setMentorNetScoin(mentorNetScoin);
+        draftOrder.setCommissionScoin(Math.max(0, menteePayablePrice - mentorNetScoin));
+
         if (coupon != null) {
             draftOrder.setCouponId(coupon.getId());
             draftOrder.setCouponCodeSnapshot(coupon.getCode());

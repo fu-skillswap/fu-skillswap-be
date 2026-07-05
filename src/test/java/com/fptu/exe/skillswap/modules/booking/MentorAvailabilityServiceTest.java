@@ -27,6 +27,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -93,7 +94,8 @@ class MentorAvailabilityServiceTest {
                 mentorServiceRepository,
                 bookingRepository,
                 notificationService,
-                calendarWindowCalculator
+                calendarWindowCalculator,
+                new PaymentProperties()
         );
 
         mentorUserId = UUID.randomUUID();

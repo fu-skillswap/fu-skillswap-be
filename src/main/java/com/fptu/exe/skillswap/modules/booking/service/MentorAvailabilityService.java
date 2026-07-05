@@ -34,6 +34,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -90,6 +91,7 @@ public class MentorAvailabilityService {
     private final BookingRepository bookingRepository;
     private final NotificationService notificationService;
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
+    private final PaymentProperties paymentProperties;
 
     @Deprecated(forRemoval = false)
     @Transactional(readOnly = true)
@@ -628,7 +630,7 @@ public class MentorAvailabilityService {
                 .title(service.getTitle())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
-                .priceScoin(service.getPriceScoin())
+                .priceScoin(service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0 : service.getPriceScoin() + (service.getPriceScoin() * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
                 .build();
     }
 

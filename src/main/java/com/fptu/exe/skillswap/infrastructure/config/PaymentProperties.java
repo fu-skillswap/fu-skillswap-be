@@ -9,11 +9,19 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "application.payment")
 public class PaymentProperties {
 
+    private int platformCommissionBps = 1000;
+
     /**
-     * Platform commission in basis points.
+     * Mentee surcharge rate in basis points.
      * 1000 bps = 10%.
      */
-    private int platformCommissionBps = 1000;
+    private int menteeSurchargeBps = 1000;
+
+    /**
+     * Mentor commission rate in basis points.
+     * 1000 bps = 10%.
+     */
+    private int mentorCommissionBps = 1000;
 
     /**
      * Payment link expiry in minutes.
