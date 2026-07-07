@@ -134,9 +134,7 @@ public class MentorServiceManagementService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ mentor đã được xác thực mới được quản lý dịch vụ mentoring");
         }
         if (!hasText(profile.getHeadline())
-                || !hasText(profile.getExpertiseDescription())
-                || profile.getTeachingMode() == null
-                || profile.getSessionDuration() == null) {
+                || !hasText(profile.getExpertiseDescription())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Cần hoàn thiện hồ sơ mentor trước khi quản lý dịch vụ mentoring");
         }
         return profile;
