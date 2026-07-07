@@ -36,6 +36,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -145,7 +146,8 @@ class BookingServiceTest {
                 settlementService,
                 paymentOrderService,
                 bookingSlotValidator,
-                bookingEligibilityPolicy
+                bookingEligibilityPolicy,
+                new PaymentProperties()
         );
 
         menteeId = UUID.randomUUID();
