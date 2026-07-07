@@ -344,7 +344,7 @@ public class MentorAvailabilityService {
                         ss.getService().getTitle(),
                         ss.getService().getDurationMinutes(),
                         ss.getService().isFree(),
-                        ss.getService().getPriceScoin()
+                        normalizedServicePrice(ss.getService())
                 ))
                 .collect(Collectors.toList());
         return new MentorManagedAvailabilitySlotResponse(
@@ -630,8 +630,15 @@ public class MentorAvailabilityService {
                 .title(service.getTitle())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
-                .priceScoin(service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0 : service.getPriceScoin() + (service.getPriceScoin() * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
+                .priceScoin(service.isFree() || service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0 : service.getPriceScoin() + (service.getPriceScoin() * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
                 .build();
+    }
+
+    private Integer normalizedServicePrice(MentorService service) {
+        if (service == null || service.isFree()) {
+            return 0;
+        }
+        return service.getPriceScoin() == null ? 0 : service.getPriceScoin();
     }
 
     private void validateMentorOwnsSlot(UUID mentorUserId, MentorAvailabilitySlot slot) {

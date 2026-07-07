@@ -138,7 +138,7 @@ class BookingEmailNotificationTest {
                 .description("Support Email")
                 .durationMinutes(60)
                 .isFree(false)
-                .priceScoin(100)
+                .priceScoin(72_000)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()

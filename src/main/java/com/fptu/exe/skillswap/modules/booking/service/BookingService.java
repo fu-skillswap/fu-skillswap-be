@@ -32,6 +32,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -69,6 +70,8 @@ public class BookingService {
     private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 24;
     private static final long PAYMENT_WINDOW_MINUTES = 360;
     private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
+    private static final int MAX_SERVICE_PRICE_SCOIN_PER_MINUTE = 500_000;
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.ACCEPTED,
@@ -98,6 +101,7 @@ public class BookingService {
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final PaymentProperties paymentProperties;
+    private final InternalTelemetryService internalTelemetryService;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -186,7 +190,7 @@ public class BookingService {
                 .serviceDurationSnapshot(mentorService.getDurationMinutes())
                 .serviceExpectedOutcomeSnapshot(mentorService.getExpectedOutcome())
                 .serviceIsFreeSnapshot(mentorService.isFree())
-                .servicePriceScoinSnapshot(mentorService.getPriceScoin())
+                .servicePriceScoinSnapshot(normalizedServicePrice(mentorService))
                 .build());
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
@@ -206,6 +210,17 @@ public class BookingService {
                 "Yêu cầu đặt lịch mới đã được gửi.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
         ));
+        internalTelemetryService.record(
+                "BOOKING_STARTED",
+                menteeUserId,
+                "BOOKING",
+                savedBooking.getId(),
+                Map.of(
+                        "mentorUserId", String.valueOf(savedBooking.getMentorProfile().getUserId()),
+                        "serviceId", String.valueOf(mentorService.getId()),
+                        "slotId", String.valueOf(slot.getId())
+                )
+        );
 
         return toBookingResponse(savedBooking);
     }
@@ -256,7 +271,7 @@ public class BookingService {
 
         java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+                ? conversationService.findConversationIdsForBookings(page.getContent())
                 : java.util.Collections.emptyMap();
         java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -759,6 +774,16 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
         settlementService.releaseForBooking(savedBooking);
+        internalTelemetryService.record(
+                "BOOKING_COMPLETED",
+                currentUserId,
+                "BOOKING",
+                savedBooking.getId(),
+                Map.of(
+                        "mentorUserId", String.valueOf(savedBooking.getMentorProfile() == null ? null : savedBooking.getMentorProfile().getUserId()),
+                        "completionOutcome", String.valueOf(savedBooking.getCompletionOutcome())
+                )
+        );
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
@@ -831,7 +856,7 @@ public class BookingService {
 
         java.util.List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+                ? conversationService.findConversationIdsForBookings(page.getContent())
                 : java.util.Collections.emptyMap();
         java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -907,6 +932,7 @@ public class BookingService {
         if (mentorService.getDurationMinutes() == null || mentorService.getDurationMinutes() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn có thời lượng không hợp lệ");
         }
+        validateServicePricing(mentorService.isFree(), mentorService.getPriceScoin(), mentorService.getDurationMinutes());
         return mentorService;
     }
 
@@ -980,6 +1006,9 @@ public class BookingService {
             conversationId = bookingToConversationMap.get(booking.getId());
         } else if (conversationService != null) {
             com.fptu.exe.skillswap.modules.conversation.domain.Conversation conv = conversationService.findByBookingId(booking.getId());
+            if (conv == null && mentee != null && mentee.getId() != null && mentorUser != null && mentorUser.getId() != null) {
+                conv = conversationService.findDirectByParticipants(mentorUser.getId(), mentee.getId());
+            }
             if (conv != null) {
                 conversationId = conv.getId();
             }
@@ -1094,7 +1123,49 @@ public class BookingService {
             return 0;
         }
         int surchargeBps = paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps();
-        return price + (price * surchargeBps) / 10_000;
+        long total = (long) price + ((long) price * surchargeBps) / 10_000L;
+        if (total > Integer.MAX_VALUE) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá hiển thị cho mentee vượt giới hạn hệ thống");
+        }
+        return (int) total;
+    }
+
+    private int normalizedServicePrice(MentorService mentorService) {
+        if (mentorService == null) {
+            return 0;
+        }
+        validateServicePricing(mentorService.isFree(), mentorService.getPriceScoin(), mentorService.getDurationMinutes());
+        return Boolean.TRUE.equals(mentorService.isFree()) ? 0 : defaultInteger(mentorService.getPriceScoin());
+    }
+
+    private void validateServicePricing(Boolean isFree, Integer priceScoin, Integer durationMinutes) {
+        if (Boolean.TRUE.equals(isFree)) {
+            if (priceScoin != null && priceScoin > 0) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring miễn phí phải có giá bằng 0");
+            }
+            return;
+        }
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn có thời lượng không hợp lệ");
+        }
+        int normalizedPrice = defaultInteger(priceScoin);
+        if (normalizedPrice <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring có phí phải có giá lớn hơn 0");
+        }
+        int minimumPrice = durationMinutes * MIN_SERVICE_PRICE_SCOIN_PER_MINUTE;
+        if (normalizedPrice < minimumPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Gói mentoring có phí phải có giá tối thiểu " + minimumPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
+        int maximumPrice = durationMinutes * MAX_SERVICE_PRICE_SCOIN_PER_MINUTE;
+        if (normalizedPrice > maximumPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Gói mentoring có phí chỉ được đặt tối đa " + maximumPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
     }
 
     private Pageable bookingPageable(BookingListRequest request) {

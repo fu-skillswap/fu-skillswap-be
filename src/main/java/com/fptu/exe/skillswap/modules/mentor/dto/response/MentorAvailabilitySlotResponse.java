@@ -22,7 +22,7 @@ public record MentorAvailabilitySlotResponse(
         String timezone,
         @Schema(description = "Thời lượng parent slot tính theo phút, được suy ra từ endTime - startTime. Đây là field dẫn xuất để FE tiện hiển thị, không phải duration của service.", example = "60", deprecated = true)
         Integer durationMinutes,
-        @Schema(description = "Hình thức mentoring của slot", example = "ONLINE")
+        @Schema(description = "Legacy field cũ, FE mới không nên dùng.", example = "ONLINE", deprecated = true, hidden = true)
         TeachingMode teachingMode,
         @Schema(description = "Tổng số booking request PENDING đã gửi vào parent slot này ở thời điểm hiện tại", example = "2")
         Integer pendingRequestCount,

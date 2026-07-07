@@ -36,6 +36,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -114,6 +115,9 @@ class BookingServiceTest {
     @Mock
     private PaymentOrderService paymentOrderService;
 
+    @Mock
+    private InternalTelemetryService internalTelemetryService;
+
     private BookingSlotValidator bookingSlotValidator;
 
     private BookingEligibilityPolicy bookingEligibilityPolicy;
@@ -147,7 +151,8 @@ class BookingServiceTest {
                 paymentOrderService,
                 bookingSlotValidator,
                 bookingEligibilityPolicy,
-                new PaymentProperties()
+                new PaymentProperties(),
+                internalTelemetryService
         );
 
         menteeId = UUID.randomUUID();
@@ -190,6 +195,8 @@ class BookingServiceTest {
                 .mentorProfile(mentorProfile)
                 .title("Mock Service")
                 .durationMinutes(60)
+                .isFree(false)
+                .priceScoin(72_000)
                 .isActive(true)
                 .build();
 

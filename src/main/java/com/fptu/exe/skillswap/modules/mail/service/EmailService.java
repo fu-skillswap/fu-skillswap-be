@@ -29,10 +29,10 @@ public class EmailService {
     @Value("${application.mail.from-name:SkillSwap}")
     private String senderName;
 
-    public void sendSimpleEmail(String to, String subject, String body) {
+    public boolean sendSimpleEmail(String to, String subject, String body) {
         if (!mailEnabled) {
             log.info("Email service is disabled. Skipping email to: {}, subject: {}", to, subject);
-            return;
+            return false;
         }
 
         try {
@@ -48,16 +48,18 @@ public class EmailService {
 
             javaMailSender.send(message);
             log.info("Email sent successfully to: {}", to);
+            return true;
         } catch (Exception ex) {
             log.error("Failed to send email to: {}. Reason: {}", to, ex.getMessage(), ex);
             // We specifically DO NOT throw the exception to prevent rolling back business transactions
+            return false;
         }
     }
 
-    public void sendHtmlEmail(String to, String subject, String htmlBody, String plainTextFallback) {
+    public boolean sendHtmlEmail(String to, String subject, String htmlBody, String plainTextFallback) {
         if (!mailEnabled) {
             log.info("Email service is disabled. Skipping HTML email to: {}, subject: {}", to, subject);
-            return;
+            return false;
         }
 
         try {
@@ -80,9 +82,11 @@ public class EmailService {
 
             javaMailSender.send(message);
             log.info("HTML email sent successfully to: {}", to);
+            return true;
         } catch (Exception ex) {
             log.error("Failed to send HTML email to: {}. Reason: {}", to, ex.getMessage(), ex);
             // Email is best-effort and must never roll back business transactions.
+            return false;
         }
     }
 }

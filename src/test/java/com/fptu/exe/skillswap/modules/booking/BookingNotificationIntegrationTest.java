@@ -139,9 +139,9 @@ class BookingNotificationIntegrationTest {
         mentee2 = createMentee("mentee2-noti@test.com", "Mentee Two", "SE190002");
         mentee3 = createMentee("mentee3-noti@test.com", "Mentee Three", "SE190003");
 
-        creditLedgerService.issueCredit(mentee1.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 1000, "Test");
-        creditLedgerService.issueCredit(mentee2.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 1000, "Test");
-        creditLedgerService.issueCredit(mentee3.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 1000, "Test");
+        creditLedgerService.issueCredit(mentee1.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 100_000, "Test");
+        creditLedgerService.issueCredit(mentee2.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 100_000, "Test");
+        creditLedgerService.issueCredit(mentee3.getId(), com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL, com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL, UUID.randomUUID(), 100_000, "Test");
 
         mentorUser = userRepository.save(User.builder()
                 .email("mentor-noti@test.com")
@@ -190,7 +190,7 @@ class BookingNotificationIntegrationTest {
                 .description("Support Java backend and REST API")
                 .durationMinutes(60)
                 .isFree(false)
-                .priceScoin(100)
+                .priceScoin(72_000)
                 .isActive(true)
                 .build());
 

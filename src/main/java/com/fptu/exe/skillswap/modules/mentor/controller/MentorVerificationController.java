@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -59,6 +60,7 @@ import java.util.UUID;
 public class MentorVerificationController {
 
     private final MentorVerificationService mentorVerificationService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(summary = "Mở mentor verification request", description = "Tạo một mentor verification request mới có thể chỉnh sửa hoặc trả về request active hiện tại nếu đã tồn tại. FE dùng đây là bước đầu tiên của wizard xác thực mentor trước khi upload minh chứng và submit.")
     @ApiResponses({
@@ -134,6 +136,12 @@ public class MentorVerificationController {
             @RequestPart("file") MultipartFile file
     ) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                "mentor-verification:upload:" + principal.getPublicId(),
+                12,
+                java.time.Duration.ofMinutes(15),
+                "Bạn đang upload minh chứng quá nhanh, vui lòng thử lại sau"
+        );
         MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
                 principal.getPublicId(),
                 documentType,
@@ -157,6 +165,12 @@ public class MentorVerificationController {
             @Valid @RequestBody MentorVerificationDocumentUploadRequest request
     ) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                "mentor-verification:upload:" + principal.getPublicId(),
+                12,
+                java.time.Duration.ofMinutes(15),
+                "Bạn đang upload minh chứng quá nhanh, vui lòng thử lại sau"
+        );
         MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
                 principal.getPublicId(),
                 request
@@ -179,6 +193,12 @@ public class MentorVerificationController {
             @Valid @RequestBody MentorVerificationSubmitRequest request
     ) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                "mentor-verification:submit:" + principal.getPublicId(),
+                5,
+                java.time.Duration.ofHours(1),
+                "Bạn đang gửi yêu cầu xác thực quá nhanh, vui lòng kiểm tra lại hồ sơ rồi thử sau"
+        );
         return ApiResponse.success(mentorVerificationService.submit(principal.getPublicId(), request));
     }
 

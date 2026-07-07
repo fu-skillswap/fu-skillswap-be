@@ -24,35 +24,20 @@ public final class HtmlEmailTemplate {
                       <td align="center" style="font-family:__FONT_STACK__;">
                         <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%%;background:#ffffff;border-radius:28px;overflow:hidden;border:1px solid #d4e3ef;font-family:__FONT_STACK__;">
                           <tr>
-                            <td style="padding:24px 34px;background:#f8fbff;text-align:center;border-bottom:1px solid #dbe8f3;font-family:__FONT_STACK__;">
-                              <div style="font-size:34px;line-height:1;font-weight:800;color:#0b3a67;letter-spacing:-1px;font-family:__FONT_STACK__;">SkillSwap</div>
-                              <div style="margin-top:8px;font-size:13px;color:#5d7083;font-family:__FONT_STACK__;">Nền tảng mentoring và trao đổi kỹ năng FPTU</div>
-                            </td>
-                          </tr>
-                          <tr>
                             <td style="background:#d7eaf8;padding:0;font-family:__FONT_STACK__;">
                               <table role="presentation" width="100%%" cellspacing="0" cellpadding="0" style="font-family:__FONT_STACK__;">
                                 <tr>
-                                  <td style="padding:34px 30px 30px 34px;width:56%%;vertical-align:top;font-family:__FONT_STACK__;">
+                                  <td style="padding:34px 10px 30px 34px;width:50%%;vertical-align:top;font-family:__FONT_STACK__;">
                                     <div style="display:inline-block;padding:7px 12px;border-radius:999px;background:#ffffff;color:#0b3a67;font-size:12px;font-weight:700;font-family:__FONT_STACK__;">%s</div>
                                     <h1 style="margin:18px 0 0;font-size:30px;line-height:1.15;color:#082f57;letter-spacing:-0.6px;font-family:__FONT_STACK__;">%s</h1>
                                     <p style="margin:14px 0 0;font-size:15px;line-height:1.6;color:#26465f;font-family:__FONT_STACK__;">%s</p>
                                   </td>
-                                  <td style="padding:28px 30px 28px 0;vertical-align:middle;font-family:__FONT_STACK__;">
-                                    <div style="background:#ffffff;border-radius:24px;padding:18px;border:1px solid #b9d6ea;box-shadow:0 10px 24px rgba(11,58,103,0.16);">
-                                      <div style="height:12px;width:86px;background:#0b3a67;border-radius:999px;margin-bottom:14px;"></div>
-                                      <div style="padding:12px;border-radius:16px;background:#f6faff;border:1px solid #dbe8f3;margin-bottom:10px;">
-                                        <div style="font-size:12px;color:#5d7083;font-family:__FONT_STACK__;">%s</div>
-                                        <div style="font-size:15px;font-weight:700;color:#102a43;font-family:__FONT_STACK__;">%s</div>
-                                      </div>
-                                      <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%%;">
-                                        <tr>
-                                          <td style="padding-right:8px;"><span style="display:block;width:54px;height:42px;border-radius:14px;background:#b9d6ea;"></span></td>
-                                          <td style="padding-right:8px;"><span style="display:block;width:54px;height:42px;border-radius:14px;background:#7fb3d5;"></span></td>
-                                          <td><span style="display:block;width:54px;height:42px;border-radius:14px;background:#0b3a67;"></span></td>
-                                        </tr>
-                                      </table>
-                                    </div>
+                                  <td style="width:50%%;padding:28px 10px;vertical-align:middle;text-align:center;font-family:__FONT_STACK__;">
+                                    <a href="https://skillswap.asia" target="_blank" style="text-decoration:none;display:inline-block;">
+                                      <img src="https://i.ibb.co/psBSNZt/logo.png" alt="SkillSwap Logo" style="display:block;max-width:140px;border:0;margin:0 auto;">
+                                    </a>
+                                    <div style="margin-top:14px;font-size:12px;color:#5d7083;font-family:__FONT_STACK__;">%s</div>
+                                    <div style="margin-top:4px;font-size:15px;font-weight:700;color:#102a43;font-family:__FONT_STACK__;">%s</div>
                                   </td>
                                 </tr>
                               </table>
@@ -76,22 +61,25 @@ public final class HtmlEmailTemplate {
                             </td>
                           </tr>
                           <tr>
-                            <td style="padding:22px 34px;background:#062b4f;color:#d7eaf8;text-align:center;font-family:__FONT_STACK__;">
+                            <td style="padding:20px 34px;background:#0f4c81;color:#d7eaf8;text-align:center;font-family:__FONT_STACK__;">
                               <div style="font-size:15px;line-height:1.6;color:#ffffff;font-family:__FONT_STACK__;">
                                 Best regards,<br>
                                 <strong>SkillSwap Team</strong>
                               </div>
                               
-                              <div style="margin-top:18px;text-align:center;font-family:__FONT_STACK__;">
-                                <a href="https://www.facebook.com/skillswap.fptedu" style="display:inline-block;margin-right:12px;text-decoration:none;" target="_blank">
+                              <div style="margin-top:20px;text-align:center;font-family:__FONT_STACK__;">
+                                <a href="https://skillswap.asia" style="display:inline-block;margin:0 10px;text-decoration:none;vertical-align:middle;" target="_blank">
+                                  <img src="https://img.icons8.com/color/48/domain--v1.png" width="24" height="24" alt="Website" style="display:block;border:0;">
+                                </a>
+                                <a href="https://www.facebook.com/skillswap.fptedu" style="display:inline-block;margin:0 10px;text-decoration:none;vertical-align:middle;" target="_blank">
                                   <img src="https://img.icons8.com/color/48/facebook-new.png" width="24" height="24" alt="Facebook" style="display:block;border:0;">
                                 </a>
-                                <a href="https://www.tiktok.com/@skillswap.fptu?_r=1&_t=ZS-97dweZeVLIy" style="display:inline-block;text-decoration:none;" target="_blank">
+                                <a href="https://www.tiktok.com/@skillswap.fptu?_r=1&_t=ZS-97dweZeVLIy" style="display:inline-block;margin:0 10px;text-decoration:none;vertical-align:middle;" target="_blank">
                                   <img src="https://img.icons8.com/color/48/tiktok.png" width="24" height="24" alt="TikTok" style="display:block;border:0;">
                                 </a>
                               </div>
                               
-                              <div style="margin-top:8px;font-size:12px;line-height:1.6;font-family:__FONT_STACK__;">Email tự động từ hệ thống. Vui lòng không trả lời trực tiếp email này.</div>
+                              <div style="margin-top:14px;font-size:12px;line-height:1.6;color:#a8c6df;font-family:__FONT_STACK__;">Email tự động từ hệ thống. Vui lòng không trả lời trực tiếp email này.</div>
                             </td>
                           </tr>
                         </table>

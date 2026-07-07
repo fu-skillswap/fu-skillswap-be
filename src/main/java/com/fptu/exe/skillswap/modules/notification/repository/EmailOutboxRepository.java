@@ -22,6 +22,10 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
     @Query("select emailOutbox from EmailOutbox emailOutbox where emailOutbox.id = :emailOutboxId")
     Optional<EmailOutbox> findByIdForUpdate(@Param("emailOutboxId") UUID emailOutboxId);
 
+    boolean existsByDedupeKey(String dedupeKey);
+
+    Optional<EmailOutbox> findByDedupeKey(String dedupeKey);
+
     @Query(value = """
             select emailOutbox
             from EmailOutbox emailOutbox

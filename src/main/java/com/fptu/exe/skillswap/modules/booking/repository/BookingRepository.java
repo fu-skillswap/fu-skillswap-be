@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.repository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
+import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -232,6 +233,47 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(BookingStatus status, LocalDateTime selectedStartTimeBefore);
+
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            where booking.status in :statuses
+              and booking.selectedStartTime >= :startInclusive
+              and booking.selectedStartTime < :endExclusive
+            order by booking.selectedStartTime asc, booking.id asc
+            """)
+    List<Booking> findConfirmedBookingsStartingBetween(
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
+
+    @Query("""
+            select booking.mentorProfile.userId as mentorUserId,
+                   mentorUser.email as mentorEmail,
+                   mentorUser.fullName as mentorName,
+                   coalesce(booking.serviceTitleSnapshot, service.title, 'Dịch vụ mentoring') as serviceTitle,
+                   count(booking.id) as pendingCount
+            from Booking booking
+            join booking.mentorProfile mentorProfile
+            join mentorProfile.user mentorUser
+            left join booking.service service
+            where booking.status = :status
+            group by booking.mentorProfile.userId,
+                     mentorUser.email,
+                     mentorUser.fullName,
+                     booking.serviceTitleSnapshot,
+                     service.title
+            order by mentorUser.email asc, serviceTitle asc
+            """)
+    List<PendingBookingServiceCountProjection> countPendingRequestsGroupedByMentorAndService(
+            @Param("status") BookingStatus status
+    );
 
     @Query("""
             select count(b.id)

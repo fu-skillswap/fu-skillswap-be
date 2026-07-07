@@ -112,7 +112,7 @@ class CoreMentorshipFlowSmokeTest {
                     com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL,
                     com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL,
                     UUID.randomUUID(),
-                    5000,
+                    100_000,
                     "Smoke test grant"
             );
         }
@@ -275,7 +275,7 @@ class CoreMentorshipFlowSmokeTest {
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
                 .isFree(false)
-                .priceScoin(100)
+                .priceScoin(72_000)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
@@ -376,7 +376,7 @@ class CoreMentorshipFlowSmokeTest {
                 .description("Support Spring Boot and REST API")
                 .durationMinutes(60)
                 .isFree(false)
-                .priceScoin(100)
+                .priceScoin(72_000)
                 .isActive(true)
                 .build());
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()

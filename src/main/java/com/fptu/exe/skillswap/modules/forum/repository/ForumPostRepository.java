@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.Collection;
 import java.util.List;
@@ -74,4 +75,19 @@ public interface ForumPostRepository extends JpaRepository<ForumPost, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ForumPost p where p.id = :id")
     Optional<ForumPost> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("""
+            select count(p.id) > 0
+            from ForumPost p
+            where p.authorUser.id = :authorUserId
+              and lower(p.title) = lower(:title)
+              and lower(p.content) = lower(:content)
+              and p.createdAt >= :createdAfter
+            """)
+    boolean existsRecentDuplicatePost(
+            @Param("authorUserId") UUID authorUserId,
+            @Param("title") String title,
+            @Param("content") String content,
+            @Param("createdAfter") LocalDateTime createdAfter
+    );
 }

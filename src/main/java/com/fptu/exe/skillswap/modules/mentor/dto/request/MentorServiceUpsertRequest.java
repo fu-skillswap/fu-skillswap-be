@@ -35,9 +35,10 @@ public record MentorServiceUpsertRequest(
         @NotNull(message = "Trạng thái miễn phí không được để trống")
         Boolean isFree,
 
-        @Schema(example = "120", nullable = true, description = "Giá dịch vụ tính theo SCoin. 0 nghĩa là dịch vụ miễn phí.")
+        @Schema(example = "72000", nullable = true, description = "Giá dịch vụ tính theo SCoin. Nếu isFree=false thì giá tối thiểu = durationMinutes x 1.200. Nếu isFree=true thì phải bằng 0.")
         @NotNull(message = "Giá dịch vụ không được để trống")
         @Min(value = 0, message = "Giá dịch vụ không được nhỏ hơn 0")
+        @jakarta.validation.constraints.Max(value = 45000000, message = "Giá dịch vụ không được vượt quá 45.000.000 SCoin")
         Integer priceScoin,
 
         @Schema(description = "Danh sách help topic mentor service có thể hỗ trợ")

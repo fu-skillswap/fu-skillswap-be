@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepositor
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,6 +73,7 @@ class PaymentOrderServiceTest {
     @Mock private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
     @Mock private NotificationService notificationService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private InternalTelemetryService internalTelemetryService;
 
     private PaymentOrderService paymentOrderService;
 
@@ -102,7 +104,8 @@ class PaymentOrderServiceTest {
                 sessionService,
                 conversationService,
                 notificationService,
-                eventPublisher
+                eventPublisher,
+                internalTelemetryService
         );
 
         menteeId = UUID.randomUUID();
@@ -128,7 +131,9 @@ class PaymentOrderServiceTest {
                 .mentee(mentee)
                 .mentorProfile(mentorProfile)
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
-                .servicePriceScoinSnapshot(100)
+                .serviceIsFreeSnapshot(false)
+                .serviceDurationSnapshot(60)
+                .servicePriceScoinSnapshot(72_000)
                 .build();
         java.util.Map<CreditOriginType, Integer> defaultBalances = new java.util.EnumMap<>(CreditOriginType.class);
         for (CreditOriginType type : CreditOriginType.values()) {
@@ -175,11 +180,11 @@ class PaymentOrderServiceTest {
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(100)))
+        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(72_000)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
-        when(creditLedgerService.reserveCredit(eq(menteeId), eq(100), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
+        when(creditLedgerService.reserveCredit(eq(menteeId), eq(72_000), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
                 .thenReturn(List.of(CreditLedgerEntry.builder()
-                        .amountScoin(100)
+                        .amountScoin(72_000)
                         .originType(CreditOriginType.MANUAL)
                         .build()));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -622,18 +627,19 @@ class PaymentOrderServiceTest {
                 sessionService,
                 conversationService,
                 notificationService,
-                eventPublisher
+                eventPublisher,
+                internalTelemetryService
         );
 
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
-        // With surcharge-added price = 110
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(110)))
+        // With surcharge-added price = 79,200
+        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(79_200)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
-        when(creditLedgerService.reserveCredit(eq(menteeId), eq(110), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
+        when(creditLedgerService.reserveCredit(eq(menteeId), eq(79_200), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
                 .thenReturn(List.of(CreditLedgerEntry.builder()
-                        .amountScoin(110)
+                        .amountScoin(79_200)
                         .originType(CreditOriginType.MANUAL)
                         .build()));
         
@@ -646,9 +652,9 @@ class PaymentOrderServiceTest {
 
         assertNotNull(response);
         PaymentOrder capturedOrder = orderCaptor.getValue();
-        assertEquals(110, capturedOrder.getGrossScoin());
-        assertEquals(90, capturedOrder.getMentorNetScoin());
-        assertEquals(20, capturedOrder.getCommissionScoin());
+        assertEquals(79_200, capturedOrder.getGrossScoin());
+        assertEquals(64_800, capturedOrder.getMentorNetScoin());
+        assertEquals(14_400, capturedOrder.getCommissionScoin());
         assertEquals(2000, capturedOrder.getCommissionRateBps()); // 10% + 10%
     }
 }

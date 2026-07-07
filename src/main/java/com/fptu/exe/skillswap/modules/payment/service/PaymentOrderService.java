@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -29,6 +30,7 @@ import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -48,6 +50,8 @@ import java.util.concurrent.atomic.AtomicLong;
 public class PaymentOrderService {
 
     private static final long PAYOS_MAX_SAFE_ORDER_CODE = 9_007_199_254_740_991L;
+    private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
+    private static final int MAX_SERVICE_PRICE_SCOIN_PER_MINUTE = 500_000;
     private static final long PROVIDER_ORDER_CODE_EPOCH_MILLIS = LocalDateTime.of(2025, 1, 1, 0, 0)
             .atZone(ZoneId.of(DateTimeUtil.ZONE_HCM))
             .toInstant()
@@ -69,6 +73,7 @@ public class PaymentOrderService {
     private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final InternalTelemetryService internalTelemetryService;
 
     @Transactional
     public PaymentCheckoutResponse checkout(UUID currentUserId, PaymentCheckoutRequest request) {
@@ -269,6 +274,22 @@ public class PaymentOrderService {
     }
 
     @Transactional
+    public void reconcileStaleProviderPayments() {
+        List<PaymentOrder> staleOrders = paymentOrderRepository.findTop50ByStatusInAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+                List.of(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT),
+                DateTimeUtil.now().minusMinutes(15),
+                PageRequest.of(0, 50)
+        );
+        for (PaymentOrder order : staleOrders) {
+            try {
+                synchronizeProviderStatusForBooking(order.getBookingId());
+            } catch (RuntimeException ex) {
+                log.warn("Failed to reconcile payment order {} for booking {}: {}", order.getId(), order.getBookingId(), ex.getMessage());
+            }
+        }
+    }
+
+    @Transactional
     public void handleMenteeCancellation(Booking booking, boolean lateCancellation) {
         if (booking == null || booking.getId() == null) {
             return;
@@ -338,12 +359,37 @@ public class PaymentOrderService {
     }
 
     private int resolveBasePriceScoin(Booking booking) {
+        boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot());
         int basePriceScoin = booking.getServicePriceScoinSnapshot() != null
                 ? booking.getServicePriceScoinSnapshot()
                 : (booking.getService() != null && booking.getService().getPriceScoin() != null
                 ? booking.getService().getPriceScoin()
                 : 0);
-        return Math.max(0, basePriceScoin);
+        if (isFree) {
+            return 0;
+        }
+        Integer durationMinutes = booking.getServiceDurationSnapshot() != null
+                ? booking.getServiceDurationSnapshot()
+                : (booking.getService() == null ? null : booking.getService().getDurationMinutes());
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ mentoring đang có thời lượng không hợp lệ");
+        }
+        int normalizedPrice = Math.max(0, basePriceScoin);
+        int minimumPrice = durationMinutes * MIN_SERVICE_PRICE_SCOIN_PER_MINUTE;
+        if (normalizedPrice < minimumPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Dịch vụ mentoring có phí phải có giá tối thiểu " + minimumPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
+        int maximumPrice = durationMinutes * MAX_SERVICE_PRICE_SCOIN_PER_MINUTE;
+        if (normalizedPrice > maximumPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Dịch vụ mentoring có phí chỉ được đặt tối đa " + maximumPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
+        return normalizedPrice;
     }
 
     private void cancelAwaitingPaymentOrder(PaymentOrder order) {
@@ -664,6 +710,17 @@ public class PaymentOrderService {
         }
         booking.setStatus(BookingStatus.PAID);
         bookingRepository.save(booking);
+        internalTelemetryService.record(
+                "BOOKING_PAYMENT_CONFIRMED",
+                booking.getMentee() == null ? null : booking.getMentee().getId(),
+                "BOOKING",
+                booking.getId(),
+                java.util.Map.of(
+                        "mentorUserId", String.valueOf(booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUserId()),
+                        "grossScoin", String.valueOf(order.getGrossScoin()),
+                        "remainingPayableScoin", String.valueOf(order.getRemainingPayableScoin())
+                )
+        );
 
         sessionService.createForAcceptedBooking(booking);
         conversationService.createDirectForAcceptedBooking(booking);

@@ -31,6 +31,8 @@ import java.util.UUID;
 public class MentorServiceManagementService {
 
     private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 30, 60, 90);
+    private static final int MIN_PRICE_SCOIN_PER_MINUTE = 1_200;
+    private static final int MAX_PRICE_SCOIN_PER_MINUTE = 500_000;
     private static final String ACTIVE_FILTER_ALL = "all";
     private static final String ACTIVE_FILTER_TRUE = "true";
     private static final String ACTIVE_FILTER_FALSE = "false";
@@ -39,6 +41,7 @@ public class MentorServiceManagementService {
     private final MentorProfileRepository mentorProfileRepository;
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
+    private final MentorProfileService mentorProfileService;
 
     @Transactional(readOnly = true)
     public List<MentorServiceResponse> getMyServices(UUID mentorUserId, String activeFilter) {
@@ -67,14 +70,16 @@ public class MentorServiceManagementService {
         requireRequest(request);
 
         List<Tag> helpTopics = loadHelpTopics(request.helpTopicIds());
+        int durationMinutes = validateDuration(request.durationMinutes());
+        boolean isFree = Boolean.TRUE.equals(request.isFree());
         MentorService service = MentorService.builder()
                 .mentorProfile(mentorProfile)
                 .title(cleanRequired(request.title(), "Tiêu đề dịch vụ"))
                 .description(cleanRequired(request.description(), "Mô tả dịch vụ"))
                 .expectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"))
-                .durationMinutes(validateDuration(request.durationMinutes()))
-                .isFree(Boolean.TRUE.equals(request.isFree()))
-                .priceScoin(normalizePriceScoin(request.isFree(), request.priceScoin()))
+                .durationMinutes(durationMinutes)
+                .isFree(isFree)
+                .priceScoin(normalizePriceScoin(isFree, request.priceScoin(), durationMinutes))
                 .isActive(true)
                 .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
@@ -90,13 +95,15 @@ public class MentorServiceManagementService {
 
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
         List<Tag> helpTopics = loadHelpTopics(request.helpTopicIds());
+        int durationMinutes = validateDuration(request.durationMinutes());
+        boolean isFree = Boolean.TRUE.equals(request.isFree());
 
         service.setTitle(cleanRequired(request.title(), "Tiêu đề dịch vụ"));
         service.setDescription(cleanRequired(request.description(), "Mô tả dịch vụ"));
         service.setExpectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"));
-        service.setDurationMinutes(validateDuration(request.durationMinutes()));
-        service.setFree(Boolean.TRUE.equals(request.isFree()));
-        service.setPriceScoin(normalizePriceScoin(request.isFree(), request.priceScoin()));
+        service.setDurationMinutes(durationMinutes);
+        service.setFree(isFree);
+        service.setPriceScoin(normalizePriceScoin(isFree, request.priceScoin(), durationMinutes));
         replaceHelpTopics(service, helpTopics);
         touchMentorActivity(mentorProfile, LocalDateTime.now());
 
@@ -133,8 +140,7 @@ public class MentorServiceManagementService {
         if (profile.getStatus() != MentorStatus.ACTIVE || profile.getVerifiedAt() == null) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ mentor đã được xác thực mới được quản lý dịch vụ mentoring");
         }
-        if (!hasText(profile.getHeadline())
-                || !hasText(profile.getExpertiseDescription())) {
+        if (!mentorProfileService.hasCompletedMentorProfile(mentorUserId)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Cần hoàn thiện hồ sơ mentor trước khi quản lý dịch vụ mentoring");
         }
         return profile;
@@ -189,7 +195,7 @@ public class MentorServiceManagementService {
                 .expectedOutcome(service.getExpectedOutcome())
                 .durationMinutes(service.getDurationMinutes())
                 .free(service.isFree())
-                .priceScoin(defaultInteger(service.getPriceScoin()))
+                .priceScoin(service.isFree() ? 0 : defaultInteger(service.getPriceScoin()))
                 .active(service.isActive())
                 .helpTopics(helpTopics)
                 .createdAt(service.getCreatedAt())
@@ -215,7 +221,7 @@ public class MentorServiceManagementService {
         return durationMinutes;
     }
 
-    private Integer normalizePriceScoin(Boolean isFree, Integer priceScoin) {
+    private Integer normalizePriceScoin(Boolean isFree, Integer priceScoin, Integer durationMinutes) {
         if (Boolean.TRUE.equals(isFree)) {
             if (priceScoin != null && priceScoin > 0) {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ miễn phí phải có priceScoin bằng 0");
@@ -226,7 +232,35 @@ public class MentorServiceManagementService {
         if (priceScoin == null || priceScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ có phí phải có priceScoin lớn hơn 0");
         }
+        int minPrice = minimumPriceForDuration(durationMinutes);
+        if (priceScoin < minPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Dịch vụ có phí phải có giá tối thiểu " + minPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
+        int maxPrice = maximumPriceForDuration(durationMinutes);
+        if (priceScoin > maxPrice) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Dịch vụ có phí chỉ được đặt tối đa " + maxPrice + " SCoin cho " + durationMinutes + " phút"
+            );
+        }
         return priceScoin;
+    }
+
+    private int minimumPriceForDuration(Integer durationMinutes) {
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ không hợp lệ");
+        }
+        return durationMinutes * MIN_PRICE_SCOIN_PER_MINUTE;
+    }
+
+    private int maximumPriceForDuration(Integer durationMinutes) {
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ không hợp lệ");
+        }
+        return durationMinutes * MAX_PRICE_SCOIN_PER_MINUTE;
     }
 
     private String cleanRequired(String value, String label) {

@@ -11,22 +11,30 @@ import com.fptu.exe.skillswap.modules.conversation.repository.ConversationReposi
 import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.conversation.event.ChatMessageRealtimeDelivery;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
 public class ConversationService {
 
+    private static final ConcurrentHashMap<String, ReentrantLock> DIRECT_CONVERSATION_LOCKS = new ConcurrentHashMap<>();
+
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
     private final MessageRepository messageRepository;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final InternalTelemetryService internalTelemetryService;
 
     @Transactional
     public Conversation createDirectForAcceptedBooking(Booking booking) {
@@ -34,30 +42,48 @@ public class ConversationService {
             throw new IllegalArgumentException("Booking must not be null");
         }
 
-        Optional<Conversation> existingConv = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId());
-        Conversation conversation;
-        if (existingConv.isPresent()) {
-            conversation = existingConv.get();
-        } else {
-            conversation = Conversation.builder()
-                    .sourceType(ConversationSourceType.BOOKING)
-                    .sourceId(booking.getId())
-                    .type(ConversationType.DIRECT)
-                    .status(ConversationStatus.ACTIVE)
-                    .build();
-            try {
-                conversation = conversationRepository.save(conversation);
-            } catch (org.springframework.dao.DataIntegrityViolationException ex) {
-                conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
-                        .orElseThrow(() -> ex);
-            }
+        User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
+        User menteeUser = booking.getMentee();
+        if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
+            throw new IllegalArgumentException("Booking must have mentor and mentee users");
         }
 
-        // Add participants idempotently
-        addParticipantIfAbsent(conversation, booking.getMentorProfile().getUser());
-        addParticipantIfAbsent(conversation, booking.getMentee());
+        String lockKey = directConversationLockKey(mentorUser.getId(), menteeUser.getId());
+        ReentrantLock lock = DIRECT_CONVERSATION_LOCKS.computeIfAbsent(lockKey, ignored -> new ReentrantLock());
+        lock.lock();
+        try {
+            Optional<Conversation> existingConv = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId());
+            Conversation conversation;
+            if (existingConv.isPresent()) {
+                conversation = existingConv.get();
+            } else if ((conversation = findDirectByParticipants(mentorUser.getId(), menteeUser.getId())) != null) {
+                // Reuse the same direct chat across multiple bookings between the same mentee and mentor.
+            } else {
+                conversation = Conversation.builder()
+                        .sourceType(ConversationSourceType.BOOKING)
+                        .sourceId(booking.getId())
+                        .type(ConversationType.DIRECT)
+                        .status(ConversationStatus.ACTIVE)
+                        .build();
+                try {
+                    conversation = conversationRepository.save(conversation);
+                } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+                    conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
+                            .orElseThrow(() -> ex);
+                }
+            }
 
-        return conversation;
+            // Add participants idempotently
+            addParticipantIfAbsent(conversation, mentorUser);
+            addParticipantIfAbsent(conversation, menteeUser);
+
+            return conversation;
+        } finally {
+            lock.unlock();
+            if (!lock.hasQueuedThreads()) {
+                DIRECT_CONVERSATION_LOCKS.remove(lockKey, lock);
+            }
+        }
     }
 
     @Transactional
@@ -80,6 +106,20 @@ public class ConversationService {
     public Conversation findByBookingId(UUID bookingId) {
         return conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)
                 .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public Conversation findDirectByParticipants(UUID firstUserId, UUID secondUserId) {
+        if (firstUserId == null || secondUserId == null) {
+            return null;
+        }
+        java.util.List<Conversation> conversations = conversationRepository.findDirectActiveByParticipantPair(
+                firstUserId,
+                secondUserId,
+                ConversationType.DIRECT,
+                ConversationStatus.ACTIVE
+        );
+        return conversations == null || conversations.isEmpty() ? null : conversations.getFirst();
     }
 
     @Transactional(readOnly = true)
@@ -137,6 +177,7 @@ public class ConversationService {
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
         }
+        internalTelemetryService.record("CHAT_OPENED", userId, "CONVERSATION", conversationId, java.util.Map.of());
 
         return messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable)
                 .map(msg -> com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
@@ -164,6 +205,12 @@ public class ConversationService {
                 .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND, "Không tìm thấy người dùng"));
 
         String content = request.content().trim();
+        if (messageRepository.existsRecentDuplicateMessage(conversationId, userId, content, DateTimeUtil.now().minusSeconds(10))) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(
+                    com.fptu.exe.skillswap.shared.exception.ErrorCode.TOO_MANY_REQUESTS,
+                    "Bạn vừa gửi nội dung này rồi, vui lòng chờ một chút trước khi gửi lại"
+            );
+        }
 
         com.fptu.exe.skillswap.modules.conversation.domain.Message message = com.fptu.exe.skillswap.modules.conversation.domain.Message.builder()
                 .conversation(conversation)
@@ -290,12 +337,51 @@ public class ConversationService {
         ));
     }
 
+    @Transactional(readOnly = true)
+    public java.util.Map<UUID, UUID> findConversationIdsForBookings(java.util.List<Booking> bookings) {
+        if (bookings == null || bookings.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.List<UUID> bookingIds = bookings.stream()
+                .filter(booking -> booking != null && booking.getId() != null)
+                .map(Booking::getId)
+                .toList();
+        java.util.Map<UUID, UUID> result = new java.util.HashMap<>(findConversationIdsByBookingIds(bookingIds));
+        for (Booking booking : bookings) {
+            if (booking == null || booking.getId() == null || result.containsKey(booking.getId())) {
+                continue;
+            }
+            User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
+            User menteeUser = booking.getMentee();
+            if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
+                continue;
+            }
+            Conversation directConversation = findDirectByParticipants(mentorUser.getId(), menteeUser.getId());
+            if (directConversation != null) {
+                result.put(booking.getId(), directConversation.getId());
+            }
+        }
+        return result;
+    }
+
+    private String directConversationLockKey(UUID firstUserId, UUID secondUserId) {
+        if (firstUserId == null || secondUserId == null) {
+            return "direct:null";
+        }
+        String left = firstUserId.toString();
+        String right = secondUserId.toString();
+        return left.compareTo(right) <= 0 ? left + ":" + right : right + ":" + left;
+    }
+
     @Transactional
     public void markConversationAsRead(UUID conversationId, UUID userId) {
         ConversationParticipant me = participantRepository.findByConversationIdAndUserId(conversationId, userId)
                 .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(
                         com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này"));
-        me.setLastReadAt(DateTimeUtil.now());
-        participantRepository.save(me);
+        java.time.LocalDateTime now = DateTimeUtil.now();
+        if (me.getLastReadAt() == null || me.getLastReadAt().isBefore(now)) {
+            me.setLastReadAt(now);
+            participantRepository.save(me);
+        }
     }
 }

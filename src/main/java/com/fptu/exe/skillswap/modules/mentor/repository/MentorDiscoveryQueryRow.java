@@ -10,7 +10,6 @@ public record MentorDiscoveryQueryRow(
         String avatarUrl,
         String headline,
         String expertiseDescription,
-        String supportingSubjects,
         String bio,
         Integer foundationSupportLevel,
         Integer outputReviewSupportLevel,

@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -33,6 +34,9 @@ class ChatControllerTest {
 
     @MockBean
     private ConversationService conversationService;
+
+    @MockBean
+    private InMemoryRateLimitService rateLimitService;
 
     @Test
     void getConversationDetail_whenAuthenticated_shouldReturnDetail() throws Exception {

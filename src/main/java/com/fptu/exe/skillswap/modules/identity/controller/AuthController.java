@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,6 +31,7 @@ import org.springframework.util.StringUtils;
 public class AuthController {
 
     private final IdentityService identityService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực user bằng Google ID token và phát hành token riêng của SkillSwap để gọi các API phía sau. FE dùng đây là API đầu tiên trong luồng authentication trước khi gọi API lấy current user. Nếu là lần đăng nhập đầu, backend có thể tự tạo account mới; refresh token được trả qua HttpOnly cookie còn body giữ access token.")
     @ApiResponses({
@@ -40,8 +42,15 @@ public class AuthController {
     @PostMapping("/google")
     public ApiResponse<TokenResponse> loginWithGoogle(
             @Valid @RequestBody GoogleLoginRequest request,
+            HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
+        rateLimitService.check(
+                "auth:google:" + resolveClientKey(httpServletRequest),
+                20,
+                java.time.Duration.ofMinutes(10),
+                "Bạn đang đăng nhập quá nhanh, vui lòng thử lại sau ít phút"
+        );
         TokenResponse tokenResponse = identityService.loginWithGoogle(request);
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
         tokenResponse.setRefreshToken(null);
@@ -59,6 +68,12 @@ public class AuthController {
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
+        rateLimitService.check(
+                "auth:refresh:" + resolveClientKey(httpServletRequest),
+                40,
+                java.time.Duration.ofMinutes(10),
+                "Bạn đang làm mới phiên đăng nhập quá nhanh, vui lòng thử lại sau"
+        );
         String refreshToken = resolveRefreshToken(request, httpServletRequest);
         TokenResponse tokenResponse = identityService.refreshToken(refreshToken);
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
@@ -118,5 +133,17 @@ public class AuthController {
 
     private void clearRefreshTokenCookie(HttpServletResponse response) {
         response.addHeader(HttpHeaders.SET_COOKIE, identityService.buildRefreshTokenCookieValue("", true));
+    }
+
+    private String resolveClientKey(HttpServletRequest request) {
+        if (request == null) {
+            return "unknown";
+        }
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwarded)) {
+            int commaIndex = forwarded.indexOf(',');
+            return commaIndex >= 0 ? forwarded.substring(0, commaIndex).trim() : forwarded.trim();
+        }
+        return StringUtils.hasText(request.getRemoteAddr()) ? request.getRemoteAddr() : "unknown";
     }
 }

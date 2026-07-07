@@ -38,6 +38,9 @@ public class EmailOutbox {
     @Column(name = "template_code", length = 100)
     private String templateCode;
 
+    @Column(name = "dedupe_key", length = 180, unique = true)
+    private String dedupeKey;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default

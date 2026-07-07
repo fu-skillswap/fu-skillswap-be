@@ -82,6 +82,7 @@ import java.util.stream.Collectors;
 @Order(2)
 public class DevDemoDataSeeder implements CommandLineRunner {
 
+    private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
     private static final String GOOGLE_PROVIDER = "GOOGLE";
     private static final int TOTAL_MENTOR_COUNT = 100;
     private static final int MENTEE_COUNT = 10;
@@ -281,7 +282,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             service.setExpectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.");
             service.setDurationMinutes(seed.serviceDuration());
             service.setFree(seed.serviceFree());
-            service.setPriceScoin(seed.priceScoin());
+            service.setPriceScoin(normalizedServicePrice(seed.serviceFree(), seed.serviceDuration(), seed.priceScoin()));
             service.setActive(true);
             service.getHelpTopics().clear();
             for (String code : seed.helpTopicCodes()) {
@@ -301,7 +302,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 .expectedOutcome("Sau buổi mentoring, mentee có checklist hành động rõ ràng để tự cải thiện.")
                 .durationMinutes(seed.serviceDuration())
                 .isFree(seed.serviceFree())
-                .priceScoin(seed.priceScoin())
+                .priceScoin(normalizedServicePrice(seed.serviceFree(), seed.serviceDuration(), seed.priceScoin()))
                 .isActive(true)
                 .build();
         for (String code : seed.helpTopicCodes()) {
@@ -521,6 +522,18 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         return email + "-" + documentType.name().toLowerCase() + "." + extension;
     }
 
+    private Integer normalizedServicePrice(boolean serviceFree, Integer durationMinutes, Integer configuredPriceScoin) {
+        if (serviceFree) {
+            return 0;
+        }
+        if (durationMinutes == null || durationMinutes <= 0) {
+            throw new IllegalStateException("Demo mentor service duration must be positive");
+        }
+        int minimumPrice = durationMinutes * MIN_SERVICE_PRICE_SCOIN_PER_MINUTE;
+        int configured = configuredPriceScoin == null ? 0 : configuredPriceScoin;
+        return Math.max(configured, minimumPrice);
+    }
+
     private List<MentorSeed> mentorSeeds() {
         List<MentorSeed> seeds = new ArrayList<>();
 
@@ -659,7 +672,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             String supportingSubjects = specializedSupportingSubjects(programCode, specializationCode, seedIndex);
             String serviceTitle = specializedServiceTitle(programCode, specializationCode, seedIndex);
             String serviceDescription = specializedServiceDescription(programCode, specializationCode, seedIndex);
-            Integer priceScoin = serviceFree ? 0 : basePriceScoin + ((i - 1) * 5);
+            Integer priceScoin = normalizedServicePrice(serviceFree, sessionDuration, basePriceScoin + ((i - 1) * 5));
             int totalCompletedSessions = 10 + i;
             int totalReviews = 6 + (i % 12);
             BigDecimal averageRating = BigDecimal.valueOf(450L - ((i - 1L) % 10L) * 5L, 2);
@@ -753,7 +766,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     serviceDescription,
                     track.sessionDuration(),
                     track.serviceFree(),
-                    track.basePriceScoin() + ((i - 1) * 3),
+                    normalizedServicePrice(track.serviceFree(), track.sessionDuration(), track.basePriceScoin() + ((i - 1) * 3)),
                     true,
                     120 + i,
                     5 + i,

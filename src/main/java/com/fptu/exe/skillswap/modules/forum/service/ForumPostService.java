@@ -98,11 +98,21 @@ public class ForumPostService {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.CREATE_POST);
         Tag helpTopic = requireHelpTopic(request.helpTopicId());
+        String normalizedTitle = forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết");
+        String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết");
+        if (forumPostRepository.existsRecentDuplicatePost(
+                currentUser.getId(),
+                normalizedTitle,
+                normalizedContent,
+                DateTimeUtil.now().minusMinutes(15)
+        )) {
+            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa đăng nội dung này rồi, vui lòng tránh đăng trùng lặp");
+        }
         ForumPost post = ForumPost.builder()
                 .authorUser(currentUser)
                 .helpTopic(helpTopic)
-                .title(forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết"))
-                .content(forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết"))
+                .title(normalizedTitle)
+                .content(normalizedContent)
                 .status(ForumPostStatus.PUBLISHED)
                 .commentCount(0)
                 .reactionCount(0)
@@ -149,11 +159,20 @@ public class ForumPostService {
         ForumPost post = forumPostRepository.findByIdForUpdate(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         ensurePostVisible(post);
+        String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận");
+        if (forumCommentRepository.existsRecentDuplicateComment(
+                post.getId(),
+                currentUser.getId(),
+                normalizedContent,
+                DateTimeUtil.now().minusMinutes(5)
+        )) {
+            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa gửi bình luận này rồi, vui lòng tránh spam lặp nội dung");
+        }
 
         ForumComment comment = ForumComment.builder()
                 .post(post)
                 .authorUser(currentUser)
-                .content(forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận"))
+                .content(normalizedContent)
                 .status(ForumCommentStatus.VISIBLE)
                 .reportCount(0)
                 .build();

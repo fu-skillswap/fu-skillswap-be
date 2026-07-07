@@ -1,12 +1,26 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
+import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
+import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorListRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorDetailResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -17,6 +31,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -29,6 +45,10 @@ public class AdminMentorService {
 
     private final MentorProfileRepository mentorProfileRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final MentorTagRepository mentorTagRepository;
+    private final MentorSubjectResultRepository mentorSubjectResultRepository;
+    private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
+    private final MentorAchievementRepository mentorAchievementRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminMentorListItemResponse> getMentors(AdminMentorListRequest request) {
@@ -65,6 +85,31 @@ public class AdminMentorService {
         String primaryLabel = studentProfileRepository.findWithDetailsByUserId(mentorUserId)
                 .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
                 .orElse(null);
+        List<MentorTagResponse> helpTopics = mentorTagRepository == null
+                ? List.of()
+                : mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(mentorUserId, List.of(MentorTagType.HELP_TOPIC))
+                        .stream()
+                        .sorted(Comparator.comparing(mentorTag -> mentorTag.getTag().getNameVi() == null ? "" : mentorTag.getTag().getNameVi()))
+                        .map(this::toTagResponse)
+                        .toList();
+        List<MentorSubjectResultResponse> subjectResults = mentorSubjectResultRepository == null
+                ? List.of()
+                : mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
+                        .stream()
+                        .map(this::toSubjectResultResponse)
+                        .toList();
+        List<MentorFeaturedProjectResponse> featuredProjects = mentorFeaturedProjectRepository == null
+                ? List.of()
+                : mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
+                        .stream()
+                        .map(this::toFeaturedProjectResponse)
+                        .toList();
+        List<MentorAchievementResponse> achievements = mentorAchievementRepository == null
+                ? List.of()
+                : mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
+                        .stream()
+                        .map(this::toAchievementResponse)
+                        .toList();
 
         return AdminMentorDetailResponse.builder()
                 .mentorUserId(profile.getUserId())
@@ -78,6 +123,13 @@ public class AdminMentorService {
                 .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
                 .headline(profile.getHeadline())
                 .expertiseDescription(profile.getExpertiseDescription())
+                .subjectResults(subjectResults)
+                .foundationSupportLevel(profile.getFoundationSupportLevel())
+                .outputReviewSupportLevel(profile.getOutputReviewSupportLevel())
+                .directionSupportLevel(profile.getDirectionSupportLevel())
+                .helpTopics(helpTopics)
+                .featuredProjects(featuredProjects)
+                .achievements(achievements)
                 .supportingSubjects(profile.getSupportingSubjects())
                 .teachingMode(profile.getTeachingMode())
                 .sessionDuration(profile.getSessionDuration())
@@ -93,6 +145,57 @@ public class AdminMentorService {
                 .verifiedAt(profile.getVerifiedAt())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
+                .build();
+    }
+
+    private MentorTagResponse toTagResponse(MentorTag mentorTag) {
+        Tag tag = mentorTag.getTag();
+        return MentorTagResponse.builder()
+                .id(tag.getId())
+                .code(tag.getCode())
+                .nameVi(tag.getNameVi())
+                .nameEn(tag.getNameEn())
+                .type(tag.getType())
+                .primary(mentorTag.isPrimary())
+                .build();
+    }
+
+    private MentorSubjectResultResponse toSubjectResultResponse(MentorSubjectResult subjectResult) {
+        return MentorSubjectResultResponse.builder()
+                .id(subjectResult.getId())
+                .subjectCode(subjectResult.getSubjectCode())
+                .subjectName(subjectResult.getSubjectName())
+                .scoreValue(subjectResult.getScoreValue())
+                .displayOrder(subjectResult.getDisplayOrder())
+                .build();
+    }
+
+    private MentorFeaturedProjectResponse toFeaturedProjectResponse(MentorFeaturedProject project) {
+        return MentorFeaturedProjectResponse.builder()
+                .id(project.getId())
+                .title(project.getTitle())
+                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
+                .content(project.getContent())
+                .projectDescription(project.getProjectDescription())
+                .liveDemoUrl(project.getLiveDemoUrl())
+                .displayOrder(project.getDisplayOrder())
+                .createdAt(project.getCreatedAt())
+                .updatedAt(project.getUpdatedAt())
+                .build();
+    }
+
+    private MentorAchievementResponse toAchievementResponse(MentorAchievement achievement) {
+        return MentorAchievementResponse.builder()
+                .id(achievement.getId())
+                .title(achievement.getTitle())
+                .awardDescription(achievement.getAwardDescription())
+                .achievedAt(achievement.getAchievedAt())
+                .productHeader(achievement.getProductHeader())
+                .productDescription(achievement.getProductDescription())
+                .demoUrl(achievement.getDemoUrl())
+                .displayOrder(achievement.getDisplayOrder())
+                .createdAt(achievement.getCreatedAt())
+                .updatedAt(achievement.getUpdatedAt())
                 .build();
     }
 

@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookingController {
 
     private final BookingService bookingService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(
             summary = "Tạo booking request",
@@ -64,6 +66,12 @@ public class BookingController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateBookingRequest request) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                "booking:create:" + principal.getPublicId(),
+                12,
+                java.time.Duration.ofMinutes(10),
+                "Bạn đang tạo booking quá nhanh, vui lòng chờ thêm một chút"
+        );
         BookingResponse response = bookingService.createBooking(principal.getPublicId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }

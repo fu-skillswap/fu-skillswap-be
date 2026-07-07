@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 @Repository
 public interface AvailabilitySlotServiceRepository extends JpaRepository<AvailabilitySlotService, AvailabilitySlotServiceId> {
@@ -49,6 +50,21 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
     boolean existsBySlotIdAndServiceId(
             @Param("slotId") UUID slotId,
             @Param("serviceId") UUID serviceId
+    );
+
+    @Query("""
+            select distinct slotService.slot.mentorProfile.userId
+            from AvailabilitySlotService slotService
+            where slotService.slot.mentorProfile.userId in :mentorUserIds
+              and slotService.slot.isActive = true
+              and slotService.slot.startTime >= :now
+              and slotService.service.isActive = true
+              and slotService.service.durationMinutes = :durationMinutes
+            """)
+    List<UUID> findMentorUserIdsWithFutureActiveSlotServiceDuration(
+            @Param("mentorUserIds") Collection<UUID> mentorUserIds,
+            @Param("durationMinutes") Integer durationMinutes,
+            @Param("now") LocalDateTime now
     );
 
     @Modifying

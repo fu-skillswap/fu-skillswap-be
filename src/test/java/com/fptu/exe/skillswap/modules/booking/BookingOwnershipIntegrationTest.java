@@ -120,7 +120,7 @@ class BookingOwnershipIntegrationTest {
                 com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL,
                 com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType.MANUAL,
                 UUID.randomUUID(),
-                1000,
+                100_000,
                 "Add test credit"
         );
 
@@ -149,7 +149,7 @@ class BookingOwnershipIntegrationTest {
                         .description("Test ownership access")
                         .durationMinutes(60)
                         .isFree(false)
-                        .priceScoin(100)
+                        .priceScoin(72_000)
                         .isActive(true)
                         .build()
         );

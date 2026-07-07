@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.academic.domain.Campus;
 import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
@@ -36,6 +37,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
 import com.fptu.exe.skillswap.modules.matching.service.MentoringMatchProfileService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -107,7 +109,7 @@ public class MentorDiscoveryService {
     private static final BigDecimal CAPABILITY_MATCH_MULTIPLIER = decimal("8.00");
     private static final BigDecimal MENTOR_FIT_SUBJECT_BONUS = decimal("12.00");
     private static final BigDecimal MENTOR_FIT_ALUMNI_BONUS = decimal("12.00");
-    private static final BigDecimal DURATION_PREFERENCE_LIGHT_BONUS = decimal("3.00");
+    private static final BigDecimal DURATION_PREFERENCE_MATCH_BONUS = decimal("6.00");
     private static final BigDecimal MAX_SEARCH_PERSONALIZATION_SCORE = decimal(100);
     private static final BigDecimal MAX_SEARCH_QUALITY_SCORE = decimal(38);
     private static final BigDecimal MAX_PERCENTAGE_SCORE = decimal(100);
@@ -126,12 +128,16 @@ public class MentorDiscoveryService {
     private static final BigDecimal RECENT_ACTIVITY_14D_BONUS = decimal("3.00");
     private static final BigDecimal RECENT_ACTIVITY_30D_BONUS = decimal("1.50");
     private static final BigDecimal MAX_RECOMMENDATION_QUALITY_SCORE = decimal(38);
+    private static final BigDecimal COLD_START_VERIFIED_BONUS = decimal("6.00");
+    private static final BigDecimal STALE_MATCHING_30D_MULTIPLIER = decimal("0.85");
+    private static final BigDecimal STALE_MATCHING_90D_MULTIPLIER = decimal("0.60");
 
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorTagRepository mentorTagRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityService mentorAvailabilityService;
+    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final DataSource dataSource;
@@ -141,6 +147,7 @@ public class MentorDiscoveryService {
     private final MentorAchievementRepository mentorAchievementRepository;
     private final MentoringMatchProfileService mentoringMatchProfileService;
     private final PaymentProperties paymentProperties;
+    private final InternalTelemetryService internalTelemetryService;
 
     private volatile List<String> cachedKeywords = new java.util.ArrayList<>();
     private final Object cacheLock = new Object();
@@ -276,6 +283,19 @@ public class MentorDiscoveryService {
                 }
             }
         }
+        if (hasKeyword && candidatePage.isEmpty()) {
+            internalTelemetryService.record(
+                    "MENTOR_SEARCH_ZERO_RESULT",
+                    currentUserId,
+                    "MENTOR_SEARCH",
+                    null,
+                    Map.of(
+                            "keyword", normalizedKeyword,
+                            "campusId", String.valueOf(safeRequest.getCampusId()),
+                            "specializationId", String.valueOf(safeRequest.getSpecializationId())
+                    )
+            );
+        }
 
         List<UUID> candidateIds = candidatePage.getContent();
         List<MentorDiscoveryQueryRow> rows = relevanceSort
@@ -303,6 +323,7 @@ public class MentorDiscoveryService {
         List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
         Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
         Set<UUID> mentorsWithAvailability = loadMentorsWithAvailability(candidateIds, currentTime());
+        Set<UUID> mentorsWithPreferredDurationAvailability = loadMentorsWithPreferredDurationAvailability(candidateIds, menteeFeatures, currentTime());
 
         List<MentorDiscoveryCardResponse> content;
         if (relevanceSort) {
@@ -320,13 +341,14 @@ public class MentorDiscoveryService {
                                 featuredProjectsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 achievementsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 services,
-                                mentorsWithAvailability.contains(row.mentorUserId())
+                                mentorsWithAvailability.contains(row.mentorUserId()),
+                                mentorsWithPreferredDurationAvailability.contains(row.mentorUserId())
                         );
                         return new RankedSearchCandidate(
                                 row,
                                 helpTopics,
                                 rawScore,
-                                calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size())
+                                calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size(), menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null)
                         );
                     })
                     .sorted(Comparator
@@ -364,9 +386,10 @@ public class MentorDiscoveryService {
                                 featuredProjectsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 achievementsByMentor.getOrDefault(row.mentorUserId(), List.of()),
                                 services,
-                                mentorsWithAvailability.contains(row.mentorUserId())
+                                mentorsWithAvailability.contains(row.mentorUserId()),
+                                mentorsWithPreferredDurationAvailability.contains(row.mentorUserId())
                         );
-                        BigDecimal matchScore = calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size());
+                        BigDecimal matchScore = calculateSearchScorePercentage(rawScore, normalizedKeyword, services.size(), menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null);
                         return toCardResponse(
                                 row,
                                 helpTopics,
@@ -428,6 +451,7 @@ public class MentorDiscoveryService {
         List<MentorService> activeServices = loadActiveServicesByMentorIds(candidateIds);
         Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(activeServices);
         Set<UUID> mentorsWithAvailability = loadMentorsWithAvailability(candidateIds, now);
+        Set<UUID> mentorsWithPreferredDurationAvailability = loadMentorsWithPreferredDurationAvailability(candidateIds, menteeFeatures, now);
 
         return candidates.stream()
                 .map(candidate -> toRecommendation(
@@ -438,6 +462,7 @@ public class MentorDiscoveryService {
                         achievementsByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
                         servicesByMentor.getOrDefault(candidate.mentorUserId(), List.of()),
                         mentorsWithAvailability.contains(candidate.mentorUserId()),
+                        mentorsWithPreferredDurationAvailability.contains(candidate.mentorUserId()),
                         menteeProfile,
                         menteeFeatures
                 ))
@@ -452,6 +477,7 @@ public class MentorDiscoveryService {
     @Transactional(readOnly = true)
     public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
+        internalTelemetryService.record("MENTOR_DETAIL_OPENED", null, "MENTOR", mentorUserId, Map.of());
         StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
         Map<UUID, List<MentorTagResponse>> tagsByMentor = loadTagsByMentor(
                 List.of(mentorUserId),
@@ -475,15 +501,10 @@ public class MentorDiscoveryService {
         int reviews = defaultInteger(mentorProfile.getTotalReviews());
         BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
 
-        boolean hasCompletedProfile = mentorProfile.getHeadline() != null && !mentorProfile.getHeadline().isBlank()
-                && mentorProfile.getExpertiseDescription() != null && !mentorProfile.getExpertiseDescription().isBlank()
-                && mentorProfile.getFoundationSupportLevel() != null
-                && mentorProfile.getOutputReviewSupportLevel() != null
-                && mentorProfile.getDirectionSupportLevel() != null
-                && !subjectResults.isEmpty();
+        boolean hasCompletedProfile = hasCompletedPeerMentorProfile(mentorProfile, mentorTags, subjectResults);
         boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::active);
         boolean canRequestBooking = mentorProfile.isAvailable() && mentorProfile.getVerifiedAt() != null
-                && (mentorProfile.getBookingSuspendedUntil() == null || mentorProfile.getBookingSuspendedUntil().isBefore(LocalDateTime.now()))
+                && !isBookingSuspended(mentorProfile)
                 && hasActiveServices;
 
         return MentorDiscoveryDetailResponse.builder()
@@ -570,11 +591,12 @@ public class MentorDiscoveryService {
             List<MentorAchievementResponse> achievements,
             List<MentorService> services,
             boolean hasAvailability,
+            boolean hasPreferredDurationAvailability,
             StudentProfile menteeProfile,
             MenteeMatchingFeatures menteeFeatures
     ) {
         List<String> reasons = new ArrayList<>();
-        BigDecimal score = calculateMatchScore(candidate, menteeProfile, menteeFeatures, services, hasAvailability, reasons);
+        BigDecimal score = calculateMatchScore(candidate, menteeProfile, menteeFeatures, services, hasAvailability, hasPreferredDurationAvailability, reasons);
 
         BigDecimal maxScore = SAME_PROGRAM_SCORE
                 .add(SAME_SPECIALIZATION_SCORE)
@@ -583,6 +605,9 @@ public class MentorDiscoveryService {
                 .add(MAX_RECOMMENDATION_QUALITY_SCORE)
                 .add(HAS_AVAILABILITY_BONUS_SCORE)
                 .add(serviceBonusScore(MAX_SEARCH_SERVICE_BONUS_COUNT));
+        if (menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null) {
+            maxScore = maxScore.add(DURATION_PREFERENCE_MATCH_BONUS);
+        }
 
         BigDecimal percentageScore = BigDecimal.ZERO;
         if (maxScore.compareTo(BigDecimal.ZERO) > 0) {
@@ -610,6 +635,7 @@ public class MentorDiscoveryService {
             MenteeMatchingFeatures menteeFeatures,
             List<MentorService> services,
             boolean hasAvailability,
+            boolean hasPreferredDurationAvailability,
             List<String> reasons
     ) {
         BigDecimal baseScore = ZERO;
@@ -680,6 +706,10 @@ public class MentorDiscoveryService {
             baseScore = baseScore.add(HAS_AVAILABILITY_BONUS_SCORE);
             reasons.add("Có lịch rảnh khả dụng");
         }
+        if (hasPreferredDurationAvailability) {
+            baseScore = baseScore.add(DURATION_PREFERENCE_MATCH_BONUS);
+            reasons.add("Có slot phù hợp đúng thời lượng mentee muốn book");
+        }
 
         return baseScore.setScale(2, RoundingMode.HALF_UP);
     }
@@ -708,6 +738,20 @@ public class MentorDiscoveryService {
         }
         return new java.util.HashSet<>(Optional.ofNullable(
                 mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, now)
+        ).orElse(List.of()));
+    }
+
+    private Set<UUID> loadMentorsWithPreferredDurationAvailability(
+            Collection<UUID> mentorUserIds,
+            MenteeMatchingFeatures menteeFeatures,
+            LocalDateTime now
+    ) {
+        Integer preferredDuration = toPreferredDurationMinutes(menteeFeatures == null ? null : menteeFeatures.durationPreferenceCode());
+        if (mentorUserIds == null || mentorUserIds.isEmpty() || preferredDuration == null) {
+            return Collections.emptySet();
+        }
+        return new java.util.HashSet<>(Optional.ofNullable(
+                availabilitySlotServiceRepository.findMentorUserIdsWithFutureActiveSlotServiceDuration(mentorUserIds, preferredDuration, now)
         ).orElse(List.of()));
     }
 
@@ -830,7 +874,8 @@ public class MentorDiscoveryService {
             List<MentorFeaturedProjectResponse> featuredProjects,
             List<MentorAchievementResponse> achievements,
             List<MentorService> services,
-            boolean hasAvailability
+            boolean hasAvailability,
+            boolean hasPreferredDurationAvailability
     ) {
         BigDecimal extraBonus = ZERO;
         if (services != null && !services.isEmpty()) {
@@ -838,6 +883,9 @@ public class MentorDiscoveryService {
         }
         if (hasAvailability) {
             extraBonus = extraBonus.add(HAS_AVAILABILITY_BONUS_SCORE);
+        }
+        if (hasPreferredDurationAvailability) {
+            extraBonus = extraBonus.add(DURATION_PREFERENCE_MATCH_BONUS);
         }
 
         List<String> tokens = tokenizeSearchText(normalizedKeyword);
@@ -853,19 +901,14 @@ public class MentorDiscoveryService {
         String exactKeyword = normalizeSearchText(normalizedKeyword);
 
         String normalizedHeadline = normalizeSearchText(row.headline());
-        String normalizedSubjects = normalizeSearchText(row.supportingSubjects());
         if (!normalizedHeadline.isBlank() && normalizedHeadline.contains(exactKeyword)) {
             score = score.add(HEADLINE_EXACT_BONUS);
-        }
-        if (!normalizedSubjects.isBlank() && normalizedSubjects.contains(exactKeyword)) {
-            score = score.add(SUBJECTS_PHRASE_BONUS);
         }
 
         List<String> profileFields = Arrays.stream(new String[]{
                         row.displayName(),
                         row.headline(),
                         row.expertiseDescription(),
-                        row.supportingSubjects(),
                         row.bio(),
                         row.campusName(),
                         row.programName(),
@@ -990,13 +1033,10 @@ public class MentorDiscoveryService {
             score = score.add(decimal("8.00"));
             addReason(reasons, "Mentor đã có trải nghiệm mentoring thực tế");
         }
-        if (menteeFeatures.durationPreferenceCode() != null) {
-            score = score.add(DURATION_PREFERENCE_LIGHT_BONUS);
-        }
         if (score.compareTo(BigDecimal.ZERO) > 0) {
             addReason(reasons, "Khớp nhu cầu mentoring đã khai báo");
         }
-        return score.setScale(2, RoundingMode.HALF_UP);
+        return applyMatchingRecencyMultiplier(score, menteeFeatures).setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal levelAlignmentScore(Integer needLevel, Integer supportLevel) {
@@ -1059,8 +1099,8 @@ public class MentorDiscoveryService {
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount) {
-        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount);
+    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference) {
+        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount, hasDurationPreference);
         if (maxScore.compareTo(BigDecimal.ZERO) <= 0) {
             return ZERO;
         }
@@ -1076,7 +1116,7 @@ public class MentorDiscoveryService {
         return percentage;
     }
 
-    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount) {
+    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference) {
         int tokenCount = tokenizeSearchText(normalizedKeyword).size();
         int cappedServiceCount = Math.min(Math.max(activeServiceCount, 0), MAX_SEARCH_SERVICE_BONUS_COUNT);
 
@@ -1084,6 +1124,9 @@ public class MentorDiscoveryService {
                 .add(MAX_SEARCH_QUALITY_SCORE)
                 .add(serviceBonusScore(cappedServiceCount))
                 .add(HAS_AVAILABILITY_BONUS_SCORE);
+        if (hasDurationPreference) {
+            maxScore = maxScore.add(DURATION_PREFERENCE_MATCH_BONUS);
+        }
 
         if (tokenCount <= 0) {
             return maxScore.setScale(2, RoundingMode.HALF_UP);
@@ -1091,12 +1134,10 @@ public class MentorDiscoveryService {
 
         return maxScore
                 .add(HEADLINE_EXACT_BONUS)
-                .add(SUBJECTS_PHRASE_BONUS)
                 .add(decimal(50))
                 .add(decimal(tokenCount * 8))
                 .add(decimal(tokenCount * 10))
                 .add(decimal(tokenCount * 12))
-                .add(decimal(30))
                 .add(VERIFIED_RECENT_7D_BONUS)
                 .add(SESSION_VELOCITY_HIGH_BONUS)
                 .setScale(2, RoundingMode.HALF_UP);
@@ -1116,7 +1157,28 @@ public class MentorDiscoveryService {
             }
         }
 
+        if (row.verifiedAt() != null
+                && row.verifiedAt().isAfter(currentTime().minusDays(14))
+                && defaultInteger(row.completedSessions()) <= 3
+                && defaultInteger(row.reviewCount()) <= 2) {
+            score = score.add(COLD_START_VERIFIED_BONUS);
+        }
+
         return score.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal applyMatchingRecencyMultiplier(BigDecimal score, MenteeMatchingFeatures menteeFeatures) {
+        if (score == null || menteeFeatures == null || menteeFeatures.latestAnsweredAt() == null) {
+            return score == null ? ZERO : score;
+        }
+        LocalDateTime latestAnsweredAt = menteeFeatures.latestAnsweredAt();
+        if (latestAnsweredAt.isBefore(currentTime().minusDays(90))) {
+            return score.multiply(STALE_MATCHING_90D_MULTIPLIER);
+        }
+        if (latestAnsweredAt.isBefore(currentTime().minusDays(30))) {
+            return score.multiply(STALE_MATCHING_30D_MULTIPLIER);
+        }
+        return score;
     }
 
     private BigDecimal calculateAcceptanceRate(MentorDiscoveryQueryRow row) {
@@ -1258,7 +1320,7 @@ public class MentorDiscoveryService {
                 .description(mentorService.getDescription())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .free(mentorService.isFree())
-                .priceScoin(defaultInteger(mentorService.getPriceScoin()) == 0 ? 0 : defaultInteger(mentorService.getPriceScoin()) + (defaultInteger(mentorService.getPriceScoin()) * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
+                .priceScoin(mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0 : defaultInteger(mentorService.getPriceScoin()) + (defaultInteger(mentorService.getPriceScoin()) * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
                 .active(mentorService.isActive())
                 .helpTopics(helpTopics)
                 .createdAt(mentorService.getCreatedAt())
@@ -1288,6 +1350,13 @@ public class MentorDiscoveryService {
         if (!isDiscoverableMentor(mentorProfile)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Mentor hiện chưa sẵn sàng hiển thị trên discovery");
         }
+        List<MentorTagResponse> mentorTags = loadTagsByMentor(List.of(mentorUserId), Set.of(MentorTagType.HELP_TOPIC))
+                .getOrDefault(mentorUserId, List.of());
+        List<MentorSubjectResultResponse> subjectResults = loadSubjectResultsByMentor(List.of(mentorUserId))
+                .getOrDefault(mentorUserId, List.of());
+        if (!hasCompletedPeerMentorProfile(mentorProfile, mentorTags, subjectResults)) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Mentor hiện chưa sẵn sàng hiển thị trên discovery");
+        }
         return mentorProfile;
     }
 
@@ -1302,8 +1371,25 @@ public class MentorDiscoveryService {
                 && mentorProfile.getVerifiedAt() != null
                 && hasText(mentorProfile.getHeadline())
                 && hasText(mentorProfile.getExpertiseDescription())
+                && hasText(mentorProfile.getPhoneNumber())
+                && mentorProfile.getFoundationSupportLevel() != null
+                && mentorProfile.getOutputReviewSupportLevel() != null
+                && mentorProfile.getDirectionSupportLevel() != null
                 && mentorProfile.isAvailable()
                 && !isBookingSuspended(mentorProfile);
+    }
+
+    private Integer toPreferredDurationMinutes(String durationPreferenceCode) {
+        if (durationPreferenceCode == null || durationPreferenceCode.isBlank()) {
+            return null;
+        }
+        return switch (durationPreferenceCode) {
+            case "DURATION_15" -> 15;
+            case "DURATION_30" -> 30;
+            case "DURATION_60" -> 60;
+            case "DURATION_90" -> 90;
+            default -> null;
+        };
     }
 
     private boolean isBookingSuspended(MentorProfile mentorProfile) {
@@ -1473,6 +1559,24 @@ public class MentorDiscoveryService {
         return value != null && !value.trim().isEmpty();
     }
 
+    private boolean hasCompletedPeerMentorProfile(
+            MentorProfile mentorProfile,
+            List<MentorTagResponse> helpTopics,
+            List<MentorSubjectResultResponse> subjectResults
+    ) {
+        return mentorProfile != null
+                && hasText(mentorProfile.getHeadline())
+                && hasText(mentorProfile.getExpertiseDescription())
+                && hasText(mentorProfile.getPhoneNumber())
+                && mentorProfile.getFoundationSupportLevel() != null
+                && mentorProfile.getOutputReviewSupportLevel() != null
+                && mentorProfile.getDirectionSupportLevel() != null
+                && helpTopics != null
+                && !helpTopics.isEmpty()
+                && subjectResults != null
+                && !subjectResults.isEmpty();
+    }
+
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? ZERO : value;
     }
@@ -1559,10 +1663,31 @@ public class MentorDiscoveryService {
                     .map(this::normalizeSearchText)
                     .filter(s -> !s.isBlank())
                     .toList();
+            List<String> subjects = mentorSubjectResultRepository.findAll().stream()
+                    .flatMap(subject -> Arrays.stream(new String[]{subject.getSubjectCode(), subject.getSubjectName()}))
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::normalizeSearchText)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+            List<String> projectTexts = mentorFeaturedProjectRepository.findAll().stream()
+                    .flatMap(project -> Arrays.stream(new String[]{project.getTitle(), project.getContent(), project.getProjectDescription()}))
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::normalizeSearchText)
+                    .filter(s -> !s.isBlank())
+                    .toList();
+            List<String> achievementTexts = mentorAchievementRepository.findAll().stream()
+                    .flatMap(achievement -> Arrays.stream(new String[]{achievement.getTitle(), achievement.getAwardDescription(), achievement.getProductHeader(), achievement.getProductDescription()}))
+                    .filter(java.util.Objects::nonNull)
+                    .map(this::normalizeSearchText)
+                    .filter(s -> !s.isBlank())
+                    .toList();
 
             List<String> merged = new ArrayList<>();
             merged.addAll(tags);
             merged.addAll(serviceTitles);
+            merged.addAll(subjects);
+            merged.addAll(projectTexts);
+            merged.addAll(achievementTexts);
             List<String> deduplicated = merged.stream().distinct().collect(Collectors.toList());
 
             synchronized (cacheLock) {

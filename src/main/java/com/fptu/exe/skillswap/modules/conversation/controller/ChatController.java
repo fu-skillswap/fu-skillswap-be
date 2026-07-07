@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,6 +34,7 @@ public class ChatController {
     private final ConversationService conversationService;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final InMemoryRateLimitService rateLimitService;
 
     @GetMapping
     @Operation(
@@ -100,7 +102,12 @@ public class ChatController {
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,
             @Valid @RequestBody SendMessageRequest request) {
-        
+        rateLimitService.check(
+                "chat:send:" + userPrincipal.getId(),
+                30,
+                java.time.Duration.ofMinutes(1),
+                "Bạn đang gửi tin nhắn quá nhanh, vui lòng chậm lại một chút"
+        );
         MessageResponse response = conversationService.sendMessage(conversationId, userPrincipal.getId(), request, messageRepository, userRepository);
         return ApiResponse.created(response);
     }

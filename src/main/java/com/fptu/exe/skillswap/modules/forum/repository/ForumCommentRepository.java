@@ -13,6 +13,7 @@ import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.Collection;
 import java.util.List;
@@ -52,4 +53,19 @@ public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from ForumComment c where c.id = :id")
     Optional<ForumComment> findByIdForUpdate(@Param("id") UUID id);
+
+    @Query("""
+            select count(c.id) > 0
+            from ForumComment c
+            where c.post.id = :postId
+              and c.authorUser.id = :authorUserId
+              and lower(c.content) = lower(:content)
+              and c.createdAt >= :createdAfter
+            """)
+    boolean existsRecentDuplicateComment(
+            @Param("postId") UUID postId,
+            @Param("authorUserId") UUID authorUserId,
+            @Param("content") String content,
+            @Param("createdAfter") LocalDateTime createdAfter
+    );
 }

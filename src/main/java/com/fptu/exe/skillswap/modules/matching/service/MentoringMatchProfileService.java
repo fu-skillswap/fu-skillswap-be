@@ -134,7 +134,11 @@ public class MentoringMatchProfileService {
                 score(byCode, MentoringQuestionnaireDefaults.Q2_OUTPUT_REVIEW_LEVEL),
                 score(byCode, MentoringQuestionnaireDefaults.Q3_DIRECTION_LEVEL),
                 option(byCode, MentoringQuestionnaireDefaults.Q4_MENTOR_FIT),
-                option(byCode, MentoringQuestionnaireDefaults.Q5_DURATION_PREFERENCE)
+                option(byCode, MentoringQuestionnaireDefaults.Q5_DURATION_PREFERENCE),
+                answers.stream()
+                        .map(MentoringQuestionnaireAnswer::getAnsweredAt)
+                        .max(LocalDateTime::compareTo)
+                        .orElse(null)
         );
     }
 

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public interface MessageRepository extends JpaRepository<Message, UUID> {
@@ -44,4 +45,19 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
           and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt)
     """)
     long countTotalUnreadMessages(@org.springframework.data.repository.query.Param("userId") UUID userId);
+
+    @org.springframework.data.jpa.repository.Query("""
+        select count(m) > 0
+        from Message m
+        where m.conversation.id = :conversationId
+          and m.sender.id = :senderId
+          and lower(m.content) = lower(:content)
+          and m.createdAt >= :createdAfter
+    """)
+    boolean existsRecentDuplicateMessage(
+            @org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
+            @org.springframework.data.repository.query.Param("senderId") UUID senderId,
+            @org.springframework.data.repository.query.Param("content") String content,
+            @org.springframework.data.repository.query.Param("createdAfter") LocalDateTime createdAfter
+    );
 }

@@ -18,6 +18,7 @@ import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +57,9 @@ class ConversationServiceUnitTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private InternalTelemetryService internalTelemetryService;
 
     @InjectMocks
     private ConversationService conversationService;
@@ -134,6 +138,60 @@ class ConversationServiceUnitTest {
         assertNotNull(result);
         assertEquals(existing.getId(), result.getId());
         verify(conversationRepository, times(1)).save(any(Conversation.class));
+    }
+
+    @Test
+    void createDirectForAcceptedBooking_shouldReuseExistingDirectConversationForSameMentorAndMentee() {
+        UUID secondBookingId = UUID.randomUUID();
+        booking.setId(secondBookingId);
+        Conversation existing = Conversation.builder()
+                .id(UUID.randomUUID())
+                .sourceType(ConversationSourceType.BOOKING)
+                .sourceId(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .status(ConversationStatus.ACTIVE)
+                .build();
+
+        when(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, secondBookingId))
+                .thenReturn(Optional.empty());
+        when(conversationRepository.findDirectActiveByParticipantPair(
+                mentorUser.getId(),
+                menteeUser.getId(),
+                ConversationType.DIRECT,
+                ConversationStatus.ACTIVE
+        )).thenReturn(List.of(existing));
+        when(participantRepository.existsByConversationIdAndUserId(existing.getId(), mentorUser.getId())).thenReturn(true);
+        when(participantRepository.existsByConversationIdAndUserId(existing.getId(), menteeUser.getId())).thenReturn(true);
+
+        Conversation result = conversationService.createDirectForAcceptedBooking(booking);
+
+        assertNotNull(result);
+        assertEquals(existing.getId(), result.getId());
+        verify(conversationRepository, never()).save(any(Conversation.class));
+    }
+
+    @Test
+    void findConversationIdsForBookings_shouldFallbackToDirectConversationByParticipants() {
+        Conversation existing = Conversation.builder()
+                .id(UUID.randomUUID())
+                .sourceType(ConversationSourceType.BOOKING)
+                .sourceId(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .status(ConversationStatus.ACTIVE)
+                .build();
+
+        when(conversationRepository.findBySourceTypeAndSourceIdIn(ConversationSourceType.BOOKING, List.of(bookingId)))
+                .thenReturn(List.of());
+        when(conversationRepository.findDirectActiveByParticipantPair(
+                mentorUser.getId(),
+                menteeUser.getId(),
+                ConversationType.DIRECT,
+                ConversationStatus.ACTIVE
+        )).thenReturn(List.of(existing));
+
+        java.util.Map<UUID, UUID> result = conversationService.findConversationIdsForBookings(List.of(booking));
+
+        assertEquals(existing.getId(), result.get(bookingId));
     }
 
     @Test

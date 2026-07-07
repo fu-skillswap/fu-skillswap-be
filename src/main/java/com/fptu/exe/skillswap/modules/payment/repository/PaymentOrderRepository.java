@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import java.util.List;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID> {
@@ -50,5 +52,19 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
     Integer sumCampaignCreditByCampaignIdAndStatusNotIn(
             @Param("campaignId") UUID campaignId,
             @Param("excludedStatuses") java.util.Collection<PaymentOrderStatus> excludedStatuses
+    );
+
+    @Query("""
+            select po
+            from PaymentOrder po
+            where po.status in :statuses
+              and po.updatedAt <= :updatedBefore
+              and po.providerOrderCode is not null
+            order by po.updatedAt asc
+            """)
+    List<PaymentOrder> findTop50ByStatusInAndUpdatedAtBeforeOrderByUpdatedAtAsc(
+            @Param("statuses") java.util.Collection<PaymentOrderStatus> statuses,
+            @Param("updatedBefore") LocalDateTime updatedBefore,
+            org.springframework.data.domain.Pageable pageable
     );
 }

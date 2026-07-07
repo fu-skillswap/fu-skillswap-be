@@ -70,7 +70,15 @@ public class MentorProfileService {
     @Transactional(readOnly = true)
     public boolean hasCompletedMentorProfile(UUID userId) {
         requireUserId(userId);
-        return getMyProfile(userId).requiredFieldsCompleted();
+        return mentorProfileRepository.findWithUserByUserId(userId)
+                .map(profile -> isRequiredFieldsCompleted(
+                        profile,
+                        mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC))
+                                .stream()
+                                .map(this::mapToTagResponse)
+                                .toList()
+                ))
+                .orElse(false);
     }
 
     @Transactional
@@ -193,6 +201,8 @@ public class MentorProfileService {
                 .headline(profile.getHeadline())
                 .expertiseDescription(profile.getExpertiseDescription())
                 .isAvailable(profile.isAvailable())
+                .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
+                .lateCancellationPenaltyPoints(profile.getLateCancellationPenaltyPoints())
                 .verifiedAt(profile.getVerifiedAt())
                 .helpTopics(helpTopics)
                 .subjectResults(subjectResults)
