@@ -92,12 +92,20 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(cntt, "CNTT_CNOTS", "Công nghệ ô tô số", "Digital Automotive Technology");
         seedSpecialization(cntt, "CNTT_HTTT", "Hệ thống thông tin", "Information Systems");
         seedSpecialization(cntt, "CNTT_TKDHMT", "Thiết kế đồ hoạ và mỹ thuật số", "Graphic and Digital Art Design");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(cntt, "CNTT_RBT_TTNT", "Robot và trí tuệ nhân tạo", "Robotics and Artificial Intelligence");
+        seedSpecialization(cntt, "CNTT_KHDL_UD", "Khoa học dữ liệu và ứng dụng", "Applied Data Science");
+        seedSpecialization(cntt, "CNTT_TTNT_KHDL", "Trí tuệ nhân tạo và khoa học dữ liệu", "Artificial Intelligence and Data Science");
+        seedSpecialization(cntt, "CNTT_ANM_ATS", "An ninh mạng và an toàn số", "Cybersecurity and Digital Safety");
         seedSpecialization(cntt, "CNTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 2. CTTT
         AcademicProgram cttt = seedProgram("CTTT", "Công nghệ truyền thông", "Communication Technology");
         seedSpecialization(cttt, "CTTT_TTDPM", "Truyền thông đa phương tiện", "Multimedia Communications");
         seedSpecialization(cttt, "CTTT_QHCC", "Quan hệ công chúng", "Public Relations");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(cttt, "CTTT_TT_MKT_TH", "Truyền thông Marketing tích hợp", "Integrated Marketing Communications");
+        seedSpecialization(cttt, "CTTT_TTTH", "Truyền thông thương hiệu", "Brand Communications");
         seedSpecialization(cttt, "CTTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 3. NN
@@ -105,6 +113,10 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(nn, "NN_NNA", "Ngôn ngữ Anh", "English Linguistics");
         seedSpecialization(nn, "NN_NNHQ", "Ngôn ngữ Hàn Quốc", "Korean Linguistics");
         seedSpecialization(nn, "NN_NNTQ", "Ngôn ngữ Trung Quốc", "Chinese Linguistics");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(nn, "NN_TATM", "Tiếng Anh thương mại", "Business English");
+        seedSpecialization(nn, "NN_THTM", "Tiếng Hàn thương mại", "Business Korean");
+        seedSpecialization(nn, "NN_TTTM", "Tiếng Trung thương mại", "Business Chinese");
         seedSpecialization(nn, "NN_OTHER", "Chuyên ngành khác", "Other");
 
         // 4. LUAT
@@ -123,6 +135,8 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(qtkd, "QTKD_LQLCCUGC", "Logistics và Quản lý chuỗi cung ứng toàn cầu", "Logistics and Global Supply Chain Management");
         seedSpecialization(qtkd, "QTKD_CNTC", "Công nghệ tài chính", "Financial Technology");
         seedSpecialization(qtkd, "QTKD_TCNH", "Tài chính ngân hàng", "Finance and Banking");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(qtkd, "QTKD_TCDN", "Tài chính doanh nghiệp", "Corporate Finance");
         seedSpecialization(qtkd, "QTKD_OTHER", "Chuyên ngành khác", "Other");
     }
 
