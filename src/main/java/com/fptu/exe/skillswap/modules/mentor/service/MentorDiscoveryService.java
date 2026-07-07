@@ -1354,9 +1354,6 @@ public class MentorDiscoveryService {
                 .getOrDefault(mentorUserId, List.of());
         List<MentorSubjectResultResponse> subjectResults = loadSubjectResultsByMentor(List.of(mentorUserId))
                 .getOrDefault(mentorUserId, List.of());
-        if (!hasCompletedPeerMentorProfile(mentorProfile, mentorTags, subjectResults)) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Mentor hiện chưa sẵn sàng hiển thị trên discovery");
-        }
         return mentorProfile;
     }
 
@@ -1371,10 +1368,6 @@ public class MentorDiscoveryService {
                 && mentorProfile.getVerifiedAt() != null
                 && hasText(mentorProfile.getHeadline())
                 && hasText(mentorProfile.getExpertiseDescription())
-                && hasText(mentorProfile.getPhoneNumber())
-                && mentorProfile.getFoundationSupportLevel() != null
-                && mentorProfile.getOutputReviewSupportLevel() != null
-                && mentorProfile.getDirectionSupportLevel() != null
                 && mentorProfile.isAvailable()
                 && !isBookingSuspended(mentorProfile);
     }

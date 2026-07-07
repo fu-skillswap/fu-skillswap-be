@@ -102,11 +102,9 @@ public class NotificationService {
 
     @Transactional
     public void markAllAsRead(UUID currentUserId) {
-        int updatedCount = notificationRepository.markAllAsRead(currentUserId, LocalDateTime.now());
+        notificationRepository.markAllAsRead(currentUserId, LocalDateTime.now());
         long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(currentUserId);
-        if (updatedCount > 0) {
-            eventPublisher.publishEvent(new NotificationBadgeChangedEvent(currentUserId, unreadCount, "READ_ALL"));
-        }
+        eventPublisher.publishEvent(new NotificationBadgeChangedEvent(currentUserId, unreadCount, "READ_ALL"));
     }
 
     private NotificationResponse mapToResponse(Notification notification) {

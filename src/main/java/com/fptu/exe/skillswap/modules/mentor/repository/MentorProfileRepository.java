@@ -43,20 +43,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.phoneNumber is not null and trim(mp.phoneNumber) <> ''
-              and mp.foundationSupportLevel is not null
-              and mp.outputReviewSupportLevel is not null
-              and mp.directionSupportLevel is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
-              )
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr
-                    where msr.mentorProfile.userId = mp.userId
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
@@ -89,20 +80,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.phoneNumber is not null and trim(mp.phoneNumber) <> ''
-              and mp.foundationSupportLevel is not null
-              and mp.outputReviewSupportLevel is not null
-              and mp.directionSupportLevel is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
-              )
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr
-                    where msr.mentorProfile.userId = mp.userId
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
@@ -142,20 +124,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.phoneNumber is not null and trim(mp.phoneNumber) <> ''
-              and mp.foundationSupportLevel is not null
-              and mp.outputReviewSupportLevel is not null
-              and mp.directionSupportLevel is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
-              )
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr
-                    where msr.mentorProfile.userId = mp.userId
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
@@ -264,20 +237,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.phoneNumber is not null and trim(mp.phoneNumber) <> ''
-              and mp.foundationSupportLevel is not null
-              and mp.outputReviewSupportLevel is not null
-              and mp.directionSupportLevel is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
-              )
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr
-                    where msr.mentorProfile.userId = mp.userId
               )
               and (:campusId is null or campus.id = :campusId)
               and (:specializationId is null or specialization.id = :specializationId)
@@ -409,17 +373,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND mp.phone_number IS NOT NULL AND trim(mp.phone_number) <> ''
-              AND mp.foundation_support_level IS NOT NULL
-              AND mp.output_review_support_level IS NOT NULL
-              AND mp.direction_support_level IS NOT NULL
               AND EXISTS (
                   SELECT 1 FROM mentor_tags mt0
                   WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
-              )
-              AND EXISTS (
-                  SELECT 1 FROM mentor_subject_results msr0
-                  WHERE msr0.mentor_user_id = mp.user_id
               )
               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
@@ -478,17 +434,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND mp.phone_number IS NOT NULL AND trim(mp.phone_number) <> ''
-              AND mp.foundation_support_level IS NOT NULL
-              AND mp.output_review_support_level IS NOT NULL
-              AND mp.direction_support_level IS NOT NULL
               AND EXISTS (
                   SELECT 1 FROM mentor_tags mt0
                   WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
-              )
-              AND EXISTS (
-                  SELECT 1 FROM mentor_subject_results msr0
-                  WHERE msr0.mentor_user_id = mp.user_id
               )
               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
@@ -574,20 +522,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and mp.phoneNumber is not null and trim(mp.phoneNumber) <> ''
-              and mp.foundationSupportLevel is not null
-              and mp.outputReviewSupportLevel is not null
-              and mp.directionSupportLevel is not null
               and exists (
                     select 1
                     from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
                     where mt.id.mentorUserId = mp.userId
                       and mt.id.tagType = :helpTopicTagType
-              )
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult msr
-                    where msr.mentorProfile.userId = mp.userId
               )
             order by mp.totalAcceptedBookings desc nulls last,
                      mp.lastActiveAt desc nulls last,
