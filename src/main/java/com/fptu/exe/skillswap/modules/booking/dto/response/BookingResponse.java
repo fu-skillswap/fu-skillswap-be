@@ -69,6 +69,8 @@ public record BookingResponse(
         Boolean serviceIsFreeSnapshot,
         @Schema(description = "Snapshot giá dịch vụ theo SCoin", nullable = true)
         Integer servicePriceScoinSnapshot,
+        @Schema(description = "Giá mentee nhìn thấy trước coupon/credit, đã cộng phụ phí nền tảng theo cấu hình PAYMENT_MENTEE_SURCHARGE_BPS", nullable = true, example = "110")
+        Integer servicePriceWithSurchargeScoin,
         @Schema(description = "Trạng thái booking hiện tại", example = "PENDING")
         BookingStatus status,
         @Schema(description = "Tiêu đề mục tiêu học tập")

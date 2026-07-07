@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
@@ -96,6 +97,7 @@ public class BookingService {
     private final com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService paymentOrderService;
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final PaymentProperties paymentProperties;
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -1046,6 +1048,7 @@ public class BookingService {
                 .serviceDurationSnapshot(booking.getServiceDurationSnapshot())
                 .serviceIsFreeSnapshot(booking.getServiceIsFreeSnapshot())
                 .servicePriceScoinSnapshot(booking.getServicePriceScoinSnapshot())
+                .servicePriceWithSurchargeScoin(calculateMenteeVisiblePrice(booking.getServiceIsFreeSnapshot(), booking.getServicePriceScoinSnapshot()))
                 .status(booking.getStatus())
                 .learningGoalTitle(booking.getLearningGoalTitle())
                 .learningGoalDescription(booking.getLearningGoalDescription())
@@ -1083,6 +1086,15 @@ public class BookingService {
                 .canReschedule(canReschedule)
                 .canSubmitFeedback(canSubmitFeedback)
                 .build();
+    }
+
+    private int calculateMenteeVisiblePrice(Boolean isFree, Integer basePriceScoin) {
+        int price = basePriceScoin == null ? 0 : Math.max(0, basePriceScoin);
+        if (Boolean.TRUE.equals(isFree) || price == 0) {
+            return 0;
+        }
+        int surchargeBps = paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps();
+        return price + (price * surchargeBps) / 10_000;
     }
 
     private Pageable bookingPageable(BookingListRequest request) {
