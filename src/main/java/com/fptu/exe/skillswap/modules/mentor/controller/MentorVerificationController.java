@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
@@ -137,6 +138,28 @@ public class MentorVerificationController {
                 principal.getPublicId(),
                 documentType,
                 file
+        );
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
+    }
+
+    @Operation(
+            summary = "Lưu metadata verification document đã upload ngoài",
+            description = "Tương thích ngược cho FE đang upload file lên Cloudinary trước rồi gửi metadata JSON về BE. Quota giống multipart: FPTU_AFFILIATION_PROOF tối đa 1 file, EXPERTISE_PROOF tối đa 3 file."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
+    @PostMapping(path = "/documents", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocumentMetadata(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody MentorVerificationDocumentUploadRequest request
+    ) {
+        ensureAuthenticated(principal);
+        MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
+                principal.getPublicId(),
+                request
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
