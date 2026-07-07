@@ -211,7 +211,7 @@ public class MentorServiceManagementService {
     }
 
     private Integer validateDuration(Integer durationMinutes) {
-        if (!ALLOWED_DURATIONS.contains(durationMinutes)) {
+        if (durationMinutes == null || !ALLOWED_DURATIONS.contains(durationMinutes)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ chỉ được chọn 15, 30, 60 hoặc 90 phút");
         }
         return durationMinutes;

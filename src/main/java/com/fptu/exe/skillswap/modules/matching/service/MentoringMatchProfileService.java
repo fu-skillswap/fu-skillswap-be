@@ -249,6 +249,7 @@ public class MentoringMatchProfileService {
     }
 
     private void createQuestions(MentoringQuestionnaireVersion version, List<AdminQuestionnaireVersionCreateRequest.QuestionRequest> questionRequests) {
+        validateQuestionRequests(questionRequests);
         int questionOrder = 1;
         for (AdminQuestionnaireVersionCreateRequest.QuestionRequest questionRequest : questionRequests) {
             MentoringQuestionnaireQuestion question = questionRepository.save(MentoringQuestionnaireQuestion.builder()
@@ -270,6 +271,42 @@ public class MentoringMatchProfileService {
             }
         }
         validateVersionComplete(version);
+    }
+
+    private void validateQuestionRequests(List<AdminQuestionnaireVersionCreateRequest.QuestionRequest> questionRequests) {
+        if (questionRequests == null || questionRequests.size() != QUESTION_ORDER.size()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Questionnaire version phải có đúng 5 câu hỏi");
+        }
+        Set<String> questionCodes = new HashSet<>();
+        for (AdminQuestionnaireVersionCreateRequest.QuestionRequest questionRequest : questionRequests) {
+            if (questionRequest == null) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Questionnaire version có câu hỏi không hợp lệ");
+            }
+            String questionCode = clean(questionRequest.code(), "Mã câu hỏi");
+            if (!QUESTION_ORDER.contains(questionCode) || !questionCodes.add(questionCode)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Questionnaire version thiếu hoặc trùng semantic question code bắt buộc");
+            }
+            MentoringQuestionType expectedType = expectedQuestionType(questionCode);
+            if (questionRequest.type() == null || questionRequest.type() != expectedType) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Loại câu hỏi không hợp lệ cho " + questionCode);
+            }
+            clean(questionRequest.questionText(), "Nội dung câu hỏi");
+            List<AdminQuestionnaireVersionCreateRequest.OptionRequest> options = questionRequest.options();
+            if (options == null || options.size() != expectedOptionCount(expectedType)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Số lượng option không hợp lệ cho " + questionCode);
+            }
+            Set<String> optionCodes = new HashSet<>();
+            for (AdminQuestionnaireVersionCreateRequest.OptionRequest optionRequest : options) {
+                if (optionRequest == null) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Questionnaire version có option không hợp lệ");
+                }
+                String optionCode = clean(optionRequest.code(), "Mã option");
+                clean(optionRequest.label(), "Label option");
+                if (!optionCodes.add(optionCode)) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Mã option bị trùng trong " + questionCode);
+                }
+            }
+        }
     }
 
     private List<AdminQuestionnaireVersionCreateRequest.QuestionRequest> normalizeAdminQuestions(AdminQuestionnaireVersionCreateRequest request) {
@@ -297,6 +334,45 @@ public class MentoringMatchProfileService {
         if (!codes.containsAll(QUESTION_ORDER)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Questionnaire version thiếu semantic question code bắt buộc");
         }
+        List<MentoringQuestionnaireOption> options = optionRepository.findByQuestionIdInOrderByQuestionDisplayOrderAscDisplayOrderAsc(
+                questions.stream().map(MentoringQuestionnaireQuestion::getId).toList()
+        );
+        Map<UUID, List<MentoringQuestionnaireOption>> optionsByQuestionId = options.stream()
+                .collect(Collectors.groupingBy(option -> option.getQuestion().getId()));
+        for (MentoringQuestionnaireQuestion question : questions) {
+            MentoringQuestionType expectedType = expectedQuestionType(question.getQuestionCode());
+            if (question.getQuestionType() == null || question.getQuestionType() != expectedType) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Loại câu hỏi không hợp lệ cho " + question.getQuestionCode());
+            }
+            List<MentoringQuestionnaireOption> questionOptions = optionsByQuestionId.getOrDefault(question.getId(), List.of());
+            if (questionOptions.size() != expectedOptionCount(expectedType)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Số lượng option không hợp lệ cho " + question.getQuestionCode());
+            }
+            Set<String> optionCodes = new HashSet<>();
+            for (MentoringQuestionnaireOption option : questionOptions) {
+                if (!StringUtils.hasText(option.getOptionCode()) || !StringUtils.hasText(option.getOptionLabel()) || !optionCodes.add(option.getOptionCode())) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Option không hợp lệ cho " + question.getQuestionCode());
+                }
+            }
+        }
+    }
+
+    private MentoringQuestionType expectedQuestionType(String questionCode) {
+        return switch (questionCode) {
+            case MentoringQuestionnaireDefaults.Q1_FOUNDATION_LEVEL,
+                 MentoringQuestionnaireDefaults.Q2_OUTPUT_REVIEW_LEVEL,
+                 MentoringQuestionnaireDefaults.Q3_DIRECTION_LEVEL -> MentoringQuestionType.LEVEL;
+            case MentoringQuestionnaireDefaults.Q4_MENTOR_FIT -> MentoringQuestionType.FIT;
+            case MentoringQuestionnaireDefaults.Q5_DURATION_PREFERENCE -> MentoringQuestionType.DURATION_PREFERENCE;
+            default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Semantic question code không hợp lệ: " + questionCode);
+        };
+    }
+
+    private int expectedOptionCount(MentoringQuestionType type) {
+        return switch (type) {
+            case LEVEL, DURATION_PREFERENCE -> 4;
+            case FIT -> 3;
+        };
     }
 
     private MentoringQuestionnaireResponse toQuestionnaireResponse(MentoringQuestionnaireActivation activation) {

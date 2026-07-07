@@ -240,14 +240,18 @@ public class MentorProfileService {
                 && hasText(profile.getExpertiseDescription())
                 && hasText(profile.getPhoneNumber())
                 && !helpTopics.isEmpty()
-                && SUPPORT_LEVELS.contains(profile.getFoundationSupportLevel())
-                && SUPPORT_LEVELS.contains(profile.getOutputReviewSupportLevel())
-                && SUPPORT_LEVELS.contains(profile.getDirectionSupportLevel())
+                && isValidSupportLevel(profile.getFoundationSupportLevel())
+                && isValidSupportLevel(profile.getOutputReviewSupportLevel())
+                && isValidSupportLevel(profile.getDirectionSupportLevel())
                 && !mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(profile.getUserId()).isEmpty();
     }
 
+    private boolean isValidSupportLevel(Integer level) {
+        return level != null && SUPPORT_LEVELS.contains(level);
+    }
+
     private Integer validateSupportLevel(Integer level, String label) {
-        if (!SUPPORT_LEVELS.contains(level)) {
+        if (!isValidSupportLevel(level)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mức hỗ trợ " + label + " chỉ được chọn từ 1 đến 4");
         }
         return level;

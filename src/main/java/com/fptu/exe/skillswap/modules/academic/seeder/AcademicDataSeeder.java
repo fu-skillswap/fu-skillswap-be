@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -173,31 +174,46 @@ public class AcademicDataSeeder implements CommandLineRunner {
     }
 
     private void seedMentorSelectionTags() {
-        seedTag("TECH_JAVA", "Java", "Java", TagType.TECH_SKILL, 100);
-        seedTag("TECH_SPRING_BOOT", "Spring Boot", "Spring Boot", TagType.TECH_SKILL, 98);
-        seedTag("TECH_BACKEND", "Backend Development", "Backend Development", TagType.TECH_SKILL, 97);
-        seedTag("TECH_DATABASE", "Database Design", "Database Design", TagType.TECH_SKILL, 92);
-        seedTag("TECH_API_DESIGN", "API Design", "API Design", TagType.TECH_SKILL, 90);
-        seedTag("TECH_SYSTEM_DESIGN", "System Design", "System Design", TagType.TECH_SKILL, 89);
-        seedTag("TECH_DSA", "Data Structures and Algorithms", "Data Structures and Algorithms", TagType.TECH_SKILL, 91);
-        seedTag("TECH_WEB_DEV", "Web Development", "Web Development", TagType.TECH_SKILL, 88);
-        seedTag("TECH_MOBILE_DEV", "Mobile Development", "Mobile Development", TagType.TECH_SKILL, 84);
-        seedTag("TECH_CLOUD", "Cloud Computing", "Cloud Computing", TagType.TECH_SKILL, 86);
-        seedTag("TECH_DEVOPS", "DevOps", "DevOps", TagType.TECH_SKILL, 85);
-        seedTag("TECH_UI_UX", "UI/UX", "UI/UX", TagType.TECH_SKILL, 80);
-        seedTag("TECH_PRODUCT_MANAGEMENT", "Product Management", "Product Management", TagType.TECH_SKILL, 79);
-        seedTag("TECH_AI", "Artificial Intelligence", "Artificial Intelligence", TagType.TECH_SKILL, 87);
-        seedTag("TECH_DATA_ANALYTICS", "Data Analytics", "Data Analytics", TagType.TECH_SKILL, 83);
+        Set<String> activeHelpTopics = Set.of(
+                "HELP_STUDY_PLAN",
+                "HELP_MAJOR_ORIENTATION",
+                "HELP_CAREER_PATH",
+                "HELP_INTERNSHIP",
+                "HELP_CV_REVIEW",
+                "HELP_INTERVIEW",
+                "HELP_GRADUATION_THESIS",
+                "HELP_FOREIGN_LANGUAGE",
+                "HELP_CAMPUS_LIFE",
+                "HELP_INFORMATION",
+                "HELP_QA",
+                "HELP_PROJECT_REVIEW"
+        );
 
-        seedTag("HELP_CV_REVIEW", "Đánh giá CV", "CV Review", TagType.HELP_TOPIC, 100);
-        seedTag("HELP_INTERVIEW", "Luyện phỏng vấn", "Mock Interview", TagType.HELP_TOPIC, 98);
+        retireActiveTags(TagType.TECH_SKILL, Set.of());
+        retireActiveTags(TagType.HELP_TOPIC, activeHelpTopics);
+
+        seedTag("HELP_STUDY_PLAN", "Hỗ trợ môn học", "Subject Support", TagType.HELP_TOPIC, 100);
+        seedTag("HELP_MAJOR_ORIENTATION", "Định hướng ngành/chuyên ngành", "Major and Specialization Guidance", TagType.HELP_TOPIC, 98);
         seedTag("HELP_CAREER_PATH", "Định hướng nghề nghiệp", "Career Guidance", TagType.HELP_TOPIC, 96);
-        seedTag("HELP_INTERNSHIP", "Hỗ trợ thực tập", "Internship Guidance", TagType.HELP_TOPIC, 93);
-        seedTag("HELP_PROJECT_REVIEW", "Đánh giá dự án", "Project Review", TagType.HELP_TOPIC, 92);
-        seedTag("HELP_GRADUATION_THESIS", "Hướng dẫn đồ án tốt nghiệp", "Graduation Thesis Guidance", TagType.HELP_TOPIC, 90);
-        seedTag("HELP_PRODUCT_FEEDBACK", "Góp ý sản phẩm", "Product Feedback", TagType.HELP_TOPIC, 88);
-        seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 89);
-        seedTag("HELP_STUDY_PLAN", "Hướng dẫn môn học", "Study Guidance", TagType.HELP_TOPIC, 87);
+        seedTag("HELP_INTERNSHIP", "Giải đáp OJT/thực tập", "OJT and Internship Guidance", TagType.HELP_TOPIC, 94);
+        seedTag("HELP_CV_REVIEW", "Đánh giá CV", "CV Review", TagType.HELP_TOPIC, 92);
+        seedTag("HELP_INTERVIEW", "Luyện phỏng vấn", "Mock Interview", TagType.HELP_TOPIC, 90);
+        seedTag("HELP_GRADUATION_THESIS", "Hỗ trợ đồ án/khóa luận", "Capstone and Thesis Support", TagType.HELP_TOPIC, 88);
+        seedTag("HELP_FOREIGN_LANGUAGE", "Hỗ trợ ngoại ngữ", "Foreign Language Support", TagType.HELP_TOPIC, 86);
+        seedTag("HELP_CAMPUS_LIFE", "Thích nghi FPTU & campus life", "FPTU and Campus Life Support", TagType.HELP_TOPIC, 84);
+        seedTag("HELP_INFORMATION", "Cung cấp thông tin", "Information Support", TagType.HELP_TOPIC, 82);
+        seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 80);
+        seedTag("HELP_PROJECT_REVIEW", "Góp ý dự án/case study", "Project and Case Study Feedback", TagType.HELP_TOPIC, 78);
+    }
+
+    private void retireActiveTags(TagType type, Set<String> retainedCodes) {
+        tagRepository.findByTypeAndStatusOrderByWeightDescNameViAsc(type, TagStatus.ACTIVE).stream()
+                .filter(tag -> !retainedCodes.contains(tag.getCode()))
+                .forEach(tag -> {
+                    tag.setStatus(TagStatus.INACTIVE);
+                    tagRepository.save(tag);
+                    log.info("Retired Tag: {} ({})", tag.getCode(), type);
+                });
     }
 
     private void seedTag(String code, String nameVi, String nameEn, TagType type, int weight) {

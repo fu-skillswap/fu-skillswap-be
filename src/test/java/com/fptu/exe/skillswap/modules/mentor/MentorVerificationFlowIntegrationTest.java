@@ -11,6 +11,10 @@ import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
+import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
+import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
+import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -76,6 +80,9 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private TagRepository tagRepository;
+
+    @Autowired
+    private MentorTagRepository mentorTagRepository;
 
     @Autowired
     private MentorProfileService mentorProfileService;
@@ -249,6 +256,39 @@ class MentorVerificationFlowIntegrationTest {
         assertTrue(first.created());
         assertFalse(second.created());
         assertEquals(first.data().requestId(), second.data().requestId());
+    }
+
+    @Test
+    void requestToBecomeMentor_existingDraftWithLegacyProfileMissingSupportLevelsShouldNotThrow() {
+        UUID mentorId = mentorUser.getId();
+        MentorProfile profile = new MentorProfile();
+        profile.setUser(mentorUser);
+        profile.setStatus(MentorStatus.DRAFT);
+        profile.setHeadline("Legacy mentor profile");
+        profile.setExpertiseDescription("Legacy profile before support levels existed");
+        profile.setPhoneNumber("0912345678");
+        profile.setAvailable(true);
+        MentorProfile savedProfile = mentorProfileRepository.save(profile);
+
+        Tag activeTag = tagRepository.save(Tag.builder()
+                .code("TEST_LEGACY_HELP_TOPIC_" + Math.abs(mentorId.hashCode()))
+                .nameVi("Chủ đề legacy")
+                .type(TagType.HELP_TOPIC)
+                .status(TagStatus.ACTIVE)
+                .build());
+        mentorTagRepository.save(MentorTag.builder()
+                .id(new MentorTagId(mentorId, activeTag.getId(), MentorTagType.HELP_TOPIC))
+                .mentorProfile(savedProfile)
+                .tag(activeTag)
+                .build());
+
+        var first = mentorVerificationService.requestToBecomeMentor(mentorId);
+        var second = mentorVerificationService.requestToBecomeMentor(mentorId);
+
+        assertTrue(first.created());
+        assertFalse(second.created());
+        assertFalse(second.data().checklist().mentorProfileCompleted());
+        assertFalse(second.data().checklist().canSubmit());
     }
 
     @Test

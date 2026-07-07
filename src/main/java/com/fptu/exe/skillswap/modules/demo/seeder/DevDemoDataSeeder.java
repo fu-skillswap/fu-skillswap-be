@@ -468,15 +468,18 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
     private Map<String, Tag> loadHelpTopics() {
         List<String> codes = List.of(
-                "HELP_CV_REVIEW",
-                "HELP_INTERVIEW",
+                "HELP_STUDY_PLAN",
+                "HELP_MAJOR_ORIENTATION",
                 "HELP_CAREER_PATH",
                 "HELP_INTERNSHIP",
-                "HELP_PROJECT_REVIEW",
+                "HELP_CV_REVIEW",
+                "HELP_INTERVIEW",
                 "HELP_GRADUATION_THESIS",
-                "HELP_PRODUCT_FEEDBACK",
+                "HELP_FOREIGN_LANGUAGE",
+                "HELP_CAMPUS_LIFE",
+                "HELP_INFORMATION",
                 "HELP_QA",
-                "HELP_STUDY_PLAN"
+                "HELP_PROJECT_REVIEW"
         );
         Map<String, Tag> tags = new HashMap<>();
         for (String code : codes) {
@@ -548,7 +551,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CTTT_TTDPM",
                 10,
                 21,
-                List.of("HELP_PROJECT_REVIEW", "HELP_PRODUCT_FEEDBACK", "HELP_QA"),
+                List.of("HELP_PROJECT_REVIEW", "HELP_INFORMATION", "HELP_QA"),
                 "Communication Mentor",
                 "Presentation, storytelling, teamwork, UX explanation, demo pitching",
                 "COM101, COM102, PRJ301",
@@ -586,7 +589,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CNTT_TKDHMT",
                 10,
                 41,
-                List.of("HELP_PROJECT_REVIEW", "HELP_PRODUCT_FEEDBACK", "HELP_QA"),
+                List.of("HELP_PROJECT_REVIEW", "HELP_INFORMATION", "HELP_QA"),
                 "Design Mentor",
                 "UI design, visual storytelling, product demo, frontend presentation, design review",
                 "WEB101, UIX201, PRJ301",
@@ -707,7 +710,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 new RandomTrack("CNTT", "CNTT_ATTT", List.of("HELP_CV_REVIEW", "HELP_QA"), "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, 95),
                 new RandomTrack("CNTT", "CNTT_HTTT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, 105),
                 new RandomTrack("CNTT", "CNTT_TTNT", List.of("HELP_INTERVIEW", "HELP_STUDY_PLAN"), "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, 175),
-                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PRODUCT_FEEDBACK"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, 90),
+                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PROJECT_REVIEW"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, 90),
                 new RandomTrack("NN", "NN_NNA", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, 115),
                 new RandomTrack("LUAT", "LUAT_LKT", List.of("HELP_QA", "HELP_STUDY_PLAN"), "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, 80),
                 new RandomTrack("QTKD", "QTKD_MKT", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, 100),
