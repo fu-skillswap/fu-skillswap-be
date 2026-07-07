@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.infrastructure.storage;
 import com.fptu.exe.skillswap.infrastructure.config.R2Properties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -17,7 +17,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnBean(S3Client.class)
+@ConditionalOnProperty(prefix = "application.r2", name = "enabled", havingValue = "true")
 public class R2DocumentStorageService {
 
     private final S3Client s3Client;
