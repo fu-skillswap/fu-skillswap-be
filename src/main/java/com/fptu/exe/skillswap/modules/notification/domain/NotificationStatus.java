@@ -4,5 +4,6 @@ public enum NotificationStatus {
     PENDING,
     SENT,
     FAILED,
-    READ
+    READ,
+    FATAL_ERROR
 }

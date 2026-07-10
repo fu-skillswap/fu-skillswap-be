@@ -29,6 +29,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "forum_posts", indexes = {
+        @Index(name = "idx_forum_posts_status_last_activity_id", columnList = "status, last_activity_at DESC, id"),
         @Index(name = "idx_forum_posts_status_created", columnList = "status, created_at"),
         @Index(name = "idx_forum_posts_help_topic_created", columnList = "help_topic_id, created_at"),
         @Index(name = "idx_forum_posts_author_created", columnList = "author_user_id, created_at")
@@ -97,6 +98,12 @@ public class ForumPost {
 
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "image_urls", columnDefinition = "jsonb")
+    @Builder.Default
+    private java.util.List<String> imageUrls = new java.util.ArrayList<>();
+
 
     @PrePersist
     protected void onCreate() {

@@ -1,48 +1,52 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.forum.domain.ForumActionLog;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
-import com.fptu.exe.skillswap.modules.forum.repository.ForumActionLogRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import lombok.RequiredArgsConstructor;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.Bucket;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
 @Service
-@RequiredArgsConstructor
 public class ForumAbuseGuardService {
 
-    private final ForumActionLogRepository forumActionLogRepository;
+    private final Cache<String, Bucket> buckets = Caffeine.newBuilder()
+            .maximumSize(10000)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
 
-    @Transactional
     public void checkAndLog(User user, ForumActionType actionType) {
-        LocalDateTime now = DateTimeUtil.now();
-        LocalDateTime cutoff = switch (actionType) {
-            case CREATE_POST -> now.minusMinutes(10);
-            case CREATE_COMMENT -> now.minusMinutes(10);
-            case CREATE_REPORT -> now.minusMinutes(30);
-            case TOGGLE_REACTION -> now.minusMinutes(10);
-        };
-        long currentCount = forumActionLogRepository.countByUserIdAndActionTypeAndCreatedAtAfter(user.getId(), actionType, cutoff);
-        long limit = switch (actionType) {
+        String key = user.getId().toString() + "_" + actionType.name();
+        Bucket bucket = buckets.get(key, k -> createNewBucket(actionType));
+        if (bucket != null && !bucket.tryConsume(1)) {
+            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, buildMessage(actionType));
+        }
+    }
+
+    private Bucket createNewBucket(ForumActionType actionType) {
+        long capacity = switch (actionType) {
             case CREATE_POST -> 5;
             case CREATE_COMMENT -> 20;
             case CREATE_REPORT -> 10;
             case TOGGLE_REACTION -> 60;
         };
-        if (currentCount >= limit) {
-            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, buildMessage(actionType));
-        }
-        forumActionLogRepository.save(ForumActionLog.builder()
-                .user(user)
-                .actionType(actionType)
-                .createdAt(now)
-                .build());
+        Duration refillPeriod = switch (actionType) {
+            case CREATE_POST -> Duration.ofMinutes(10);
+            case CREATE_COMMENT -> Duration.ofMinutes(10);
+            case CREATE_REPORT -> Duration.ofMinutes(30);
+            case TOGGLE_REACTION -> Duration.ofMinutes(10);
+        };
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(capacity)
+                .refillGreedy(capacity, refillPeriod)
+                .build();
+        return Bucket.builder().addLimit(limit).build();
     }
 
     private String buildMessage(ForumActionType actionType) {

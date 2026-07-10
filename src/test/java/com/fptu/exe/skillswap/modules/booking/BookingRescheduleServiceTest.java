@@ -20,6 +20,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.session.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -60,6 +61,8 @@ class BookingRescheduleServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private SessionService sessionService;
+    @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private BookingRescheduleService bookingRescheduleService;
@@ -80,6 +83,7 @@ class BookingRescheduleServiceTest {
                 notificationService,
                 auditLogRepository,
                 userRepository,
+                sessionService,
                 eventPublisher
         );
 

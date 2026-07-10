@@ -25,7 +25,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "forum_action_logs", indexes = {
-        @Index(name = "idx_forum_action_logs_user_action_created", columnList = "user_id, action_type, created_at")
+        @Index(name = "idx_forum_action_logs_user_action_created", columnList = "user_id, action_type, created_at DESC")
 })
 @Getter
 @Setter

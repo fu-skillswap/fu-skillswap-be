@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileOptionsRe
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSupportLevelOptionResponse;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +21,7 @@ public class CatalogService {
 
     private final TagRepository tagRepository;
 
+    @Cacheable(cacheNames = "catalog", key = "'helpTopics'")
     public List<HelpTopicResponse> getHelpTopics() {
         return tagRepository.findByTypeAndStatusOrderByWeightDescNameViAsc(TagType.HELP_TOPIC, TagStatus.ACTIVE)
                 .stream()
@@ -27,6 +29,7 @@ public class CatalogService {
                 .toList();
     }
 
+    @Cacheable(cacheNames = "catalog", key = "'mentorProfileOptions'")
     public MentorProfileOptionsResponse getMentorProfileOptions() {
         List<MentorSupportLevelOptionResponse> foundationLevels = List.of(
                 MentorSupportLevelOptionResponse.builder().value(1).label("Gợi ý nhanh để mentee tự ôn lại").build(),

@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.conversation.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.modules.conversation.domain.Conversation;
 import com.fptu.exe.skillswap.modules.conversation.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.conversation.domain.ConversationSourceType;
@@ -12,11 +13,20 @@ import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.conversation.event.ChatMessageRealtimeDelivery;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
+import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,6 +45,9 @@ public class ConversationService {
     private final MessageRepository messageRepository;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
+    private final CursorCodec cursorCodec;
+    private final DomainEventOutboxService domainEventOutboxService;
+    private final RealtimeOutboxProperties realtimeOutboxProperties;
 
     @Transactional
     public Conversation createDirectForAcceptedBooking(Booking booking) {
@@ -173,6 +186,57 @@ public class ConversationService {
     }
 
     @Transactional(readOnly = true)
+    public CursorPageResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse> getMyConversations(UUID userId,
+                                                                                                                               String cursor,
+                                                                                                                               Integer limit) {
+        int resolvedLimit = defaultLimit(limit, 20);
+        String filterHash = "conversations|userId=" + userId;
+        DecodedCursor decodedCursor = decodeCursor(cursor, filterHash, "conversation");
+        List<Conversation> conversationWindow = conversationRepository.findConversationWindowByParticipant(
+                userId,
+                decodedCursor.sortAt(),
+                decodedCursor.entityId(),
+                resolvedLimit + 1
+        );
+        boolean hasNext = conversationWindow.size() > resolvedLimit;
+        List<Conversation> visibleConversations = hasNext
+                ? conversationWindow.subList(0, resolvedLimit)
+                : conversationWindow;
+
+        List<UUID> conversationIds = visibleConversations.stream()
+                .map(Conversation::getId)
+                .toList();
+        List<ConversationParticipant> allParticipants = conversationIds.isEmpty()
+                ? List.of()
+                : participantRepository.findByConversationIdInWithUser(conversationIds);
+        Map<UUID, List<ConversationParticipant>> participantsByConvId = allParticipants.stream()
+                .collect(java.util.stream.Collectors.groupingBy(cp -> cp.getConversation().getId()));
+        List<Object[]> unreadCountsRaw = conversationIds.isEmpty()
+                ? List.of()
+                : messageRepository.countUnreadMessagesBatch(conversationIds, userId);
+        Map<UUID, Long> unreadCountsMap = unreadCountsRaw.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> (UUID) row[0],
+                        row -> (Long) row[1],
+                        (a, b) -> a
+                ));
+        List<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse> items = visibleConversations.stream()
+                .map(conv -> mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap))
+                .toList();
+        String nextCursor = hasNext && !visibleConversations.isEmpty()
+                ? encodeNextConversationCursor(visibleConversations.get(visibleConversations.size() - 1), filterHash)
+                : null;
+        return CursorPageResponse.<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse>builder()
+                .items(items)
+                .nextCursor(nextCursor)
+                .prevCursor(null)
+                .hasNext(hasNext)
+                .hasPrev(false)
+                .limit(resolvedLimit)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
     public org.springframework.data.domain.Page<com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse> getMessages(UUID conversationId, UUID userId, org.springframework.data.domain.Pageable pageable, com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository messageRepository) {
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
@@ -192,6 +256,42 @@ public class ConversationService {
                         .build());
     }
 
+    @Transactional(readOnly = true)
+    public CursorPageResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse> getMessages(UUID conversationId,
+                                                                                                                     UUID userId,
+                                                                                                                     String cursor,
+                                                                                                                     Integer limit) {
+        ensureParticipant(conversationId, userId);
+        internalTelemetryService.record("CHAT_OPENED", userId, "CONVERSATION", conversationId, java.util.Map.of());
+        int resolvedLimit = defaultLimit(limit, 30);
+        String filterHash = "messages|conversationId=" + conversationId + "|viewer=" + userId;
+        DecodedCursor decodedCursor = decodeCursor(cursor, filterHash, "message");
+        List<com.fptu.exe.skillswap.modules.conversation.domain.Message> messageWindow = messageRepository.findMessageWindow(
+                conversationId,
+                decodedCursor.sortAt(),
+                decodedCursor.entityId(),
+                resolvedLimit + 1
+        );
+        boolean hasNext = messageWindow.size() > resolvedLimit;
+        List<com.fptu.exe.skillswap.modules.conversation.domain.Message> visibleMessages = hasNext
+                ? messageWindow.subList(0, resolvedLimit)
+                : messageWindow;
+        List<com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse> items = visibleMessages.stream()
+                .map(message -> toMessageResponse(message, userId))
+                .toList();
+        String nextCursor = hasNext && !visibleMessages.isEmpty()
+                ? encodeNextMessageCursor(visibleMessages.get(visibleMessages.size() - 1), filterHash)
+                : null;
+        return CursorPageResponse.<com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse>builder()
+                .items(items)
+                .nextCursor(nextCursor)
+                .prevCursor(null)
+                .hasNext(hasNext)
+                .hasPrev(false)
+                .limit(resolvedLimit)
+                .build();
+    }
+
     @Transactional
     public com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse sendMessage(UUID conversationId, UUID userId, com.fptu.exe.skillswap.modules.conversation.dto.request.SendMessageRequest request, com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository messageRepository, com.fptu.exe.skillswap.modules.identity.repository.UserRepository userRepository) {
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
@@ -200,6 +300,10 @@ public class ConversationService {
 
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
+
+        if (com.fptu.exe.skillswap.modules.conversation.domain.ConversationStatus.LOCKED.equals(conversation.getStatus())) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, "Cuộc hội thoại này đã bị khóa.");
+        }
 
         User sender = userRepository.findById(userId)
                 .orElseThrow(() -> new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND, "Không tìm thấy người dùng"));
@@ -238,11 +342,28 @@ public class ConversationService {
                 .build();
 
         java.util.List<ConversationParticipant> participants = participantRepository.findByConversationId(conversation.getId());
+
+        java.util.List<UUID> recipientIds = participants.stream()
+                .map(p -> p.getUser().getId())
+                .filter(id -> !id.equals(userId))
+                .toList();
+
+        java.util.Map<UUID, Long> unreadCountsMap = java.util.Collections.emptyMap();
+        if (!recipientIds.isEmpty()) {
+            java.util.List<Object[]> unreadCountsRaw = messageRepository.countUnreadMessagesForParticipants(conversation.getId(), recipientIds);
+            unreadCountsMap = unreadCountsRaw.stream()
+                    .collect(java.util.stream.Collectors.toMap(
+                            row -> (UUID) row[0],
+                            row -> (Long) row[1]
+                    ));
+        }
+
+        final java.util.Map<UUID, Long> finalUnreadCountsMap = unreadCountsMap;
+
         java.util.List<ChatMessageRealtimeDelivery> deliveries = participants.stream()
                 .filter(p -> !p.getUser().getId().equals(userId))
                 .map(p -> {
-                    java.time.LocalDateTime lastRead = p.getLastReadAt() != null ? p.getLastReadAt() : p.getJoinedAt();
-                    long unreadCount = messageRepository.countUnreadMessages(conversation.getId(), p.getUser().getId(), lastRead);
+                    long unreadCount = finalUnreadCountsMap.getOrDefault(p.getUser().getId(), 0L);
                     com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent recipientEvent =
                             com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
                                     .conversationId(event.conversationId())
@@ -260,7 +381,7 @@ public class ConversationService {
                 })
                 .collect(java.util.stream.Collectors.toList());
 
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.conversation.event.ChatMessageSavedEvent(event, deliveries));
+        enqueueRealtimeOutbox(conversation, message, sender, participants);
 
         return com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
                 .id(message.getId())
@@ -382,6 +503,202 @@ public class ConversationService {
         if (me.getLastReadAt() == null || me.getLastReadAt().isBefore(now)) {
             me.setLastReadAt(now);
             participantRepository.save(me);
+            if (realtimeOutboxProperties.isEnabled()) {
+                domainEventOutboxService.enqueue(
+                        "CONVERSATION",
+                        conversationId,
+                        DomainEventOutboxEventTypes.CHAT_UNREAD_COUNT_UPDATED,
+                        new ChatUnreadCountUpdatedPayload(conversationId, userId)
+                );
+                domainEventOutboxService.enqueue(
+                        "CONVERSATION",
+                        conversationId,
+                        DomainEventOutboxEventTypes.CHAT_CONVERSATION_UPDATED,
+                        new ChatConversationUpdatedPayload(conversationId, userId)
+                );
+            }
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<ChatMessageRealtimeDelivery> buildChatMessageDeliveries(UUID conversationId, UUID messageId, UUID senderId) {
+        com.fptu.exe.skillswap.modules.conversation.domain.Message message = messageRepository.findById(messageId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tin nhắn"));
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
+        List<ConversationParticipant> participants = participantRepository.findByConversationId(conversationId);
+        return participants.stream()
+                .filter(p -> !p.getUser().getId().equals(senderId))
+                .map(p -> new ChatMessageRealtimeDelivery(
+                        p.getUser().getId(),
+                        com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
+                                .conversationId(conversationId)
+                                .messageId(messageId)
+                                .senderId(senderId)
+                                .senderName(message.getSender() != null ? message.getSender().getFullName() : "Hệ thống")
+                                .messageType(message.getMessageType())
+                                .content(message.getContent())
+                                .createdAt(message.getCreatedAt())
+                                .conversationType(conversation.getType())
+                                .isSelf(false)
+                                .unreadCount(resolveUnreadCountForParticipant(conversationId, p))
+                                .build()
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UUID> getConversationParticipantUserIds(UUID conversationId) {
+        return participantRepository.findByConversationId(conversationId).stream()
+                .map(p -> p.getUser().getId())
+                .toList();
+    }
+
+    private com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse mapConversationResponse(
+            Conversation conv,
+            UUID userId,
+            Map<UUID, List<ConversationParticipant>> participantsByConvId,
+            Map<UUID, Long> unreadCountsMap) {
+        List<ConversationParticipant> participants = participantsByConvId.getOrDefault(conv.getId(), java.util.Collections.emptyList());
+        ConversationParticipant other = participants.stream()
+                .filter(p -> !p.getUser().getId().equals(userId))
+                .findFirst()
+                .orElse(null);
+        long unread = unreadCountsMap.getOrDefault(conv.getId(), 0L);
+        return com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse.builder()
+                .id(conv.getId())
+                .sourceType(conv.getSourceType())
+                .sourceId(conv.getSourceId())
+                .type(conv.getType())
+                .status(conv.getStatus())
+                .otherUserId(other != null ? other.getUser().getId() : null)
+                .otherUserName(other != null ? other.getUser().getFullName() : null)
+                .otherUserAvatarUrl(other != null ? other.getUser().getAvatarUrl() : null)
+                .lastMessageContent(conv.getLastMessageContent())
+                .lastMessageAt(conv.getLastMessageAt())
+                .createdAt(conv.getCreatedAt())
+                .unreadCount(unread)
+                .build();
+    }
+
+    private com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse toMessageResponse(
+            com.fptu.exe.skillswap.modules.conversation.domain.Message msg,
+            UUID userId) {
+        return com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
+                .id(msg.getId())
+                .conversationId(msg.getConversation().getId())
+                .senderId(msg.getSender() != null ? msg.getSender().getId() : null)
+                .senderName(msg.getSender() != null ? msg.getSender().getFullName() : "Hệ thống")
+                .messageType(msg.getMessageType())
+                .content(msg.getContent())
+                .createdAt(msg.getCreatedAt())
+                .isMine(msg.getSender() != null && msg.getSender().getId().equals(userId))
+                .build();
+    }
+
+    private void ensureParticipant(UUID conversationId, UUID userId) {
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
+        }
+    }
+
+    private int defaultLimit(Integer limit, int defaultValue) {
+        int resolved = limit == null || limit <= 0 ? defaultValue : limit;
+        return Math.min(resolved, 50);
+    }
+
+    private DecodedCursor decodeCursor(String cursor, String expectedFilterHash, String entityLabel) {
+        if (cursor == null || cursor.isBlank()) {
+            return DecodedCursor.empty();
+        }
+        CursorTokenPayload payload = cursorCodec.decode(cursor);
+        if (!expectedFilterHash.equals(payload.filterHash())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không khớp với bộ lọc hiện tại");
+        }
+        if (payload.sortKey() == null || payload.secondaryKey() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không hợp lệ");
+        }
+        try {
+            return new DecodedCursor(
+                    LocalDateTime.parse(payload.sortKey()),
+                    UUID.fromString(payload.secondaryKey())
+            );
+        } catch (RuntimeException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor chứa " + entityLabel + " window không hợp lệ", ex);
+        }
+    }
+
+    private String encodeNextConversationCursor(Conversation conversation, String filterHash) {
+        return cursorCodec.encode(CursorTokenPayload.builder()
+                .sortKey(resolveConversationActivityAt(conversation).toString())
+                .secondaryKey(conversation.getId().toString())
+                .direction("NEXT")
+                .filterHash(filterHash)
+                .issuedAt(Instant.now())
+                .build());
+    }
+
+    private String encodeNextMessageCursor(com.fptu.exe.skillswap.modules.conversation.domain.Message message, String filterHash) {
+        return cursorCodec.encode(CursorTokenPayload.builder()
+                .sortKey(message.getCreatedAt().toString())
+                .secondaryKey(message.getId().toString())
+                .direction("NEXT")
+                .filterHash(filterHash)
+                .issuedAt(Instant.now())
+                .build());
+    }
+
+    private LocalDateTime resolveConversationActivityAt(Conversation conversation) {
+        return conversation.getLastMessageAt() != null ? conversation.getLastMessageAt() : conversation.getCreatedAt();
+    }
+
+    private record DecodedCursor(LocalDateTime sortAt, UUID entityId) {
+        private static DecodedCursor empty() {
+            return new DecodedCursor(null, null);
+        }
+    }
+
+    private void enqueueRealtimeOutbox(Conversation conversation,
+                                       com.fptu.exe.skillswap.modules.conversation.domain.Message message,
+                                       User sender,
+                                       List<ConversationParticipant> participants) {
+        if (!realtimeOutboxProperties.isEnabled()) {
+            return;
+        }
+        domainEventOutboxService.enqueue(
+                "CONVERSATION",
+                conversation.getId(),
+                DomainEventOutboxEventTypes.CHAT_MESSAGE_CREATED,
+                new ChatMessageCreatedPayload(conversation.getId(), message.getId(), sender.getId())
+        );
+        domainEventOutboxService.enqueue(
+                "CONVERSATION",
+                conversation.getId(),
+                DomainEventOutboxEventTypes.CHAT_CONVERSATION_UPDATED,
+                new ChatConversationUpdatedPayload(conversation.getId(), sender.getId())
+        );
+        participants.stream()
+                .map(ConversationParticipant::getUser)
+                .filter(user -> user != null && user.getId() != null)
+                .forEach(user -> domainEventOutboxService.enqueue(
+                        "CONVERSATION",
+                        conversation.getId(),
+                        DomainEventOutboxEventTypes.CHAT_UNREAD_COUNT_UPDATED,
+                        new ChatUnreadCountUpdatedPayload(conversation.getId(), user.getId())
+                ));
+    }
+
+    private long resolveUnreadCountForParticipant(UUID conversationId, ConversationParticipant participant) {
+        LocalDateTime lastRead = participant.getLastReadAt() != null ? participant.getLastReadAt() : participant.getJoinedAt();
+        return messageRepository.countUnreadMessages(conversationId, participant.getUser().getId(), lastRead);
+    }
+
+    public record ChatMessageCreatedPayload(UUID conversationId, UUID messageId, UUID senderId) {
+    }
+
+    public record ChatConversationUpdatedPayload(UUID conversationId, UUID actorUserId) {
+    }
+
+    public record ChatUnreadCountUpdatedPayload(UUID conversationId, UUID recipientUserId) {
     }
 }

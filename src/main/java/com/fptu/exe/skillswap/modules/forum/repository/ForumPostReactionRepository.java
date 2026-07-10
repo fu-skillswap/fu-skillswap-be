@@ -24,4 +24,8 @@ public interface ForumPostReactionRepository extends JpaRepository<ForumPostReac
             """)
     List<UUID> findReactedPostIdsByUserIdAndPostIdIn(@Param("userId") UUID userId,
                                                      @Param("postIds") Collection<UUID> postIds);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from ForumPostReaction r where r.post.id = :postId")
+    void deleteByPostId(@Param("postId") UUID postId);
 }

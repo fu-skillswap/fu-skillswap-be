@@ -68,17 +68,20 @@ class AcademicServiceTest {
         
         Campus campus = new Campus();
         campus.setId(request.getCampusId());
-        lenient().when(campusRepository.findById(request.getCampusId())).thenReturn(Optional.of(campus));
+        campus.setActive(true);
+        lenient().when(campusRepository.findByIdAndIsActiveTrue(request.getCampusId())).thenReturn(Optional.of(campus));
 
         AcademicProgram program = new AcademicProgram();
         program.setId(request.getProgramId());
-        lenient().when(academicProgramRepository.findById(request.getProgramId())).thenReturn(Optional.of(program));
+        program.setActive(true);
+        lenient().when(academicProgramRepository.findByIdAndIsActiveTrue(request.getProgramId())).thenReturn(Optional.of(program));
 
         Specialization specialization = new Specialization();
         specialization.setId(request.getSpecializationId());
         specialization.setCode("SE");
         specialization.setProgram(program);
-        lenient().when(specializationRepository.findById(request.getSpecializationId())).thenReturn(Optional.of(specialization));
+        specialization.setActive(true);
+        lenient().when(specializationRepository.findByIdAndIsActiveTrue(request.getSpecializationId())).thenReturn(Optional.of(specialization));
     }
 
     @Test
@@ -162,6 +165,33 @@ class AcademicServiceTest {
 
         assertTrue(response.isAlumni());
         assertEquals(9, response.getSemester());
+    }
+
+    @Test
+    void updateStudentProfile_whenSpecializationDoesNotBelongToProgram_shouldReject() {
+        UUID otherProgramId = UUID.randomUUID();
+        AcademicProgram otherProgram = new AcademicProgram();
+        otherProgram.setId(otherProgramId);
+        otherProgram.setActive(true);
+
+        Specialization mismatchedSpecialization = new Specialization();
+        mismatchedSpecialization.setId(request.getSpecializationId());
+        mismatchedSpecialization.setCode("SE");
+        AcademicProgram anotherProgram = new AcademicProgram();
+        anotherProgram.setId(UUID.randomUUID());
+        anotherProgram.setActive(true);
+        mismatchedSpecialization.setProgram(anotherProgram);
+        mismatchedSpecialization.setActive(true);
+
+        when(academicProgramRepository.findByIdAndIsActiveTrue(request.getProgramId())).thenReturn(Optional.of(otherProgram));
+        when(specializationRepository.findByIdAndIsActiveTrue(request.getSpecializationId())).thenReturn(Optional.of(mismatchedSpecialization));
+        when(campusRepository.findByIdAndIsActiveTrue(request.getCampusId())).thenReturn(Optional.of(new Campus()));
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> academicService.updateStudentProfile(userId, request));
+
+        assertEquals("Chuyên ngành không thuộc ngành học đã chọn", exception.getMessage());
+        verify(studentProfileRepository, never()).save(any(StudentProfile.class));
     }
 
     @Test

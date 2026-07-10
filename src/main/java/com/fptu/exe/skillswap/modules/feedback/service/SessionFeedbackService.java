@@ -81,7 +81,7 @@ public class SessionFeedbackService {
 
         // If the reviewee is a Mentor, recalculate and update their MentorProfile stats
         if (reviewee.getId().equals(mentor.getId())) {
-            updateMentorRatingStats(mentorProfile.getUserId());
+            updateMentorRatingStats(mentorProfile.getUserId(), request.getRating());
         }
 
         notificationService.createNotification(
@@ -96,15 +96,20 @@ public class SessionFeedbackService {
         return toResponse(feedback);
     }
 
-    private void updateMentorRatingStats(UUID mentorUserId) {
+    private void updateMentorRatingStats(UUID mentorUserId, int newRating) {
         MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
         entityManager.refresh(lockedProfile);
-        long count = sessionFeedbackRepository.countFeedbacksByRevieweeId(mentorUserId);
-        Double avg = sessionFeedbackRepository.getAverageRatingByRevieweeId(mentorUserId);
-
-        lockedProfile.setTotalReviews((int) count);
-        lockedProfile.setAverageRating(avg == null ? BigDecimal.ZERO : BigDecimal.valueOf(avg).setScale(2, RoundingMode.HALF_UP));
+        
+        int currentCount = lockedProfile.getTotalReviews() == null ? 0 : lockedProfile.getTotalReviews();
+        BigDecimal currentAvg = lockedProfile.getAverageRating() == null ? BigDecimal.ZERO : lockedProfile.getAverageRating();
+        
+        // O(1) Incremental Update: NewAvg = ((OldAvg * OldCount) + NewRating) / (OldCount + 1)
+        BigDecimal newSum = currentAvg.multiply(BigDecimal.valueOf(currentCount)).add(BigDecimal.valueOf(newRating));
+        BigDecimal newAvg = newSum.divide(BigDecimal.valueOf(currentCount + 1), 2, RoundingMode.HALF_UP);
+        
+        lockedProfile.setTotalReviews(currentCount + 1);
+        lockedProfile.setAverageRating(newAvg);
         mentorProfileRepository.save(lockedProfile);
     }
 

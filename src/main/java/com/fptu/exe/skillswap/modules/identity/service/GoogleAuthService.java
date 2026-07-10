@@ -86,14 +86,22 @@ public class GoogleAuthService {
     }
 
     private GoogleUserInfo toUserInfo(GoogleIdToken.Payload payload) {
+        return fromOpenIdProfile(
+                payload.getSubject() != null ? String.valueOf(payload.getSubject()) : null,
+                payload.getEmail() != null ? String.valueOf(payload.getEmail()) : null,
+                payload.get("name") != null ? String.valueOf(payload.get("name")) : null,
+                payload.get("picture") != null ? String.valueOf(payload.get("picture")) : null,
+                Boolean.TRUE.equals(payload.getEmailVerified())
+        );
+    }
+
+    public GoogleUserInfo fromOpenIdProfile(String sub, String email, String name, String picture, boolean emailVerified) {
         GoogleUserInfo info = new GoogleUserInfo();
-        info.setIss(payload.getIssuer() != null ? String.valueOf(payload.getIssuer()) : null);
-        info.setSub(payload.getSubject() != null ? String.valueOf(payload.getSubject()) : null);
-        info.setAud(payload.getAudience() != null ? String.valueOf(payload.getAudience()) : null);
-        info.setEmail(payload.getEmail() != null ? String.valueOf(payload.getEmail()) : null);
-        info.setEmail_verified(String.valueOf(payload.getEmailVerified()));
-        info.setName(payload.get("name") != null ? String.valueOf(payload.get("name")) : null);
-        info.setPicture(payload.get("picture") != null ? String.valueOf(payload.get("picture")) : null);
+        info.setSub(sub);
+        info.setEmail(email);
+        info.setEmail_verified(String.valueOf(emailVerified));
+        info.setName(name);
+        info.setPicture(picture);
         return info;
     }
 

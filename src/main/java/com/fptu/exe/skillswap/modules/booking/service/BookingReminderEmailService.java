@@ -79,6 +79,78 @@ public class BookingReminderEmailService {
         return sent;
     }
 
+    public int sendAutoCloseWarningEmails() {
+        LocalDateTime now = DateTimeUtil.now();
+        // 48 hours after selectedEndTime means there is exactly 24 hours left before the 72h POST_SESSION_REVIEW_WINDOW
+        // We look for selectedEndTime between now - 48h - 1min and now - 48h
+        LocalDateTime endExclusive = now.minusHours(48);
+        LocalDateTime startInclusive = endExclusive.minusMinutes(1);
+        
+        List<Booking> bookings = bookingRepository.findBookingsAboutToAutoClose(
+                BookingStatus.AWAITING_MENTEE_CONFIRMATION,
+                startInclusive,
+                endExclusive
+        );
+
+        int sent = 0;
+        for (Booking booking : bookings) {
+            if (sendMenteeAutoCloseWarning(booking)) sent++;
+            if (sendMentorAutoCloseWarning(booking)) sent++;
+        }
+        return sent;
+    }
+
+    private boolean sendMenteeAutoCloseWarning(Booking booking) {
+        if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) {
+            return false;
+        }
+        EmailPayload payload = buildSessionReminderPayload(
+                booking,
+                "[SkillSwap] Sắp tự động đóng buổi học",
+                "Buổi học sắp tự động đóng",
+                "Đang chờ xác nhận",
+                defaultText(booking.getMentee().getFullName(), "bạn"),
+                mentorName(booking),
+                "Chỉ còn 24 giờ nữa buổi học với " + mentorName(booking) + " sẽ tự động đóng và giải ngân cho mentor.",
+                "Vui lòng vào SkillSwap để xác nhận hoàn tất hoặc báo cáo sự cố nếu có.",
+                "Đến trang quản lý"
+        );
+        return emailDispatchService.sendHtmlOnce(
+                "BOOKING_AUTO_CLOSE_WARNING_MENTEE:" + booking.getId(),
+                booking.getMentee().getEmail(),
+                payload.subject(),
+                payload.html(),
+                payload.plainText(),
+                "BOOKING_AUTO_CLOSE_WARNING_MENTEE"
+        );
+    }
+
+    private boolean sendMentorAutoCloseWarning(Booking booking) {
+        if (booking == null || booking.getId() == null || booking.getMentorProfile() == null
+                || booking.getMentorProfile().getUser() == null || !hasText(booking.getMentorProfile().getUser().getEmail())) {
+            return false;
+        }
+        EmailPayload payload = buildSessionReminderPayload(
+                booking,
+                "[SkillSwap] Sắp giải ngân tiền học phí",
+                "Sắp giải ngân tiền học phí",
+                "Đang chờ xác nhận",
+                mentorName(booking),
+                menteeName(booking),
+                "Chỉ còn 24 giờ nữa buổi học với " + menteeName(booking) + " sẽ tự động đóng. Nếu không có khiếu nại, tiền sẽ được chuyển vào ví của bạn.",
+                "Theo dõi trạng thái buổi mentoring trên hệ thống.",
+                "Đến trang quản lý"
+        );
+        return emailDispatchService.sendHtmlOnce(
+                "BOOKING_AUTO_CLOSE_WARNING_MENTOR:" + booking.getId(),
+                booking.getMentorProfile().getUser().getEmail(),
+                payload.subject(),
+                payload.html(),
+                payload.plainText(),
+                "BOOKING_AUTO_CLOSE_WARNING_MENTOR"
+        );
+    }
+
     private boolean sendMenteeReminder(Booking booking) {
         if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) {
             return false;

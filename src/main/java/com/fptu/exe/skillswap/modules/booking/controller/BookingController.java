@@ -62,6 +62,7 @@ public class BookingController {
      */
     @PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @PostMapping
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateBookingRequest request) {

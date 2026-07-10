@@ -51,4 +51,22 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
             @Param("toTime") LocalDateTime toTime,
             Pageable pageable
     );
+
+    java.util.List<EmailOutbox> findTop10ByStatusAndRetryCountLessThanOrderByCreatedAtAsc(NotificationStatus status, int retryCount);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+        update EmailOutbox e 
+        set e.status = :status, e.lastError = :errorLog, e.retryCount = e.retryCount + 1, e.sentAt = case when :status = 'SENT' then current_timestamp else e.sentAt end
+        where e.id = :id
+    """)
+    void updateStatus(@Param("id") UUID id, @Param("status") NotificationStatus status, @Param("errorLog") String errorLog);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+        update EmailOutbox e 
+        set e.status = 'FATAL_ERROR', e.lastError = 'Exceeded maximum retries'
+        where e.status = 'FAILED' and e.retryCount >= :maxRetries
+    """)
+    int updateFailedToFatalError(@Param("maxRetries") int maxRetries);
 }

@@ -8,10 +8,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 
 @RestController
@@ -30,7 +32,8 @@ public class CatalogController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách help topics")
     })
     @GetMapping("/help-topics")
-    public ApiResponse<List<HelpTopicResponse>> getHelpTopics() {
+    public ApiResponse<List<HelpTopicResponse>> getHelpTopics(HttpServletResponse response) {
+        applyCacheHeader(response);
         return ApiResponse.success(catalogService.getHelpTopics());
     }
 
@@ -42,7 +45,12 @@ public class CatalogController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách option mentor profile")
     })
     @GetMapping("/mentor-profile-options")
-    public ApiResponse<MentorProfileOptionsResponse> getMentorProfileOptions() {
+    public ApiResponse<MentorProfileOptionsResponse> getMentorProfileOptions(HttpServletResponse response) {
+        applyCacheHeader(response);
         return ApiResponse.success(catalogService.getMentorProfileOptions());
+    }
+
+    private void applyCacheHeader(HttpServletResponse response) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
     }
 }

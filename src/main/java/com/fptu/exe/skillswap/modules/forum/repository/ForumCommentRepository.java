@@ -19,7 +19,7 @@ import java.util.Collection;
 import java.util.List;
 
 @Repository
-public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID> {
+public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID>, ForumCommentRepositoryCustom {
 
     @EntityGraph(attributePaths = {"authorUser", "post", "post.helpTopic"})
     Page<ForumComment> findByPostIdAndStatus(UUID postId, ForumCommentStatus status, Pageable pageable);
@@ -68,4 +68,7 @@ public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID
             @Param("content") String content,
             @Param("createdAfter") LocalDateTime createdAfter
     );
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("update ForumComment c set c.deletedAt = current_timestamp where c.post.id = :postId")
+    void softDeleteByPostId(@Param("postId") UUID postId);
 }

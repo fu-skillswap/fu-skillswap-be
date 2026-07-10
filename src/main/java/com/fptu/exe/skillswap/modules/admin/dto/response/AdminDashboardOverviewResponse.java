@@ -22,6 +22,10 @@ public record AdminDashboardOverviewResponse(
         @Schema(description = "Breakdown số payment order theo raw payment order status. Key giữ nguyên theo enum name.", example = "{\"PENDING\":2,\"FAILED\":1,\"PAID\":9}")
         Map<String, Long> paymentOrders,
         @Schema(description = "Breakdown số email outbox theo raw notification status. Key giữ nguyên theo enum name.", example = "{\"PENDING\":4,\"FAILED\":2,\"SENT\":10}")
-        Map<String, Long> emailOutbox
+        Map<String, Long> emailOutbox,
+        @Schema(description = "Khối số liệu tài chính hệ thống.")
+        AdminDashboardFinancialOverviewResponse financial,
+        @Schema(description = "Khối số liệu retention và conversion.")
+        AdminDashboardRetentionOverviewResponse retention
 ) {
 }

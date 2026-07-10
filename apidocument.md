@@ -1,1653 +1,245 @@
-# SkillSwap API Document
-
-Tài liệu này phản ánh API backend hiện tại của SkillSwap dựa trên code trong `src/main/java`.
-
-## 1. Quy ước chung
-
-- Mọi API đều trả về `ApiResponse<T>` hoặc `ResponseEntity<ApiResponse<T>>`.
-- `bearerAuth`: dùng JWT Access Token qua header `Authorization: Bearer <token>`.
-- Refresh token:
-  - được rotate khi login / refresh
-  - được trả qua HttpOnly cookie
-  - `POST /api/auth/refresh` và `POST /api/auth/logout` vẫn có thể nhận refresh token từ body nếu FE cần
-- Các status code thường gặp:
-  - `200 OK`: thành công
-  - `201 Created`: tạo mới thành công
-  - `400 Bad Request`: dữ liệu sai
-  - `401 Unauthorized`: chưa đăng nhập / token sai
-  - `403 Forbidden`: không đủ quyền
-  - `404 Not Found`: không tìm thấy tài nguyên
-  - `409 Conflict`: xung đột nghiệp vụ
-  - `413 Payload Too Large`: file vượt dung lượng
-
-## 2. Authentication
-
-### POST `/api/auth/google`
-- Auth: Public
-- Mục đích: đăng nhập Google bằng `idToken`, backend phát hành access token của SkillSwap.
-- Request body:
-  - `idToken` `string`
-- Ghi chú:
-  - Notification hiển thị cho user thường, không bao gồm admin queue nội bộ.
-  - Các `type` user-facing dùng ở beta gồm booking lifecycle, reschedule, feedback, forum moderation cho owner và `ACCOUNT_UNLOCKED`.
-- Response:
-  - `TokenResponse`
-    - `accessToken`
-    - `refreshToken` (thường được set null trong body vì trả qua HttpOnly cookie)
-    - `tokenType`
-
-### POST `/api/auth/refresh`
-- Auth: Public
-- Mục đích: cấp access token mới.
-- Request body:
-  - `refreshToken` `string` nullable nếu FE dùng cookie
-- Response:
-  - `TokenResponse`
-
-### POST `/api/auth/logout`
-- Auth: Public
-- Mục đích: thu hồi refresh token hiện tại.
-- Request body:
-  - `refreshToken` `string` nullable nếu FE dùng cookie
-- Response:
-  - `string`
-
-### GET `/api/auth/me`
-- Auth: `bearerAuth`
-- Mục đích: lấy thông tin user hiện tại để FE quyết định onboarding / dashboard / mentor flow.
-- Response:
-  - `UserMeResponse`
-    - `publicId`
-    - `email`
-    - `fullName`
-    - `avatarUrl`
-    - `status`
-    - `roles`
-    - `profileCompleted`
-    - `hasStudentProfile`
-
-## 3. Academic / Onboarding
-
-### GET `/api/campuses`
-- Auth: Public
-- Response: `List<CampusResponse>`
-
-### GET `/api/academic-programs`
-- Auth: Public
-- Response: `List<AcademicProgramResponse>`
-
-### GET `/api/specializations`
-- Auth: Public
-- Response: `List<SpecializationResponse>`
-
-### GET `/api/academic-programs/{programId}/specializations`
-- Auth: Public
-- Path param:
-  - `programId` `UUID`
-- Response:
-  - `List<SpecializationResponse>`
-
-### GET `/api/me/student-profile`
-- Auth: `bearerAuth`
-- Mục đích: lấy hồ sơ học thuật hiện tại.
-- Response:
-  - `StudentProfileResponse`
-    - `userId`, `email`, `studentCode`, `displayName`, `avatarUrl`
-    - `campus`, `program`, `specialization`
-    - `semester`, `intakeYear`, `isAlumni`, `graduationYear`
-    - `bio`, `createdAt`, `updatedAt`
-
-### PUT `/api/me/student-profile`
-- Auth: `bearerAuth`
-- Mục đích: tạo/cập nhật hồ sơ học thuật.
-- Request body:
-  - `StudentProfileRequest`
-    - `studentCode` `string`
-    - `displayName` `string` nullable
-    - `avatarUrl` `string` nullable
-    - `campusId` `UUID`
-    - `programId` `UUID`
-    - `specializationId` `UUID`
-    - `semester` `integer`
-    - `intakeYear` `integer`
-    - `isAlumni` `boolean`
-    - `graduationYear` `integer` nullable
-    - `bio` `string` nullable
-
-## 4. Catalog
-
-### GET `/api/catalog/help-topics`
-- Auth: Public
-- Mục đích: lấy help topics dùng cho mentor profile, mentor service, discovery filter.
-- Response: `List<HelpTopicResponse>`
-
-### GET `/api/catalog/mentor-profile-options`
-- Auth: Public
-- Mục đích: lấy label mức support 1..4 để FE render form mentor profile.
-- Response:
-  - `foundationSupportLevels`
-  - `outputReviewSupportLevels`
-  - `directionSupportLevels`
-
-## 5. Mentee Matching Profile
-
-### GET `/api/me/matching-profile`
-- Auth: `bearerAuth`
-- Mục đích: lấy trạng thái trả lời active questionnaire và normalized features cho Smart Matching.
-- Response:
-  - `exists`
-  - `currentActivationCompleted`
-  - `latestAnsweredAt`
-  - `activeActivationId`, `activeVersionId`, `activeVersionNumber`
-  - `foundationNeedLevel`
-  - `outputReviewNeedLevel`
-  - `directionNeedLevel`
-  - `mentorFitCode`
-  - `durationPreferenceCode`
-  - `latestAnswerCodes`
-
-### GET `/api/me/matching-profile/questionnaire`
-- Auth: `bearerAuth`
-- Mục đích: lấy 5 câu hỏi nhu cầu mentoring đang active.
-- Response:
-  - `activationId`
-  - `versionId`
-  - `versionNumber`
-  - `phase` = `ACTIVE`
-  - `questions[]`
-
-Semantic question codes:
-- `Q1_FOUNDATION_LEVEL`
-- `Q2_OUTPUT_REVIEW_LEVEL`
-- `Q3_DIRECTION_LEVEL`
-- `Q4_MENTOR_FIT`
-- `Q5_DURATION_PREFERENCE`
-
-### PUT `/api/me/matching-profile`
-- Auth: `bearerAuth`
-- Mục đích: lưu 5 câu trả lời nhu cầu mentoring.
-- Request body:
-  - `phase` `string` optional/compatibility
-  - `question1AnswerCode`
-  - `question2AnswerCode`
-  - `question3AnswerCode`
-  - `question4AnswerCode`
-  - `question5AnswerCode`
-
-### Admin questionnaire APIs
-- `GET /api/admin/mentoring-questionnaire/versions`
-- `GET /api/admin/mentoring-questionnaire/versions/{versionId}`
-- `POST /api/admin/mentoring-questionnaire/versions`
-- `POST /api/admin/mentoring-questionnaire/activate`
-- `GET /api/admin/mentoring-questionnaire/active`
-
-## 6. Mentor Profile
-
-### GET `/api/me/mentor-profile`
-- Auth: `bearerAuth`
-- Mục đích: lấy hồ sơ mentor của user hiện tại.
-- Response:
-  - `MentorProfileResponse`
-    - `exists`
-    - `requiredFieldsCompleted`
-    - `userId`, `email`, `displayName`, `avatarUrl`
-    - `mentorStatus`
-    - `headline`, `expertiseDescription`
-    - `isAvailable`
-    - `bookingSuspendedUntil`
-    - `lateCancellationPenaltyPoints`
-    - `verifiedAt`
-    - `helpTopics`
-    - `subjectResults`
-    - `foundationSupportLevel`, `outputReviewSupportLevel`, `directionSupportLevel`
-    - `featuredProjects`, `achievements`
-    - `githubUrl`, `portfolioUrl`
-    - `phoneNumber`
-    - `ratingAverage`, `reviewCount`, `completedSessions`
-    - `createdAt`, `updatedAt`
-
-### PUT `/api/me/mentor-profile`
-- Auth: `bearerAuth`
-- Mục đích: tạo/cập nhật hồ sơ mentor.
-- Request body:
-  - `MentorProfileUpsertRequest`
-    - `headline` `string`
-    - `expertiseDescription` `string`
-    - `isAvailable` `boolean` nullable
-    - `helpTopicIds` `List<UUID>`
-    - `subjectResults` `List<{subjectCode, subjectName, scoreValue}>`
-    - `foundationSupportLevel` `integer` 1..4
-    - `outputReviewSupportLevel` `integer` 1..4
-    - `directionSupportLevel` `integer` 1..4
-    - `githubUrl` `string` nullable
-    - `portfolioUrl` `string` nullable
-    - `phoneNumber` `string`
-
-### Mentor optional profile items
-- `GET/POST/PUT/DELETE /api/me/mentor-projects`
-- `PUT /api/me/mentor-projects/{projectId}/picture`
-- `GET/POST/PUT/DELETE /api/me/mentor-achievements`
-- `featuredProjects` và `achievements` là optional, không bắt buộc để submit verification.
-
-## 7. Mentor Services
-
-### GET `/api/me/mentor-services`
-- Auth: `bearerAuth`, role `MENTOR`
-- Query params:
-  - `active=true|false|all` (mặc định `all`)
-- Mục đích: xem danh sách mentor services của mình, bao gồm cả service bật/tắt hoặc soft delete tùy filter.
-- Response: `List<MentorServiceResponse>`
-  - `serviceId`
-  - `mentorUserId`
-  - `title`
-  - `description`
-  - `expectedOutcome`
-  - `durationMinutes`
-  - `free`
-  - `priceScoin`
-  - `active`
-  - `helpTopics`
-  - `createdAt`
-  - `updatedAt`
-
-### GET `/api/me/mentor-services/{serviceId}`
-- Auth: `bearerAuth`, role `MENTOR`
-- Response: `MentorServiceResponse`
-
-### POST `/api/me/mentor-services`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `MentorServiceUpsertRequest`
-    - `title` `string`
-    - `description` `string`
-    - `expectedOutcome` `string`
-    - `durationMinutes` `integer`
-    - `isFree` `boolean`
-    - `priceScoin` `integer`
-    - `helpTopicIds` `List<UUID>`
-
-### PUT `/api/me/mentor-services/{serviceId}`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body: `MentorServiceUpsertRequest`
-- Response: `MentorServiceResponse`
-
-### PATCH `/api/me/mentor-services/{serviceId}/active`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `MentorServiceActiveRequest`
-    - `active` `boolean`
-
-### DELETE `/api/me/mentor-services/{serviceId}`
-- Auth: `bearerAuth`, role `MENTOR`
-- Mục đích: xóa mềm service.
-
-## 7. Mentor Discovery / Search / Ranking
-
-### GET `/api/mentors/recommendations`
-- Auth: `bearerAuth`
-- Query params:
-  - `limit` `int` (mặc định `12`)
-- Mục đích: lấy mentor gợi ý cho dashboard.
-- Response: `List<MentorRecommendationResponse>`
-  - `mentor` (`MentorDiscoveryCardResponse`)
-  - `matchScore`
-  - `matchReasons`
-
-### GET `/api/mentors`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `keyword`
-  - `tagIds`
-  - `campusId`
-  - `specializationId`
-- Ghi chú:
-  - `sortBy=relevance` là default cho discovery.
-  - Hệ thống không dùng `isAvailable` như filter query chính thức ở endpoint này.
-  - Search/ranking đọc câu trả lời mentee, help topics, môn - điểm, support levels, project, achievement và service text.
-- Response: `PageResponse<MentorDiscoveryCardResponse>`
-  - `mentorUserId`
-  - `displayName`
-  - `avatarUrl`
-  - `headline`
-  - `expertiseDescription`
-  - `subjectResults`
-  - `foundationSupportLevel`
-  - `outputReviewSupportLevel`
-  - `directionSupportLevel`
-  - `featuredProjects`
-  - `achievements`
-  - `isAvailable`
-  - `ratingAverage`
-  - `reviewCount`
-  - `completedSessions`
-  - `verifiedAt`
-  - `campusId`, `campusName`
-  - `programId`, `programName`
-  - `specializationId`, `specializationName`
-  - `matchScore` (%)
-  - `helpTopicTags`
-
-### GET `/api/mentors/{mentorUserId}`
-- Auth: `bearerAuth`
-- Mục đích: xem detail public của mentor.
-- Response: `MentorDiscoveryDetailResponse`
-  - `mentorUserId`
-  - `displayName`
-  - `avatarUrl`
-  - `headline`
-  - `bio`
-  - `expertiseDescription`
-  - `subjectResults`
-  - `foundationSupportLevel`
-  - `outputReviewSupportLevel`
-  - `directionSupportLevel`
-  - `featuredProjects`
-  - `achievements`
-  - `isAvailable`
-  - `bookingSuspendedUntil`
-  - `ratingAverage`
-  - `reviewCount`
-  - `completedSessions`
-  - `verifiedAt`
-  - `campusId`, `campusName`
-  - `programId`, `programName`
-  - `specializationId`, `specializationName`
-  - `semester`
-  - `alumni`
-  - `portfolioUrl`, `githubUrl`
-  - `helpTopicTags`
-  - `services`
-
-### GET `/api/mentors/{mentorUserId}/availability`
-- Auth: `bearerAuth`
-- Legacy alias của `/api/mentors/{mentorUserId}/availability-slots`.
-- Nên bỏ khỏi flow FE mới để tránh trùng contract.
-- Query params:
-  - `fromDate`
-  - `toDate`
-- Response: `List<MentorAvailabilitySlotResponse>`
-  - `slotId`
-  - `startTime`
-  - `endTime`
-  - `timezone`
-  - `durationMinutes` (legacy convenience field, suy ra từ `endTime - startTime`)
-  - `teachingMode`
-  - `pendingRequestCount` (tổng số request `PENDING` hiện có trong parent slot)
-  - `acceptedSlotCount` (số booking `ACCEPTED` hiện có trong parent slot)
-  - `maxPendingRequests` (legacy, FE mới không nên dùng ở parent slot)
-  - `remainingRequestSlots` (legacy, FE mới không nên dùng ở parent slot)
-  - `services` (mỗi service có `serviceId`, `durationMinutes`, giá)
-
-### GET `/api/mentors/{mentorUserId}/availability-slots`
-- Auth: `bearerAuth`
-- Endpoint chính FE nên dùng.
-- Trả về parent slots và danh sách `services` đã gắn vào từng slot.
-- Không nhận `serviceId` ở bước này vì đây là bước chọn slot cha trước.
-- Sau khi user chọn 1 service trong `services`, FE gọi `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...`.
-
-### GET `/api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates`
-- Auth: `bearerAuth`
-- Query params:
-  - `serviceId` `UUID`
-- Response: `ServiceSlotCandidatesResponse`
-  - `slotId`
-  - `serviceId`
-  - `serviceDurationMinutes`
-  - `candidateServiceSlots`
-    - `startTime`
-    - `endTime`
-    - `pendingCount`
-    - `remainingPendingQuota`
-    - `isSelectable`
-    - `reasonIfBlocked`
-    - `blockedByAcceptedBooking`
-    - `blockingBookingId`
-    - `blockingServiceId`
-    - `blockingServiceTitle`
-    - `blockedBySameService`
-    - `blockedByDifferentService`
-    - `bookingConflictNote`
-
-### GET `/api/mentors/{mentorUserId}/reviews`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-- Response: `PageResponse<MentorReviewResponse>`
-
-## 8. Mentor Verification - User Flow
-
-### POST `/api/me/mentor-verification/request`
-- Auth: `bearerAuth`
-- Mục đích: khởi tạo hoặc lấy hồ sơ xác thực mentor hiện tại.
-- Response: `MentorVerificationRequestResponse`
-  - `requestId`
-  - `mentorUserId`
-  - `status`
-  - `submitNote`
-  - `reviewNote`
-  - `rejectionReason`
-  - `revisionCount`
-  - `submittedAt`
-  - `termsAcceptedAt`
-  - `termsVersion`
-  - `reviewedAt`
-  - `createdAt`
-  - `updatedAt`
-  - `documents`
-  - `timeline`
-  - `checklist`
-  - `allowedActions`
-
-### GET `/api/me/mentor-verification`
-- Auth: `bearerAuth`
-- Mục đích: lấy hồ sơ mentor verification mới nhất của user, gồm cả request đã kết thúc để FE khôi phục wizard.
-
-### GET `/api/me/mentor-verification/timeline`
-- Auth: `bearerAuth`
-- Mục đích: lấy timeline của request mới nhất.
-
-### GET `/api/me/mentor-verification/documents/{documentId}`
-- Auth: `bearerAuth`
-- Mục đích: lấy chi tiết một document thuộc request mới nhất.
-
-### POST `/api/me/mentor-verification/documents`
-- Auth: `bearerAuth`
-- Content-Type: `multipart/form-data`
-- Mục đích: backend nhận file minh chứng, upload lên R2 và lưu metadata.
-- Form data:
-  - `documentType` `VerificationDocumentType`
-    - `FPTU_AFFILIATION_PROOF`
-    - `EXPERTISE_PROOF`
-  - `file` `MultipartFile`
-- Giới hạn:
-  - `FPTU_AFFILIATION_PROOF`: tối đa 1 file active.
-  - `EXPERTISE_PROOF`: tối đa 3 file active.
-  - Hỗ trợ JPG, PNG, PDF, tối đa 15MB.
-- Response: `MentorVerificationRequestResponse`
-
-### POST `/api/me/mentor-verification/submit`
-- Auth: `bearerAuth`
-- Request body:
-  - `MentorVerificationSubmitRequest`
-    - `submitNote` `string` nullable
-    - `termsAccepted` `boolean`
-
-### DELETE `/api/me/mentor-verification/documents/{documentId}`
-- Auth: `bearerAuth`
-- Mục đích: xóa mềm document khỏi request hiện tại.
-
-### POST `/api/me/mentor-verification/withdraw`
-- Auth: `bearerAuth`
-- Mục đích: rút request mentor verification hiện tại.
-
-## 9. Mentor Verification - Admin Flow
-
-### GET `/api/admin/mentor-verification/requests`
-- Auth: `bearerAuth`, role `ADMIN`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `status` (default `PENDING_REVIEW`)
-  - `keyword`
-  - `submittedFrom`
-  - `submittedTo`
-- Ghi chú:
-  - mặc định sort theo `submittedAt ASC`
-- Response: `PageResponse<AdminMentorVerificationQueueItemResponse>`
-  - `requestId`
-  - `mentorUserId`
-  - `mentorEmail`
-  - `mentorFullName`
-  - `mentorAvatarUrl`
-  - `status`
-  - `revisionCount`
-  - `submittedAt`
-  - `createdAt`
-  - `updatedAt`
-
-### GET `/api/admin/mentor-verification/requests/{requestId}`
-- Auth: `bearerAuth`, role `ADMIN`
-- Response: `AdminMentorVerificationRequestResponse`
-  - `requestId`
-  - `mentorUserId`
-  - `mentorEmail`
-  - `mentorFullName`
-  - `mentorAvatarUrl`
-  - `status`
-  - `submitNote`
-  - `reviewNote`
-  - `rejectionReason`
-  - `revisionCount`
-  - `reviewerEmail`
-  - `lockedByAdminEmail`
-  - `lockedAt`
-  - `lockExpiresAt`
-  - `canReview`
-  - `submittedAt`
-  - `termsAcceptedAt`
-  - `termsVersion`
-  - `reviewedAt`
-  - `approvedAt`
-  - `withdrawnAt`
-  - `createdAt`
-  - `updatedAt`
-  - `documents`
-  - `timeline`
-  - `checklist`
-  - `mentorProfile`
-  - `studentProfile`
-
-### GET `/api/admin/mentor-verification/requests/{requestId}/lock`
-- Auth: `bearerAuth`, role `ADMIN`
-- Response: `AdminMentorVerificationLockResponse`
-
-### POST `/api/admin/mentor-verification/requests/{requestId}/lock/refresh`
-- Auth: `bearerAuth`, role `ADMIN`
-
-### POST `/api/admin/mentor-verification/requests/{requestId}/lock/release`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: giải phóng soft lock của một mentor verification request mà không đổi `status`.
-- Rule:
-  - owner hiện tại của lock được tự release
-  - `SYSTEM_ADMIN` được force release lock của admin khác
-  - chỉ clear `lockedBy`, `lockedAt`, `lockExpiresAt`
-
-### POST `/api/admin/mentor-verification/requests/{requestId}/request-revision`
-- Auth: `bearerAuth`, role `ADMIN`
-- Request body:
-  - `AdminMentorVerificationReviewRequest`
-    - `note` `string`
-
-### POST `/api/admin/mentor-verification/requests/{requestId}/approve`
-- Auth: `bearerAuth`, role `ADMIN`
-- Request body:
-  - `AdminMentorVerificationReviewRequest` nullable
-
-### POST `/api/admin/mentor-verification/requests/{requestId}/reject`
-- Auth: `bearerAuth`, role `ADMIN`
-- Request body:
-  - `AdminMentorVerificationReviewRequest`
-    - `note` `string`
-
-## 10. Booking
-
-### POST `/api/bookings`
-- Auth: `bearerAuth`
-- Defense-in-depth:
-  - `ADMIN` and `SYSTEM_ADMIN` bị chặn ở controller
-  - `MENTOR` vẫn có thể tạo booking như một mentee hợp lệ nếu business rule cho phép
-- Request body:
-  - `CreateBookingRequest`
-    - `availabilitySlotId` `UUID`
-    - `serviceId` `UUID`
-    - `selectedStartTime` `LocalDateTime`
-    - `selectedEndTime` `LocalDateTime`
-    - `learningGoalTitle` `string`
-    - `learningGoalDescription` `string` nullable
-- Response:
-  - `BookingResponse`
-
-> Ghi chú contract:
-> - `sessionId` và `sessionStatus` là field legacy alias để giữ tương thích ngược.
-> - `actualSessionId` và `actualSessionStatus` là field nguồn sự thật cho session thật do backend tạo từ booking.
-> - FE mới nên ưu tiên đọc `actualSessionId` và `actualSessionStatus` khi có mặt.
-
-### GET `/api/me/bookings`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`, `status`, `role`
-- Mục đích: xem booking theo góc nhìn mentee hoặc mentor.
-
-### GET `/api/me/bookings/{bookingId}`
-- Auth: `bearerAuth`
-
-### POST `/api/me/bookings/{bookingId}/cancel`
-- Auth: `bearerAuth`
-- Request body:
-  - `CancelBookingRequest`
-    - `cancelReason` `string`
-- Rule:
-  - booking `PENDING`: mentee hủy tự do
-  - booking `ACCEPTED`:
-    - trước `6h`: refund `100%` về ví Scoin mentee
-    - sau `6h`: mentee mất `50%`, trong đó `35%` vào ví mentor, `15%` commission app
-
-### POST `/api/me/bookings/{bookingId}/complete`
-- Auth: `bearerAuth`
-- Mục đích: alias chuyển tiếp:
-  - nếu current user là mentor -> mentor complete
-  - nếu là participant còn lại -> confirm sau session
-- Request body:
-  - `CompleteBookingRequest`
-    - `completionNote` `string` nullable
-
-### POST `/api/me/bookings/{bookingId}/confirm`
-- Auth: `bearerAuth`
-- Request body:
-  - `ConfirmBookingRequest`
-    - `confirmationNote` `string` nullable
-
-### POST `/api/me/bookings/{bookingId}/issue`
-- Auth: `bearerAuth`
-- Request body:
-  - `SubmitBookingIssueRequest`
-    - `issueType` `BookingIssueType`
-      - hiện có: `NO_SHOW_OR_QUALITY_OR_OTHER`
-    - `description` `string`
-    - `wantsAdminReview` `boolean`
-- Response:
-  - `BookingIssueResponse`
-    - `bookingId`
-    - `status`
-    - `issueSubmittedAt`
-
-### Mentor actions
-
-#### POST `/api/mentor/bookings/{bookingId}/accept`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `AcceptBookingRequest`
-    - `mentorResponseNote` `string` nullable
-
-#### POST `/api/mentor/bookings/{bookingId}/reject`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `RejectBookingRequest`
-    - `rejectReason` `string`
-    - `mentorResponseNote` `string` nullable
-
-#### POST `/api/mentor/bookings/{bookingId}/cancel`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `CancelBookingRequest`
-    - `cancelReason` `string`
-- Rule:
-  - chỉ hủy được khi booking đang `ACCEPTED`
-  - mentor hủy thì mentee được refund `100%` về ví Scoin
-  - mentor vẫn bị penalty theo mốc hệ thống:
-    - `< 6h`: suspend nhận booking 3 ngày
-    - `>= 6h` và `< 12h`: cộng `0.5` penalty points
-
-#### POST `/api/mentor/bookings/{bookingId}/complete`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `CompleteBookingRequest`
-    - `completionNote` `string` nullable
-
-#### PATCH `/api/mentor/bookings/{bookingId}/meeting-link`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `SaveMeetingLinkRequest`
-    - `meetingPlatform` `MeetingPlatform`
-    - `meetingLink` `string`
-    - `location` `string` nullable
-
-### Admin booking
-
-#### GET `/api/admin/bookings`
-- Auth: `bearerAuth`, role `ADMIN`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`, `status`, `mentorUserId`, `menteeUserId`
-
-#### GET `/api/admin/bookings/{bookingId}`
-- Auth: `bearerAuth`, role `ADMIN`
-
-### Booking Reschedule
-
-#### POST `/api/me/bookings/{bookingId}/reschedule-requests`
-- Auth: `bearerAuth`
-- Mục đích: mentee tạo reschedule request cho booking `ACCEPTED`
-- Request body:
-  - `CreateBookingRescheduleRequest`
-    - `proposedSlotId` `UUID`
-    - `proposedSelectedStartTime` `LocalDateTime`
-    - `proposedSelectedEndTime` `LocalDateTime`
-    - `reason` `string`
-- Rule:
-  - chỉ tạo được nếu còn ít nhất `6h` trước giờ học cũ
-  - mỗi booking chỉ được reschedule tối đa `1 lần`
-  - không được đổi service
-  - không giữ slot tạm
-
-#### GET `/api/me/bookings/{bookingId}/reschedule-requests`
-- Auth: `bearerAuth`
-- Mục đích: mentee/mentor xem lịch sử reschedule của booking
-
-#### POST `/api/me/bookings/reschedule-requests/{requestId}/accept`
-- Auth: `bearerAuth`
-- Mục đích: participant còn lại accept request
-- Request body:
-  - `RespondBookingRescheduleRequest`
-    - `reason` `string`
-- Rule:
-  - mentee tạo -> chỉ mentor accept
-  - mentor tạo -> chỉ mentee accept
-  - requester không được tự accept
-  - request chỉ còn hiệu lực đến mốc `currentStartTime - 2h`
-
-#### POST `/api/me/bookings/reschedule-requests/{requestId}/reject`
-- Auth: `bearerAuth`
-- Mục đích: participant còn lại reject request
-- Request body:
-  - `RespondBookingRescheduleRequest`
-    - `reason` `string`
-
-#### POST `/api/mentor/bookings/{bookingId}/reschedule-requests`
-- Auth: `bearerAuth`, role `MENTOR`
-- Mục đích: mentor tạo reschedule request cho booking `ACCEPTED`
-
-#### POST `/api/mentor/bookings/reschedule-requests/{requestId}/accept`
-- Auth: `bearerAuth`, role `MENTOR`
-
-#### POST `/api/mentor/bookings/reschedule-requests/{requestId}/reject`
-- Auth: `bearerAuth`, role `MENTOR`
-
-#### GET `/api/admin/bookings/{bookingId}/reschedule-requests`
-- Auth: `bearerAuth`, role `ADMIN`
-- Mục đích: admin xem history reschedule của booking khi cần support/dispute
-
-#### POST `/api/admin/bookings/reschedule-requests/{requestId}/force-approve`
-- Auth: `bearerAuth`, role `ADMIN`
-- Request body:
-  - `RespondBookingRescheduleRequest`
-    - `reason` `string`
-- Rule:
-  - admin chỉ force approve request đã tồn tại
-  - bắt buộc có `reason`
-  - có audit log
-
-#### POST `/api/admin/bookings/reschedule-requests/{requestId}/force-reject`
-- Auth: `bearerAuth`, role `ADMIN`
-- Request body:
-  - `RespondBookingRescheduleRequest`
-    - `reason` `string`
-- Rule:
-  - admin chỉ force reject request đã tồn tại
-  - bắt buộc có `reason`
-  - có audit log
-
-## 11. Booking Availability / Slot-Service Mapping
-
-### PUT `/api/me/availability-slots/{slotId}/services`
-- Auth: `bearerAuth`, role `MENTOR`
-- Mục đích: mentor thay toàn bộ danh sách service được gắn vào một availability slot.
-- Request body:
-  - `ReplaceAvailabilitySlotServicesRequest`
-    - `serviceIds` `List<UUID>`
-- Response:
-  - `MentorManagedAvailabilitySlotResponse`
-
-> Ghi chú: hiện tại code public chỉ có endpoint gắn service vào slot. Các method `getMyRules/createRule/updateRule/deleteRule` tồn tại trong service nội bộ nhưng không có public controller.
-
-## 12. Session Feedback / Review & Rating
-
-### POST `/api/bookings/{bookingId}/feedback`
-- Auth: `bearerAuth`
-- Mục đích: mentee gửi feedback cho booking đã hoàn thành.
-- Request body:
-  - `SubmitFeedbackRequest`
-    - `rating` `integer` 1..5
-    - `satisfactionLevel` `integer` 1..5 nullable
-    - `comment` `string` nullable
-    - `wouldRecommend` `boolean` nullable
-    - `isPublic` `boolean` nullable
-- Response:
-  - `SessionFeedbackResponse`
-- Ghi chú:
-  - chỉ mentee của booking mới gửi được
-  - booking phải ở trạng thái completed
-  - một booking chỉ có một feedback
-
-## 13. Conversation / Chat
-
-### GET `/api/me/conversations`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-- Mục đích: lấy inbox conversation của user hiện tại.
-- Response:
-  - `PageResponse<ConversationResponse>`
-    - `id`
-    - `sourceType`
-    - `sourceId`
-    - `type`
-    - `status`
-    - `otherUserId`
-    - `otherUserName`
-    - `otherUserAvatarUrl`
-    - `lastMessageContent`
-    - `lastMessageAt`
-    - `createdAt`
-
-### GET `/api/me/conversations/{conversationId}/messages`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-- Response:
-  - `PageResponse<MessageResponse>`
-    - `id`
-    - `conversationId`
-    - `senderId`
-    - `senderName`
-    - `messageType`
-    - `content`
-    - `createdAt`
-    - `isMine`
-- Ghi chú:
-  - API đang trả newest-first
-
-### POST `/api/me/conversations/{conversationId}/messages`
-- Auth: `bearerAuth`
-- Request body:
-  - `SendMessageRequest`
-    - `content` `string`
-- Response:
-  - `MessageResponse`
-- Ghi chú:
-  - REST là source of truth
-  - gửi xong sẽ đẩy realtime qua WebSocket
-
-## 14. Notification
-
-### GET `/api/me/notifications`
-- Auth: `bearerAuth`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `unreadOnly` `boolean` (mặc định `false`)
-- Response:
-  - `PageResponse<NotificationResponse>`
-    - `notificationId`
-    - `type`
-    - `title`
-    - `message`
-    - `relatedEntityType`
-    - `relatedEntityId`
-    - `read`
-    - `readAt`
-    - `createdAt`
-
-### GET `/api/me/notifications/unread-count`
-- Auth: `bearerAuth`
-- Response:
-  - `UnreadCountResponse`
-    - `unreadCount`
-
-### PATCH `/api/me/notifications/{id}/read`
-- Auth: `bearerAuth`
-
-### PATCH `/api/me/notifications/read-all`
-- Auth: `bearerAuth`
-- Ghi chú:
-  - chỉ hỗ trợ HTTP `PATCH`
-  - nếu FE gọi `PUT` hoặc method khác, backend trả `405 Method Not Allowed`
-
-## 15. Wallet
-
-### GET `/api/me/credit-wallet`
-- Auth: `bearerAuth`, role `MENTEE`
-- Mục đích: xem ví Scoin của mentee/user hiện tại.
-- Response:
-  - `CreditWalletResponse`
-    - `availableScoin`
-    - `recentTransactions` (tối đa 15 giao dịch gần nhất)
-      - `id`
-      - `entryType`
-      - `originType`
-      - `sourceType`
-      - `sourceId`
-      - `amountScoin`
-      - `balanceEffectScoin`
-      - `memo`
-      - `createdAt`
-
-### GET `/api/me/mentor-wallet`
-- Auth: `bearerAuth`, role `MENTOR`
-- Mục đích: xem settlement earnings của mentor.
-- Response:
-  - `MentorWalletResponse`
-    - `availableScoin`
-    - `recentTransactions` (tối đa 15 giao dịch gần nhất)
-      - cùng shape như `WalletTransactionResponse`
-
-## 16. Payment / PayOS
-
-> [!NOTE]
-> **Cơ chế Phụ thu (Surcharge) & Hoa hồng (Commission)**:
-> - **Đối với Mentee**: Mọi giá dịch vụ hiển thị cho Mentee (Discovery, Detail, Slot Availability) đã tự động cộng thêm **10% phụ thu**.
-> - **Đối với Mentor**: Mentor tự quản lý dịch vụ vẫn nhìn thấy giá gốc ban đầu họ nhập ($P$). Khi buổi học hoàn tất, Mentor chịu **10% chiết khấu hoa hồng** trên giá gốc.
-> - **Ví dụ thực tế**: Mentor nhập giá gốc 100 Scoin.
->   - Mentee nhìn thấy giá dịch vụ là **110 Scoin** (được hiển thị tại `priceScoin`).
->   - Khi Checkout, Mentee thanh toán tổng cộng **110 Scoin** (trước coupon/credit).
->   - Mentor thực nhận về ví: **90 Scoin**.
->   - Nền tảng (Platform) thu chênh lệch hoa hồng: **20 Scoin** (10 Scoin phụ thu từ Mentee + 10 Scoin chiết khấu từ Mentor).
->   - Đối với dịch vụ miễn phí (giá gốc = 0), phụ thu và hoa hồng đều bằng 0.
-
-### POST `/api/me/payment-orders/checkout`
-- Auth: `bearerAuth`
-- Mục đích: tạo payment order cho booking và trả hosted payment link.
-- Request body:
-  - `PaymentCheckoutRequest`
-    - `bookingId` `UUID`
-    - `couponCode` `string` nullable
-- Response:
-  - `PaymentCheckoutResponse`
-    - `paymentOrderId`
-    - `orderCode`
-    - `bookingId`
-    - `attemptNo`
-    - `basePriceScoin`
-    - `couponDiscountScoin`
-    - `campaignCreditAppliedScoin`
-    - `userCreditAppliedScoin`
-    - `remainingPayableScoin`
-    - `remainingPayableVnd`
-    - `status`
-    - `paymentProvider`
-    - `providerOrderCode`
-    - `providerPaymentLinkId`
-    - `providerStatus`
-    - `checkoutUrl`
-    - `paymentLink`
-    - `expiresAt`
-
-### GET `/api/me/payment-orders/{bookingId}`
-- Auth: `bearerAuth`
-- Mục đích: poll trạng thái payment order theo booking.
-
-### POST `/api/payments/webhook/payos`
-- Auth: Public
-- Mục đích: nhận webhook PayOS, verify chữ ký, idempotent, chốt trạng thái payment.
-- Request body:
-  - `PaymentWebhookRequest`
-    - `code`
-    - `desc`
-    - `success`
-    - `data.orderCode`
-    - `signature`
-    - các field data khác do PayOS gửi
-
-## 17. Payout Profiles / Payout Requests
-
-### POST `/api/mentor/payout-profiles`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `MentorPayoutProfileUpsertRequest`
-    - `accountHolderName`
-    - `bankCode` nullable
-    - `bankName`
-    - `accountNumber`
-    - `isDefault` nullable
-    - `isActive` nullable
-
-### PUT `/api/mentor/payout-profiles/{payoutProfileId}`
-- Auth: `bearerAuth`, role `MENTOR`
-
-### GET `/api/mentor/payout-profiles`
-- Auth: `bearerAuth`, role `MENTOR`
-
-### POST `/api/mentor/payout-requests`
-- Auth: `bearerAuth`, role `MENTOR`
-- Request body:
-  - `PayoutRequestCreateRequest`
-    - `amountScoin` `integer`
-    - `payoutProfileId` `UUID` nullable
-    - `note` `string` nullable
-- Response:
-  - `PayoutRequestResponse`
-    - `payoutRequestId`
-    - `mentorUserId`
-    - `settlementAccountId`
-    - `payoutProfileId`
-    - `amountScoin`
-    - `status`
-    - `bankAccountNameSnapshot`
-    - `bankNameSnapshot`
-    - `bankAccountNumberMaskedSnapshot`
-    - `adminUserId`
-    - `adminNote`
-    - `requestedAt`
-    - `reviewedAt`
-    - `approvedAt`
-    - `paidAt`
-    - `rejectedAt`
-
-### GET `/api/mentor/payout-requests`
-- Auth: `bearerAuth`, role `MENTOR`
-
-### POST `/api/admin/payout-requests/{payoutRequestId}/approve`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `AdminNoteRequest` nullable
-
-### POST `/api/admin/payout-requests/{payoutRequestId}/reject`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `AdminNoteRequest` nullable
-
-### POST `/api/admin/payout-requests/{payoutRequestId}/mark-paid`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `AdminNoteRequest` nullable
-
-## 18. Forum
-
-### User forum
-
-### GET `/api/forum/posts`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Query params:
-  - `page`, `size`
-  - `keyword`
-  - `helpTopicId`
-  - `mine`
-
-### GET `/api/forum/posts/{postId}`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-
-### POST `/api/forum/posts`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Request body:
-  - `ForumPostUpsertRequest`
-
-### PUT `/api/forum/posts/{postId}`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: cập nhật bài viết forum của chính tôi.
-- Request body:
-  - `ForumPostUpsertRequest`
-
-### DELETE `/api/forum/posts/{postId}`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: xóa mềm bài viết forum của chính tôi.
-
-### GET `/api/forum/posts/{postId}/comments`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Query params:
-  - `page`, `size`
-
-### POST `/api/forum/posts/{postId}/comments`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Request body:
-  - `ForumCommentUpsertRequest`
-
-### PUT `/api/forum/comments/{commentId}`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: cập nhật comment forum của chính tôi.
-- Request body:
-  - `ForumCommentUpsertRequest`
-
-### DELETE `/api/forum/comments/{commentId}`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: xóa mềm comment forum của chính tôi.
-
-### PUT `/api/forum/posts/{postId}/reaction`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: upsert reaction cho bài viết forum.
-- Request body:
-  - `ForumReactionRequest`
-
-### DELETE `/api/forum/posts/{postId}/reaction`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Mục đích: bỏ reaction của tôi khỏi bài viết forum.
-
-### POST `/api/forum/reports`
-- Auth: `bearerAuth`, role `MENTEE` hoặc `MENTOR`
-- Request body:
-  - `ForumReportCreateRequest`
-
-### Admin forum moderation
-
-### GET `/api/admin/forum/reports`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Query params:
-  - `page`, `size`
-  - `keyword`
-  - `status`
-  - `targetType`
-
-### GET `/api/admin/forum/reports/{reportId}`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-
-### POST `/api/admin/forum/reports/{reportId}/resolve`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `ForumReportResolveRequest`
-
-### GET `/api/admin/forum/posts`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-
-### GET `/api/admin/forum/comments`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-
-### POST `/api/admin/forum/posts/{postId}/restore`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-
-### POST `/api/admin/forum/comments/{commentId}/restore`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-
-### Admin dashboard
-
-### GET `/api/admin/dashboard/overview`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: snapshot tổng quan cho admin dashboard.
-- Response:
-  - `AdminDashboardOverviewResponse`
-    - `snapshotAt`
-    - `users`
-      - `total`
-      - `active`
-      - `banned`
-      - `deleted`
-      - `menteeOnly`
-      - `mentor`
-    - `mentorVerification`
-      - `draft`
-      - `pendingReview`
-      - `needsRevision`
-      - `approved`
-      - `rejected`
-      - `withdrawn`
-    - `bookings`
-      - map raw `BookingStatus` -> count
-    - `forumReports`
-      - map raw `ForumReportStatus` -> count
-    - `payoutRequests`
-      - map raw `PayoutRequestStatus` -> count
-    - `paymentOrders`
-      - map raw `PaymentOrderStatus` -> count
-    - `emailOutbox`
-      - map raw `NotificationStatus` -> count
-
-### GET `/api/admin/dashboard/queues`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: trả queue vận hành ưu tiên cho admin dashboard.
-- Response:
-  - `AdminDashboardQueuesResponse`
-    - `snapshotAt`
-    - `items[]`
-      - `key`
-      - `label`
-      - `count`
-      - `severity`
-      - `targetPath`
-      - `priorityOrder`
-- Ghi chú:
-  - queue cố định phase 3 gồm:
-    - `mentor_verification_pending_review`
-    - `booking_under_review`
-    - `forum_reports_open`
-    - `payout_requests_requested`
-    - `payment_orders_failed`
-    - `email_outbox_failed`
-    - `bookings_accepted_awaiting_payment`
-
-### GET `/api/admin/dashboard/timeseries`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: trả timeseries 30 ngày gần nhất theo `Asia/Ho_Chi_Minh`.
-- Response:
-  - `AdminDashboardTimeseriesResponse`
-    - `timezone`
-    - `fromDate`
-    - `toDate`
-    - `points[]`
-      - `date`
-      - `usersCreated`
-      - `mentorVerificationSubmitted`
-      - `bookingsCreated`
-      - `paymentOrdersPaid`
-      - `forumReportsCreated`
-      - `payoutRequestsCreated`
-
-### GET `/api/admin/dashboard/queue-items`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: drill-down từng queue sang danh sách case cụ thể để admin xử lý trực tiếp trong workbench.
-- Query params:
-  - `queueKey` bắt buộc
-  - `page`, `size`, `sortBy`, `direction`
-  - `assignedToMe` `boolean`
-  - `unassignedOnly` `boolean`
-- Response:
-  - `PageResponse<AdminQueueCaseItemResponse>`
-    - `queueKey`
-    - `caseType`
-    - `caseId`
-    - `title`
-    - `subtitle`
-    - `status`
-    - `severity`
-    - `createdAt`
-    - `updatedAt`
-    - `ageMinutes`
-    - `assignedAdminUserId`
-    - `assignedAdminDisplayName`
-    - `assignedAt`
-    - `detailPath`
-    - `availableActions`
-- Ghi chú:
-  - `detailPath` luôn trỏ sang detail API hiện có của domain tương ứng
-  - default sort là `createdAt ASC` để item cũ hơn nổi lên trước
-
-### GET `/api/admin/audit-logs`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: duyệt audit logs nội bộ theo actor, entity, action và khoảng thời gian.
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `actorUserId`
-  - `entityType`
-  - `entityId`
-  - `action`
-  - `from`
-  - `to`
-- Response:
-  - `PageResponse<AdminAuditLogItemResponse>`
-    - `auditLogId`
-    - `createdAt`
-    - `actorUserId`
-    - `actorDisplayName`
-    - `entityType`
-    - `entityId`
-    - `action`
-    - `oldValue` (raw JSON/string từ DB)
-    - `newValue` (raw JSON/string từ DB)
-    - `ipAddress`
-    - `userAgent`
-
-### GET `/api/admin/notes`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: lấy admin notes nội bộ theo target.
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `targetType`
-  - `targetId`
-- Response:
-  - `PageResponse<AdminNoteResponse>`
-    - `noteId`
-    - `targetType`
-    - `targetId`
-    - `note`
-    - `adminUserId`
-    - `adminDisplayName`
-    - `createdAt`
-
-### POST `/api/admin/notes`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: tạo admin note nội bộ dạng append-only.
-- Request body:
-  - `AdminNoteCreateRequest`
-    - `targetType`
-      - supported phase 3: `USER`, `MENTOR`, `MENTOR_VERIFICATION_REQUEST`, `BOOKING`, `FORUM_REPORT`, `PAYOUT_REQUEST`, `PAYMENT_ORDER`, `EMAIL_OUTBOX`
-    - `targetId`
-    - `note`
-- Response:
-  - `AdminNoteResponse`
-
-### GET `/api/admin/email-outbox`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: xem email outbox nội bộ để chẩn đoán pending/failed/sent.
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `status`
-  - `templateCode`
-  - `toEmail`
-  - `from`
-  - `to`
-- Response:
-  - `PageResponse<AdminEmailOutboxItemResponse>`
-    - `emailOutboxId`
-    - `toEmail`
-    - `subject`
-    - `templateCode`
-    - `status`
-    - `retryCount`
-    - `createdAt`
-    - `sentAt`
-    - `lastErrorPreview`
-
-### GET `/api/admin/email-outbox/{emailOutboxId}`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: xem chi tiết body và lỗi đầy đủ của một email outbox.
-- Response:
-  - `AdminEmailOutboxDetailResponse`
-    - giữ toàn bộ field của item response
-    - thêm `body`
-    - thêm `lastError`
-
-### POST `/api/admin/email-outbox/{emailOutboxId}/retry`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: retry lại email outbox đang `FAILED` bằng cách reset chính row hiện tại về `PENDING`.
-- Rule:
-  - chỉ retry được khi status hiện tại là `FAILED`
-  - `PENDING` hoặc `SENT` sẽ trả `409 Conflict`
-  - backend không tạo row outbox mới trong phase 3
-- Response:
-  - `AdminEmailOutboxDetailResponse`
-
-### GET `/api/admin/cases/{caseType}/{caseId}/ownership`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: lấy owner hiện tại của case vận hành.
-- Response:
-  - `AdminCaseOwnershipResponse`
-    - `caseType`
-    - `caseId`
-    - `assigned`
-    - `assignedAdminUserId`
-    - `assignedAdminDisplayName`
-    - `assignedAt`
-
-### POST `/api/admin/cases/{caseType}/{caseId}/assign`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: assign case cho chính admin đang gọi.
-- Rule:
-  - chưa assign -> assign cho caller
-  - caller đang giữ sẵn -> idempotent success
-  - admin khác đang giữ -> `409 Conflict`
-- Response:
-  - `AdminCaseOwnershipResponse`
-
-### POST `/api/admin/cases/{caseType}/{caseId}/unassign`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: gỡ ownership của case.
-- Rule:
-  - owner hiện tại được unassign
-  - `SYSTEM_ADMIN` được force unassign
-  - admin khác không phải owner -> `403 Forbidden`
-- Response:
-  - `AdminCaseOwnershipResponse`
-
-### GET `/api/admin/cases/{caseType}/{caseId}/activity`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: lấy operator activity nội bộ của một case. Đây không phải full business timeline của domain.
-- Query params:
-  - `page`, `size`
-- Response:
-  - `PageResponse<AdminCaseActivityItemResponse>`
-    - `eventType`
-    - `occurredAt`
-    - `actorUserId`
-    - `actorDisplayName`
-    - `title`
-    - `description`
-    - `source`
-
-## 19. System Admin / Admin User Management
-
-### POST `/api/system/users/admin-role/grant`
-- Auth: `bearerAuth`, role `SYSTEM_ADMIN`
-- Request body:
-  - `AdminRoleChangeRequest`
-    - `email`
-- Behavior:
-  - Nếu user đã có `ADMIN` thì trả `409 Conflict`.
-  - Nếu cấp thành công, backend gỡ `MENTEE` và `MENTOR` khỏi user để tài khoản trở thành admin-only.
-
-### POST `/api/system/users/admin-role/revoke`
-- Auth: `bearerAuth`, role `SYSTEM_ADMIN`
-- Request body:
-  - `AdminRoleChangeRequest`
-    - `email`
-- Behavior:
-  - Nếu user chưa có `ADMIN` thì trả `409 Conflict`.
-  - Nếu thu hồi thành công, backend gỡ `ADMIN`, gỡ `MENTOR` nếu còn dữ liệu cũ, và gán lại `MENTEE` mặc định.
-
-### GET `/api/system/users/admins`
-- Auth: `bearerAuth`, role `SYSTEM_ADMIN`
-- Mục đích: xem danh sách user đang có quyền ADMIN.
-- Response: `PageResponse<AdminUserResponse>`
-
-### GET `/api/system/users`
-- Auth: `bearerAuth`, role `SYSTEM_ADMIN`
-- Mục đích: xem toàn bộ system users.
-- Response: `PageResponse<SystemUserResponse>`
-
-### GET `/api/admin/users`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `keyword`
-  - `role` (chỉ `MENTEE` hoặc `MENTOR`)
-  - `status`
-- Mục đích: admin xem danh sách user thường, chỉ trả user có role MENTEE/MENTOR; loại admin/sysadmin khỏi list.
-- Response:
-  - `PageResponse<AdminUserListItemResponse>`
-    - `userId`
-    - `email`
-    - `fullName`
-    - `avatarUrl`
-    - `status`
-    - `roles`
-    - `lastLoginAt`
-    - `createdAt`
-    - `academicProfile.claimedStudentCode`
-
-### GET `/api/admin/users/{userId}/summary`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Mục đích: entrypoint summary cho FE admin xem nhanh identity, academic, mentor và activity counts của một visible user.
-- Response:
-  - `AdminUserSummaryResponse`
-    - `userId`
-    - `email`
-    - `fullName`
-    - `avatarUrl`
-    - `status`
-    - `roles`
-    - `lastLoginAt`
-    - `createdAt`
-    - `academicProfile`
-      - `studentCode`
-      - `campusCode`
-      - `campusName`
-      - `programCode`
-      - `programName`
-      - `specializationCode`
-      - `specializationName`
-      - `semester`
-      - `isAlumni`
-    - `mentorProfile`
-      - `exists`
-      - `mentorStatus`
-      - `isAvailable`
-      - `verifiedAt`
-      - `headline`
-      - `averageRating`
-      - `totalCompletedSessions`
-    - `activitySummary`
-      - `menteeBookingCount`
-      - `mentorBookingCount`
-      - `paymentOrderCount`
-      - `payoutRequestCount`
-      - `forumReportCreatedCount`
-
-### POST `/api/admin/users/{userId}/ban`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `BanUserRequest`
-    - `reason`
-
-### POST `/api/admin/users/{userId}/unban`
-- Auth: `bearerAuth`, role `ADMIN` hoặc `SYSTEM_ADMIN`
-- Request body:
-  - `UnbanUserRequest`
-    - `reason`
-
-## 20. Admin Mentors
-
-### GET `/api/admin/mentors`
-- Auth: `bearerAuth`, role `ADMIN`
-- Query params:
-  - `page`, `size`, `sortBy`, `direction`
-  - `keyword`
-  - `status`
-  - `isAvailable`
-- Mục đích: danh sách mentor cho vận hành.
-- Response: `PageResponse<AdminMentorListItemResponse>`
-
-### GET `/api/admin/mentors/{mentorUserId}`
-- Auth: `bearerAuth`, role `ADMIN`
-- Response: `AdminMentorDetailResponse`
-
-## 21. Realtime WebSocket
-
-- Endpoint handshake: `wss://api.skillswap.asia/ws?token=<accessToken>`
-- Kênh hiện tại là **raw WebSocket**, không phải SockJS/STOMP.
-- Lưu ý:
-  - chỉ dùng **access token**
-  - `?token=` chỉ dành cho `/ws`
-  - FE nên reconnect nhẹ và resync lại REST sau reconnect
-
-### Message types hiện có
-
-- Client -> server:
-  - `PING`
-- Server -> client:
-  - `AUTH_OK`
-  - `PONG`
-  - `ERROR`
-  - `CHAT_MESSAGE_CREATED`
-  - `NEW_NOTIFICATION`
-  - `NOTIFICATION_BADGE_UPDATED`
-
-### Payload realtime
-
-- `CHAT_MESSAGE_CREATED`
-  - `conversationId`
-  - `messageId`
-  - `senderId`
-  - `senderName`
-  - `messageType`
-  - `content`
-  - `createdAt`
-  - `conversationType`
-  - `isSelf`
-  - `unreadCount`
-- `NEW_NOTIFICATION`
-  - payload là `NotificationResponse`
-  - realtime có thể bổ sung:
-    - `unreadCount`
-    - `realtimeEventKind`
-- `NOTIFICATION_BADGE_UPDATED`
-  - `unreadCount`
-  - `eventKind`
-
-## 22. Core status enums
-
-### BookingStatus
-
-- `PENDING`
-- `ACCEPTED`
-- `REJECTED`
-- `EXPIRED`
-- `CANCELLED_BY_MENTEE`
-- `CANCELLED_BY_MENTOR`
-- `AWAITING_MENTOR_COMPLETION`
-- `AWAITING_MENTEE_CONFIRMATION`
-- `COMPLETED`
-- `AUTO_CLOSED`
-- `UNDER_REVIEW`
-- `NO_SHOW`
-
-### VerificationStatus
-
-- `DRAFT`
-- `PENDING_REVIEW`
-- `NEEDS_REVISION`
-- `APPROVED`
-- `REJECTED`
-- `WITHDRAWN`
-
-### PaymentOrderStatus
-
-- `PENDING`
-- `PARTIALLY_COVERED_BY_CREDIT`
-- `AWAITING_PROVIDER_PAYMENT`
-- `PAID`
-- `FAILED`
-- `CANCELLED`
-- `EXPIRED`
-
-### PayoutRequestStatus
-
-- `REQUESTED`
-- `APPROVED`
-- `REJECTED`
-- `PAID`
-- `CANCELLED`
-
-### MentorStatus
-
-- `DRAFT`
-- `PENDING_VERIFICATION`
-- `ACTIVE`
-- `PAUSED`
-- `REJECTED`
-- `SUSPENDED`
-
-### TeachingMode
-
-- `ONLINE`
-- `OFFLINE`
-- `HYBRID`
-
-### MeetingPlatform
-
-- `GOOGLE_MEET`
-- `ZOOM`
-- `MICROSOFT_TEAMS`
-- `DISCORD`
-- `OFFLINE`
-- `OTHER`
-
-### CreditOriginType
-
-- `CAMPAIGN_BONUS`
-- `COUPON_BONUS`
-- `REFUND`
-- `MANUAL`
-- `PAYMENT_RESERVATION`
-
-### LedgerEntryType
-
-- `ISSUE`
-- `RESERVE`
-- `CONSUME`
-- `RELEASE`
-- `REFUND`
-- `ADJUSTMENT`
-- `HOLD`
-- `PAID_OUT`
-- `COMMISSION`
-- `VOID`
-
-### LedgerSourceType
-
-- `PAYMENT_ORDER`
-- `BOOKING`
-- `CAMPAIGN`
-- `COUPON`
-- `MANUAL`
-- `PAYOUT_REQUEST`
-- `REFUND`
-
-## 23. Ghi chú thực dụng cho FE
-
-- `GET /api/auth/me` là API đầu tiên sau login.
-- Mentor verification flow:
-  - user: `request` -> upload document metadata -> submit -> timeline/detail -> delete/withdraw
-  - admin: queue -> detail -> lock -> refresh -> request revision / approve / reject
-- Discovery:
-  - `GET /api/mentors/recommendations` cho dashboard
-  - `GET /api/mentors` cho search/filter/ranking
-  - `GET /api/mentors/{mentorUserId}/availability-slots` rồi `.../candidates` để tạo booking
-- Booking:
-  - mentee tạo booking bằng exact candidate segment
-  - mentor accept/reject/cancel/complete trên booking của họ
-  - mentee confirm hoặc issue trong cửa sổ sau session
-- Chat:
-  - REST là nguồn dữ liệu chính
-  - WebSocket chỉ push realtime
-- Notification:
-  - đọc danh sách + unread count bằng REST
-  - realtime chỉ là push bổ trợ
-- Wallet:
-  - mỗi ví chỉ trả số dư hiện tại và 15 giao dịch gần nhất
-- Forum:
-  - user flow: `posts` -> `comments` -> `reaction` -> `reports`
-  - admin flow: `reports` -> `resolve` hoặc `restore`
+# API Document Addendum - Forum Post Cursor List
+
+Tài liệu này chỉ chuẩn hóa 2 endpoint post list đang chuyển sang cursor pagination.
+
+## Quy ước chung
+
+- `cursor` là chuỗi mờ `opaque string`.
+- Frontend không được decode, sửa, hoặc tự tạo cursor.
+- Frontend chỉ được lấy `nextCursor` từ response trước đó rồi truyền lại nguyên giá trị.
+- `nextCursor = null` nghĩa là đã hết dữ liệu.
+- `prevCursor` hiện chưa dùng cho 2 endpoint này nên luôn có thể là `null`.
+- Mỗi response list trả theo envelope `ApiResponse<CursorPageResponse<ForumPostResponse>>`.
+
+## 1. GET `/api/forum/posts`
+
+### Mục đích
+
+Lấy danh sách bài viết forum cho user đã đăng nhập, sắp xếp theo hoạt động mới nhất trước.
+
+### Query params
+
+| Param | Kiểu | Mặc định | Bắt buộc | Mô tả |
+|---|---|---:|---|---|
+| `cursor` | string | null | Không | Cursor mờ để lấy window tiếp theo. Chỉ dùng lại `nextCursor` từ response trước đó. |
+| `limit` | integer | 20 | Không | Số lượng item mỗi lần lấy. Tối đa 50. |
+| `keyword` | string | null | Không | Tìm theo title/content/tên tác giả. |
+| `helpTopicId` | UUID | null | Không | Lọc theo help topic. |
+| `mine` | boolean | false | Không | Chỉ lấy bài viết của chính user hiện tại. |
+
+### Response
+
+```json
+{
+  "timestamp": "2026-07-08 15:40:00",
+  "status": 200,
+  "code": "SUCCESS_0200",
+  "message": "Thành công",
+  "data": {
+    "items": [
+      {
+        "postId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a1001",
+        "authorUserId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a2001",
+        "authorFullName": "Nguyen Van A",
+        "authorAvatarUrl": "https://cdn.skillswap.asia/avatar/a.jpg",
+        "helpTopic": {
+          "id": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a3001",
+          "code": "HELP_PROJECT_REVIEW",
+          "nameVi": "Góp ý dự án/case study",
+          "nameEn": "Project or case study review"
+        },
+        "title": "Xin góp ý slide milestone",
+        "content": "Mọi người review giúp mình flow thuyết trình với.",
+        "status": "PUBLISHED",
+        "commentCount": 3,
+        "reactionCount": 5,
+        "reportCount": 0,
+        "lastActivityAt": "2026-07-08T14:30:00",
+        "reactedByCurrentUser": false,
+        "myReactionType": null,
+        "createdAt": "2026-07-08T10:00:00",
+        "updatedAt": "2026-07-08T10:00:00"
+      }
+    ],
+    "nextCursor": "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I",
+    "prevCursor": null,
+    "hasNext": true,
+    "hasPrev": false,
+    "limit": 20
+  }
+}
+```
+
+## 2. GET `/api/admin/forum/posts`
+
+### Mục đích
+
+Lấy danh sách bài viết forum cho admin với bộ lọc quản trị.
+
+### Query params
+
+| Param | Kiểu | Mặc định | Bắt buộc | Mô tả |
+|---|---|---:|---|---|
+| `cursor` | string | null | Không | Cursor mờ để lấy window tiếp theo. Chỉ dùng lại `nextCursor` từ response trước đó. |
+| `limit` | integer | 20 | Không | Số lượng item mỗi lần lấy. Tối đa 50. |
+| `keyword` | string | null | Không | Tìm theo title/content/tên tác giả. |
+| `helpTopicId` | UUID | null | Không | Lọc theo help topic. |
+| `authorId` | UUID | null | Không | Lọc theo tác giả. |
+| `status` | enum | null | Không | Lọc theo trạng thái post. |
+
+### Response
+
+```json
+{
+  "timestamp": "2026-07-08 15:40:00",
+  "status": 200,
+  "code": "SUCCESS_0200",
+  "message": "Thành công",
+  "data": {
+    "items": [
+      {
+        "postId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a1001",
+        "authorUserId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a2001",
+        "authorFullName": "Nguyen Van A",
+        "authorAvatarUrl": "https://cdn.skillswap.asia/avatar/a.jpg",
+        "helpTopic": {
+          "id": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a3001",
+          "code": "HELP_PROJECT_REVIEW",
+          "nameVi": "Góp ý dự án/case study",
+          "nameEn": "Project or case study review"
+        },
+        "title": "Xin góp ý slide milestone",
+        "content": "Mọi người review giúp mình flow thuyết trình với.",
+        "status": "PUBLISHED",
+        "commentCount": 3,
+        "reactionCount": 5,
+        "reportCount": 0,
+        "lastActivityAt": "2026-07-08T14:30:00",
+        "reactedByCurrentUser": false,
+        "myReactionType": null,
+        "createdAt": "2026-07-08T10:00:00",
+        "updatedAt": "2026-07-08T10:00:00"
+      }
+    ],
+    "nextCursor": "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I",
+    "prevCursor": null,
+    "hasNext": true,
+    "hasPrev": false,
+    "limit": 20
+  }
+}
+```
+
+## Lưu ý cho Frontend
+
+- Không được coi `cursor` là payload có thể parse.
+- Không được tạo cursor mới từ `lastActivityAt` hoặc `postId`.
+- Muốn load trang kế tiếp thì chỉ truyền nguyên `nextCursor` của response trước đó.
+- Khi `nextCursor = null`, dừng infinite scroll.
+
+# API Document Addendum - Academic / Catalog / Onboarding
+
+## Quy ước chung
+
+- Các API danh mục học thuật và catalog đều là master data ổn định.
+- Các endpoint này trả `Cache-Control: public, max-age=86400`.
+- Frontend nên cache cục bộ và chỉ gọi lại khi cần refresh thủ công.
+- `help topic` là catalog nghiệp vụ cho mentor profile / mentor service / discovery, không phải tag kỹ thuật.
+- `student profile completed` là tín hiệu nền cho onboarding, không thay thế trạng thái tài khoản hay role.
+
+## 1. GET `/api/campuses`
+
+### Mục đích
+
+Lấy danh sách cơ sở học tập đang hoạt động của FPT University để đổ dropdown trong form academic profile.
+
+### Response
+
+- `ApiResponse<List<CampusResponse>>`
+- Header:
+  - `Cache-Control: public, max-age=86400`
+
+## 2. GET `/api/academic-programs`
+
+### Mục đích
+
+Lấy danh sách ngành học đang hoạt động để user chọn trước khi chọn specialization.
+
+### Response
+
+- `ApiResponse<List<AcademicProgramResponse>>`
+- Header:
+  - `Cache-Control: public, max-age=86400`
+
+## 3. GET `/api/specializations`
+
+### Mục đích
+
+Lấy toàn bộ specialization đang hoạt động để FE dựng form nhanh hoặc cache sẵn data.
+
+### Response
+
+- `ApiResponse<List<SpecializationResponse>>`
+- Header:
+  - `Cache-Control: public, max-age=86400`
+
+## 4. GET `/api/academic-programs/{programId}/specializations`
+
+### Mục đích
+
+Lấy specialization theo ngành học đã chọn.
+
+### Rule
+
+- `programId` phải tồn tại và đang active.
+- Nếu `programId` không hợp lệ hoặc inactive, backend trả `404`.
+- `Cache-Control: public, max-age=86400`
+
+## 5. GET `/api/catalog/help-topics`
+
+### Mục đích
+
+Lấy danh sách help topics hiện hành để dùng cho mentor profile, mentor service, discovery và các form liên quan.
+
+### Response
+
+- `ApiResponse<List<HelpTopicResponse>>`
+- Header:
+  - `Cache-Control: public, max-age=86400`
+
+## 6. GET `/api/catalog/mentor-profile-options`
+
+### Mục đích
+
+Lấy label mức support 1..4 cho mentor profile để FE không fix cứng wording.
+
+### Response
+
+- `ApiResponse<MentorProfileOptionsResponse>`
+- Header:
+  - `Cache-Control: public, max-age=86400`
+
+## 7. PUT `/api/me/student-profile`
+
+### Rule quan trọng
+
+- `campusId`, `programId`, `specializationId` phải hợp lệ.
+- `specializationId` phải thuộc đúng `programId`.
+- Sai relation phải trả `400 Bad Request`, không để DB văng `500`.
+- FE nên coi đây là bước validate trước khi đi tiếp onboarding.
+
+## 8. GET `/api/me/onboarding-status`
+
+### Output chính
+
+- `studentProfileCompleted`
+- `mentorProfileCompleted`
+- `mentoringNeedsCompleted`
+- `mentorVerificationStatus`
+- `roles`
+- `nextRecommendedAction`
+
+### Ghi chú
+
+- FE dùng response này để điều hướng tiếp theo trong onboarding.
+- Không tự suy diễn trạng thái khác ngoài `nextRecommendedAction`.

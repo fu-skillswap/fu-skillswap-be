@@ -1,0 +1,9 @@
+#
+#Thu Jul 09 09:42:29 ICT 2026
+business\ modules\ must\ not\ depend\ on\ admin\ module=43efcf0f-a75c-4019-ada8-c62ed94ec6e0
+business\ modules\ must\ not\ form\ circular\ dependencies=f059b25b-a0b5-4c89-b5a5-b0a3ea83e4e0
+controllers\ must\ not\ access\ repositories\ directly=4d77505b-8a5a-4975-afd5-45de3d62a57c
+entities\ should\ follow\ module\ table\ naming\ convention=991a396b-ba52-48a0-b0e1-f43e7b0be9c3
+infrastructure\ must\ not\ depend\ on\ business\ services\ directly=7ca30e9f-d5a3-4d9e-9ded-f67b8d9783cb
+repositories\ must\ not\ be\ accessed\ across\ module\ boundaries=b37cc803-cfbc-4e00-b1da-4908dcacb78d
+shared\ must\ not\ depend\ on\ business\ modules=ae0e0a65-afbc-494e-8b63-7524ccfec059

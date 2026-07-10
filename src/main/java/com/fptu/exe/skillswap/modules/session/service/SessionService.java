@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.session.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
 import com.fptu.exe.skillswap.modules.session.domain.Session;
 import com.fptu.exe.skillswap.modules.session.domain.SessionSourceType;
 import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
@@ -46,6 +47,7 @@ public class SessionService {
                 .sourceId(booking.getId())
                 .scheduledStartTime(booking.getSelectedStartTime())
                 .scheduledEndTime(booking.getSelectedEndTime())
+                .calendarSyncStatus(GoogleCalendarSyncStatus.NOT_CONNECTED)
                 .status(SessionStatus.SCHEDULED)
                 .build();
 
@@ -86,5 +88,22 @@ public class SessionService {
             session.setStatus(SessionStatus.CANCELLED);
             sessionRepository.save(session);
         }
+    }
+
+    @Transactional
+    public Session save(Session session) {
+        if (session == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Session không hợp lệ");
+        }
+        return sessionRepository.save(session);
+    }
+
+    @Transactional
+    public Session updateScheduleForBooking(UUID bookingId, LocalDateTime scheduledStartTime, LocalDateTime scheduledEndTime) {
+        Session session = sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy session của booking"));
+        session.setScheduledStartTime(scheduledStartTime);
+        session.setScheduledEndTime(scheduledEndTime);
+        return sessionRepository.save(session);
     }
 }

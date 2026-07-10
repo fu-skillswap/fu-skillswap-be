@@ -17,19 +17,28 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
+import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumPostListRequest;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,6 +57,8 @@ class AdminForumModerationServiceTest {
     private NotificationService notificationService;
     @Mock
     private ForumTextPolicy forumTextPolicy;
+    @Mock
+    private CursorCodec cursorCodec;
 
     private AdminForumModerationService service;
     private ForumPost post;
@@ -62,19 +73,20 @@ class AdminForumModerationServiceTest {
                 forumPostReactionRepository,
                 forumReportRepository,
                 notificationService,
-                forumTextPolicy
+                forumTextPolicy,
+                cursorCodec
         );
 
-        User author = User.builder().id(UUID.randomUUID()).fullName("Author").build();
+        User author = User.builder().id(UuidUtil.generateUuidV7()).fullName("Author").build();
         Tag helpTopic = Tag.builder()
-                .id(UUID.randomUUID())
+                .id(UuidUtil.generateUuidV7())
                 .code("HELP_QA")
                 .nameVi("Giải đáp thắc mắc")
                 .type(TagType.HELP_TOPIC)
                 .status(TagStatus.ACTIVE)
                 .build();
         post = ForumPost.builder()
-                .id(UUID.randomUUID())
+                .id(UuidUtil.generateUuidV7())
                 .authorUser(author)
                 .helpTopic(helpTopic)
                 .title("Post")
@@ -83,26 +95,26 @@ class AdminForumModerationServiceTest {
                 .commentCount(1)
                 .build();
         comment = ForumComment.builder()
-                .id(UUID.randomUUID())
+                .id(UuidUtil.generateUuidV7())
                 .post(post)
                 .authorUser(author)
                 .content("Comment")
                 .status(ForumCommentStatus.VISIBLE)
                 .build();
         report = ForumReport.builder()
-                .id(UUID.randomUUID())
-                .reporterUser(User.builder().id(UUID.randomUUID()).fullName("Reporter").build())
+                .id(UuidUtil.generateUuidV7())
+                .reporterUser(User.builder().id(UuidUtil.generateUuidV7()).fullName("Reporter").build())
                 .targetType(ForumReportTargetType.COMMENT)
                 .targetId(comment.getId())
                 .reasonType(ForumReportReasonType.SPAM)
                 .status(ForumReportStatus.OPEN)
                 .build();
-        when(forumTextPolicy.normalizeOptionalPlainText(any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(forumTextPolicy.normalizeOptionalPlainText(any(), any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
     void resolveHideComment_shouldHideCommentAndDecreaseCount() {
-        UUID adminId = UUID.randomUUID();
+        UUID adminId = UuidUtil.generateUuidV7();
         when(forumReportRepository.findByIdForUpdate(report.getId())).thenReturn(Optional.of(report));
         when(forumCommentRepository.findByIdForUpdate(comment.getId())).thenReturn(Optional.of(comment));
         when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
@@ -123,18 +135,18 @@ class AdminForumModerationServiceTest {
 
     @Test
     void resolveConfirmNoAction_shouldKeepContentUntouched() {
-        UUID adminId = UUID.randomUUID();
+        UUID adminId = UuidUtil.generateUuidV7();
         ForumPost reportedPost = ForumPost.builder()
-                .id(UUID.randomUUID())
-                .authorUser(User.builder().id(UUID.randomUUID()).fullName("Author").build())
+                .id(UuidUtil.generateUuidV7())
+                .authorUser(User.builder().id(UuidUtil.generateUuidV7()).fullName("Author").build())
                 .helpTopic(post.getHelpTopic())
                 .title("Post")
                 .content("Content")
                 .status(ForumPostStatus.PUBLISHED)
                 .build();
         ForumReport postReport = ForumReport.builder()
-                .id(UUID.randomUUID())
-                .reporterUser(User.builder().id(UUID.randomUUID()).fullName("Reporter").build())
+                .id(UuidUtil.generateUuidV7())
+                .reporterUser(User.builder().id(UuidUtil.generateUuidV7()).fullName("Reporter").build())
                 .targetType(ForumReportTargetType.POST)
                 .targetId(reportedPost.getId())
                 .reasonType(ForumReportReasonType.OTHER)
@@ -152,5 +164,35 @@ class AdminForumModerationServiceTest {
         assertEquals("RESOLVED_NO_ACTION", response.status());
         assertEquals(ForumReportStatus.RESOLVED_NO_ACTION, postReport.getStatus());
         verify(notificationService, org.mockito.Mockito.never()).createNotification(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getAdminPosts_firstWindow_shouldReturnCursorPage() {
+        ForumPost secondPost = ForumPost.builder()
+                .id(UuidUtil.generateUuidV7())
+                .authorUser(post.getAuthorUser())
+                .helpTopic(post.getHelpTopic())
+                .title("Post 2")
+                .content("Content 2")
+                .status(ForumPostStatus.PUBLISHED)
+                .lastActivityAt(LocalDateTime.of(2026, 7, 8, 9, 0))
+                .build();
+        ForumPost thirdPost = ForumPost.builder()
+                .id(UuidUtil.generateUuidV7())
+                .authorUser(post.getAuthorUser())
+                .helpTopic(post.getHelpTopic())
+                .title("Post 3")
+                .content("Content 3")
+                .status(ForumPostStatus.PUBLISHED)
+                .lastActivityAt(LocalDateTime.of(2026, 7, 8, 8, 0))
+                .build();
+        when(forumPostRepository.findWindow(any(), eq(3))).thenReturn(List.of(post, secondPost, thirdPost));
+        when(cursorCodec.encode(any())).thenReturn("next-admin-cursor");
+
+        CursorPageResponse<?> response = service.getAdminPosts(new AdminForumPostListRequest(null, 2, null, null, null, null));
+
+        assertEquals(2, response.items().size());
+        assertTrue(response.hasNext());
+        assertEquals("next-admin-cursor", response.nextCursor());
     }
 }

@@ -74,8 +74,8 @@ public class PaymentOrderService {
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
-    @Transactional
     public PaymentCheckoutResponse checkout(UUID currentUserId, PaymentCheckoutRequest request) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -84,115 +84,137 @@ public class PaymentOrderService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "bookingId không được để trống");
         }
 
-        Booking booking = bookingRepository.findByIdForSessionUpdate(request.bookingId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        validateCheckoutOwnership(currentUserId, booking);
+        PaymentOrder savedOrder = transactionTemplate.execute(status -> {
+            Booking booking = bookingRepository.findByIdForSessionUpdate(request.bookingId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+            validateCheckoutOwnership(currentUserId, booking);
 
-        if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
-                || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
+            if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
+                    || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
+            }
+
+            PaymentOrder existingOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+            PaymentAttempt latestAttempt = existingOrder == null
+                    ? null
+                    : paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(existingOrder.getId()).orElse(null);
+            if (existingOrder != null && latestAttempt != null) {
+                trySynchronizeProviderStatus(existingOrder, latestAttempt);
+            }
+
+            if (existingOrder != null && existingOrder.getStatus() == PaymentOrderStatus.PAID) {
+                return existingOrder;
+            }
+            if (existingOrder != null && isAwaitingPayment(existingOrder.getStatus()) && !isExpired(existingOrder)) {
+                return existingOrder;
+            }
+
+            int originalPriceScoin = resolveBasePriceScoin(booking);
+            int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
+            int menteeSurchargeScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * menteeSurchargeBps) / 10_000;
+            int menteePayablePrice = originalPriceScoin + menteeSurchargeScoin;
+
+            var coupon = couponService.resolveCoupon(request.couponCode());
+            couponService.validateApplicable(coupon, booking, currentUserId, menteePayablePrice);
+            int couponDiscountScoin = couponService.calculateCouponDiscount(coupon, menteePayablePrice);
+            int amountAfterCoupon = Math.max(0, menteePayablePrice - couponDiscountScoin);
+
+            CampaignService.CampaignCreditApplication campaignApplication =
+                    campaignService.resolveCampaignCredit(currentUserId, booking, amountAfterCoupon);
+            int campaignCreditAppliedScoin = Math.max(0, Math.min(amountAfterCoupon, campaignApplication.appliedScoin()));
+            int amountAfterCampaign = Math.max(0, amountAfterCoupon - campaignCreditAppliedScoin);
+
+            PaymentOrder draftOrder = existingOrder != null ? existingOrder : new PaymentOrder();
+            prepareOrderForCheckout(draftOrder, booking, currentUserId, coupon, campaignApplication,
+                    originalPriceScoin, menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin);
+
+            if (amountAfterCampaign > 0) {
+                int userCredit = reserveUserCredit(currentUserId, draftOrder, amountAfterCampaign);
+                draftOrder.setUserCreditScoin(userCredit);
+                draftOrder.setRemainingPayableScoin(Math.max(0, amountAfterCampaign - userCredit));
+                draftOrder.setStatus(draftOrder.getRemainingPayableScoin() > 0
+                        ? hasInternalCoverage(menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin, userCredit)
+                            ? PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT
+                            : PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT
+                        : PaymentOrderStatus.PAID);
+            } else {
+                draftOrder.setUserCreditScoin(0);
+                draftOrder.setRemainingPayableScoin(0);
+                draftOrder.setStatus(PaymentOrderStatus.PAID);
+            }
+
+            return paymentOrderRepository.save(draftOrder);
+        });
+
+        // Fast path for paid or existing awaiting payment
+        if (savedOrder.getStatus() == PaymentOrderStatus.PAID || 
+            (isAwaitingPayment(savedOrder.getStatus()) && savedOrder.getProviderOrderCode() != null)) {
+            PaymentAttempt latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(savedOrder.getId()).orElse(null);
+            return toResponse(savedOrder, latestAttempt);
         }
 
-        PaymentOrder existingOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
-        PaymentAttempt latestAttempt = existingOrder == null
-                ? null
-                : paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(existingOrder.getId()).orElse(null);
-        if (existingOrder != null && latestAttempt != null) {
-            trySynchronizeProviderStatus(existingOrder, latestAttempt);
-        }
-
-        if (existingOrder != null && existingOrder.getStatus() == PaymentOrderStatus.PAID) {
-            return toResponse(existingOrder, latestAttempt);
-        }
-        if (existingOrder != null && isAwaitingPayment(existingOrder.getStatus()) && !isExpired(existingOrder)) {
-            return toResponse(existingOrder, latestAttempt);
-        }
-
-        int originalPriceScoin = resolveBasePriceScoin(booking);
-        int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
-        int menteeSurchargeScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * menteeSurchargeBps) / 10_000;
-        int menteePayablePrice = originalPriceScoin + menteeSurchargeScoin;
-
-        var coupon = couponService.resolveCoupon(request.couponCode());
-        couponService.validateApplicable(coupon, booking, currentUserId, menteePayablePrice);
-        int couponDiscountScoin = couponService.calculateCouponDiscount(coupon, menteePayablePrice);
-        int amountAfterCoupon = Math.max(0, menteePayablePrice - couponDiscountScoin);
-
-        CampaignService.CampaignCreditApplication campaignApplication =
-                campaignService.resolveCampaignCredit(currentUserId, booking, amountAfterCoupon);
-        int campaignCreditAppliedScoin = Math.max(0, Math.min(amountAfterCoupon, campaignApplication.appliedScoin()));
-        int amountAfterCampaign = Math.max(0, amountAfterCoupon - campaignCreditAppliedScoin);
-
-        PaymentOrder draftOrder = existingOrder != null ? existingOrder : new PaymentOrder();
-        prepareOrderForCheckout(draftOrder, booking, currentUserId, coupon, campaignApplication,
-                originalPriceScoin, menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin);
-
-        if (amountAfterCampaign > 0) {
-            int userCredit = reserveUserCredit(currentUserId, draftOrder, amountAfterCampaign);
-            draftOrder.setUserCreditScoin(userCredit);
-            draftOrder.setRemainingPayableScoin(Math.max(0, amountAfterCampaign - userCredit));
-            draftOrder.setStatus(draftOrder.getRemainingPayableScoin() > 0
-                    ? hasInternalCoverage(menteePayablePrice, couponDiscountScoin, campaignCreditAppliedScoin, userCredit)
-                        ? PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT
-                        : PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT
-                    : PaymentOrderStatus.PAID);
-        } else {
-            draftOrder.setUserCreditScoin(0);
-            draftOrder.setRemainingPayableScoin(0);
-            draftOrder.setStatus(PaymentOrderStatus.PAID);
-        }
-
-        PaymentOrder savedOrder = paymentOrderRepository.save(draftOrder);
         int nextAttemptNo = (int) paymentAttemptRepository.countByPaymentOrderId(savedOrder.getId()) + 1;
-
-        PaymentAttempt attempt;
+        long providerOrderCode = savedOrder.getRemainingPayableScoin() > 0 ? generateProviderOrderCode(savedOrder.getId(), nextAttemptNo) : 0;
+        
+        PayOsGateway.CreatePaymentLinkResult createResult = null;
         if (savedOrder.getRemainingPayableScoin() > 0) {
-            long providerOrderCode = generateProviderOrderCode(savedOrder.getId(), nextAttemptNo);
-            PayOsGateway.CreatePaymentLinkResult createResult = payOsGateway.createPaymentLink(
+            Booking booking = bookingRepository.findById(request.bookingId()).orElseThrow();
+            createResult = payOsGateway.createPaymentLink(
                     buildCreatePaymentLinkCommand(booking, savedOrder, providerOrderCode)
             );
-            savedOrder.setProviderOrderCode(createResult.providerOrderCode());
-            savedOrder.setProviderPaymentLinkId(createResult.providerPaymentLinkId());
-            savedOrder.setProviderStatus(createResult.providerStatus());
-            savedOrder.setPaymentLink(createResult.checkoutUrl());
-            savedOrder.setExpiresAt(createResult.expiresAt());
-            savedOrder = paymentOrderRepository.save(savedOrder);
-
-            attempt = paymentAttemptRepository.save(PaymentAttempt.builder()
-                    .paymentOrderId(savedOrder.getId())
-                    .attemptNo(nextAttemptNo)
-                    .status(PaymentAttemptStatus.REDIRECTED)
-                    .providerOrderCode(createResult.providerOrderCode())
-                    .providerPaymentLinkId(createResult.providerPaymentLinkId())
-                    .providerStatus(createResult.providerStatus())
-                    .checkoutUrl(createResult.checkoutUrl())
-                    .build());
-        } else {
-            savedOrder.setProviderOrderCode(null);
-            savedOrder.setProviderPaymentLinkId(null);
-            savedOrder.setProviderStatus("PAID");
-            savedOrder.setPaymentLink(null);
-            savedOrder.setExpiresAt(null);
-            savedOrder = paymentOrderRepository.save(savedOrder);
-            attempt = paymentAttemptRepository.save(PaymentAttempt.builder()
-                    .paymentOrderId(savedOrder.getId())
-                    .attemptNo(nextAttemptNo)
-                    .status(PaymentAttemptStatus.SUCCEEDED)
-                    .providerStatus("PAID")
-                    .build());
         }
 
-        if (coupon != null) {
-            couponService.reserveCoupon(coupon, savedOrder.getId(), currentUserId, couponDiscountScoin);
-        }
-        if (savedOrder.getStatus() == PaymentOrderStatus.PAID) {
-            finalizeInternalPayment(savedOrder, attempt, null, null, "PAID", booking);
-            savedOrder = paymentOrderRepository.save(savedOrder);
-        }
-        return toResponse(savedOrder, attempt);
+        final PayOsGateway.CreatePaymentLinkResult finalCreateResult = createResult;
+        return transactionTemplate.execute(status -> {
+            PaymentOrder orderToUpdate = paymentOrderRepository.findByIdForUpdate(savedOrder.getId()).orElseThrow();
+            PaymentAttempt attempt;
+            if (orderToUpdate.getRemainingPayableScoin() > 0) {
+                orderToUpdate.setProviderOrderCode(finalCreateResult.providerOrderCode());
+                orderToUpdate.setProviderPaymentLinkId(finalCreateResult.providerPaymentLinkId());
+                orderToUpdate.setProviderStatus(finalCreateResult.providerStatus());
+                orderToUpdate.setPaymentLink(finalCreateResult.checkoutUrl());
+                orderToUpdate.setExpiresAt(finalCreateResult.expiresAt());
+                orderToUpdate = paymentOrderRepository.save(orderToUpdate);
+
+                attempt = paymentAttemptRepository.save(PaymentAttempt.builder()
+                        .paymentOrderId(orderToUpdate.getId())
+                        .attemptNo(nextAttemptNo)
+                        .status(PaymentAttemptStatus.REDIRECTED)
+                        .providerOrderCode(finalCreateResult.providerOrderCode())
+                        .providerPaymentLinkId(finalCreateResult.providerPaymentLinkId())
+                        .providerStatus(finalCreateResult.providerStatus())
+                        .checkoutUrl(finalCreateResult.checkoutUrl())
+                        .build());
+            } else {
+                orderToUpdate.setProviderOrderCode(null);
+                orderToUpdate.setProviderPaymentLinkId(null);
+                orderToUpdate.setProviderStatus("PAID");
+                orderToUpdate.setPaymentLink(null);
+                orderToUpdate.setExpiresAt(null);
+                orderToUpdate = paymentOrderRepository.save(orderToUpdate);
+                attempt = paymentAttemptRepository.save(PaymentAttempt.builder()
+                        .paymentOrderId(orderToUpdate.getId())
+                        .attemptNo(nextAttemptNo)
+                        .status(PaymentAttemptStatus.SUCCEEDED)
+                        .providerStatus("PAID")
+                        .build());
+            }
+
+            if (request.couponCode() != null) {
+                Coupon coupon = couponService.resolveCoupon(request.couponCode());
+                if (coupon != null) {
+                    couponService.reserveCoupon(coupon, orderToUpdate.getId(), currentUserId, orderToUpdate.getCouponDiscountScoin());
+                }
+            }
+            if (orderToUpdate.getStatus() == PaymentOrderStatus.PAID) {
+                Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(orderToUpdate.getBookingId()).orElseThrow();
+                finalizeInternalPayment(orderToUpdate, attempt, null, null, "PAID", lockedBooking);
+                orderToUpdate = paymentOrderRepository.save(orderToUpdate);
+            }
+            return toResponse(orderToUpdate, attempt);
+        });
     }
 
-    @Transactional
     public PaymentCheckoutResponse handleWebhook(PaymentWebhookRequest request) {
         if (request == null || request.data() == null || request.data().orderCode() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Webhook PayOS thiếu data.orderCode");
@@ -203,39 +225,48 @@ public class PaymentOrderService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Webhook PayOS chưa xác nhận thanh toán thành công");
         }
 
-        PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(verified.providerOrderCode())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
-                        "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
-        PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+        PaymentAttempt optimisticAttempt = paymentAttemptRepository.findByProviderOrderCode(verified.providerOrderCode())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment attempt"));
+        if ("PAID".equals(optimisticAttempt.getProviderStatus()) || "SUCCESS".equals(optimisticAttempt.getProviderStatus()) || "00".equals(optimisticAttempt.getProviderStatus())) {
+            PaymentOrder optimisticOrder = paymentOrderRepository.findById(optimisticAttempt.getPaymentOrderId()).orElseThrow();
+            return toResponse(optimisticOrder, optimisticAttempt);
+        }
 
-        String providerEventId = resolveProviderEventId(verified);
-        if (StringUtils.hasText(providerEventId)
-                && (paymentOrderRepository.existsByProviderEventId(providerEventId)
-                || paymentAttemptRepository.existsByProviderEventId(providerEventId))) {
+        return transactionTemplate.execute(status -> {
+            PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(verified.providerOrderCode())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                            "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
+            PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+            Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+
+            String providerEventId = resolveProviderEventId(verified);
+            if (StringUtils.hasText(providerEventId)
+                    && (paymentOrderRepository.existsByProviderEventId(providerEventId)
+                    || paymentAttemptRepository.existsByProviderEventId(providerEventId))) {
+                return toResponse(order, attempt);
+            }
+            if (order.getStatus() == PaymentOrderStatus.PAID) {
+                return toResponse(order, attempt);
+            }
+
+            order.setProviderOrderCode(verified.providerOrderCode());
+            order.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+            order.setProviderStatus("PAID");
+            order.setProviderTransactionId(verified.providerTransactionId());
+            order.setProviderEventId(providerEventId);
+            if (verified.paidAt() != null) {
+                order.setPaidAt(verified.paidAt());
+            }
+
+            attempt.setProviderOrderCode(verified.providerOrderCode());
+            attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+            attempt.setProviderStatus("PAID");
+            finalizeInternalPayment(order, attempt, verified.providerTransactionId(), providerEventId, "PAID", lockedBooking);
+            order = paymentOrderRepository.save(order);
             return toResponse(order, attempt);
-        }
-        if (order.getStatus() == PaymentOrderStatus.PAID) {
-            return toResponse(order, attempt);
-        }
-
-        order.setProviderOrderCode(verified.providerOrderCode());
-        order.setProviderPaymentLinkId(verified.providerPaymentLinkId());
-        order.setProviderStatus("PAID");
-        order.setProviderTransactionId(verified.providerTransactionId());
-        order.setProviderEventId(providerEventId);
-        if (verified.paidAt() != null) {
-            order.setPaidAt(verified.paidAt());
-        }
-
-        attempt.setProviderOrderCode(verified.providerOrderCode());
-        attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
-        attempt.setProviderStatus("PAID");
-        finalizeInternalPayment(order, attempt, verified.providerTransactionId(), providerEventId, "PAID", lockedBooking);
-        order = paymentOrderRepository.save(order);
-        return toResponse(order, attempt);
+        });
     }
 
     @Transactional

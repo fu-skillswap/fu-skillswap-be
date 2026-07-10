@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
+import com.fptu.exe.skillswap.modules.mentor.event.MentorAvailabilityChangedEvent;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
@@ -28,7 +29,10 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepos
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,8 +60,7 @@ public class MentorProfileService {
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
-    @org.springframework.context.annotation.Lazy
-    private final com.fptu.exe.skillswap.modules.booking.service.BookingService bookingService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public MentorProfileResponse getMyProfile(UUID userId) {
@@ -87,6 +90,8 @@ public class MentorProfileService {
         requireProfileRequest(request);
         MentorProfile profile = getOrCreateProfile(userId);
         List<Tag> helpTopics = loadAndValidateTags(request.helpTopicIds(), Set.of(TagType.HELP_TOPIC), "chủ đề hỗ trợ");
+        Boolean previousAvailability = null;
+        Boolean currentAvailability = null;
 
         profile.setHeadline(clean(request.headline()));
         profile.setExpertiseDescription(clean(request.expertiseDescription()));
@@ -95,13 +100,9 @@ public class MentorProfileService {
         profile.setDirectionSupportLevel(validateSupportLevel(request.directionSupportLevel(), "định hướng"));
         profile.setPhoneNumber(clean(request.phoneNumber()));
         if (request.isAvailable() != null) {
-            boolean wasAvailable = profile.isAvailable();
-            boolean nowAvailable = request.isAvailable();
-            profile.setAvailable(nowAvailable);
-            
-            if (wasAvailable && !nowAvailable) {
-                bookingService.rejectAllPendingBookingsForMentor(userId, "Mentor đã chuyển sang trạng thái không nhận lịch");
-            }
+            previousAvailability = profile.isAvailable();
+            currentAvailability = request.isAvailable();
+            profile.setAvailable(currentAvailability);
         }
         profile.setGithubUrl(cleanNullable(request.githubUrl()));
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
@@ -111,6 +112,7 @@ public class MentorProfileService {
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
         replaceHelpTopics(savedProfile, helpTopics);
         replaceSubjectResults(savedProfile, request.subjectResults());
+        publishAvailabilityChangedEventIfNeeded(savedProfile, previousAvailability, currentAvailability);
         return mapToResponseFromTags(savedProfile, helpTopics);
     }
 
@@ -406,5 +408,24 @@ public class MentorProfileService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ mentor không được để trống");
         }
+    }
+
+    private void publishAvailabilityChangedEventIfNeeded(MentorProfile profile,
+                                                         Boolean previousAvailability,
+                                                         Boolean currentAvailability) {
+        if (profile == null || previousAvailability == null || currentAvailability == null) {
+            return;
+        }
+        if (previousAvailability.booleanValue() == currentAvailability.booleanValue()) {
+            return;
+        }
+        eventPublisher.publishEvent(new MentorAvailabilityChangedEvent(
+                UuidUtil.generateUuidV7(),
+                profile.getUserId(),
+                profile.getUserId(),
+                previousAvailability,
+                currentAvailability,
+                DateTimeUtil.now()
+        ));
     }
 }

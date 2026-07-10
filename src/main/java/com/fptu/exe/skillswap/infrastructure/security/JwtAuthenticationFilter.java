@@ -80,17 +80,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);
         }
-        // ?token= query param is ONLY accepted for the raw WebSocket handshake endpoint.
-        // Regular HTTP APIs must use the Authorization header.
-        // Allowing ?token= on HTTP APIs leaks JWTs into server logs, proxy access logs,
-        // browser history, and Referer headers.
-        String requestPath = request.getServletPath();
-        if (requestPath != null && (requestPath.startsWith("/ws/") || requestPath.equals("/ws"))) {
-            String tokenParam = request.getParameter("token");
-            if (StringUtils.hasText(tokenParam)) {
-                return tokenParam;
-            }
-        }
         return null;
     }
 }

@@ -33,7 +33,7 @@ public class AuthController {
     private final IdentityService identityService;
     private final InMemoryRateLimitService rateLimitService;
 
-    @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực user bằng Google ID token và phát hành token riêng của SkillSwap để gọi các API phía sau. FE dùng đây là API đầu tiên trong luồng authentication trước khi gọi API lấy current user. Nếu là lần đăng nhập đầu, backend có thể tự tạo account mới; refresh token được trả qua HttpOnly cookie còn body giữ access token.")
+    @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực user bằng Google ID token hoặc authorization-code flow và phát hành token riêng của SkillSwap để gọi các API phía sau. FE dùng đây là API đầu tiên trong luồng authentication trước khi gọi API lấy current user. Nếu là lần đăng nhập đầu, backend có thể tự tạo account mới; refresh token được trả qua HttpOnly cookie còn body giữ access token.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng nhập thành công, trả về token"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID Token Google không hợp lệ"),
@@ -57,7 +57,7 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token còn hiệu lực. FE dùng khi access token hết hạn và cần gia hạn phiên đăng nhập mà không bắt user đăng nhập lại. Refresh token có thể được lấy từ request body hoặc từ HttpOnly cookie theo flow backend hiện tại, và token refresh cũ sẽ bị rotate khi thành công.")
+    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token còn hiệu lực. FE dùng khi access token hết hạn và cần gia hạn phiên đăng nhập mà không bắt user đăng nhập lại. Refresh token có thể được lấy từ request body hoặc từ HttpOnly cookie theo flow backend hiện tại. Khi cùng một refresh token cũ được dùng song song trong khoảng grace period, backend sẽ replay lại đúng cùng một token pair thay vì phát sinh token thứ ba.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Làm mới token thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Refresh Token đã hết hạn hoặc bị thu hồi")

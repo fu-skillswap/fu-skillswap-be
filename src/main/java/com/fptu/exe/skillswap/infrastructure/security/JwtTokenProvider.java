@@ -87,7 +87,17 @@ public class JwtTokenProvider {
 
     public boolean validateAccessToken(String token) {
         try {
-            Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
+            Jws<Claims> claimsJws = Jwts.parserBuilder()
+                    .setSigningKey(getSigningKey())
+                    .build()
+                    .parseClaimsJws(token);
+                    
+            // Đóng chốt tường minh: Ép buộc hệ thống chỉ chấp nhận thuật toán HS256
+            if (!SignatureAlgorithm.HS256.getValue().equalsIgnoreCase(claimsJws.getHeader().getAlgorithm())) {
+                log.warn("Cảnh báo bảo mật: JWT sử dụng sai thuật toán. Yêu cầu: HS256, Thực tế: {}", claimsJws.getHeader().getAlgorithm());
+                return false;
+            }
+            
             return true;
         } catch (MalformedJwtException ex) {
             log.warn("Invalid JWT token: {}", ex.getMessage());
@@ -104,10 +114,16 @@ public class JwtTokenProvider {
     }
 
     public Claims getClaimsFromToken(String token) {
-        return Jwts.parserBuilder()
+        Jws<Claims> claimsJws = Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseClaimsJws(token);
+                
+        // Đóng chốt tường minh: Ép buộc hệ thống chỉ chấp nhận thuật toán HS256
+        if (!SignatureAlgorithm.HS256.getValue().equalsIgnoreCase(claimsJws.getHeader().getAlgorithm())) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Thuật toán JWT không hợp lệ. Hệ thống chỉ chấp nhận HS256.");
+        }
+        
+        return claimsJws.getBody();
     }
 }

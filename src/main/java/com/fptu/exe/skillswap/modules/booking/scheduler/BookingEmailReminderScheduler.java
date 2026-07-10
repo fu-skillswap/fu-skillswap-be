@@ -20,8 +20,12 @@ public class BookingEmailReminderScheduler {
             if (sent > 0) {
                 log.info("Sent {} upcoming booking reminder emails.", sent);
             }
+            int warningSent = bookingReminderEmailService.sendAutoCloseWarningEmails();
+            if (warningSent > 0) {
+                log.info("Sent {} auto-close warning emails.", warningSent);
+            }
         } catch (Exception ex) {
-            log.error("Error occurred while sending upcoming booking reminder emails", ex);
+            log.error("Error occurred while sending upcoming booking reminder emails or auto-close warnings", ex);
         }
     }
 

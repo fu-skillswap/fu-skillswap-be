@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.forum.service.AdminForumModerationService;
 import com.fptu.exe.skillswap.modules.forum.service.ForumPostService;
 import com.fptu.exe.skillswap.modules.forum.service.ForumReportService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +29,11 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "application.cursor.crypto.version=test",
+        "application.cursor.crypto.aes-key=MDEyMzQ1Njc4OWFiY2RlZg==",
+        "application.cursor.crypto.hmac-key=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+})
 @AutoConfigureMockMvc
 class ForumControllerSecurityTest {
 
@@ -40,13 +46,15 @@ class ForumControllerSecurityTest {
     private ForumReportService forumReportService;
     @MockBean
     private AdminForumModerationService adminForumModerationService;
+    @MockBean
+    private CursorCodec cursorCodec;
 
     @Test
     void forumPosts_menteeShouldBeAllowed() throws Exception {
         UUID userId = UUID.randomUUID();
         UserPrincipal principal = UserPrincipal.create(userId, "mentee@test.com", List.of(RoleCode.MENTEE));
         when(forumPostService.getPosts(any(), any(), any(), any(), any(), any()))
-                .thenReturn(PageResponse.<ForumPostResponse>builder().content(List.of()).page(0).size(20).totalElements(0).totalPages(0).last(true).build());
+                .thenReturn(CursorPageResponse.<ForumPostResponse>builder().items(List.of()).nextCursor(null).prevCursor(null).hasNext(false).hasPrev(false).limit(20).build());
 
         mockMvc.perform(get("/api/forum/posts")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))

@@ -22,6 +22,7 @@ public record ForumPostResponse(
         boolean reactedByCurrentUser,
         String myReactionType,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        java.util.List<String> imageUrls
 ) {
 }

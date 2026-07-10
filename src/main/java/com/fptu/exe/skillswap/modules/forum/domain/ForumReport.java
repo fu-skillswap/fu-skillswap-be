@@ -29,7 +29,7 @@ import java.util.UUID;
 @Table(name = "forum_reports", uniqueConstraints = {
         @UniqueConstraint(name = "uq_forum_reports_reporter_target", columnNames = {"reporter_user_id", "target_type", "target_id"})
 }, indexes = {
-        @Index(name = "idx_forum_reports_status_created", columnList = "status, created_at"),
+        @Index(name = "idx_forum_reports_status_created", columnList = "status, created_at ASC"),
         @Index(name = "idx_forum_reports_target", columnList = "target_type, target_id")
 })
 @Getter

@@ -5,9 +5,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.cache.annotation.EnableCaching;
 
+import org.springframework.retry.annotation.EnableRetry;
+
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @EnableCaching
+@EnableRetry
 public class ProjectApplication {
 
 	@jakarta.annotation.PostConstruct

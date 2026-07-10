@@ -1,8 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.admin.domain.AuditAction;
-import com.fptu.exe.skillswap.modules.admin.domain.AuditLog;
-import com.fptu.exe.skillswap.modules.admin.repository.AuditLogRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleActorRole;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
@@ -16,13 +13,14 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleRequestRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.session.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import com.fptu.exe.skillswap.shared.util.AuditLogJsonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,8 +44,8 @@ public class BookingRescheduleService {
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final BookingSlotValidator bookingSlotValidator;
     private final NotificationService notificationService;
-    private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
+    private final SessionService sessionService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -247,6 +245,13 @@ public class BookingRescheduleService {
         booking.setUpdatedAt(DateTimeUtil.now());
         booking.setRescheduleCount((booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) + 1);
         bookingRepository.save(booking);
+        if (booking.getStatus() == BookingStatus.PAID || booking.getStatus() == BookingStatus.ACCEPTED) {
+            sessionService.updateScheduleForBooking(
+                    booking.getId(),
+                    rescheduleRequest.getProposedSelectedStartTime(),
+                    rescheduleRequest.getProposedSelectedEndTime()
+            );
+        }
 
         LocalDateTime now = DateTimeUtil.now();
         for (Booking pendingBooking : overlappingPendingBookings) {
@@ -267,12 +272,10 @@ public class BookingRescheduleService {
                 : "Đồng ý dời lịch."));
         rescheduleRequest.setAdminOverride(adminOverride);
         bookingRescheduleRequestRepository.save(rescheduleRequest);
-        if (adminOverride) {
-            saveAdminAuditLog(responderUserId, AuditAction.APPROVE, previousStatus, rescheduleRequest, reason);
-        }
 
         refreshSlotBookedFlag(currentSlot);
         refreshSlotBookedFlag(proposedSlot);
+        eventPublisher.publishEvent(new GoogleCalendarUpdateBookingRequestedEvent(booking.getId(), booking.getUpdatedAt()));
         notifyAccept(rescheduleRequest);
         notifyAutoRejectedPendingBookings(overlappingPendingBookings);
         return toResponse(rescheduleRequest);
@@ -293,9 +296,6 @@ public class BookingRescheduleService {
                 : "Từ chối dời lịch."));
         rescheduleRequest.setAdminOverride(adminOverride);
         bookingRescheduleRequestRepository.save(rescheduleRequest);
-        if (adminOverride) {
-            saveAdminAuditLog(responderUserId, AuditAction.REJECT, previousStatus, rescheduleRequest, reason);
-        }
         notifyReject(rescheduleRequest);
         return toResponse(rescheduleRequest);
     }
@@ -591,34 +591,6 @@ public class BookingRescheduleService {
             return fallback;
         }
         return reason.trim();
-    }
-
-    private void saveAdminAuditLog(UUID adminUserId,
-                                   AuditAction action,
-                                   BookingRescheduleStatus previousStatus,
-                                   BookingRescheduleRequest request,
-                                   String reason) {
-        User adminUser = userRepository.findById(adminUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy admin thực hiện override"));
-        String oldValue = AuditLogJsonUtil.toJson(Map.of(
-                "status", previousStatus == null ? "" : previousStatus.name(),
-                "bookingId", request.getBooking().getId().toString(),
-                "from", request.getPreviousSelectedStartTime() == null ? "" : request.getPreviousSelectedStartTime().toString(),
-                "to", request.getProposedSelectedStartTime() == null ? "" : request.getProposedSelectedStartTime().toString()
-        ));
-        String newValue = AuditLogJsonUtil.toJson(Map.of(
-                "status", action == AuditAction.APPROVE ? BookingRescheduleStatus.ACCEPTED.name() : BookingRescheduleStatus.REJECTED.name(),
-                "reason", reason == null ? "" : reason,
-                "adminOverride", true
-        ));
-        auditLogRepository.save(AuditLog.builder()
-                .actor(adminUser)
-                .action(action)
-                .entityType("BOOKING_RESCHEDULE_REQUEST")
-                .entityId(request.getId())
-                .oldValue(oldValue)
-                .newValue(newValue)
-                .build());
     }
 
     private BookingRescheduleRequestResponse toResponse(BookingRescheduleRequest request) {

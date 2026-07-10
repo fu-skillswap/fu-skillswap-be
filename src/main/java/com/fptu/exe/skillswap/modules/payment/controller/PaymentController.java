@@ -37,6 +37,7 @@ public class PaymentController {
     @Operation(summary = "Tạo payment order cho booking", description = "FE gọi sau khi booking đã sẵn sàng thanh toán. Backend tự áp coupon/credit, sau đó tạo Hosted Payment Link thật từ PayOS và trả checkoutUrl cho FE redirect.")
     @SecurityRequirement(name = "bearerAuth")
     @PostMapping("/me/payment-orders/checkout")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> checkout(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PaymentCheckoutRequest request) {

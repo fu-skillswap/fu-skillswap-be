@@ -48,6 +48,13 @@ public class SettlementAccount {
     @Builder.Default
     private boolean active = true;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private java.math.BigDecimal balance = java.math.BigDecimal.ZERO;
+
+    @jakarta.persistence.Version
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -15,7 +15,6 @@ public interface SettlementAccountRepository extends JpaRepository<SettlementAcc
 
     Optional<SettlementAccount> findByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select account
             from SettlementAccount account
@@ -26,4 +25,20 @@ public interface SettlementAccountRepository extends JpaRepository<SettlementAcc
                                                                    @Param("ownerId") UUID ownerId);
 
     boolean existsByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            UPDATE SettlementAccount a
+            SET a.balance = a.balance - :amount
+            WHERE a.id = :id AND a.balance >= :amount
+            """)
+    int deductBalanceSafely(@Param("id") UUID id, @Param("amount") java.math.BigDecimal amount);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            UPDATE SettlementAccount a
+            SET a.balance = a.balance + :amount
+            WHERE a.id = :id
+            """)
+    int addBalance(@Param("id") UUID id, @Param("amount") java.math.BigDecimal amount);
 }

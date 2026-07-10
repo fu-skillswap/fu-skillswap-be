@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
+import com.fptu.exe.skillswap.modules.identity.domain.UserSessionState;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
@@ -34,17 +35,16 @@ public class IdentityService {
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
     private final GoogleAuthService googleAuthService;
+    private final GoogleCalendarConnectionService googleCalendarConnectionService;
     private final IdentityLoginTransactionService identityLoginTransactionService;
+    private final RefreshTokenReplayCryptoService refreshTokenReplayCryptoService;
     private final AcademicService academicService;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final RefreshTokenCookieProperties refreshTokenCookieProperties;
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
-        if (request == null || request.getIdToken() == null || request.getIdToken().trim().isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Google ID token không được để trống");
-        }
-        GoogleAuthService.GoogleUserInfo googleUser = googleAuthService.verifyToken(request.getIdToken());
+        GoogleAuthService.GoogleUserInfo googleUser = googleCalendarConnectionService.resolveUserInfoForLogin(request);
         return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
     }
 
@@ -55,14 +55,43 @@ public class IdentityService {
         }
         String hash = jwtTokenProvider.hashToken(rawRefreshToken);
 
-        UserSession session = userSessionRepository.findByRefreshTokenHash(hash)
+        UserSession session = userSessionRepository.findByRefreshTokenHashForUpdate(hash)
                 .orElseThrow(() -> new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã hết hạn hoặc không hợp lệ"));
+
+        UserSessionState sessionState = resolveSessionState(session);
 
         if (session.isRevoked()) {
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã bị thu hồi");
         }
 
-        if (session.getExpiresAt().isBefore(DateTimeUtil.now())) {
+        LocalDateTime now = DateTimeUtil.now();
+
+        if (sessionState == UserSessionState.ROTATING_GRACE) {
+            UUID userId = session.getUser().getId();
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản liên kết đã bị xóa khỏi hệ thống"));
+            checkUserStatus(user);
+
+            if (isGraceWindowActive(session, now)) {
+                TokenResponse replayResponse = refreshTokenReplayCryptoService.decrypt(session.getGraceReplayCiphertext());
+                if (replayResponse == null) {
+                    throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Không thể khôi phục phản hồi làm mới phiên");
+                }
+                if (isGraceReplacementRevoked(session, now)) {
+                    markSessionRevoked(session);
+                    userSessionRepository.save(session);
+                    throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã bị thu hồi");
+                }
+                return replayResponse;
+            }
+            markSessionExpired(session);
+            userSessionRepository.save(session);
+            throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
+        }
+
+        if (session.getExpiresAt().isBefore(now)) {
+            markSessionExpired(session);
+            userSessionRepository.save(session);
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
         }
 
@@ -71,12 +100,14 @@ public class IdentityService {
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản liên kết đã bị xóa khỏi hệ thống"));
         checkUserStatus(user);
 
-        // Revoke the old session
-        session.setRevoked(true);
-        userSessionRepository.save(session);
-
         // Generate and issue new token pair (refresh token rotation)
-        return generateTokensAndCreateSession(user);
+        TokenIssuance issuance = generateTokensAndCreateSession(user);
+        session.setSessionState(UserSessionState.ROTATING_GRACE);
+        session.setGraceExpiresAt(now.plusNanos(jwtProperties.getJwt().getRefreshToken().getRotationGracePeriodMillis() * 1_000_000L));
+        session.setGraceReplayCiphertext(refreshTokenReplayCryptoService.encrypt(issuance.tokenResponse()));
+        session.setGraceReplacementSessionId(issuance.session().getId());
+        userSessionRepository.save(session);
+        return issuance.tokenResponse();
     }
 
     @Transactional
@@ -85,9 +116,16 @@ public class IdentityService {
             return;
         }
         String hash = jwtTokenProvider.hashToken(rawRefreshToken);
-        userSessionRepository.findByRefreshTokenHash(hash).ifPresent(session -> {
-            session.setRevoked(true);
-            userSessionRepository.save(session);
+        userSessionRepository.findByRefreshTokenHashForUpdate(hash).ifPresent(session -> {
+            UserSessionState currentState = resolveSessionState(session);
+            UUID replacementSessionId = session.getGraceReplacementSessionId();
+            userSessionRepository.findByGraceReplacementSessionId(session.getId())
+                    .ifPresent(parentSession -> revokeSession(parentSession, UserSessionState.REVOKED));
+            revokeSession(session, UserSessionState.REVOKED);
+            if (currentState == UserSessionState.ROTATING_GRACE && replacementSessionId != null) {
+                userSessionRepository.findById(replacementSessionId)
+                        .ifPresent(replacement -> revokeSession(replacement, UserSessionState.REVOKED));
+            }
         });
     }
 
@@ -101,6 +139,8 @@ public class IdentityService {
 
         List<RoleCode> roles = new java.util.ArrayList<>(user.getRoles());
         boolean hasProfile = academicService.hasCompletedStudentProfile(user.getId());
+        GoogleCalendarConnectionService.UserMeGoogleCalendarView googleCalendarView =
+                googleCalendarConnectionService.getUserMeView(user.getId());
 
         return UserMeResponse.builder()
                 .publicId(user.getPublicId())
@@ -111,6 +151,12 @@ public class IdentityService {
                 .roles(roles)
                 .profileCompleted(hasProfile)
                 .hasStudentProfile(hasProfile)
+                .googleCalendarConnected(googleCalendarView.connected())
+                .googleCalendarSyncEnabled(googleCalendarView.syncEnabled())
+                .googleCalendarEmail(googleCalendarView.email())
+                .googleCalendarNeedsReconnect(googleCalendarView.needsReconnect())
+                .googleCalendarLastSyncStatus(googleCalendarView.lastSyncStatus())
+                .googleCalendarLastSyncAt(googleCalendarView.lastSyncAt())
                 .build();
     }
 
@@ -126,7 +172,7 @@ public class IdentityService {
         }
     }
 
-    private TokenResponse generateTokensAndCreateSession(User user) {
+    private TokenIssuance generateTokensAndCreateSession(User user) {
         List<String> roleNames = user.getRoles()
                 .stream()
                 .map(RoleCode::name)
@@ -149,13 +195,15 @@ public class IdentityService {
                 .refreshTokenHash(hashedRefresh)
                 .expiresAt(expiresAt)
                 .isRevoked(false)
+                .sessionState(UserSessionState.ACTIVE)
                 .build();
-        userSessionRepository.save(session);
+        UserSession savedSession = userSessionRepository.save(session);
 
-        return TokenResponse.builder()
+        TokenResponse tokenResponse = TokenResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .build();
+        return new TokenIssuance(tokenResponse, savedSession);
     }
 
     public String buildRefreshTokenCookieValue(String refreshToken) {
@@ -180,6 +228,54 @@ public class IdentityService {
         return refreshTokenCookieProperties.getName();
     }
 
+    private UserSessionState resolveSessionState(UserSession session) {
+        return session == null || session.getSessionState() == null
+                ? UserSessionState.ACTIVE
+                : session.getSessionState();
+    }
+
+    private boolean isGraceWindowActive(UserSession session, LocalDateTime now) {
+        return session.getGraceExpiresAt() != null && !session.getGraceExpiresAt().isBefore(now);
+    }
+
+    private boolean isGraceReplacementRevoked(UserSession session, LocalDateTime now) {
+        if (session.getGraceReplacementSessionId() == null) {
+            return false;
+        }
+        return userSessionRepository.findById(session.getGraceReplacementSessionId())
+                .map(replacement -> replacement.isRevoked() || replacement.getExpiresAt().isBefore(now))
+                .orElse(false);
+    }
+
+    private void markSessionExpired(UserSession session) {
+        session.setRevoked(true);
+        session.setSessionState(UserSessionState.EXPIRED);
+        session.setGraceExpiresAt(null);
+        session.setGraceReplayCiphertext(null);
+        session.setGraceReplacementSessionId(null);
+    }
+
+    private void markSessionRevoked(UserSession session) {
+        session.setRevoked(true);
+        session.setSessionState(UserSessionState.REVOKED);
+        session.setGraceExpiresAt(null);
+        session.setGraceReplayCiphertext(null);
+        session.setGraceReplacementSessionId(null);
+    }
+
+    private void revokeSession(UserSession session, UserSessionState terminalState) {
+        if (session == null) {
+            return;
+        }
+        session.setRevoked(true);
+        session.setSessionState(terminalState);
+        session.setGraceExpiresAt(null);
+        session.setGraceReplayCiphertext(null);
+        session.setGraceReplacementSessionId(null);
+        userSessionRepository.save(session);
+    }
+
+    private record TokenIssuance(TokenResponse tokenResponse, UserSession session) {}
 }
 
 

@@ -453,4 +453,17 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("now") java.time.LocalDateTime now,
             @Param("reason") String reason
     );
+
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.selectedEndTime between :startInclusive and :endExclusive
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
+    List<Booking> findBookingsAboutToAutoClose(
+            @Param("status") BookingStatus status,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
 }

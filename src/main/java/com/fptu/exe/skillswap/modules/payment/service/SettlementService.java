@@ -22,6 +22,9 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
@@ -43,6 +46,7 @@ public class SettlementService {
     private final PaymentProperties paymentProperties;
     private final CreditLedgerService creditLedgerService;
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public SettlementAccount ensureMentorAccount(UUID mentorUserId) {
         if (mentorUserId == null) {
@@ -51,11 +55,13 @@ public class SettlementService {
         return ensureAccount(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId, "SETTLEMENT_MENTOR_" + mentorUserId);
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public SettlementAccount ensurePlatformAccount() {
         return ensureAccount(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID, "SETTLEMENT_PLATFORM");
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void releaseForBooking(Booking booking) {
         if (booking == null || booking.getId() == null) {
@@ -98,6 +104,7 @@ public class SettlementService {
 
         SettlementAccount platformAccount = lockPlatformAccount();
 
+        settlementAccountRepository.addBalance(mentorAccount.getId(), java.math.BigDecimal.valueOf(releasableScoin));
         settlementEntryRepository.save(SettlementEntry.builder()
                 .accountId(mentorAccount.getId())
                 .entryType(SettlementEntryType.RELEASE)
@@ -112,6 +119,7 @@ public class SettlementService {
                 .memo("Release for completed booking " + booking.getId())
                 .build());
 
+        settlementAccountRepository.addBalance(platformAccount.getId(), java.math.BigDecimal.valueOf(commissionScoin));
         settlementEntryRepository.save(SettlementEntry.builder()
                 .accountId(platformAccount.getId())
                 .entryType(SettlementEntryType.COMMISSION)
@@ -127,6 +135,7 @@ public class SettlementService {
                 .build());
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void handlePaidBookingCancelledByMentee(Booking booking, PaymentOrder paymentOrder, boolean lateCancellation) {
         if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
@@ -185,6 +194,7 @@ public class SettlementService {
         SettlementAccount platformAccount = lockPlatformAccount();
 
         if (mentorShare > 0) {
+            settlementAccountRepository.addBalance(mentorAccount.getId(), java.math.BigDecimal.valueOf(mentorShare));
             settlementEntryRepository.save(SettlementEntry.builder()
                     .accountId(mentorAccount.getId())
                     .entryType(SettlementEntryType.RELEASE)
@@ -201,6 +211,7 @@ public class SettlementService {
         }
 
         if (platformShare > 0) {
+            settlementAccountRepository.addBalance(platformAccount.getId(), java.math.BigDecimal.valueOf(platformShare));
             settlementEntryRepository.save(SettlementEntry.builder()
                     .accountId(platformAccount.getId())
                     .entryType(SettlementEntryType.COMMISSION)
@@ -217,6 +228,7 @@ public class SettlementService {
         }
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void handlePaidBookingCancelledByMentor(Booking booking, PaymentOrder paymentOrder) {
         if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
@@ -266,6 +278,7 @@ public class SettlementService {
         return settlementEntryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public SettlementEntry holdPayout(UUID mentorUserId, UUID payoutRequestId, int amountScoin, String memo) {
         if (amountScoin <= 0) {
@@ -283,6 +296,12 @@ public class SettlementService {
                     account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.HOLD
             ).orElseThrow();
         }
+
+        int rows = settlementAccountRepository.deductBalanceSafely(account.getId(), java.math.BigDecimal.valueOf(amountScoin));
+        if (rows == 0) {
+            throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE, "Số dư không đủ để thực hiện hold");
+        }
+
         return settlementEntryRepository.save(SettlementEntry.builder()
                 .accountId(account.getId())
                 .entryType(SettlementEntryType.HOLD)
@@ -294,6 +313,7 @@ public class SettlementService {
                 .build());
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void voidPayoutHold(UUID mentorUserId, UUID payoutRequestId, String memo) {
         SettlementAccount account = lockMentorAccount(mentorUserId);
@@ -304,17 +324,21 @@ public class SettlementService {
         }
         settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.HOLD
-        ).ifPresent(hold -> settlementEntryRepository.save(SettlementEntry.builder()
-                .accountId(account.getId())
+        ).ifPresent(hold -> {
+            settlementAccountRepository.addBalance(account.getId(), java.math.BigDecimal.valueOf(hold.getAmountScoin()));
+            settlementEntryRepository.save(SettlementEntry.builder()
+                    .accountId(account.getId())
                 .entryType(SettlementEntryType.VOID)
                 .sourceType(LedgerSourceType.PAYOUT_REQUEST)
                 .sourceId(payoutRequestId)
                 .amountScoin(hold.getAmountScoin())
                 .balanceEffectScoin(hold.getAmountScoin())
                 .memo(memo)
-                .build()));
+                .build());
+        });
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void finalizePayout(UUID mentorUserId, UUID payoutRequestId, String memo) {
         SettlementAccount account = lockMentorAccount(mentorUserId);
@@ -353,13 +377,13 @@ public class SettlementService {
     }
 
     private SettlementAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
-        SettlementAccount existing = settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+        SettlementAccount existing = settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElse(null);
         if (existing != null) {
             return existing;
         }
         ensureAccount(ownerType, ownerId, accountCode);
-        return settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+        return settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa settlement account"));
     }
 

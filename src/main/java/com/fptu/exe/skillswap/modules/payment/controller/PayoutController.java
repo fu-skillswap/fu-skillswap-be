@@ -44,6 +44,7 @@ public class PayoutController {
     @Operation(summary = "Tạo payout request", description = "Mentor tạo yêu cầu rút settlement balance đang có.")
     @PreAuthorize("hasRole('MENTOR')")
     @PostMapping("/mentor/payout-requests")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ResponseEntity<ApiResponse<PayoutRequestResponse>> create(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PayoutRequestCreateRequest request) {

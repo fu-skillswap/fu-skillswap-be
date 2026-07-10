@@ -56,6 +56,9 @@ public class MentorPayoutProfile {
     @Builder.Default
     private boolean isActive = true;
 
+    @jakarta.persistence.Version
+    private Long version;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

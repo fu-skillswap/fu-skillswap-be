@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface NotificationRepository extends JpaRepository<Notification, UUID> {
+public interface NotificationRepository extends JpaRepository<Notification, UUID>, NotificationRepositoryCustom {
 
     Page<Notification> findByRecipientUserId(UUID recipientUserId, Pageable pageable);
 

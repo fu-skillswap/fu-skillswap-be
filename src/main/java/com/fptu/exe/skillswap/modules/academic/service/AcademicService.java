@@ -44,7 +44,7 @@ public class AcademicService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    @Cacheable("academicCampuses")
+    @Cacheable(cacheNames = "catalog", key = "'campuses'")
     public List<CampusResponse> getAllCampuses() {
         return campusRepository.findByIsActiveTrue()
                 .stream()
@@ -53,7 +53,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable("academicPrograms")
+    @Cacheable(cacheNames = "catalog", key = "'programs'")
     public List<AcademicProgramResponse> getAllAcademicPrograms() {
         return academicProgramRepository.findByIsActiveTrue()
                 .stream()
@@ -62,7 +62,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable("academicSpecializations")
+    @Cacheable(cacheNames = "catalog", key = "'specializations'")
     public List<SpecializationResponse> getAllSpecializations() {
         return specializationRepository.findByIsActiveTrue()
                 .stream()
@@ -71,10 +71,10 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
-    @Cacheable(value = "academicSpecializationsByProgram", key = "#programId")
+    @Cacheable(cacheNames = "catalog", key = "'specializationsByProgram:' + #programId")
     public List<SpecializationResponse> getSpecializationsByProgram(UUID programId) {
         requireId(programId, "Ngành học");
-        if (!academicProgramRepository.existsById(programId)) {
+        if (!academicProgramRepository.existsByIdAndIsActiveTrue(programId)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học liên kết");
         }
         return specializationRepository.findByProgramIdAndIsActiveTrue(programId)
@@ -134,22 +134,16 @@ public class AcademicService {
         requireId(userId, "Người dùng");
         requireStudentProfileRequest(request);
         validateAcademicTimeline(request);
+        Campus campus = campusRepository.findByIdAndIsActiveTrue(request.getCampusId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cơ sở học tập"));
+        AcademicProgram program = academicProgramRepository.findByIdAndIsActiveTrue(request.getProgramId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học"));
+        Specialization specialization = specializationRepository.findByIdAndIsActiveTrue(request.getSpecializationId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy chuyên ngành"));
+        validateAcademicRelation(program, specialization);
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
-
-        Campus campus = campusRepository.findById(request.getCampusId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cơ sở học tập"));
-
-        AcademicProgram program = academicProgramRepository.findById(request.getProgramId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học"));
-
-        Specialization specialization = specializationRepository.findById(request.getSpecializationId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy chuyên ngành"));
-
-        // Validate specialization belongs to program
-        if (!specialization.getProgram().getId().equals(program.getId())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không thuộc ngành học đã chọn");
-        }
 
         // Normalize student code
         String normalizedStudentCode = request.getStudentCode().trim().toUpperCase();
@@ -236,6 +230,18 @@ public class AcademicService {
     private void requireStudentProfileRequest(StudentProfileRequest request) {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ học thuật không được để trống");
+        }
+    }
+
+    private void validateAcademicRelation(AcademicProgram program, Specialization specialization) {
+        if (program == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Ngành học không được để trống");
+        }
+        if (specialization == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không được để trống");
+        }
+        if (specialization.getProgram() == null || !specialization.getProgram().getId().equals(program.getId())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không thuộc ngành học đã chọn");
         }
     }
 

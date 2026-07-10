@@ -62,7 +62,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Tìm kiếm mentor",
-            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng cùng keyword, help topics, campus, specialization, teaching mode và các sort options hợp lệ để dựng trải nghiệm browse/filter mentor."
+            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng cùng keyword, help topics, campus, specialization và các sort/filter options đúng theo request schema hiện tại để dựng trải nghiệm browse/filter mentor."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),

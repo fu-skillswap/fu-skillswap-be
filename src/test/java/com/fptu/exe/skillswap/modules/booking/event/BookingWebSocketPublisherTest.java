@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
-import com.fptu.exe.skillswap.infrastructure.websocket.RealtimeMessageType;
-import com.fptu.exe.skillswap.infrastructure.websocket.RealtimePushService;
+import com.fptu.exe.skillswap.infrastructure.realtime.RealtimeFanoutService;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,7 +17,7 @@ import static org.mockito.Mockito.verify;
 class BookingWebSocketPublisherTest {
 
     @Mock
-    private RealtimePushService realtimePushService;
+    private RealtimeFanoutService realtimeFanoutService;
 
     @InjectMocks
     private BookingWebSocketPublisher publisher;
@@ -38,7 +37,7 @@ class BookingWebSocketPublisherTest {
 
         publisher.handleBookingStatusUpdate(event);
 
-        verify(realtimePushService).pushToUser(menteeId, RealtimeMessageType.BOOKING_STATUS_UPDATED, event);
-        verify(realtimePushService).pushToUser(mentorId, RealtimeMessageType.BOOKING_STATUS_UPDATED, event);
+        verify(realtimeFanoutService).pushBookingStatus(menteeId, event);
+        verify(realtimeFanoutService).pushBookingStatus(mentorId, event);
     }
 }

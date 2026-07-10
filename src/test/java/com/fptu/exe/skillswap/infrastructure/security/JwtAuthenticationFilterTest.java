@@ -1,8 +1,5 @@
 package com.fptu.exe.skillswap.infrastructure.security;
 
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.impl.DefaultClaims;
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,14 +11,9 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.List;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class JwtAuthenticationFilterTest {
@@ -60,20 +52,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void websocketHandshake_queryParamTokenShouldBeAccepted() throws Exception {
-        UUID userId = UUID.randomUUID();
-        Claims claims = new DefaultClaims();
-        claims.put("userId", userId.toString());
-        claims.put("email", "socket-user@test.com");
-        claims.put("roles", List.of("MENTEE"));
-
-        when(jwtTokenProvider.validateAccessToken("socket-jwt")).thenReturn(true);
-        when(jwtTokenProvider.getClaimsFromToken("socket-jwt")).thenReturn(claims);
-        when(userBanStatusPort.isBanned(userId)).thenReturn(false);
-        when(userAuthLookupPort.findSnapshotByUserId(userId)).thenReturn(
-                java.util.Optional.of(new UserAuthSnapshot(userId, "socket-user@test.com", List.of(RoleCode.MENTOR)))
-        );
-
+    void legacyWebsocketHandshake_queryParamTokenShouldBeIgnored() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.setServletPath("/ws");
         request.setParameter("token", "socket-jwt");
@@ -84,10 +63,7 @@ class JwtAuthenticationFilterTest {
                 new MockFilterChain()
         );
 
-        verify(jwtTokenProvider).validateAccessToken("socket-jwt");
-        assertNotNull(SecurityContextHolder.getContext().getAuthentication());
-        var principal = (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        org.junit.jupiter.api.Assertions.assertTrue(principal.getRoles().contains(RoleCode.MENTOR));
-        org.junit.jupiter.api.Assertions.assertFalse(principal.getRoles().contains(RoleCode.MENTEE));
+        verify(jwtTokenProvider, never()).validateAccessToken("socket-jwt");
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 }

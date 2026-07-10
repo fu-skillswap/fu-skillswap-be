@@ -15,7 +15,6 @@ public interface CreditLedgerAccountRepository extends JpaRepository<CreditLedge
 
     Optional<CreditLedgerAccount> findByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select account
             from CreditLedgerAccount account
@@ -26,4 +25,20 @@ public interface CreditLedgerAccountRepository extends JpaRepository<CreditLedge
                                                                      @Param("ownerId") UUID ownerId);
 
     boolean existsByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            UPDATE CreditLedgerAccount a
+            SET a.balance = a.balance - :amount
+            WHERE a.id = :id AND a.balance >= :amount
+            """)
+    int deductBalanceSafely(@Param("id") UUID id, @Param("amount") int amount);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+            UPDATE CreditLedgerAccount a
+            SET a.balance = a.balance + :amount
+            WHERE a.id = :id
+            """)
+    int addBalance(@Param("id") UUID id, @Param("amount") int amount);
 }

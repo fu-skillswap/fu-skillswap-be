@@ -59,7 +59,35 @@ server:
     threads:
       max: ${TOMCAT_MAX_THREADS:80}
 
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+        add-additional-paths: true
+      show-details: never
+      group:
+        liveness:
+          include: livenessstate
+        readiness:
+          include: readinessstate
+
 application:
+  cursor:
+    crypto:
+      version: ${CURSOR_CRYPTO_VERSION:v1}
+      # Override in production using CURSOR_AES_KEY and CURSOR_HMAC_KEY (base64-encoded keys).
+      aes-key: ${CURSOR_AES_KEY:Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=}
+      hmac-key: ${CURSOR_HMAC_KEY:Q3Vyc29yUGhhc2UxSG1hY0tleUZvclNraWxsU3dhcDAx}
   upload:
     dir: ./uploads/files
   storage:
@@ -78,8 +106,56 @@ application:
           same-site: Lax
     google:
       client-id: ${GOOGLE_CLIENT_ID}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
+      token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
+      token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}
+      calendar-sync-poll-ms: ${GOOGLE_CALENDAR_SYNC_POLL_MS:60000}
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
+  websocket:
+    stomp:
+      enabled: ${WEBSOCKET_STOMP_ENABLED:false}
+      endpoint: ${WEBSOCKET_STOMP_ENDPOINT:/ws-stomp}
+      app-destination-prefix: ${WEBSOCKET_STOMP_APP_PREFIX:/app}
+      user-destination-prefix: ${WEBSOCKET_STOMP_USER_PREFIX:/user}
+      auto-startup: ${WEBSOCKET_STOMP_AUTO_STARTUP:true}
+      system-heartbeat-send-interval-ms: ${WEBSOCKET_STOMP_SYSTEM_HEARTBEAT_SEND_INTERVAL_MS:10000}
+      system-heartbeat-receive-interval-ms: ${WEBSOCKET_STOMP_SYSTEM_HEARTBEAT_RECEIVE_INTERVAL_MS:10000}
+      message-size-limit: ${WEBSOCKET_STOMP_MESSAGE_SIZE_LIMIT:131072}
+      send-buffer-size-limit: ${WEBSOCKET_STOMP_SEND_BUFFER_SIZE_LIMIT:524288}
+      send-time-limit-ms: ${WEBSOCKET_STOMP_SEND_TIME_LIMIT_MS:15000}
+      relay:
+        host: ${WEBSOCKET_STOMP_RELAY_HOST:localhost}
+        port: ${WEBSOCKET_STOMP_RELAY_PORT:61613}
+        username: ${WEBSOCKET_STOMP_RELAY_USERNAME:guest}
+        password: ${WEBSOCKET_STOMP_RELAY_PASSWORD:guest}
+      client-login: ${WEBSOCKET_STOMP_CLIENT_LOGIN:guest}
+      client-passcode: ${WEBSOCKET_STOMP_CLIENT_PASSCODE:guest}
+      system-login: ${WEBSOCKET_STOMP_SYSTEM_LOGIN:guest}
+      system-passcode: ${WEBSOCKET_STOMP_SYSTEM_PASSCODE:guest}
+  realtime:
+    outbox:
+      enabled: ${REALTIME_OUTBOX_ENABLED:false}
+      poll-ms: ${REALTIME_OUTBOX_POLL_MS:1000}
+      exchange: ${REALTIME_OUTBOX_EXCHANGE:skillswap.domain-events}
+      chat-queue: ${REALTIME_OUTBOX_CHAT_QUEUE:skillswap.chat.realtime}
+      notification-queue: ${REALTIME_OUTBOX_NOTIFICATION_QUEUE:skillswap.notification.realtime}
+      dead-letter-exchange: ${REALTIME_OUTBOX_DLX:skillswap.domain-events.dlx}
+      chat-dlq-queue: ${REALTIME_OUTBOX_CHAT_DLQ_QUEUE:skillswap.chat.realtime.dlq}
+
+  filestorage:
+    r2:
+      endpoint: ${R2_ENDPOINT:https://<account_id>.r2.cloudflarestorage.com}
+      access-key: ${R2_ACCESS_KEY:}
+      secret-key: ${R2_SECRET_KEY:}
+      bucket-name: ${R2_BUCKET_NAME:skillswap}
+      public-url-prefix: ${R2_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
+      notification-dlq-queue: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_QUEUE:skillswap.notification.realtime.dlq}
+      chat-dlq-routing-key: ${REALTIME_OUTBOX_CHAT_DLQ_ROUTING_KEY:chat.dlq}
+      notification-dlq-routing-key: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_ROUTING_KEY:notification.dlq}
+      chat-routing-pattern: ${REALTIME_OUTBOX_CHAT_ROUTING_PATTERN:chat.#}
+      notification-routing-pattern: ${REALTIME_OUTBOX_NOTIFICATION_ROUTING_PATTERN:notification.#}
   cloudinary:
     enabled: ${CLOUDINARY_ENABLED:false}
     cloud-name: ${CLOUDINARY_CLOUD_NAME:}

@@ -8,6 +8,9 @@ import jakarta.validation.constraints.Size;
 public record ForumCommentUpsertRequest(
         @NotBlank(message = "Nội dung bình luận không được để trống")
         @Size(max = 2000, message = "Nội dung bình luận không được quá 2000 ký tự")
-        String content
+        String content,
+
+        @Size(max = 1, message = "Mỗi bình luận chỉ được đính kèm tối đa 1 ảnh")
+        java.util.List<@Size(max = 2000, message = "URL ảnh quá dài") String> imageUrls
 ) {
 }

@@ -42,7 +42,19 @@ public class OpenApiConfig {
                             
                             SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
                             Backend hiện cung cấp REST API cho xác thực, hồ sơ, questionnaire nhu cầu mentoring,
-                            mentor service, availability, booking, notification và chat; realtime dùng raw WebSocket theo scope nhỏ.
+                            mentor service, availability, booking, payment, notification, forum, chat và Google Calendar sync.
+                            
+                            ### Quy ước tài liệu API
+                            - Mọi API business trả về `ApiResponse<T>`.
+                            - Một số list endpoint vẫn dùng `page/size`, nhưng một số endpoint mới đã chuyển sang `cursor/limit`.
+                            - Với cursor APIs:
+                              - `cursor` là **opaque string**
+                              - Frontend **không được decode, chỉnh sửa hoặc tự tạo**
+                              - FE chỉ được lấy `nextCursor` từ response trước đó để truyền lại nguyên giá trị
+                            - Các trường thời gian trong response hiện dùng ISO-8601 theo schema `LocalDateTime`.
+                            - Một số endpoint upload hiện hỗ trợ cả:
+                              - `multipart/form-data`
+                              - JSON metadata fallback để tương thích FE cũ
                             
                             ### Realtime guide cho Frontend
                             - Dùng **REST API** để:
@@ -50,15 +62,32 @@ public class OpenApiConfig {
                               - load conversation list
                               - load message history
                               - load notification list và unread count
-                            - Dùng **raw WebSocket** chỉ để nhận realtime push event.
-                            - FE connect websocket bằng:
-                              - `wss://api.skillswap.asia/ws?token=<accessToken>`
-                            - Chỉ dùng **access token**. Không dùng refresh token trong websocket URL.
+                            - Realtime production dùng duy nhất STOMP relay endpoint: `/ws-stomp`
+                            - Legacy raw websocket `/ws` đã bị decommission và sẽ trả `410 Gone`.
+                            - STOMP user destinations hiện dùng cho chat/notification:
+                              - `/user/queue/chat/messages`
+                              - `/user/queue/chat/inbox`
+                              - `/user/queue/chat/unread`
+                              - `/user/queue/notifications/items`
+                              - `/user/queue/notifications/badge`
+                            - Booking realtime hiện push qua STOMP destination: `/user/queue/bookings/status`
+                            - FE gửi access token qua STOMP `CONNECT` header `Authorization: Bearer <accessToken>`.
+                            - Heartbeat production chuẩn là `10000,10000` ở cả client và server relay.
                             - Sau khi reconnect, FE nên resync dữ liệu cần thiết qua REST.
-                            - Scope websocket hiện tại được giữ nhỏ, chỉ gồm:
+                            - Scope realtime hiện tại được giữ nhỏ, chỉ gồm:
                               - push chat message mới
+                              - push cập nhật inbox chat
+                              - push unread count của chat
                               - push notification quan trọng
                               - push badge update cho notification unread count
+                            - Realtime chat có thể tới lệch thứ tự trong tình huống mạng thực tế.
+                              FE phải sort defensive theo `createdAt`, tie-break bằng `messageId`.
+                            - Conversation list là dữ liệu động theo `lastMessageAt`; khi merge các cursor page, FE phải dedup theo `conversationId` thay vì append mù.
+                            
+                            ### Google Calendar / Google Meet
+                            - Mentor có thể kết nối Google Calendar qua nhóm API `Google Calendar`.
+                            - Khi booking đủ điều kiện, backend có thể tự tạo Google Meet và đồng bộ lên Google Calendar của mentor.
+                            - Mentee không cần tự connect lịch để nhận link meeting trong flow hiện tại.
                             
                             ### Cách dùng token trên Swagger UI
                             1. Lấy `accessToken` hợp lệ từ flow login hiện tại.
@@ -83,8 +112,10 @@ public class OpenApiConfig {
                                         .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`")))
                 .tags(List.of(
                         new Tag().name("Authentication").description("Nhóm API dùng cho đăng nhập Google, làm mới token, đăng xuất và lấy thông tin user hiện tại. FE dùng nhóm này ở đầu luồng onboarding và khi cần khôi phục phiên đăng nhập."),
-                        new Tag().name("Academic Catalog").description("Nhóm API trả dữ liệu danh mục campus, program và specialization để điền form onboarding hoặc form cập nhật hồ sơ học thuật. FE dùng các API này để đổ dropdown trước khi lưu Academic Profile."),
-                        new Tag().name("Help Topic Catalog").description("Nhóm API trả danh sách help topics dùng trong mentor profile, mentor services và bộ lọc discovery. FE dùng khi cần danh sách chủ đề hỗ trợ để chọn trong form hoặc filter."),
+                        new Tag().name("Google Calendar").description("Nhóm API kết nối, kiểm tra trạng thái và ngắt kết nối Google Calendar để backend tự tạo Google Meet và đồng bộ lịch cho booking."),
+                        new Tag().name("Academic Catalog").description("Nhóm API trả dữ liệu danh mục campus, program và specialization để điền form onboarding hoặc form cập nhật hồ sơ học thuật. Các endpoint master data này được cache 24h bằng HTTP Cache-Control và cache backend."),
+                        new Tag().name("Onboarding").description("Nhóm API tổng hợp trạng thái onboarding hiện tại của user để FE quyết định điều hướng tiếp theo như điền profile, hoàn thành nhu cầu mentoring hoặc nộp verification."),
+                        new Tag().name("Help Topic Catalog").description("Nhóm API trả danh sách help topics dùng trong mentor profile, mentor services và bộ lọc discovery. Các endpoint master data này được cache 24h bằng HTTP Cache-Control và cache backend."),
                         new Tag().name("Academic Profile").description("Nhóm API tạo và cập nhật hồ sơ học thuật của user hiện tại. FE dùng ở bước onboarding và ở những luồng mà việc hoàn thành profile ảnh hưởng đến quyền sử dụng tính năng."),
                         new Tag().name("Mentee Matching Profile").description("Nhóm API lấy 5 câu hỏi nhu cầu mentoring và lưu câu trả lời flat của mentee để phục vụ Smart Matching."),
                         new Tag().name("Mentor Profile").description("Nhóm API tạo và duy trì hồ sơ peer mentor: headline, mô tả, help topics, môn - điểm, 3 mức support, GitHub/portfolio và các mục project/achievement optional."),
@@ -134,7 +165,9 @@ public class OpenApiConfig {
 
             List<String> preferredOrder = List.of(
                     "Authentication",
+                    "Google Calendar",
                     "Academic Catalog",
+                    "Onboarding",
                     "Help Topic Catalog",
                     "Academic Profile",
                     "Mentee Matching Profile",

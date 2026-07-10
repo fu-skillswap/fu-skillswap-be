@@ -8,8 +8,11 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationBadgeChangedEvent;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent;
+import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +44,12 @@ class NotificationServiceTest {
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    private CursorCodec cursorCodec;
+    @Mock
+    private DomainEventOutboxService domainEventOutboxService;
+    @Mock
+    private RealtimeOutboxProperties realtimeOutboxProperties;
 
     @InjectMocks
     private NotificationService notificationService;

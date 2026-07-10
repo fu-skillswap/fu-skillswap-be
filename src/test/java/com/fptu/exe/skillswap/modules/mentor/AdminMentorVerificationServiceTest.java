@@ -23,7 +23,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -71,8 +71,6 @@ class AdminMentorVerificationServiceTest {
     private AcademicService academicService;
     @Mock
     private MentorProfileService mentorProfileService;
-    @Mock
-    private NotificationService notificationService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
@@ -196,20 +194,22 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.APPROVED);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
-        verify(notificationService).createNotification(
-                eq(mentor.getId()),
-                eq(NotificationType.MENTOR_VERIFICATION_APPROVED),
-                eq("Yêu cầu trở thành mentor đã được duyệt"),
-                eq("Hồ sơ mentor của bạn đã được duyệt. Bạn có thể bắt đầu nhận yêu cầu đặt lịch."),
-                eq("MENTOR_VERIFICATION"),
-                eq(request.getId())
-        );
-        ArgumentCaptor<MentorVerificationEmailNotificationEvent> emailEventCaptor =
-                ArgumentCaptor.forClass(MentorVerificationEmailNotificationEvent.class);
-        verify(eventPublisher).publishEvent(emailEventCaptor.capture());
-        assertThat(emailEventCaptor.getValue().getEventType())
-                .isEqualTo(MentorVerificationEmailNotificationEvent.EventType.APPROVED_EMAIL);
-        assertThat(emailEventCaptor.getValue().getRecipientEmail()).isEqualTo("mentor@test.com");
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).hasSize(2);
+        NotificationEvent notificationEvent = (NotificationEvent) eventCaptor.getAllValues().stream()
+                .filter(NotificationEvent.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+        MentorVerificationEmailNotificationEvent emailEvent = (MentorVerificationEmailNotificationEvent) eventCaptor.getAllValues().stream()
+                .filter(MentorVerificationEmailNotificationEvent.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+        assertThat(notificationEvent.recipientUserId()).isEqualTo(mentor.getId());
+        assertThat(notificationEvent.type()).isEqualTo(NotificationType.MENTOR_VERIFICATION_APPROVED);
+        assertThat(notificationEvent.relatedEntityId()).isEqualTo(request.getId());
+        assertThat(emailEvent.getEventType()).isEqualTo(MentorVerificationEmailNotificationEvent.EventType.APPROVED_EMAIL);
+        assertThat(emailEvent.getRecipientEmail()).isEqualTo("mentor@test.com");
     }
 
     @Test
@@ -239,15 +239,12 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.REJECTED);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
-        verify(notificationService).createNotification(
-                eq(mentor.getId()),
-                eq(NotificationType.MENTOR_VERIFICATION_REJECTED),
-                eq("Yêu cầu trở thành mentor đã bị từ chối"),
-                eq("Hồ sơ mentor của bạn chưa được duyệt. Vui lòng xem lý do từ chối và cập nhật lại nếu cần."),
-                eq("MENTOR_VERIFICATION"),
-                eq(request.getId())
-        );
-        verify(eventPublisher, never()).publishEvent(any(MentorVerificationEmailNotificationEvent.class));
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        NotificationEvent notificationEvent = (NotificationEvent) eventCaptor.getValue();
+        assertThat(notificationEvent.recipientUserId()).isEqualTo(mentor.getId());
+        assertThat(notificationEvent.type()).isEqualTo(NotificationType.MENTOR_VERIFICATION_REJECTED);
+        assertThat(notificationEvent.relatedEntityId()).isEqualTo(request.getId());
     }
 
     @Test
@@ -277,21 +274,22 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.NEEDS_REVISION);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
-        verify(notificationService).createNotification(
-                eq(mentor.getId()),
-                eq(NotificationType.MENTOR_VERIFICATION_NEEDS_REVISION),
-                eq("Hồ sơ mentor cần được bổ sung"),
-                eq("Hồ sơ mentor của bạn cần được bổ sung thông tin trước khi xét duyệt."),
-                eq("MENTOR_VERIFICATION"),
-                eq(request.getId())
-        );
-        ArgumentCaptor<MentorVerificationEmailNotificationEvent> emailEventCaptor =
-                ArgumentCaptor.forClass(MentorVerificationEmailNotificationEvent.class);
-        verify(eventPublisher).publishEvent(emailEventCaptor.capture());
-        assertThat(emailEventCaptor.getValue().getEventType())
-                .isEqualTo(MentorVerificationEmailNotificationEvent.EventType.NEEDS_REVISION_EMAIL);
-        assertThat(emailEventCaptor.getValue().getRecipientEmail()).isEqualTo("mentor@test.com");
-        assertThat(emailEventCaptor.getValue().getReviewNote()).isEqualTo("Need more info");
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).hasSize(2);
+        NotificationEvent notificationEvent = (NotificationEvent) eventCaptor.getAllValues().stream()
+                .filter(NotificationEvent.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+        MentorVerificationEmailNotificationEvent emailEvent = (MentorVerificationEmailNotificationEvent) eventCaptor.getAllValues().stream()
+                .filter(MentorVerificationEmailNotificationEvent.class::isInstance)
+                .findFirst()
+                .orElseThrow();
+        assertThat(notificationEvent.recipientUserId()).isEqualTo(mentor.getId());
+        assertThat(notificationEvent.type()).isEqualTo(NotificationType.MENTOR_VERIFICATION_NEEDS_REVISION);
+        assertThat(emailEvent.getEventType()).isEqualTo(MentorVerificationEmailNotificationEvent.EventType.NEEDS_REVISION_EMAIL);
+        assertThat(emailEvent.getRecipientEmail()).isEqualTo("mentor@test.com");
+        assertThat(emailEvent.getReviewNote()).isEqualTo("Need more info");
     }
 
     @Test
@@ -310,7 +308,7 @@ class AdminMentorVerificationServiceTest {
         assertThatThrownBy(() -> adminMentorVerificationService.approve(admin.getId(), request.getId(), "OK"))
                 .isInstanceOf(BaseException.class);
 
-        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(NotificationEvent.class));
     }
 
     @Test

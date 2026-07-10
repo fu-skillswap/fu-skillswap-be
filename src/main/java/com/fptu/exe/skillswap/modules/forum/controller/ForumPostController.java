@@ -8,10 +8,13 @@ import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.service.ForumPostService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
-import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
+import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -41,17 +44,86 @@ public class ForumPostController {
     private final ForumPostService forumPostService;
 
     @GetMapping("/posts")
-    @Operation(summary = "Lấy danh sách bài viết forum", description = "Danh sách bài viết forum cho user đã đăng nhập, mặc định sắp xếp bài mới nhất trước.")
-    public ApiResponse<PageResponse<ForumPostResponse>> getPosts(
+    @Operation(
+            summary = "Lấy danh sách bài viết forum",
+            description = """
+                    Trả về danh sách bài viết forum theo cursor pagination.
+                    
+                    Lưu ý cho Frontend:
+                    - `cursor` là opaque string, chỉ được lấy từ `nextCursor` của response trước đó.
+                    - Không được decode, chỉnh sửa hoặc tự tạo cursor mới.
+                    - Endpoint này trả `ApiResponse<CursorPageResponse<ForumPostResponse>>`.
+                    - `nextCursor = null` nghĩa là đã hết dữ liệu.
+                    """
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Lấy danh sách forum posts thành công",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(
+                                    name = "ForumPostCursorPage",
+                                    value = """
+                                            {
+                                              "timestamp": "2026-07-08 15:40:00",
+                                              "status": 200,
+                                              "code": "SUCCESS_0200",
+                                              "message": "Thành công",
+                                              "data": {
+                                                "items": [
+                                                  {
+                                                    "postId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a1001",
+                                                    "authorUserId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a2001",
+                                                    "authorFullName": "Nguyen Van A",
+                                                    "authorAvatarUrl": "https://cdn.skillswap.asia/avatar/a.jpg",
+                                                    "helpTopic": {
+                                                      "id": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a3001",
+                                                      "code": "HELP_PROJECT_REVIEW",
+                                                      "nameVi": "Góp ý dự án/case study",
+                                                      "nameEn": "Project or case study review"
+                                                    },
+                                                    "title": "Xin góp ý slide milestone",
+                                                    "content": "Mọi người review giúp mình flow thuyết trình với.",
+                                                    "status": "PUBLISHED",
+                                                    "commentCount": 3,
+                                                    "reactionCount": 5,
+                                                    "reportCount": 0,
+                                                    "lastActivityAt": "2026-07-08T14:30:00",
+                                                    "reactedByCurrentUser": false,
+                                                    "myReactionType": null,
+                                                    "createdAt": "2026-07-08T10:00:00",
+                                                    "updatedAt": "2026-07-08T10:00:00"
+                                                  }
+                                                ],
+                                                "nextCursor": "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I",
+                                                "prevCursor": null,
+                                                "hasNext": true,
+                                                "hasPrev": false,
+                                                "limit": 20
+                                              }
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
+    public ApiResponse<CursorPageResponse<ForumPostResponse>> getPosts(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam(defaultValue = "0") Integer page,
-            @RequestParam(defaultValue = "20") Integer size,
+            @Parameter(
+                    description = "Opaque cursor string. Frontend không được cố gắng decode hay tự tạo chuỗi này; chỉ được lấy từ nextCursor của response trước đó để truyền lên.",
+                    example = "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I"
+            )
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "Số lượng item mong muốn cho một lần lấy dữ liệu. Mặc định 20, tối đa 50.", example = "20")
+            @RequestParam(defaultValue = "20") Integer limit,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) UUID helpTopicId,
             @RequestParam(required = false, defaultValue = "false") Boolean mine
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(forumPostService.getPosts(principal.getPublicId(), page, size, keyword, helpTopicId, mine));
+        return ApiResponse.success(forumPostService.getPosts(principal.getPublicId(), cursor, limit, keyword, helpTopicId, mine));
     }
 
     @GetMapping("/posts/{postId}")
@@ -97,14 +169,19 @@ public class ForumPostController {
 
     @GetMapping("/posts/{postId}/comments")
     @Operation(summary = "Lấy comment của bài viết forum", description = "Danh sách comment theo thứ tự cũ nhất trước.")
-    public ApiResponse<PageResponse<ForumCommentResponse>> getComments(
+    public ApiResponse<CursorPageResponse<ForumCommentResponse>> getComments(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
-            @RequestParam(defaultValue = "0") Integer page,
-            @RequestParam(defaultValue = "20") Integer size
+            @Parameter(
+                    description = "Opaque cursor string. Frontend không được cố gắng decode hay tự tạo chuỗi này; chỉ được lấy từ nextCursor của response trước đó để truyền lên.",
+                    example = "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I"
+            )
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "Số lượng item mong muốn cho một lần lấy dữ liệu. Mặc định 20, tối đa 50.", example = "20")
+            @RequestParam(defaultValue = "20") Integer limit
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(forumPostService.getComments(principal.getPublicId(), postId, page, size));
+        return ApiResponse.success(forumPostService.getComments(principal.getPublicId(), postId, cursor, limit));
     }
 
     @PostMapping("/posts/{postId}/comments")

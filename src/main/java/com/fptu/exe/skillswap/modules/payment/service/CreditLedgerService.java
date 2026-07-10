@@ -13,6 +13,9 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.EnumMap;
@@ -29,6 +32,7 @@ public class CreditLedgerService {
     private final CreditLedgerAccountRepository accountRepository;
     private final CreditLedgerEntryRepository entryRepository;
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public CreditLedgerAccount ensureUserAccount(UUID userId) {
         if (userId == null) {
@@ -37,11 +41,13 @@ public class CreditLedgerService {
         return ensureAccount(LedgerAccountType.USER_CREDIT, userId, "CREDIT_USER_" + userId);
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public CreditLedgerAccount ensurePlatformAccount() {
         return ensureAccount(LedgerAccountType.PLATFORM_SETTLEMENT, PLATFORM_OWNER_ID, "CREDIT_PLATFORM");
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public CreditLedgerAccount getUserAccountForUpdate(UUID userId) {
         if (userId == null) {
@@ -72,6 +78,7 @@ public class CreditLedgerService {
         return entryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public List<CreditLedgerEntry> reserveCredit(UUID userId,
                                                  int amountScoin,
@@ -104,6 +111,7 @@ public class CreditLedgerService {
         );
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void consumeReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
         CreditLedgerAccount account = getUserAccountForUpdate(userId);
@@ -129,6 +137,7 @@ public class CreditLedgerService {
         }
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void releaseReservedCredit(UUID userId, LedgerSourceType sourceType, UUID sourceId, String memo) {
         CreditLedgerAccount account = getUserAccountForUpdate(userId);
@@ -141,6 +150,7 @@ public class CreditLedgerService {
                 account.getId(), sourceType, sourceId, LedgerEntryType.RESERVE
         );
         for (CreditLedgerEntry reserve : reserves) {
+            accountRepository.addBalance(account.getId(), reserve.getAmountScoin());
             entryRepository.save(CreditLedgerEntry.builder()
                     .accountId(account.getId())
                     .entryType(LedgerEntryType.RELEASE)
@@ -154,6 +164,7 @@ public class CreditLedgerService {
         }
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public CreditLedgerEntry issueCredit(UUID userId,
                                          CreditOriginType originType,
@@ -165,6 +176,7 @@ public class CreditLedgerService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Số credit phát hành phải lớn hơn 0");
         }
         CreditLedgerAccount account = getUserAccountForUpdate(userId);
+        accountRepository.addBalance(account.getId(), amountScoin);
         return entryRepository.save(CreditLedgerEntry.builder()
                 .accountId(account.getId())
                 .entryType(LedgerEntryType.ISSUE)
@@ -177,6 +189,7 @@ public class CreditLedgerService {
                 .build());
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public void refundCredit(UUID userId,
                              CreditOriginType originType,
@@ -188,6 +201,7 @@ public class CreditLedgerService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Số credit hoàn trả phải lớn hơn 0");
         }
         CreditLedgerAccount account = getUserAccountForUpdate(userId);
+        accountRepository.addBalance(account.getId(), amountScoin);
         entryRepository.save(CreditLedgerEntry.builder()
                 .accountId(account.getId())
                 .entryType(LedgerEntryType.REFUND)
@@ -206,13 +220,13 @@ public class CreditLedgerService {
     }
 
     private CreditLedgerAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
-        CreditLedgerAccount existing = accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+        CreditLedgerAccount existing = accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElse(null);
         if (existing != null) {
             return existing;
         }
         ensureAccount(ownerType, ownerId, accountCode);
-        return accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
+        return accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa credit account"));
     }
 
@@ -235,6 +249,10 @@ public class CreditLedgerService {
                          UUID sourceId,
                          int amountScoin,
                          String memo) {
+        int rows = accountRepository.deductBalanceSafely(accountId, amountScoin);
+        if (rows == 0) {
+            throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE, "Tài khoản không đủ số dư SCoin");
+        }
         entryRepository.save(CreditLedgerEntry.builder()
                 .accountId(accountId)
                 .entryType(LedgerEntryType.RESERVE)

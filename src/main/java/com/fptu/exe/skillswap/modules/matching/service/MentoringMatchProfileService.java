@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.matching.service;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.matching.event.MatchingFeaturesInvalidationEvent;
 import com.fptu.exe.skillswap.modules.matching.domain.*;
 import com.fptu.exe.skillswap.modules.matching.dto.request.AdminQuestionnaireActivateRequest;
 import com.fptu.exe.skillswap.modules.matching.dto.request.AdminQuestionnaireVersionCreateRequest;
@@ -12,6 +13,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -39,6 +41,8 @@ public class MentoringMatchProfileService {
     private final MentoringQuestionnaireActivationRepository activationRepository;
     private final MentoringQuestionnaireAnswerRepository answerRepository;
     private final UserRepository userRepository;
+    private final MenteeMatchingFeatureProvider matchingFeatureProvider;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public MentoringQuestionnaireResponse getActiveQuestionnaire() {
@@ -51,28 +55,7 @@ public class MentoringMatchProfileService {
         requireUserId(userId);
         MentoringQuestionnaireActivation activation = getOrCreateActiveActivationReadOnlySafe();
         List<MentoringQuestionnaireAnswer> activeAnswers = answerRepository.findByActivationIdAndUserId(activation.getId(), userId);
-        boolean completed = activeAnswers.size() == QUESTION_ORDER.size();
-        MenteeMatchingFeatures features = latestFeatures(userId);
-        LocalDateTime latestAnsweredAt = activeAnswers.stream()
-                .map(MentoringQuestionnaireAnswer::getAnsweredAt)
-                .max(LocalDateTime::compareTo)
-                .orElse(null);
-        Map<String, String> answerCodes = activeAnswers.stream()
-                .collect(Collectors.toMap(MentoringQuestionnaireAnswer::getQuestionCode, MentoringQuestionnaireAnswer::getOptionCode, (left, right) -> right, LinkedHashMap::new));
-        return MentoringMatchProfileResponse.builder()
-                .exists(completed || features.hasAnySignal())
-                .currentActivationCompleted(completed)
-                .latestAnsweredAt(latestAnsweredAt)
-                .activeActivationId(activation.getId())
-                .activeVersionId(activation.getVersion().getId())
-                .activeVersionNumber(activation.getVersion().getVersionNumber())
-                .foundationNeedLevel(features.foundationNeedLevel())
-                .outputReviewNeedLevel(features.outputReviewNeedLevel())
-                .directionNeedLevel(features.directionNeedLevel())
-                .mentorFitCode(features.mentorFitCode())
-                .durationPreferenceCode(features.durationPreferenceCode())
-                .latestAnswerCodes(answerCodes)
-                .build();
+        return buildMatchingProfileResponse(activation, activeAnswers, matchingFeatureProvider.getLatestFeatures(userId));
     }
 
     @Transactional
@@ -117,29 +100,13 @@ public class MentoringMatchProfileService {
                     .build());
         }
         answerRepository.saveAll(answers);
-        return getMyMatchingProfile(userId);
+        eventPublisher.publishEvent(MatchingFeaturesInvalidationEvent.forUser(userId, "MentoringMatchProfileService.submitMyMatchingProfile"));
+        return buildMatchingProfileResponse(activation, answers, computeFeaturesFromAnswers(answers));
     }
 
     @Transactional(readOnly = true)
     public MenteeMatchingFeatures latestFeatures(UUID userId) {
-        requireUserId(userId);
-        MentoringQuestionnaireActivation activation = activationRepository.findFirstByDeactivatedAtIsNullOrderByActivatedAtDesc().orElse(null);
-        List<MentoringQuestionnaireAnswer> answers = activation == null
-                ? answerRepository.findFirst5ByUserIdOrderByAnsweredAtDesc(userId)
-                : answerRepository.findByActivationIdAndUserId(activation.getId(), userId);
-        Map<String, MentoringQuestionnaireAnswer> byCode = answers.stream()
-                .collect(Collectors.toMap(MentoringQuestionnaireAnswer::getQuestionCode, Function.identity(), (left, right) -> right));
-        return new MenteeMatchingFeatures(
-                score(byCode, MentoringQuestionnaireDefaults.Q1_FOUNDATION_LEVEL),
-                score(byCode, MentoringQuestionnaireDefaults.Q2_OUTPUT_REVIEW_LEVEL),
-                score(byCode, MentoringQuestionnaireDefaults.Q3_DIRECTION_LEVEL),
-                option(byCode, MentoringQuestionnaireDefaults.Q4_MENTOR_FIT),
-                option(byCode, MentoringQuestionnaireDefaults.Q5_DURATION_PREFERENCE),
-                answers.stream()
-                        .map(MentoringQuestionnaireAnswer::getAnsweredAt)
-                        .max(LocalDateTime::compareTo)
-                        .orElse(null)
-        );
+        return matchingFeatureProvider.getLatestFeatures(userId);
     }
 
     @Transactional(readOnly = true)
@@ -191,6 +158,7 @@ public class MentoringMatchProfileService {
                 .activatedBy(admin)
                 .activatedAt(DateTimeUtil.now())
                 .build());
+        eventPublisher.publishEvent(MatchingFeaturesInvalidationEvent.invalidateAll("MentoringMatchProfileService.activateVersion"));
         return toActivationResponse(activation);
     }
 
@@ -435,6 +403,51 @@ public class MentoringMatchProfileService {
                 .build();
     }
 
+    private MentoringMatchProfileResponse buildMatchingProfileResponse(
+            MentoringQuestionnaireActivation activation,
+            List<MentoringQuestionnaireAnswer> activeAnswers,
+            MenteeMatchingFeatures features
+    ) {
+        boolean completed = activeAnswers.size() == QUESTION_ORDER.size();
+        LocalDateTime latestAnsweredAt = activeAnswers.stream()
+                .map(MentoringQuestionnaireAnswer::getAnsweredAt)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        Map<String, String> answerCodes = activeAnswers.stream()
+                .collect(Collectors.toMap(MentoringQuestionnaireAnswer::getQuestionCode, MentoringQuestionnaireAnswer::getOptionCode, (left, right) -> right, LinkedHashMap::new));
+        return MentoringMatchProfileResponse.builder()
+                .exists(completed || features.hasAnySignal())
+                .currentActivationCompleted(completed)
+                .latestAnsweredAt(latestAnsweredAt)
+                .activeActivationId(activation.getId())
+                .activeVersionId(activation.getVersion().getId())
+                .activeVersionNumber(activation.getVersion().getVersionNumber())
+                .foundationNeedLevel(features.foundationNeedLevel())
+                .outputReviewNeedLevel(features.outputReviewNeedLevel())
+                .directionNeedLevel(features.directionNeedLevel())
+                .mentorFitCode(features.mentorFitCode())
+                .durationPreferenceCode(features.durationPreferenceCode())
+                .latestAnswerCodes(answerCodes)
+                .build();
+    }
+
+    private MenteeMatchingFeatures computeFeaturesFromAnswers(List<MentoringQuestionnaireAnswer> answers) {
+        Map<String, MentoringQuestionnaireAnswer> byCode = answers.stream()
+                .collect(Collectors.toMap(MentoringQuestionnaireAnswer::getQuestionCode, Function.identity(), (left, right) -> left));
+        LocalDateTime latestAnsweredAt = answers.stream()
+                .map(MentoringQuestionnaireAnswer::getAnsweredAt)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        return new MenteeMatchingFeatures(
+                scoreValue(byCode, MentoringQuestionnaireDefaults.Q1_FOUNDATION_LEVEL),
+                scoreValue(byCode, MentoringQuestionnaireDefaults.Q2_OUTPUT_REVIEW_LEVEL),
+                scoreValue(byCode, MentoringQuestionnaireDefaults.Q3_DIRECTION_LEVEL),
+                optionCode(byCode, MentoringQuestionnaireDefaults.Q4_MENTOR_FIT),
+                optionCode(byCode, MentoringQuestionnaireDefaults.Q5_DURATION_PREFERENCE),
+                latestAnsweredAt
+        );
+    }
+
     private Map<String, String> submittedAnswers(MentoringMatchProfileSubmitRequest request) {
         Map<String, String> result = new LinkedHashMap<>();
         result.put(MentoringQuestionnaireDefaults.Q1_FOUNDATION_LEVEL, request.question1AnswerCode());
@@ -445,12 +458,12 @@ public class MentoringMatchProfileService {
         return result;
     }
 
-    private Integer score(Map<String, MentoringQuestionnaireAnswer> answers, String code) {
+    private Integer scoreValue(Map<String, MentoringQuestionnaireAnswer> answers, String code) {
         MentoringQuestionnaireAnswer answer = answers.get(code);
         return answer == null ? null : answer.getScoreValue();
     }
 
-    private String option(Map<String, MentoringQuestionnaireAnswer> answers, String code) {
+    private String optionCode(Map<String, MentoringQuestionnaireAnswer> answers, String code) {
         MentoringQuestionnaireAnswer answer = answers.get(code);
         return answer == null ? null : answer.getOptionCode();
     }

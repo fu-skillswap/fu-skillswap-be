@@ -15,7 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
+public interface ConversationRepository extends JpaRepository<Conversation, UUID>, ConversationRepositoryCustom {
     Optional<Conversation> findBySourceTypeAndSourceId(ConversationSourceType sourceType, UUID sourceId);
 
     java.util.List<Conversation> findBySourceTypeAndSourceIdIn(ConversationSourceType sourceType, java.util.List<UUID> sourceIds);

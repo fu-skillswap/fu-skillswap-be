@@ -48,4 +48,22 @@ public class UserMeResponse {
         example = "true"
     )
     private boolean hasStudentProfile;
+
+    @Schema(description = "True nếu user hiện tại đã kết nối Google Calendar cho tài khoản này", example = "true")
+    private boolean googleCalendarConnected;
+
+    @Schema(description = "True nếu backend đang có thể tự đồng bộ lịch lên Google Calendar", example = "true")
+    private boolean googleCalendarSyncEnabled;
+
+    @Schema(description = "Email Google Calendar đang liên kết", nullable = true, example = "mentor@fpt.edu.vn")
+    private String googleCalendarEmail;
+
+    @Schema(description = "True nếu user cần reconnect lại Google Calendar do token/scope không còn hợp lệ", example = "false")
+    private boolean googleCalendarNeedsReconnect;
+
+    @Schema(description = "Trạng thái sync gần nhất của Google Calendar", nullable = true, example = "SYNCED")
+    private String googleCalendarLastSyncStatus;
+
+    @Schema(description = "Thời điểm sync gần nhất của Google Calendar", nullable = true)
+    private java.time.LocalDateTime googleCalendarLastSyncAt;
 }

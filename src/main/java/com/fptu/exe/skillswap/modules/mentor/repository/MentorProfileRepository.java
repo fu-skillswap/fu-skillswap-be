@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -553,7 +553,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     List<UUID> findActiveMentorUserIds(@Param("mentorStatus") MentorStatus mentorStatus);
 
     @Query(value = """
-            select new com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse(
+            select new com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse(
                 mp.userId,
                 u.fullName,
                 u.email,

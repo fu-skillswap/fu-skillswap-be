@@ -1,7 +1,9 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
+import com.fptu.exe.skillswap.infrastructure.filter.LegacyRawWebSocketGoneFilter;
 import com.fptu.exe.skillswap.infrastructure.security.JwtAuthenticationFilter;
 import com.fptu.exe.skillswap.infrastructure.security.SecurityErrorResponseHandler;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +18,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -25,6 +28,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final SecurityErrorResponseHandler securityErrorResponseHandler;
+    private final LegacyRawWebSocketGoneFilter legacyRawWebSocketGoneFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -47,10 +51,16 @@ public class SecurityConfig {
                                     "/api/campuses",
                                     "/api/academic-programs",
                                     "/api/catalog/help-topics",
+                                    "/api/catalog/mentor-profile-options",
                                     "/api/specializations",
                                     "/api/academic-programs/**",
                                     "/health",
-                                    "/ws/**",
+                                    "/actuator/health",
+                                    "/actuator/health/**",
+                                    "/livez",
+                                    "/readyz",
+                                    "/ws-stomp",
+                                    "/ws-stomp/**",
                                     "/v3/api-docs/**",
                                     "/swagger-ui/**",
                                     "/swagger-ui.html"
@@ -61,9 +71,17 @@ public class SecurityConfig {
                 })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
+        http.addFilterAfter(legacyRawWebSocketGoneFilter, CorsFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<LegacyRawWebSocketGoneFilter> legacyRawWebSocketGoneFilterRegistration() {
+        FilterRegistrationBean<LegacyRawWebSocketGoneFilter> registration = new FilterRegistrationBean<>(legacyRawWebSocketGoneFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean

@@ -27,8 +27,12 @@ import java.util.stream.Collectors;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ValidationErrorResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.TraceContext;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @RestControllerAdvice
 @Slf4j
@@ -155,13 +159,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        log.error("Data integrity violation", ex);
+        log.error("Data integrity violation traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(ErrorCode.RESOURCE_CONFLICT, "Dữ liệu không hợp lệ hoặc đang xung đột với trạng thái hiện tại");
     }
 
     @ExceptionHandler({DataAccessException.class, JpaSystemException.class})
     public ResponseEntity<ApiResponse<Object>> handleDataAccess(Exception ex) {
-        log.error("Database access error", ex);
+        log.error("Database access error traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(ErrorCode.DATABASE_ERROR, ErrorCode.DATABASE_ERROR.getMessage());
     }
 
@@ -172,7 +176,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalState(IllegalStateException ex) {
-        log.error("Illegal state", ex);
+        log.error("Illegal state traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(
                 ErrorCode.CONFIGURATION_ERROR,
                 ex.getMessage() != null ? ex.getMessage() : "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu"
@@ -181,7 +185,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IOException.class)
     public ResponseEntity<ApiResponse<Object>> handleIOException(IOException ex) {
-        log.error("I/O error", ex);
+        log.error("I/O error traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(ErrorCode.STORAGE_ERROR, ex.getMessage() != null ? ex.getMessage() : ErrorCode.STORAGE_ERROR.getMessage());
     }
 
@@ -190,6 +194,7 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ApiResponse<Object>> buildResponse(ErrorCode errorCode, String message, Object data) {
+        applyTraceIdHeader();
         ApiResponse<Object> response = ApiResponse.builder()
                 .timestamp(DateTimeUtil.now())
                 .status(errorCode.getStatus())
@@ -216,8 +221,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleAllExceptions(Exception ex) {
-        log.error("Unhandled Exception: ", ex);
+        log.error("Unhandled Exception traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(ErrorCode.UNCATEGORIZED_EXCEPTION, ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage());
+    }
+
+    private void applyTraceIdHeader() {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        if (!(attributes instanceof ServletRequestAttributes servletAttributes)) {
+            return;
+        }
+        String traceId = TraceContext.getCurrentTraceId();
+        if (traceId != null && servletAttributes.getResponse() != null) {
+            servletAttributes.getResponse().setHeader(TraceContext.TRACE_ID_HEADER, traceId);
+        }
     }
 }
 

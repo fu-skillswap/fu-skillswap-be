@@ -10,8 +10,10 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,7 +30,8 @@ public class AcademicController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách cơ sở")
     })
     @GetMapping("/campuses")
-    public ApiResponse<List<CampusResponse>> getCampuses() {
+    public ApiResponse<List<CampusResponse>> getCampuses(HttpServletResponse response) {
+        applyCacheHeader(response);
         List<CampusResponse> campuses = academicService.getAllCampuses();
         return ApiResponse.success(campuses);
     }
@@ -38,7 +41,8 @@ public class AcademicController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách ngành học")
     })
     @GetMapping("/academic-programs")
-    public ApiResponse<List<AcademicProgramResponse>> getAcademicPrograms() {
+    public ApiResponse<List<AcademicProgramResponse>> getAcademicPrograms(HttpServletResponse response) {
+        applyCacheHeader(response);
         List<AcademicProgramResponse> programs = academicService.getAllAcademicPrograms();
         return ApiResponse.success(programs);
     }
@@ -48,7 +52,8 @@ public class AcademicController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách chuyên ngành")
     })
     @GetMapping("/specializations")
-    public ApiResponse<List<SpecializationResponse>> getSpecializations() {
+    public ApiResponse<List<SpecializationResponse>> getSpecializations(HttpServletResponse response) {
+        applyCacheHeader(response);
         List<SpecializationResponse> specs = academicService.getAllSpecializations();
         return ApiResponse.success(specs);
     }
@@ -60,8 +65,14 @@ public class AcademicController {
     })
     @GetMapping("/academic-programs/{programId}/specializations")
     public ApiResponse<List<SpecializationResponse>> getSpecializationsByProgram(
+            HttpServletResponse response,
             @Parameter(description = "ID của ngành học", required = true, example = "3fa85f64-5717-4562-b3fc-2c963f66afa6") @PathVariable UUID programId) {
+        applyCacheHeader(response);
         List<SpecializationResponse> specs = academicService.getSpecializationsByProgram(programId);
         return ApiResponse.success(specs);
+    }
+
+    private void applyCacheHeader(HttpServletResponse response) {
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
     }
 }

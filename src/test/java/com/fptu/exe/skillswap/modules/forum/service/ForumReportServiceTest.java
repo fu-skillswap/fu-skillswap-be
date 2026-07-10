@@ -19,6 +19,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -61,6 +62,10 @@ class ForumReportServiceTest {
     private ForumTextPolicy forumTextPolicy;
     @Mock
     private ForumAbuseGuardService forumAbuseGuardService;
+    @Mock
+    private CursorCodec cursorCodec;
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     private ForumReportService forumReportService;
     private User reporter;
@@ -77,7 +82,9 @@ class ForumReportServiceTest {
                 tagRepository,
                 notificationService,
                 forumTextPolicy,
-                forumAbuseGuardService
+                forumAbuseGuardService,
+                cursorCodec,
+                eventPublisher
         );
         forumReportService = new ForumReportService(
                 forumPostService,

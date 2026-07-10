@@ -19,6 +19,9 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -60,6 +63,12 @@ class ConversationServiceUnitTest {
 
     @Mock
     private InternalTelemetryService internalTelemetryService;
+    @Mock
+    private CursorCodec cursorCodec;
+    @Mock
+    private DomainEventOutboxService domainEventOutboxService;
+    @Mock
+    private RealtimeOutboxProperties realtimeOutboxProperties;
 
     @InjectMocks
     private ConversationService conversationService;

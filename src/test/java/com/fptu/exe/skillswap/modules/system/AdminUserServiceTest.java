@@ -17,6 +17,7 @@ import com.fptu.exe.skillswap.modules.system.service.AdminUserService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
+import com.fptu.exe.skillswap.shared.event.UserStatusChangedEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -106,6 +107,7 @@ class AdminUserServiceTest {
         assertTrue(s1.isRevoked());
         verify(userSessionRepository).saveAll(sessions);
         verify(eventPublisher).publishEvent(any(UserBannedEvent.class));
+        verify(eventPublisher).publishEvent(any(UserStatusChangedEvent.class));
         verify(userRepository).save(targetUser);
         verify(auditLogRepository).save(any(AuditLog.class));
         verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
@@ -143,6 +145,7 @@ class AdminUserServiceTest {
         assertNotNull(response);
         assertEquals(UserStatus.ACTIVE, targetUser.getStatus());
         verify(eventPublisher, never()).publishEvent(any(UserBannedEvent.class));
+        verify(eventPublisher).publishEvent(any(UserStatusChangedEvent.class));
         verify(userRepository).save(targetUser);
         verify(notificationService).createNotification(
                 eq(userId),

@@ -70,7 +70,7 @@ public class MentorServiceController {
 
     @Operation(
             summary = "Tạo mentor service",
-            description = "Tạo một dịch vụ mentoring mới cho mentor hiện tại. FE dùng sau khi mentor đã nhập tiêu đề, mô tả, thời lượng, hình thức giá và các help topics mà dịch vụ hỗ trợ."
+            description = "Tạo một dịch vụ mentoring mới cho mentor hiện tại. Contract hiện tại vẫn nhận title, description, expectedOutcome, durationMinutes, pricing/free flags và help topics của dịch vụ. FE cần bám đúng schema runtime hiện tại thay vì suy luận từ plan phase sau."
     )
     @PostMapping
     public ApiResponse<MentorServiceResponse> createService(
@@ -83,7 +83,7 @@ public class MentorServiceController {
 
     @Operation(
             summary = "Cập nhật mentor service",
-            description = "Cập nhật một dịch vụ mentoring hiện có của mentor. FE dùng khi mentor muốn thay đổi nội dung dịch vụ hoặc phạm vi help topics trước các booking trong tương lai."
+            description = "Cập nhật một dịch vụ mentoring hiện có của mentor theo contract runtime hiện tại, bao gồm thông tin mô tả, pricing/free flags và help topics."
     )
     @PutMapping("/{serviceId}")
     public ApiResponse<MentorServiceResponse> updateService(

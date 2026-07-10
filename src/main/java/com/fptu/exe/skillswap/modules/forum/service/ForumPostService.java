@@ -20,11 +20,15 @@ import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
+import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -37,9 +41,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Collection;
 import java.util.HashSet;
@@ -60,29 +70,42 @@ public class ForumPostService {
     private final NotificationService notificationService;
     private final ForumTextPolicy forumTextPolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
+    private final CursorCodec cursorCodec;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
-    public PageResponse<ForumPostResponse> getPosts(UUID currentUserId, Integer page, Integer size, String keyword, UUID helpTopicId, Boolean mine) {
+    public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID helpTopicId, Boolean mine) {
         User currentUser = requireForumUser(currentUserId);
-        Pageable pageable = PageRequest.of(defaultPage(page), defaultSize(size), Sort.by(Sort.Direction.DESC, "createdAt"));
+        int resolvedLimit = defaultLimit(limit);
         String keywordPattern = toKeywordPattern(keyword);
-        UUID authorId = Boolean.TRUE.equals(mine) ? currentUser.getId() : null;
-        Page<ForumPost> postPage = forumPostRepository.searchPublicPosts(
-                ForumPostStatus.PUBLISHED,
-                helpTopicId,
-                authorId,
-                keywordPattern,
-                pageable
-        );
+        String filterHash = buildUserPostFilterHash(keyword, helpTopicId, mine);
+        DecodedPostCursor decodedCursor = decodePostCursor(cursor, filterHash);
+        Specification<ForumPost> specification = buildUserPostSpecification(currentUser.getId(), keywordPattern, helpTopicId, mine, decodedCursor);
+        List<ForumPost> postWindow = forumPostRepository.findWindow(specification, resolvedLimit + 1);
+        boolean hasNext = postWindow.size() > resolvedLimit;
+        List<ForumPost> visiblePosts = hasNext ? new ArrayList<>(postWindow.subList(0, resolvedLimit)) : postWindow;
         Set<UUID> reactedPostIds = loadReactedPostIds(
                 currentUser.getId(),
-                postPage.getContent().stream().map(ForumPost::getId).toList()
+                visiblePosts.stream().map(ForumPost::getId).toList()
         );
-        return toPostPageResponse(postPage.map(post -> toPostResponse(
-                post,
-                reactedPostIds.contains(post.getId()),
-                reactedPostIds.contains(post.getId()) ? ForumReactionType.LIKE.name() : null
-        )));
+        List<ForumPostResponse> items = visiblePosts.stream()
+                .map(post -> toPostResponse(
+                        post,
+                        reactedPostIds.contains(post.getId()),
+                        reactedPostIds.contains(post.getId()) ? ForumReactionType.LIKE.name() : null
+                ))
+                .toList();
+        String nextCursor = hasNext && !visiblePosts.isEmpty()
+                ? encodeNextCursor(visiblePosts.get(visiblePosts.size() - 1), filterHash)
+                : null;
+        return CursorPageResponse.<ForumPostResponse>builder()
+                .items(items)
+                .nextCursor(nextCursor)
+                .prevCursor(null)
+                .hasNext(hasNext)
+                .hasPrev(false)
+                .limit(resolvedLimit)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -108,11 +131,13 @@ public class ForumPostService {
         )) {
             throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa đăng nội dung này rồi, vui lòng tránh đăng trùng lặp");
         }
+        java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
         ForumPost post = ForumPost.builder()
                 .authorUser(currentUser)
                 .helpTopic(helpTopic)
                 .title(normalizedTitle)
                 .content(normalizedContent)
+                .imageUrls(cleanedImages)
                 .status(ForumPostStatus.PUBLISHED)
                 .commentCount(0)
                 .reactionCount(0)
@@ -129,6 +154,7 @@ public class ForumPostService {
         Tag helpTopic = requireHelpTopic(request.helpTopicId());
         post.setTitle(forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết"));
         post.setContent(forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết"));
+        post.setImageUrls(cleanImageUrls(request.imageUrls()));
         post.setHelpTopic(helpTopic);
         return toPostResponse(forumPostRepository.save(post), currentUser.getId());
     }
@@ -139,7 +165,41 @@ public class ForumPostService {
         ForumPost post = loadOwnedEditablePost(postId, currentUser.getId());
         ForumPostResponse response = toPostResponse(post, currentUser.getId());
         forumPostRepository.delete(post);
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.forum.event.ForumPostDeletedEvent(postId));
         return response;
+    }
+
+    @Transactional(readOnly = true)
+    public CursorPageResponse<ForumCommentResponse> getComments(UUID currentUserId, UUID postId, String cursor, Integer limit) {
+        requireForumUser(currentUserId);
+        ForumPost post = forumPostRepository.findByIdAndStatus(postId, ForumPostStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
+        int resolvedLimit = defaultLimit(limit);
+        String filterHash = buildUserCommentFilterHash(postId);
+        DecodedCommentCursor decodedCursor = decodeCommentCursor(cursor, filterHash, "comment");
+        List<ForumComment> commentWindow = forumCommentRepository.findVisibleCommentsWindow(
+                post.getId(),
+                ForumCommentStatus.VISIBLE,
+                decodedCursor.createdAt(),
+                decodedCursor.commentId(),
+                resolvedLimit + 1
+        );
+        boolean hasNext = commentWindow.size() > resolvedLimit;
+        List<ForumComment> visibleComments = hasNext ? new ArrayList<>(commentWindow.subList(0, resolvedLimit)) : commentWindow;
+        List<ForumCommentResponse> items = visibleComments.stream()
+                .map(this::toCommentResponse)
+                .toList();
+        String nextCursor = hasNext && !visibleComments.isEmpty()
+                ? encodeNextCommentCursor(visibleComments.get(visibleComments.size() - 1), filterHash)
+                : null;
+        return CursorPageResponse.<ForumCommentResponse>builder()
+                .items(items)
+                .nextCursor(nextCursor)
+                .prevCursor(null)
+                .hasNext(hasNext)
+                .hasPrev(false)
+                .limit(resolvedLimit)
+                .build();
     }
 
     @Transactional(readOnly = true)
@@ -169,10 +229,12 @@ public class ForumPostService {
             throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa gửi bình luận này rồi, vui lòng tránh spam lặp nội dung");
         }
 
+        java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
         ForumComment comment = ForumComment.builder()
                 .post(post)
                 .authorUser(currentUser)
                 .content(normalizedContent)
+                .imageUrls(cleanedImages)
                 .status(ForumCommentStatus.VISIBLE)
                 .reportCount(0)
                 .build();
@@ -204,6 +266,7 @@ public class ForumPostService {
         User currentUser = requireForumUser(currentUserId);
         ForumComment comment = loadOwnedEditableComment(commentId, currentUser.getId());
         comment.setContent(forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận"));
+        comment.setImageUrls(cleanImageUrls(request.imageUrls()));
         return toCommentResponse(forumCommentRepository.save(comment));
     }
 
@@ -371,6 +434,7 @@ public class ForumPostService {
                 .myReactionType(myReactionType)
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
+                .imageUrls(post.getImageUrls())
                 .build();
     }
 
@@ -407,6 +471,7 @@ public class ForumPostService {
                 .reportCount(defaultInt(comment.getReportCount()))
                 .createdAt(comment.getCreatedAt())
                 .updatedAt(comment.getUpdatedAt())
+                .imageUrls(comment.getImageUrls())
                 .build();
     }
 
@@ -419,26 +484,9 @@ public class ForumPostService {
                 .build();
     }
 
-    private PageResponse<ForumPostResponse> toPostPageResponse(Page<ForumPostResponse> page) {
-        return PageResponse.<ForumPostResponse>builder()
-                .content(page.getContent())
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .last(page.isLast())
-                .build();
-    }
-
-    private PageResponse<ForumCommentResponse> toCommentPageResponse(Page<ForumCommentResponse> page) {
-        return PageResponse.<ForumCommentResponse>builder()
-                .content(page.getContent())
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .last(page.isLast())
-                .build();
+    private int defaultLimit(Integer limit) {
+        int resolved = limit == null || limit <= 0 ? 20 : limit;
+        return Math.min(resolved, 50);
     }
 
     private int defaultPage(Integer page) {
@@ -457,11 +505,152 @@ public class ForumPostService {
         return "%" + keyword.trim().toLowerCase() + "%";
     }
 
+    private String buildUserPostFilterHash(String keyword, UUID helpTopicId, Boolean mine) {
+        return "forum-posts:user|keyword=" + normalizeFilterValue(keyword)
+                + "|helpTopicId=" + normalizeFilterValue(helpTopicId)
+                + "|mine=" + Boolean.TRUE.equals(mine)
+                + "|status=" + ForumPostStatus.PUBLISHED.name();
+    }
+
+    private String buildUserCommentFilterHash(UUID postId) {
+        return "forum-comments:user|postId=" + normalizeFilterValue(postId)
+                + "|status=" + ForumCommentStatus.VISIBLE.name();
+    }
+
+    private Specification<ForumPost> buildUserPostSpecification(UUID currentUserId,
+                                                                String keywordPattern,
+                                                                UUID helpTopicId,
+                                                                Boolean mine,
+                                                                DecodedPostCursor decodedCursor) {
+        Specification<ForumPost> specification = Specification.where(ForumPostSpecification.hasStatus(ForumPostStatus.PUBLISHED))
+                .and(ForumPostSpecification.hasHelpTopic(helpTopicId))
+                .and(ForumPostSpecification.hasKeyword(keywordPattern));
+        if (Boolean.TRUE.equals(mine)) {
+            specification = specification.and(ForumPostSpecification.mineOnly(currentUserId));
+        }
+        return specification.and(ForumPostSpecification.isBeforeCursor(decodedCursor.lastActivityAt(), decodedCursor.postId()));
+    }
+
+    private DecodedPostCursor decodePostCursor(String cursor, String expectedFilterHash) {
+        if (cursor == null || cursor.isBlank()) {
+            return DecodedPostCursor.empty();
+        }
+        CursorTokenPayload payload = cursorCodec.decode(cursor);
+        if (!Objects.equals(expectedFilterHash, payload.filterHash())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không khớp với bộ lọc hiện tại");
+        }
+        if (payload.sortKey() == null || payload.secondaryKey() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không hợp lệ");
+        }
+        return new DecodedPostCursor(
+                parseCursorDateTime(payload.sortKey()),
+                parseCursorPostId(payload.secondaryKey())
+        );
+    }
+
+    private String encodeNextCursor(ForumPost post, String filterHash) {
+        return cursorCodec.encode(CursorTokenPayload.builder()
+                .sortKey(post.getLastActivityAt().toString())
+                .secondaryKey(post.getId().toString())
+                .direction("NEXT")
+                .filterHash(filterHash)
+                .issuedAt(Instant.now())
+                .build());
+    }
+
+    private DecodedCommentCursor decodeCommentCursor(String cursor, String expectedFilterHash, String entityLabel) {
+        if (cursor == null || cursor.isBlank()) {
+            return DecodedCommentCursor.empty();
+        }
+        CursorTokenPayload payload = cursorCodec.decode(cursor);
+        if (!Objects.equals(expectedFilterHash, payload.filterHash())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không khớp với bộ lọc hiện tại");
+        }
+        if (payload.sortKey() == null || payload.secondaryKey() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không hợp lệ");
+        }
+        return new DecodedCommentCursor(
+                parseCursorDateTime(payload.sortKey()),
+                parseCursorUuid(payload.secondaryKey(), entityLabel)
+        );
+    }
+
+    private String encodeNextCommentCursor(ForumComment comment, String filterHash) {
+        return cursorCodec.encode(CursorTokenPayload.builder()
+                .sortKey(comment.getCreatedAt().toString())
+                .secondaryKey(comment.getId().toString())
+                .direction("NEXT")
+                .filterHash(filterHash)
+                .issuedAt(Instant.now())
+                .build());
+    }
+
+    private LocalDateTime parseCursorDateTime(String rawValue) {
+        try {
+            return LocalDateTime.parse(rawValue);
+        } catch (DateTimeParseException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor chứa lastActivityAt không hợp lệ", ex);
+        }
+    }
+
+    private UUID parseCursorPostId(String rawValue) {
+        return parseCursorUuid(rawValue, "post");
+    }
+
+    private UUID parseCursorUuid(String rawValue, String entityLabel) {
+        try {
+            return UUID.fromString(rawValue);
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor chứa " + entityLabel + "Id không hợp lệ", ex);
+        }
+    }
+
+    private String normalizeFilterValue(Object value) {
+        if (value == null) {
+            return "_";
+        }
+        String normalized = value.toString().trim();
+        return normalized.isEmpty() ? "_" : normalized;
+    }
+
+    private PageResponse<ForumCommentResponse> toCommentPageResponse(Page<ForumCommentResponse> page) {
+        return PageResponse.<ForumCommentResponse>builder()
+                .content(page.getContent())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+
+    private java.util.List<String> cleanImageUrls(java.util.List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return raw.stream()
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::trim)
+                .toList();
+    }
+
     private int safeIncrement(Integer value) {
         return defaultInt(value) + 1;
     }
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record DecodedPostCursor(LocalDateTime lastActivityAt, UUID postId) {
+        private static DecodedPostCursor empty() {
+            return new DecodedPostCursor(null, null);
+        }
+    }
+
+    private record DecodedCommentCursor(LocalDateTime createdAt, UUID commentId) {
+        private static DecodedCommentCursor empty() {
+            return new DecodedCommentCursor(null, null);
+        }
     }
 }

@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.admin.service;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardMentorVerificationOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardOverviewResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardFinancialOverviewResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardRetentionOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardQueueItemResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardQueuesResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardTimeseriesPointResponse;
@@ -72,6 +74,13 @@ public class AdminDashboardService {
                 adminDashboardQueryRepository.countEmailOutboxByStatus()
         );
 
+        LocalDateTime fromInclusive = snapshotAt.minusDays(30);
+        var financialStats = adminDashboardQueryRepository.fetchFinancialOverview(fromInclusive);
+        
+        LocalDateTime yesterday = snapshotAt.minusDays(1);
+        LocalDateTime lastMonth = snapshotAt.minusDays(30);
+        var retentionStats = adminDashboardQueryRepository.fetchRetentionOverview(yesterday, lastMonth);
+
         return new AdminDashboardOverviewResponse(
                 snapshotAt,
                 new AdminDashboardUsersOverviewResponse(
@@ -94,7 +103,18 @@ public class AdminDashboardService {
                 forumReportCounts,
                 payoutRequestCounts,
                 paymentOrderCounts,
-                emailOutboxCounts
+                emailOutboxCounts,
+                new AdminDashboardFinancialOverviewResponse(
+                        financialStats.gmv30dScoin(),
+                        financialStats.platformFee30dScoin(),
+                        financialStats.totalEscrowVnd(),
+                        financialStats.totalCreditLedgerScoin()
+                ),
+                new AdminDashboardRetentionOverviewResponse(
+                        retentionStats.signupToMentorConversionRate(),
+                        retentionStats.dau(),
+                        retentionStats.mau()
+                )
         );
     }
 

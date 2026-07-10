@@ -191,6 +191,57 @@ public class AdminDashboardQueryRepository {
         return LocalDate.parse(String.valueOf(value));
     }
 
+    public FinancialOverviewRow fetchFinancialOverview(LocalDateTime fromInclusive) {
+        Object[] row = (Object[]) entityManager.createNativeQuery("""
+                select
+                    coalesce(sum(gross_scoin), 0) as gmv,
+                    coalesce(sum(commission_scoin), 0) as platform_fee
+                from payment_orders
+                where status = 'PAID'
+                  and coalesce(paid_at, updated_at) >= :fromInclusive
+                """)
+                .setParameter("fromInclusive", fromInclusive)
+                .getSingleResult();
+
+        java.math.BigDecimal totalEscrow = (java.math.BigDecimal) entityManager.createNativeQuery("""
+                select coalesce(sum(balance), 0.00) from settlement_accounts
+                """).getSingleResult();
+
+        Number totalCredit = (Number) entityManager.createNativeQuery("""
+                select coalesce(sum(balance), 0) from credit_ledger_accounts
+                """).getSingleResult();
+
+        return new FinancialOverviewRow(
+                toLong(row[0]),
+                toLong(row[1]),
+                totalEscrow,
+                totalCredit.longValue()
+        );
+    }
+
+    public RetentionOverviewRow fetchRetentionOverview(LocalDateTime yesterday, LocalDateTime lastMonth) {
+        Object[] row = (Object[]) entityManager.createNativeQuery("""
+                select
+                    (select count(*) from users) as total_users,
+                    (select count(distinct user_id) from user_roles where role = 'MENTOR') as total_mentors,
+                    (select count(*) from users where last_login_at >= :yesterday) as dau,
+                    (select count(*) from users where last_login_at >= :lastMonth) as mau
+                """)
+                .setParameter("yesterday", yesterday)
+                .setParameter("lastMonth", lastMonth)
+                .getSingleResult();
+
+        long totalUsers = toLong(row[0]);
+        long totalMentors = toLong(row[1]);
+        double conversionRate = totalUsers == 0 ? 0.0 : (totalMentors * 100.0 / totalUsers);
+
+        return new RetentionOverviewRow(
+                conversionRate,
+                toLong(row[2]),
+                toLong(row[3])
+        );
+    }
+
     public record UserOverviewCountsRow(
             long total,
             long active,
@@ -204,6 +255,21 @@ public class AdminDashboardQueryRepository {
     public record DailyCountRow(
             LocalDate bucketDate,
             long total
+    ) {
+    }
+
+    public record FinancialOverviewRow(
+            long gmv30dScoin,
+            long platformFee30dScoin,
+            java.math.BigDecimal totalEscrowVnd,
+            long totalCreditLedgerScoin
+    ) {
+    }
+
+    public record RetentionOverviewRow(
+            double signupToMentorConversionRate,
+            long dau,
+            long mau
     ) {
     }
 }

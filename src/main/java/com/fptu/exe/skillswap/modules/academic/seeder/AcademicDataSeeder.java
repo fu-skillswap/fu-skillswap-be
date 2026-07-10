@@ -66,6 +66,10 @@ public class AcademicDataSeeder implements CommandLineRunner {
                 campus.setCity(city);
                 changed = true;
             }
+            if (!campus.isActive()) {
+                campus.setActive(true);
+                changed = true;
+            }
             if (changed) {
                 campusRepository.save(campus);
                 log.info("Updated Campus: {} (Name: {}, City: {})", code, name, city);
@@ -144,9 +148,17 @@ public class AcademicDataSeeder implements CommandLineRunner {
         Optional<AcademicProgram> existing = academicProgramRepository.findByCode(code);
         if (existing.isPresent()) {
             AcademicProgram program = existing.get();
+            boolean changed = false;
             if (!nameVi.equals(program.getNameVi()) || !nameEn.equals(program.getNameEn())) {
                 program.setNameVi(nameVi);
                 program.setNameEn(nameEn);
+                changed = true;
+            }
+            if (!program.isActive()) {
+                program.setActive(true);
+                changed = true;
+            }
+            if (changed) {
                 academicProgramRepository.save(program);
                 log.info("Updated Academic Program: {} (Vi: {}, En: {})", code, nameVi, nameEn);
             }
@@ -178,9 +190,25 @@ public class AcademicDataSeeder implements CommandLineRunner {
             log.info("Seeded Specialization: {}", code);
         } else {
             Specialization spec = existing.get();
+            boolean changed = false;
+            if (spec.getProgram() == null || !program.getId().equals(spec.getProgram().getId())) {
+                spec.setProgram(program);
+                changed = true;
+            }
             if (!nameVi.equals(spec.getNameVi()) || !nameEn.equals(spec.getNameEn())) {
                 spec.setNameVi(nameVi);
                 spec.setNameEn(nameEn);
+                changed = true;
+            }
+            if (spec.isExpected()) {
+                spec.setExpected(false);
+                changed = true;
+            }
+            if (!spec.isActive()) {
+                spec.setActive(true);
+                changed = true;
+            }
+            if (changed) {
                 specializationRepository.save(spec);
                 log.info("Updated Specialization: {} (Vi: {}, En: {})", code, nameVi, nameEn);
             }
