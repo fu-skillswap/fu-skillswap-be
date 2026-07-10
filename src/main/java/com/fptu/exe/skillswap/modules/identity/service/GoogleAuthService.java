@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
@@ -24,6 +25,7 @@ import java.util.Collections;
 public class GoogleAuthService {
 
     private final JwtProperties jwtProperties;
+    private final GoogleApiProperties googleApiProperties;
     private volatile GoogleIdTokenVerifier verifier;
 
     public GoogleUserInfo verifyToken(String idToken) {
@@ -37,7 +39,7 @@ public class GoogleAuthService {
                 throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
             }
 
-            String expectedClientId = jwtProperties.getGoogle().getClientId();
+            String expectedClientId = googleApiProperties.getClientId();
             if (!StringUtils.hasText(expectedClientId)) {
                 throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
             }
@@ -68,7 +70,7 @@ public class GoogleAuthService {
             synchronized (this) {
                 current = verifier;
                 if (current == null) {
-                    String clientId = jwtProperties.getGoogle().getClientId();
+                    String clientId = googleApiProperties.getClientId();
                     if (!StringUtils.hasText(clientId)) {
                         throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
                     }

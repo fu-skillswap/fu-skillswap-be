@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -71,7 +71,7 @@ public class MentorVerificationService {
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
-    private final ObjectProvider<R2DocumentStorageService> r2StorageProvider;
+    private final ObjectProvider<StorageGateway> r2StorageProvider;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -735,28 +735,24 @@ public class MentorVerificationService {
     }
 
     private StoredFile storeVerificationFile(User user, VerificationDocumentType documentType, MultipartFile file) {
-        R2DocumentStorageService storageService = r2StorageProvider.getIfAvailable();
+        StorageGateway storageService = r2StorageProvider.getIfAvailable();
         if (storageService == null) {
             throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình R2 để upload minh chứng");
         }
-        try {
-            R2DocumentStorageService.R2UploadResult uploadResult = storageService.upload(
-                    file,
-                    "mentor-verification/" + user.getId() + "/" + documentType.name().toLowerCase()
-            );
-            return storedFileRepository.save(StoredFile.builder()
-                    .owner(user)
-                    .purpose(FilePurpose.VERIFICATION_DOCUMENT)
-                    .originalName(sanitizeFilename(trimToNull(file.getOriginalFilename())))
-                    .storageProvider("R2")
-                    .storageKey(uploadResult.objectKey())
-                    .publicUrl(uploadResult.fileUrl())
-                    .mimeType(canonicalizeContentType(file.getContentType()))
-                    .sizeBytes(file.getSize())
-                    .build());
-        } catch (IOException ex) {
-            throw new BaseException(ErrorCode.STORAGE_ERROR, "Upload minh chứng mentor thất bại");
-        }
+        StorageGateway.StorageUploadResult uploadResult = storageService.uploadFile(
+                file,
+                "mentor-verification/" + user.getId() + "/" + documentType.name().toLowerCase()
+        );
+        return storedFileRepository.save(StoredFile.builder()
+                .owner(user)
+                .purpose(FilePurpose.VERIFICATION_DOCUMENT)
+                .originalName(sanitizeFilename(trimToNull(file.getOriginalFilename())))
+                .storageProvider("R2")
+                .storageKey(uploadResult.objectKey())
+                .publicUrl(uploadResult.publicUrl())
+                .mimeType(canonicalizeContentType(file.getContentType()))
+                .sizeBytes(file.getSize())
+                .build());
     }
 
     private void validateMultipartUploadInput(VerificationDocumentType documentType, MultipartFile file) {

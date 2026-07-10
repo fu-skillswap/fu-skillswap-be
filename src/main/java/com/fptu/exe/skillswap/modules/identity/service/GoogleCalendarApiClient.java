@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.session.domain.Session;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -32,7 +32,7 @@ public class GoogleCalendarApiClient {
     private static final String USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
     private static final String CALENDAR_BASE_URL = "https://www.googleapis.com/calendar/v3/calendars";
 
-    private final JwtProperties jwtProperties;
+    private final GoogleApiProperties googleApiProperties;
     private final ObjectMapper objectMapper;
     private final GoogleCalendarDateTimeMapper dateTimeMapper;
 
@@ -46,8 +46,8 @@ public class GoogleCalendarApiClient {
                 TOKEN_ENDPOINT,
                 Map.of(
                         "code", authorizationCode,
-                        "client_id", jwtProperties.getGoogle().getClientId(),
-                        "client_secret", jwtProperties.getGoogle().getClientSecret(),
+                        "client_id", googleApiProperties.getClientId(),
+                        "client_secret", googleApiProperties.getClientSecret(),
                         "redirect_uri", redirectUri,
                         "code_verifier", codeVerifier,
                         "grant_type", "authorization_code"
@@ -61,8 +61,8 @@ public class GoogleCalendarApiClient {
                 TOKEN_ENDPOINT,
                 Map.of(
                         "refresh_token", refreshToken,
-                        "client_id", jwtProperties.getGoogle().getClientId(),
-                        "client_secret", jwtProperties.getGoogle().getClientSecret(),
+                        "client_id", googleApiProperties.getClientId(),
+                        "client_secret", googleApiProperties.getClientSecret(),
                         "grant_type", "refresh_token"
                 )
         );
@@ -289,8 +289,8 @@ public class GoogleCalendarApiClient {
     }
 
     private void ensureGoogleOauthConfigured() {
-        if (!StringUtils.hasText(jwtProperties.getGoogle().getClientId())
-                || !StringUtils.hasText(jwtProperties.getGoogle().getClientSecret())) {
+        if (!StringUtils.hasText(googleApiProperties.getClientId())
+                || !StringUtils.hasText(googleApiProperties.getClientSecret())) {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID hoặc GOOGLE_CLIENT_SECRET");
         }
     }

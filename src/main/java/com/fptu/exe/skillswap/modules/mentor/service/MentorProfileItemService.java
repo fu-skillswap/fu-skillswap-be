@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
@@ -42,7 +42,7 @@ public class MentorProfileItemService {
     private final MentorAchievementRepository mentorAchievementRepository;
     private final StoredFileRepository storedFileRepository;
     private final UserRepository userRepository;
-    private final ObjectProvider<R2DocumentStorageService> r2StorageProvider;
+    private final ObjectProvider<StorageGateway> r2StorageProvider;
 
     @Transactional(readOnly = true)
     public List<MentorFeaturedProjectResponse> listProjects(UUID mentorUserId) {
@@ -83,29 +83,25 @@ public class MentorProfileItemService {
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
         validateProjectImage(file);
-        R2DocumentStorageService storageService = r2StorageProvider.getIfAvailable();
+        StorageGateway storageService = r2StorageProvider.getIfAvailable();
         if (storageService == null) {
             throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình R2 để upload ảnh dự án");
         }
         User user = userRepository.findById(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
-        try {
-            R2DocumentStorageService.R2UploadResult uploadResult = storageService.upload(file, "mentor-projects/" + mentorUserId);
-            StoredFile storedFile = storedFileRepository.save(StoredFile.builder()
-                    .owner(user)
-                    .purpose(FilePurpose.PORTFOLIO)
-                    .originalName(sanitizeFilename(file.getOriginalFilename()))
-                    .storageProvider("R2")
-                    .storageKey(uploadResult.objectKey())
-                    .publicUrl(uploadResult.fileUrl())
-                    .mimeType(canonicalizeContentType(file.getContentType()))
-                    .sizeBytes(file.getSize())
-                    .build());
-            project.setPictureFile(storedFile);
-            return mapProject(mentorFeaturedProjectRepository.save(project));
-        } catch (IOException ex) {
-            throw new BaseException(ErrorCode.STORAGE_ERROR, "Upload ảnh dự án thất bại");
-        }
+        StorageGateway.StorageUploadResult uploadResult = storageService.uploadFile(file, "mentor-projects/" + mentorUserId);
+        StoredFile storedFile = storedFileRepository.save(StoredFile.builder()
+                .owner(user)
+                .purpose(FilePurpose.PORTFOLIO)
+                .originalName(sanitizeFilename(file.getOriginalFilename()))
+                .storageProvider("R2")
+                .storageKey(uploadResult.objectKey())
+                .publicUrl(uploadResult.publicUrl())
+                .mimeType(canonicalizeContentType(file.getContentType()))
+                .sizeBytes(file.getSize())
+                .build());
+        project.setPictureFile(storedFile);
+        return mapProject(mentorFeaturedProjectRepository.save(project));
     }
 
     @Transactional(readOnly = true)

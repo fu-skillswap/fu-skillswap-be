@@ -13,7 +13,7 @@ public class GoogleCalendarSyncScheduler {
 
     private final GoogleCalendarSyncService googleCalendarSyncService;
 
-    @Scheduled(fixedDelayString = "${application.security.google.calendar-sync-poll-ms:60000}")
+    @Scheduled(fixedDelayString = "${application.google.calendar-sync-poll-ms:60000}")
     public void processDueJobs() {
         try {
             googleCalendarSyncService.processDueJobs();

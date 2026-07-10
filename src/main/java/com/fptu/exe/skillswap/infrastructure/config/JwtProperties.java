@@ -18,8 +18,6 @@ public class JwtProperties {
 
     @Valid
     private Jwt jwt = new Jwt();
-    @Valid
-    private Google google = new Google();
 
     @Getter
     @Setter
@@ -42,13 +40,4 @@ public class JwtProperties {
         }
     }
 
-    @Getter
-    @Setter
-    public static class Google {
-        private String clientId;
-        private String clientSecret;
-        private String calendarRedirectUri;
-        private String tokenEncryptionKey;
-        private Integer tokenEncryptionKeyVersion = 1;
-    }
 }

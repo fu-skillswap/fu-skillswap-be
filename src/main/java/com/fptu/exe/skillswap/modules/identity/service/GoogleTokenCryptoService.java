@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +23,7 @@ public class GoogleTokenCryptoService {
     private static final int GCM_TAG_LENGTH_BITS = 128;
     private static final int IV_LENGTH_BYTES = 12;
 
-    private final JwtProperties jwtProperties;
+    private final GoogleApiProperties googleApiProperties;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public String encrypt(String plaintext) {
@@ -67,13 +67,13 @@ public class GoogleTokenCryptoService {
     }
 
     public int currentKeyVersion() {
-        return jwtProperties.getGoogle().getTokenEncryptionKeyVersion() == null
+        return googleApiProperties.getTokenEncryptionKeyVersion() == null
                 ? 1
-                : jwtProperties.getGoogle().getTokenEncryptionKeyVersion();
+                : googleApiProperties.getTokenEncryptionKeyVersion();
     }
 
     private SecretKey resolveKey() {
-        String configuredKey = jwtProperties.getGoogle().getTokenEncryptionKey();
+        String configuredKey = googleApiProperties.getTokenEncryptionKey();
         if (!StringUtils.hasText(configuredKey)) {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_TOKEN_ENCRYPTION_KEY");
         }

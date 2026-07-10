@@ -82,6 +82,13 @@ management:
           include: readinessstate
 
 application:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
+    token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
+    token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}
+    calendar-sync-poll-ms: ${GOOGLE_CALENDAR_SYNC_POLL_MS:60000}
   cursor:
     crypto:
       version: ${CURSOR_CRYPTO_VERSION:v1}
@@ -104,13 +111,6 @@ application:
           path: /
           secure: true
           same-site: Lax
-    google:
-      client-id: ${GOOGLE_CLIENT_ID}
-      client-secret: ${GOOGLE_CLIENT_SECRET:}
-      calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
-      token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
-      token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}
-      calendar-sync-poll-ms: ${GOOGLE_CALENDAR_SYNC_POLL_MS:60000}
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
   websocket:
@@ -143,14 +143,6 @@ application:
       notification-queue: ${REALTIME_OUTBOX_NOTIFICATION_QUEUE:skillswap.notification.realtime}
       dead-letter-exchange: ${REALTIME_OUTBOX_DLX:skillswap.domain-events.dlx}
       chat-dlq-queue: ${REALTIME_OUTBOX_CHAT_DLQ_QUEUE:skillswap.chat.realtime.dlq}
-
-  filestorage:
-    r2:
-      endpoint: ${R2_ENDPOINT:https://<account_id>.r2.cloudflarestorage.com}
-      access-key: ${R2_ACCESS_KEY:}
-      secret-key: ${R2_SECRET_KEY:}
-      bucket-name: ${R2_BUCKET_NAME:skillswap}
-      public-url-prefix: ${R2_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
       notification-dlq-queue: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_QUEUE:skillswap.notification.realtime.dlq}
       chat-dlq-routing-key: ${REALTIME_OUTBOX_CHAT_DLQ_ROUTING_KEY:chat.dlq}
       notification-dlq-routing-key: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_ROUTING_KEY:notification.dlq}
@@ -162,14 +154,15 @@ application:
     api-key: ${CLOUDINARY_API_KEY:}
     api-secret: ${CLOUDINARY_API_SECRET:}
     folder: skillswap # thư mục gốc trên Cloudinary
-  r2:
-    enabled: ${R2_ENABLED:false}
-    endpoint: ${R2_ENDPOINT:}
-    access-key-id: ${R2_ACCESS_KEY_ID:}
-    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
-    bucket: ${R2_BUCKET:}
-    region: ${R2_REGION:auto}
-    documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
+  storage:
+    enabled: ${STORAGE_ENABLED:false}
+    endpoint: ${STORAGE_ENDPOINT:}
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    bucket: ${STORAGE_BUCKET:}
+    region: ${STORAGE_REGION:auto}
+    public-url-prefix: ${STORAGE_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
+    documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:skillswap/verification-documents}
   system-admin:
     emails: ${SYSTEM_ADMIN_EMAILS:}
   mentor-verification:
