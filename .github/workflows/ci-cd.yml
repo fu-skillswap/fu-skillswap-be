@@ -105,8 +105,8 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
-          mkdir -p ~/skillswap-deployment
-          cd ~/skillswap-deployment
+          mkdir -p /opt/fu-skillswap/backend
+          cd /opt/fu-skillswap/backend
 
           # Cập nhật file compose
           curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
