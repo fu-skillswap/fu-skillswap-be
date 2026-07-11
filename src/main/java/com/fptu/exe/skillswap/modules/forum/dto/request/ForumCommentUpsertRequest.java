@@ -11,6 +11,9 @@ public record ForumCommentUpsertRequest(
         String content,
 
         @Size(max = 1, message = "Mỗi bình luận chỉ được đính kèm tối đa 1 ảnh")
-        java.util.List<@Size(max = 2000, message = "URL ảnh quá dài") String> imageUrls
+        java.util.List<@Size(max = 2000, message = "URL ảnh quá dài") String> imageUrls,
+
+        @Schema(description = "ID của bình luận muốn reply. Truyền null nếu là bình luận gốc.")
+        java.util.UUID replyToCommentId
 ) {
 }

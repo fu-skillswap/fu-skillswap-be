@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumReportListRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
-import com.fptu.exe.skillswap.modules.forum.service.AdminForumModerationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminForumModerationService;
 import com.fptu.exe.skillswap.modules.forum.service.ForumPostService;
 import com.fptu.exe.skillswap.modules.forum.service.ForumReportService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;

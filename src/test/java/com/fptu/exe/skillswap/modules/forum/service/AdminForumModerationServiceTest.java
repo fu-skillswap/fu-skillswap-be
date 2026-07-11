@@ -23,6 +23,8 @@ import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
+import com.fptu.exe.skillswap.modules.admin.service.AdminForumModerationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,6 +60,8 @@ class AdminForumModerationServiceTest {
     @Mock
     private ForumTextPolicy forumTextPolicy;
     @Mock
+    private AdminAuditWriterService adminAuditWriterService;
+    @Mock
     private CursorCodec cursorCodec;
 
     private AdminForumModerationService service;
@@ -68,6 +72,7 @@ class AdminForumModerationServiceTest {
     @BeforeEach
     void setUp() {
         service = new AdminForumModerationService(
+                adminAuditWriterService,
                 forumPostRepository,
                 forumCommentRepository,
                 forumPostReactionRepository,

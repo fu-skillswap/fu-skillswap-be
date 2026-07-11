@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentReaction;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostReaction;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReactionType;
@@ -18,6 +19,7 @@ import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumHelpTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
@@ -30,17 +32,12 @@ import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
-import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +49,9 @@ import java.util.ArrayList;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Collection;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -65,6 +65,7 @@ public class ForumPostService {
     private final ForumPostRepository forumPostRepository;
     private final ForumCommentRepository forumCommentRepository;
     private final ForumPostReactionRepository forumPostReactionRepository;
+    private final ForumCommentReactionRepository forumCommentReactionRepository;
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
     private final NotificationService notificationService;
@@ -186,8 +187,13 @@ public class ForumPostService {
         );
         boolean hasNext = commentWindow.size() > resolvedLimit;
         List<ForumComment> visibleComments = hasNext ? new ArrayList<>(commentWindow.subList(0, resolvedLimit)) : commentWindow;
+        Set<UUID> reactedCommentIds = loadReactedCommentIds(
+                currentUserId,
+                visibleComments.stream().map(ForumComment::getId).toList()
+        );
+        Map<UUID, ForumComment> replyParentsById = loadReplyParentsById(visibleComments);
         List<ForumCommentResponse> items = visibleComments.stream()
-                .map(this::toCommentResponse)
+                .map(comment -> toCommentResponse(comment, reactedCommentIds.contains(comment.getId()), replyParentsById))
                 .toList();
         String nextCursor = hasNext && !visibleComments.isEmpty()
                 ? encodeNextCommentCursor(visibleComments.get(visibleComments.size() - 1), filterHash)
@@ -200,16 +206,6 @@ public class ForumPostService {
                 .hasPrev(false)
                 .limit(resolvedLimit)
                 .build();
-    }
-
-    @Transactional(readOnly = true)
-    public PageResponse<ForumCommentResponse> getComments(UUID currentUserId, UUID postId, Integer page, Integer size) {
-        requireForumUser(currentUserId);
-        ForumPost post = forumPostRepository.findByIdAndStatus(postId, ForumPostStatus.PUBLISHED)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        Pageable pageable = PageRequest.of(defaultPage(page), defaultSize(size), Sort.by(Sort.Direction.ASC, "createdAt"));
-        Page<ForumComment> commentPage = forumCommentRepository.findByPostIdAndStatus(post.getId(), ForumCommentStatus.VISIBLE, pageable);
-        return toCommentPageResponse(commentPage.map(this::toCommentResponse));
     }
 
     @Transactional
@@ -229,6 +225,21 @@ public class ForumPostService {
             throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa gửi bình luận này rồi, vui lòng tránh spam lặp nội dung");
         }
 
+        ForumComment parentComment = null;
+        if (request.replyToCommentId() != null) {
+            parentComment = forumCommentRepository.findById(request.replyToCommentId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không tồn tại"));
+            if (parentComment.getStatus() != ForumCommentStatus.VISIBLE) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể reply bình luận đã bị ẩn hoặc xóa");
+            }
+            if (!parentComment.getPost().getId().equals(post.getId())) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không thuộc bài viết này");
+            }
+            if (parentComment.getReplyToCommentId() != null) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ trả lời bình luận 1 cấp (Không thể reply một reply)");
+            }
+        }
+
         java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
         ForumComment comment = ForumComment.builder()
                 .post(post)
@@ -237,28 +248,53 @@ public class ForumPostService {
                 .imageUrls(cleanedImages)
                 .status(ForumCommentStatus.VISIBLE)
                 .reportCount(0)
+                .reactionCount(0)
+                .replyToCommentId(parentComment != null ? parentComment.getId() : null)
                 .build();
         ForumComment saved = forumCommentRepository.save(comment);
         post.setCommentCount(safeIncrement(post.getCommentCount()));
         post.setLastActivityAt(DateTimeUtil.now());
         forumPostRepository.save(post);
 
-        if (!currentUser.getId().equals(post.getAuthorUser().getId())) {
-            try {
-                notificationService.createNotification(
-                        post.getAuthorUser().getId(),
-                        NotificationType.FORUM_POST_COMMENTED,
-                        "Bài viết của bạn có bình luận mới",
-                        currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
-                        "FORUM_POST",
-                        post.getId()
-                );
-            } catch (RuntimeException ex) {
-                log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
+        boolean isSelfReply = parentComment != null && currentUser.getId().equals(parentComment.getAuthorUser().getId());
+        boolean isSelfComment = currentUser.getId().equals(post.getAuthorUser().getId());
+
+        if (parentComment != null) {
+            if (!isSelfReply) {
+                try {
+                    notificationService.createNotification(
+                            parentComment.getAuthorUser().getId(),
+                            NotificationType.FORUM_COMMENT_REPLY,
+                            "Bình luận của bạn có người trả lời",
+                            currentUser.getFullName() + " vừa trả lời bình luận của bạn trong bài viết forum.",
+                            "FORUM_POST",
+                            post.getId()
+                    );
+                } catch (RuntimeException ex) {
+                    log.warn("Không thể tạo notification cho forum reply commentId={}: {}", saved.getId(), ex.getMessage());
+                }
+            }
+        } else {
+            if (!isSelfComment) {
+                try {
+                    notificationService.createNotification(
+                            post.getAuthorUser().getId(),
+                            NotificationType.FORUM_POST_COMMENTED,
+                            "Bài viết của bạn có bình luận mới",
+                            currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
+                            "FORUM_POST",
+                            post.getId()
+                    );
+                } catch (RuntimeException ex) {
+                    log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
+                }
             }
         }
 
-        return toCommentResponse(saved);
+        Map<UUID, ForumComment> replyParentsById = parentComment == null
+                ? Map.of()
+                : Map.of(parentComment.getId(), parentComment);
+        return toCommentResponse(saved, false, replyParentsById);
     }
 
     @Transactional
@@ -267,7 +303,7 @@ public class ForumPostService {
         ForumComment comment = loadOwnedEditableComment(commentId, currentUser.getId());
         comment.setContent(forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận"));
         comment.setImageUrls(cleanImageUrls(request.imageUrls()));
-        return toCommentResponse(forumCommentRepository.save(comment));
+        return toCommentResponse(forumCommentRepository.save(comment), currentUserId);
     }
 
     @Transactional
@@ -276,13 +312,67 @@ public class ForumPostService {
         ForumComment comment = loadOwnedEditableComment(commentId, currentUser.getId());
         ForumPost post = forumPostRepository.findByIdForUpdate(comment.getPost().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        ForumCommentResponse response = toCommentResponse(comment);
+        ForumCommentResponse response = toCommentResponse(comment, currentUserId);
+        List<ForumComment> visibleReplies = forumCommentRepository.findByReplyToCommentIdAndStatus(comment.getId(), ForumCommentStatus.VISIBLE);
+        visibleReplies.forEach(forumCommentRepository::delete);
         forumCommentRepository.delete(comment);
+        int removedCount = 1 + visibleReplies.size();
         if (post.getCommentCount() != null && post.getCommentCount() > 0) {
-            post.setCommentCount(post.getCommentCount() - 1);
+            post.setCommentCount(Math.max(0, post.getCommentCount() - removedCount));
             forumPostRepository.save(post);
         }
         return response;
+    }
+
+    @Transactional
+    public ForumCommentResponse upsertCommentReaction(UUID currentUserId, UUID commentId, ForumReactionRequest request) {
+        User currentUser = requireForumUser(currentUserId);
+        forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
+        if (request.reactionType() != ForumReactionType.LIKE) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Forum MVP hiện chỉ hỗ trợ reaction LIKE cho comment");
+        }
+
+        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
+        if (comment.getStatus() != ForumCommentStatus.VISIBLE) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể thả reaction cho bình luận đã bị ẩn hoặc xóa");
+        }
+        ensurePostVisible(comment.getPost());
+
+        Optional<ForumCommentReaction> existing =
+                forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId());
+        if (existing.isEmpty()) {
+            ForumCommentReaction reaction = ForumCommentReaction.builder()
+                    .comment(comment)
+                    .user(currentUser)
+                    .reactionType(ForumReactionType.LIKE)
+                    .build();
+            forumCommentReactionRepository.save(reaction);
+            comment.setReactionCount(safeIncrement(comment.getReactionCount()));
+            forumCommentRepository.save(comment);
+        }
+        return toCommentResponse(comment, currentUserId);
+    }
+
+    @Transactional
+    public ForumCommentResponse removeCommentReaction(UUID currentUserId, UUID commentId) {
+        User currentUser = requireForumUser(currentUserId);
+        forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
+        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
+        if (comment.getStatus() != ForumCommentStatus.VISIBLE) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể thao tác trên bình luận đã bị ẩn hoặc xóa");
+        }
+        ensurePostVisible(comment.getPost());
+        
+        forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId()).ifPresent(reaction -> {
+            forumCommentReactionRepository.delete(reaction);
+            if (comment.getReactionCount() != null && comment.getReactionCount() > 0) {
+                comment.setReactionCount(comment.getReactionCount() - 1);
+                forumCommentRepository.save(comment);
+            }
+        });
+        return toCommentResponse(comment, currentUserId);
     }
 
     @Transactional
@@ -445,6 +535,13 @@ public class ForumPostService {
         return new HashSet<>(forumPostReactionRepository.findReactedPostIdsByUserIdAndPostIdIn(currentUserId, postIds));
     }
 
+    private Set<UUID> loadReactedCommentIds(UUID currentUserId, Collection<UUID> commentIds) {
+        if (currentUserId == null || commentIds == null || commentIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(forumCommentReactionRepository.findReactedCommentIdsByUserIdAndCommentIdIn(currentUserId, commentIds));
+    }
+
     private String determineAuthorRole(java.util.Set<RoleCode> roles) {
         if (roles == null) {
             return "MENTEE";
@@ -458,7 +555,20 @@ public class ForumPostService {
         return "MENTEE";
     }
 
-    private ForumCommentResponse toCommentResponse(ForumComment comment) {
+    private ForumCommentResponse toCommentResponse(ForumComment comment, UUID currentUserId) {
+        Optional<ForumCommentReaction> reaction = currentUserId == null
+                ? Optional.empty()
+                : forumCommentReactionRepository.findByCommentIdAndUserId(comment.getId(), currentUserId);
+        return toCommentResponse(comment, reaction.isPresent(), loadReplyParentsById(List.of(comment)));
+    }
+
+    private ForumCommentResponse toCommentResponse(ForumComment comment,
+                                                   boolean reactedByCurrentUser,
+                                                   Map<UUID, ForumComment> replyParentsById) {
+        ForumComment replyParent = comment.getReplyToCommentId() == null
+                ? null
+                : replyParentsById.get(comment.getReplyToCommentId());
+
         return ForumCommentResponse.builder()
                 .commentId(comment.getId())
                 .postId(comment.getPost().getId())
@@ -469,10 +579,31 @@ public class ForumPostService {
                 .content(comment.getContent())
                 .status(comment.getStatus().name())
                 .reportCount(defaultInt(comment.getReportCount()))
+                .reactionCount(defaultInt(comment.getReactionCount()))
+                .reactedByCurrentUser(reactedByCurrentUser)
+                .replyToCommentId(comment.getReplyToCommentId())
+                .replyToUserId(replyParent == null ? null : replyParent.getAuthorUser().getId())
+                .replyToUserName(replyParent == null ? null : replyParent.getAuthorUser().getFullName())
                 .createdAt(comment.getCreatedAt())
                 .updatedAt(comment.getUpdatedAt())
                 .imageUrls(comment.getImageUrls())
                 .build();
+    }
+
+    private Map<UUID, ForumComment> loadReplyParentsById(Collection<ForumComment> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> parentIds = comments.stream()
+                .map(ForumComment::getReplyToCommentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (parentIds.isEmpty()) {
+            return Map.of();
+        }
+        return forumCommentRepository.findByIdIn(parentIds).stream()
+                .collect(Collectors.toMap(ForumComment::getId, Function.identity()));
     }
 
     private ForumHelpTopicResponse toHelpTopicResponse(Tag tag) {
@@ -489,15 +620,6 @@ public class ForumPostService {
         return Math.min(resolved, 50);
     }
 
-    private int defaultPage(Integer page) {
-        return page == null || page < 0 ? 0 : page;
-    }
-
-    private int defaultSize(Integer size) {
-        int resolved = size == null || size <= 0 ? 20 : size;
-        return Math.min(resolved, 50);
-    }
-
     private String toKeywordPattern(String keyword) {
         if (keyword == null || keyword.trim().isEmpty()) {
             return null;
@@ -506,7 +628,7 @@ public class ForumPostService {
     }
 
     private String buildUserPostFilterHash(String keyword, UUID helpTopicId, Boolean mine) {
-        return "forum-posts:user|keyword=" + normalizeFilterValue(keyword)
+        return "forum-posts:user|keyword=" + normalizeKeywordFilterValue(keyword)
                 + "|helpTopicId=" + normalizeFilterValue(helpTopicId)
                 + "|mine=" + Boolean.TRUE.equals(mine)
                 + "|status=" + ForumPostStatus.PUBLISHED.name();
@@ -613,15 +735,12 @@ public class ForumPostService {
         return normalized.isEmpty() ? "_" : normalized;
     }
 
-    private PageResponse<ForumCommentResponse> toCommentPageResponse(Page<ForumCommentResponse> page) {
-        return PageResponse.<ForumCommentResponse>builder()
-                .content(page.getContent())
-                .page(page.getNumber())
-                .size(page.getSize())
-                .totalElements(page.getTotalElements())
-                .totalPages(page.getTotalPages())
-                .last(page.isLast())
-                .build();
+    private String normalizeKeywordFilterValue(String value) {
+        if (value == null) {
+            return "_";
+        }
+        String normalized = value.trim().toLowerCase();
+        return normalized.isEmpty() ? "_" : normalized;
     }
 
     private java.util.List<String> cleanImageUrls(java.util.List<String> raw) {

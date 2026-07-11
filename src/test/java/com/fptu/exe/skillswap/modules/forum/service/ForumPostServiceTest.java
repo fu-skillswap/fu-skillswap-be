@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.forum.dto.request.ForumCommentUpsertReques
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -76,6 +77,8 @@ class ForumPostServiceTest {
     private CursorCodec cursorCodec;
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    private ForumCommentReactionRepository forumCommentReactionRepository;
 
     private ForumPostService forumPostService;
     private User mentee;
@@ -87,6 +90,7 @@ class ForumPostServiceTest {
                 forumPostRepository,
                 forumCommentRepository,
                 forumPostReactionRepository,
+                forumCommentReactionRepository,
                 userRepository,
                 tagRepository,
                 notificationService,
@@ -128,7 +132,8 @@ class ForumPostServiceTest {
         var response = forumPostService.createPost(mentee.getId(), new ForumPostUpsertRequest(
                 "Cần hỏi về PRJ301",
                 "Mọi người cho em xin tips làm API.",
-                helpTopic.getId()
+                helpTopic.getId(),
+                List.of()
         ));
 
         assertEquals("Cần hỏi về PRJ301", response.title());
@@ -227,7 +232,7 @@ class ForumPostServiceTest {
         BaseException ex = assertThrows(BaseException.class, () -> forumPostService.updatePost(
                 mentee.getId(),
                 post.getId(),
-                new ForumPostUpsertRequest("New", "New content", helpTopic.getId())
+                new ForumPostUpsertRequest("New", "New content", helpTopic.getId(), List.of())
         ));
 
         assertEquals(ErrorCode.ACCESS_DENIED, ex.getErrorCode());
@@ -250,7 +255,7 @@ class ForumPostServiceTest {
         BaseException ex = assertThrows(BaseException.class, () -> forumPostService.createComment(
                 mentee.getId(),
                 post.getId(),
-                new ForumCommentUpsertRequest("Em muốn hỏi thêm")
+                new ForumCommentUpsertRequest("Em muốn hỏi thêm", List.of(), null)
         ));
 
         assertEquals(ErrorCode.NOT_FOUND, ex.getErrorCode());
@@ -273,7 +278,7 @@ class ForumPostServiceTest {
                 .content("content")
                 .status(ForumPostStatus.PUBLISHED)
                 .build();
-        ForumCommentUpsertRequest request = new ForumCommentUpsertRequest("Em muốn hỏi thêm");
+        ForumCommentUpsertRequest request = new ForumCommentUpsertRequest("Em muốn hỏi thêm", List.of(), null);
 
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
         when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
@@ -302,7 +307,7 @@ class ForumPostServiceTest {
 
         BaseException ex = assertThrows(BaseException.class, () -> forumPostService.createPost(
                 mentee.getId(),
-                new ForumPostUpsertRequest("<b>Hello</b>", "content", helpTopic.getId())
+                new ForumPostUpsertRequest("<b>Hello</b>", "content", helpTopic.getId(), List.of())
         ));
 
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());

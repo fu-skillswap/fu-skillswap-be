@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -78,14 +79,19 @@ public class ForumReportService {
             default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Loại target report không được hỗ trợ");
         }
 
-        ForumReport report = forumReportRepository.save(ForumReport.builder()
-                .reporterUser(reporter)
-                .targetType(request.targetType())
-                .targetId(request.targetId())
-                .reasonType(request.reasonType())
-                .description(forumTextPolicy.normalizeOptionalPlainText(request.description(), "Mô tả report"))
-                .status(ForumReportStatus.OPEN)
-                .build());
+        ForumReport report;
+        try {
+            report = forumReportRepository.saveAndFlush(ForumReport.builder()
+                    .reporterUser(reporter)
+                    .targetType(request.targetType())
+                    .targetId(request.targetId())
+                    .reasonType(request.reasonType())
+                    .description(forumTextPolicy.normalizeOptionalPlainText(request.description(), "Mô tả report"))
+                    .status(ForumReportStatus.OPEN)
+                    .build());
+        } catch (DataIntegrityViolationException ex) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó", ex);
+        }
 
         return ForumReportResponse.builder()
                 .reportId(report.getId())

@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.PageRequest;
@@ -73,27 +74,28 @@ class ForumFlowIntegrationTest {
         var post = forumPostService.createPost(author.getId(), new ForumPostUpsertRequest(
                 "Cần mentor review CV",
                 "Mọi người cho em xin feedback về CV backend.",
-                helpTopic.getId()
+                helpTopic.getId(),
+                List.of()
         ));
 
-        forumPostService.createComment(commenter.getId(), post.postId(), new ForumCommentUpsertRequest("Anh thấy CV ổn, nên bổ sung phần project."));
+        forumPostService.createComment(commenter.getId(), post.postId(), new ForumCommentUpsertRequest("Anh thấy CV ổn, nên bổ sung phần project.", List.of(), null));
 
         var authorNotifications = notificationService.getMyNotifications(author.getId(), false, PageRequest.of(0, 10));
         assertEquals(1, authorNotifications.getContent().size());
         assertEquals(NotificationType.FORUM_POST_COMMENTED.name(), authorNotifications.getContent().getFirst().getType());
         assertEquals(post.postId(), authorNotifications.getContent().getFirst().getRelatedEntityId());
 
-        var commentsAfterExternalReply = forumPostService.getComments(author.getId(), post.postId(), 0, 10);
-        assertEquals(1, commentsAfterExternalReply.getContent().size());
-        assertEquals("Anh thấy CV ổn, nên bổ sung phần project.", commentsAfterExternalReply.getContent().getFirst().content());
+        var commentsAfterExternalReply = forumPostService.getComments(author.getId(), post.postId(), null, 10);
+        assertEquals(1, commentsAfterExternalReply.items().size());
+        assertEquals("Anh thấy CV ổn, nên bổ sung phần project.", commentsAfterExternalReply.items().getFirst().content());
 
-        forumPostService.createComment(author.getId(), post.postId(), new ForumCommentUpsertRequest("Cảm ơn anh, em sẽ cập nhật."));
+        forumPostService.createComment(author.getId(), post.postId(), new ForumCommentUpsertRequest("Cảm ơn anh, em sẽ cập nhật.", List.of(), null));
 
         var authorNotificationsAfterSelfComment = notificationService.getMyNotifications(author.getId(), false, PageRequest.of(0, 10));
         assertEquals(1, authorNotificationsAfterSelfComment.getContent().size());
 
-        var commentsAfterSelfReply = forumPostService.getComments(author.getId(), post.postId(), 0, 10);
-        assertEquals(2, commentsAfterSelfReply.getContent().size());
+        var commentsAfterSelfReply = forumPostService.getComments(author.getId(), post.postId(), null, 10);
+        assertEquals(2, commentsAfterSelfReply.items().size());
     }
 
     @Test
@@ -101,7 +103,8 @@ class ForumFlowIntegrationTest {
         var post = forumPostService.createPost(author.getId(), new ForumPostUpsertRequest(
                 "Spam bài viết",
                 "Nội dung giả lập để test report flow.",
-                helpTopic.getId()
+                helpTopic.getId(),
+                List.of()
         ));
 
         var report = forumReportService.createReport(commenter.getId(), new ForumReportCreateRequest(

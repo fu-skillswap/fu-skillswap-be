@@ -16,6 +16,11 @@ public record ForumCommentResponse(
         String content,
         String status,
         Integer reportCount,
+        Integer reactionCount,
+        Boolean reactedByCurrentUser,
+        UUID replyToCommentId,
+        UUID replyToUserId,
+        String replyToUserName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
         java.util.List<String> imageUrls

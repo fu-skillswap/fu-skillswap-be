@@ -237,6 +237,27 @@ public class ForumPostController {
         return ApiResponse.success(forumPostService.removeReaction(principal.getPublicId(), postId));
     }
 
+    @PutMapping("/comments/{commentId}/reaction")
+    @Operation(summary = "Thả reaction cho bình luận forum")
+    public ApiResponse<ForumCommentResponse> upsertCommentReaction(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID commentId,
+            @Valid @RequestBody ForumReactionRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(forumPostService.upsertCommentReaction(principal.getPublicId(), commentId, request));
+    }
+
+    @DeleteMapping("/comments/{commentId}/reaction")
+    @Operation(summary = "Bỏ reaction của tôi khỏi bình luận forum")
+    public ApiResponse<ForumCommentResponse> removeCommentReaction(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID commentId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(forumPostService.removeCommentReaction(principal.getPublicId(), commentId));
+    }
+
     private void ensureAuthenticated(UserPrincipal principal) {
         if (principal == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");

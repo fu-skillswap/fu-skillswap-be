@@ -65,6 +65,13 @@ public class ForumComment {
     @Builder.Default
     private Integer reportCount = 0;
 
+    @Column(name = "reaction_count", nullable = false)
+    @Builder.Default
+    private Integer reactionCount = 0;
+
+    @Column(name = "reply_to_comment_id")
+    private UUID replyToCommentId;
+
     @Column(name = "hidden_at")
     private LocalDateTime hiddenAt;
 

@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumReportReasonType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReportCreateRequest;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
@@ -23,6 +24,7 @@ import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -66,6 +68,8 @@ class ForumReportServiceTest {
     private CursorCodec cursorCodec;
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    private ForumCommentReactionRepository forumCommentReactionRepository;
 
     private ForumReportService forumReportService;
     private User reporter;
@@ -78,6 +82,7 @@ class ForumReportServiceTest {
                 forumPostRepository,
                 forumCommentRepository,
                 forumPostReactionRepository,
+                forumCommentReactionRepository,
                 userRepository,
                 tagRepository,
                 notificationService,
@@ -161,7 +166,7 @@ class ForumReportServiceTest {
         when(forumReportRepository.existsByReporterUserIdAndTargetTypeAndTargetId(reporter.getId(), ForumReportTargetType.POST, post.getId())).thenReturn(false);
         when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
         when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(forumReportRepository.save(any(ForumReport.class))).thenAnswer(inv -> {
+        when(forumReportRepository.saveAndFlush(any(ForumReport.class))).thenAnswer(inv -> {
             ForumReport report = inv.getArgument(0);
             report.setId(UUID.randomUUID());
             return report;
@@ -176,7 +181,24 @@ class ForumReportServiceTest {
         assertEquals("OPEN", response.status());
         verify(forumAbuseGuardService).checkAndLog(reporter, ForumActionType.CREATE_REPORT);
         verify(forumPostRepository).save(post);
-        verify(forumReportRepository).save(any(ForumReport.class));
+        verify(forumReportRepository).saveAndFlush(any(ForumReport.class));
+    }
+
+    @Test
+    void createReport_concurrentDuplicate_shouldThrowConflict() {
+        when(userRepository.findById(reporter.getId())).thenReturn(Optional.of(reporter));
+        when(forumReportRepository.existsByReporterUserIdAndTargetTypeAndTargetId(reporter.getId(), ForumReportTargetType.POST, post.getId())).thenReturn(false);
+        when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
+        when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(forumReportRepository.saveAndFlush(any(ForumReport.class)))
+                .thenThrow(new DataIntegrityViolationException("uq_forum_reports_reporter_target"));
+
+        BaseException ex = assertThrows(BaseException.class, () -> forumReportService.createReport(
+                reporter.getId(),
+                new ForumReportCreateRequest(ForumReportTargetType.POST, post.getId(), ForumReportReasonType.SPAM, "spam")
+        ));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, ex.getErrorCode());
     }
 
     @Test
