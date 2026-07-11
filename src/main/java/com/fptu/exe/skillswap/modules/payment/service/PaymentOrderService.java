@@ -147,8 +147,14 @@ public class PaymentOrderService {
         });
 
         // Fast path for paid or existing awaiting payment
-        if (savedOrder.getStatus() == PaymentOrderStatus.PAID || 
-            (isAwaitingPayment(savedOrder.getStatus()) && savedOrder.getProviderOrderCode() != null)) {
+        if (savedOrder.getStatus() == PaymentOrderStatus.PAID) {
+            if (savedOrder.getProviderOrderCode() == null) {
+                return finalizeFullyPaidOrder(savedOrder);
+            }
+            PaymentAttempt latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(savedOrder.getId()).orElse(null);
+            return toResponse(savedOrder, latestAttempt);
+        }
+        if (isAwaitingPayment(savedOrder.getStatus()) && savedOrder.getProviderOrderCode() != null) {
             PaymentAttempt latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(savedOrder.getId()).orElse(null);
             return toResponse(savedOrder, latestAttempt);
         }
@@ -794,6 +800,18 @@ public class PaymentOrderService {
                 .build());
     }
 
+    private PaymentCheckoutResponse finalizeFullyPaidOrder(PaymentOrder savedOrder) {
+        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(savedOrder.getBookingId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+        if (savedOrder.getCreditFinalizedAt() == null) {
+            savedOrder.setCreditFinalizedAt(DateTimeUtil.now());
+            savedOrder = paymentOrderRepository.save(savedOrder);
+        }
+        finalizePaidBooking(savedOrder, lockedBooking);
+        PaymentAttempt latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(savedOrder.getId()).orElse(null);
+        return toResponse(savedOrder, latestAttempt);
+    }
+
     private void compensateCapturedPaymentForTerminalBooking(Booking booking, PaymentOrder order) {
         if (booking == null || order == null) {
             return;
@@ -922,6 +940,10 @@ public class PaymentOrderService {
         while (true) {
             long bucket = Math.max(0L, System.currentTimeMillis() - PROVIDER_ORDER_CODE_EPOCH_MILLIS);
             int sequence = nextProviderOrderCodeSequence(bucket);
+            if (sequence < 0) {
+                Thread.onSpinWait();
+                continue;
+            }
             long candidate = bucket * PROVIDER_ORDER_CODE_SEQUENCE_MOD + sequence;
             if (candidate > 0 && candidate <= PAYOS_MAX_SAFE_ORDER_CODE) {
                 return candidate;
@@ -944,7 +966,7 @@ public class PaymentOrderService {
                 return current;
             }
 
-            Thread.yield();
+            return -1;
         }
     }
 

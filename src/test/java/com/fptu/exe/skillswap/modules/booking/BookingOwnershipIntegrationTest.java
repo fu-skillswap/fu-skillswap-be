@@ -13,6 +13,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
@@ -82,6 +84,9 @@ class BookingOwnershipIntegrationTest {
 
     @Autowired
     private MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private BookingRepository bookingRepository;
 
     @Autowired
     private BookingService bookingService;
@@ -203,6 +208,11 @@ class BookingOwnershipIntegrationTest {
 
         bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("Accepted"));
         paymentOrderService.checkout(menteeUser.getId(), new PaymentCheckoutRequest(booking.bookingId(), null));
+
+        var bookingEntity = bookingRepository.findById(booking.bookingId()).orElseThrow();
+        bookingEntity.setStatus(BookingStatus.PAID);
+        bookingRepository.saveAndFlush(bookingEntity);
+        conversationService.createDirectForAcceptedBooking(bookingEntity);
 
         BaseException bookingException = assertThrows(BaseException.class,
                 () -> bookingService.getBookingDetail(outsiderUser.getId(), booking.bookingId()));

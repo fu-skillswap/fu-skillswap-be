@@ -1,4 +1,4 @@
-package com.fptu.exe.skillswap.modules.mentor;
+package com.fptu.exe.skillswap.modules.admin;
 
 import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
@@ -8,11 +8,11 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorListRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorDetailResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminMentorModerationService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.Test;
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AdminMentorServiceTest {
+class AdminMentorModerationServiceTest {
 
     @Mock
     private MentorProfileRepository mentorProfileRepository;
@@ -47,7 +47,7 @@ class AdminMentorServiceTest {
     private StudentProfileRepository studentProfileRepository;
 
     @InjectMocks
-    private AdminMentorService adminMentorService;
+    private AdminMentorModerationService adminMentorService;
 
     @Test
     void getMentors_shouldTrimKeywordAndQueryDirectly() {

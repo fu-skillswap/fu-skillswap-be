@@ -25,11 +25,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.util.EnumSet;
 import java.util.List;
@@ -51,7 +47,7 @@ public class MentorVerificationService {
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
     private static final long MAX_DOCUMENT_SIZE_BYTES = 15L * 1024L * 1024L;
-    private static final Pattern PUBLIC_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]+$");
+    private static final Pattern OBJECT_KEY_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]+$");
 
     @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
     private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
@@ -70,7 +66,6 @@ public class MentorVerificationService {
     private final MentorProfileService mentorProfileService;
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
-    private final com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
     private final ObjectProvider<StorageGateway> r2StorageProvider;
 
     @Transactional
@@ -129,42 +124,6 @@ public class MentorVerificationService {
         MentorVerificationDocument document = mentorVerificationDocumentRepository.findByIdAndRequestId(documentId, request.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu xác thực"));
         return mapDocumentResponse(document);
-    }
-
-    @Transactional
-    public MentorVerificationRequestResponse uploadDocument(
-            UUID userId,
-            VerificationDocumentType documentType,
-            MultipartFile file
-    ) {
-        requireUserId(userId);
-        MentorVerificationRequest verificationRequest = findEditableRequestForUpdate(userId);
-        validateMultipartUploadInput(documentType, file);
-        enforceDocumentCountLimit(verificationRequest.getId(), documentType);
-
-        User user = getRequiredUser(userId);
-        StoredFile storedFile = storeVerificationFile(user, documentType, file);
-
-        int nextVersion = mentorVerificationDocumentRepository
-                .findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(verificationRequest.getId(), documentType)
-                .stream()
-                .map(MentorVerificationDocument::getVersion)
-                .max(Integer::compareTo)
-                .orElse(0) + 1;
-
-        MentorVerificationDocument document = MentorVerificationDocument.builder()
-                .request(verificationRequest)
-                .documentType(documentType)
-                .status(VerificationDocumentStatus.UPLOADED)
-                .storageKind(resolveStorageKind(file.getContentType()))
-                .storedFile(storedFile)
-                .isActive(true)
-                .version(nextVersion)
-                .uploadedBy(user)
-                .build();
-
-        mentorVerificationDocumentRepository.save(document);
-        return buildResponse(verificationRequest);
     }
 
     @Transactional
@@ -381,20 +340,32 @@ public class MentorVerificationService {
         if (user == null || user.getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xác định người dùng tải tài liệu");
         }
-        String fileUrl = trimToNull(request.fileUrl());
-        String publicId = trimToNull(request.publicId());
+        String objectKey = trimToNull(request.objectKey());
         // Strip path separators from the client-supplied filename to prevent path separator
         // injection into the stored record (the file is never written to disk here, but we
         // keep the persisted name clean for admin display and future use).
         String originalFilename = sanitizeFilename(trimToNull(request.originalFilename()));
         String contentType = canonicalizeContentType(request.contentType());
+        StorageGateway storageGateway = getRequiredStorageGateway();
+        StorageGateway.ObjectMetadata objectMetadata = storageGateway.headObject(objectKey);
+        String uploadedContentType = canonicalizeContentType(objectMetadata.contentType());
+        if (!contentType.equals(uploadedContentType)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "contentType xác nhận không khớp file đã upload");
+        }
+        // sizeBytes == 0 is the local-profile sentinel for "unknown size" (file not on disk).
+        // Skip the size check in that case; production storage always returns the actual size.
+        if (objectMetadata.sizeBytes() > 0
+                && request.sizeBytes() != null && request.sizeBytes() > 0
+                && objectMetadata.sizeBytes() != request.sizeBytes()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "sizeBytes xác nhận không khớp file đã upload");
+        }
         return storedFileRepository.save(StoredFile.builder()
                 .owner(user)
                 .purpose(FilePurpose.VERIFICATION_DOCUMENT)
                 .originalName(originalFilename)
-                .storageProvider("CLOUDINARY")
-                .storageKey(publicId)
-                .publicUrl(fileUrl)
+                .storageProvider(storageGateway.storageProviderName())
+                .storageKey(objectKey)
+                .publicUrl("private://" + objectKey)
                 .mimeType(contentType)
                 .sizeBytes(request.sizeBytes())
                 .build());
@@ -407,12 +378,8 @@ public class MentorVerificationService {
         if (request.documentType() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
         }
-        if (!StringUtils.hasText(request.fileUrl())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không được để trống");
-        }
-        validateDocumentUrl(request.fileUrl());
-        if (!StringUtils.hasText(request.publicId()) || !isValidPublicId(request.publicId())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã publicId của tài liệu không hợp lệ");
+        if (!StringUtils.hasText(request.objectKey()) || !isValidObjectKey(request.objectKey())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "objectKey của tài liệu không hợp lệ");
         }
         if (!StringUtils.hasText(request.originalFilename())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Tên file gốc không được để trống");
@@ -640,56 +607,21 @@ public class MentorVerificationService {
         return normalized;
     }
 
-    private void validateDocumentUrl(String fileUrl) {
-        if (storageSecurityProperties.getAllowedUrlHosts() == null || storageSecurityProperties.getAllowedUrlHosts().isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Hệ thống chưa cấu hình danh sách domain lưu trữ hợp lệ");
-        }
-        try {
-            URI uri = new URI(fileUrl.trim());
-            if (!uri.isAbsolute()) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu sai định dạng");
-            }
-            String scheme = uri.getScheme();
-            String host = uri.getHost();
-
-            if (!"https".equalsIgnoreCase(scheme)) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu phải sử dụng giao thức https an toàn");
-            }
-
-            if (!StringUtils.hasText(host)) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ (thiếu host)");
-            }
-
-            String lowerHost = host.toLowerCase();
-            if (lowerHost.equals("localhost") || lowerHost.startsWith("127.") || lowerHost.startsWith("10.") || lowerHost.startsWith("192.168.") || lowerHost.equals("::1") || lowerHost.matches("^172\\.(1[6-9]|2[0-9]|3[0-1])\\..+")) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không hợp lệ (không hỗ trợ IP nội bộ)");
-            }
-
-            boolean isAllowed = storageSecurityProperties.getAllowedUrlHosts().stream()
-                    .anyMatch(allowedHost -> allowedHost.equalsIgnoreCase(host));
-
-            if (!isAllowed) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu không thuộc danh sách các nguồn lưu trữ được phép");
-            }
-        } catch (URISyntaxException ex) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Đường dẫn tài liệu sai định dạng");
-        }
-    }
-
-    private boolean isValidPublicId(String publicId) {
-        if (publicId == null) {
+    private boolean isValidObjectKey(String objectKey) {
+        if (objectKey == null) {
             return false;
         }
-        String trimmed = publicId.trim();
-        if (!PUBLIC_ID_PATTERN.matcher(trimmed).matches()) {
+        String trimmed = objectKey.trim();
+        if (!OBJECT_KEY_PATTERN.matcher(trimmed).matches()) {
             return false;
         }
-        // Even though the regex allows '/' and '.', explicitly reject any path segment
-        // equal to ".." to prevent path-traversal sequences such as "../../admin".
         for (String segment : trimmed.split("/", -1)) {
-            if ("..".equals(segment)) {
+            if (segment.isBlank() || "..".equals(segment)) {
                 return false;
             }
+        }
+        if (trimmed.startsWith("/")) {
+            return false;
         }
         return true;
     }
@@ -734,44 +666,6 @@ public class MentorVerificationService {
         return value.trim();
     }
 
-    private StoredFile storeVerificationFile(User user, VerificationDocumentType documentType, MultipartFile file) {
-        StorageGateway storageService = r2StorageProvider.getIfAvailable();
-        if (storageService == null) {
-            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình R2 để upload minh chứng");
-        }
-        StorageGateway.StorageUploadResult uploadResult = storageService.uploadFile(
-                file,
-                "mentor-verification/" + user.getId() + "/" + documentType.name().toLowerCase()
-        );
-        return storedFileRepository.save(StoredFile.builder()
-                .owner(user)
-                .purpose(FilePurpose.VERIFICATION_DOCUMENT)
-                .originalName(sanitizeFilename(trimToNull(file.getOriginalFilename())))
-                .storageProvider("R2")
-                .storageKey(uploadResult.objectKey())
-                .publicUrl(uploadResult.publicUrl())
-                .mimeType(canonicalizeContentType(file.getContentType()))
-                .sizeBytes(file.getSize())
-                .build());
-    }
-
-    private void validateMultipartUploadInput(VerificationDocumentType documentType, MultipartFile file) {
-        if (documentType == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
-        }
-        maxFilesFor(documentType);
-        if (file == null || file.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "File minh chứng không được để trống");
-        }
-        if (file.getSize() <= 0 || file.getSize() > MAX_DOCUMENT_SIZE_BYTES) {
-            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 15MB");
-        }
-        String contentType = canonicalizeContentType(file.getContentType());
-        if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
-        }
-    }
-
     private boolean hasActiveAdminLock(MentorVerificationRequest request) {
         return request.getLockedBy() != null
                 && request.getLockExpiresAt() != null
@@ -789,6 +683,14 @@ public class MentorVerificationService {
         return findLatestRequest(userId)
                 .map(req -> req.getStatus().name())
                 .orElse("NOT_STARTED");
+    }
+
+    private StorageGateway getRequiredStorageGateway() {
+        StorageGateway storageGateway = r2StorageProvider.getIfAvailable();
+        if (storageGateway == null) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình storage để upload minh chứng");
+        }
+        return storageGateway;
     }
 }
 

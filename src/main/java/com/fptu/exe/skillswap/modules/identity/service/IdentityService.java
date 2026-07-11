@@ -75,23 +75,21 @@ public class IdentityService {
             if (isGraceWindowActive(session, now)) {
                 TokenResponse replayResponse = refreshTokenReplayCryptoService.decrypt(session.getGraceReplayCiphertext());
                 if (replayResponse == null) {
+                    revokeSessionFamily(session, UserSessionState.REVOKED);
                     throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Không thể khôi phục phản hồi làm mới phiên");
                 }
                 if (isGraceReplacementRevoked(session, now)) {
-                    markSessionRevoked(session);
-                    userSessionRepository.save(session);
+                    revokeSessionFamily(session, UserSessionState.REVOKED);
                     throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã bị thu hồi");
                 }
                 return replayResponse;
             }
-            markSessionExpired(session);
-            userSessionRepository.save(session);
+            revokeSessionFamily(session, UserSessionState.EXPIRED);
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
         }
 
         if (session.getExpiresAt().isBefore(now)) {
-            markSessionExpired(session);
-            userSessionRepository.save(session);
+            revokeSessionFamily(session, UserSessionState.EXPIRED);
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã quá hạn");
         }
 
@@ -117,15 +115,9 @@ public class IdentityService {
         }
         String hash = jwtTokenProvider.hashToken(rawRefreshToken);
         userSessionRepository.findByRefreshTokenHashForUpdate(hash).ifPresent(session -> {
-            UserSessionState currentState = resolveSessionState(session);
-            UUID replacementSessionId = session.getGraceReplacementSessionId();
+            revokeSessionFamily(session, UserSessionState.REVOKED);
             userSessionRepository.findByGraceReplacementSessionId(session.getId())
                     .ifPresent(parentSession -> revokeSession(parentSession, UserSessionState.REVOKED));
-            revokeSession(session, UserSessionState.REVOKED);
-            if (currentState == UserSessionState.ROTATING_GRACE && replacementSessionId != null) {
-                userSessionRepository.findById(replacementSessionId)
-                        .ifPresent(replacement -> revokeSession(replacement, UserSessionState.REVOKED));
-            }
         });
     }
 
@@ -273,6 +265,22 @@ public class IdentityService {
         session.setGraceReplayCiphertext(null);
         session.setGraceReplacementSessionId(null);
         userSessionRepository.save(session);
+    }
+
+    private void revokeSessionFamily(UserSession session, UserSessionState terminalState) {
+        if (session == null) {
+            return;
+        }
+        UUID replacementSessionId = session.getGraceReplacementSessionId();
+        revokeSession(session, terminalState);
+        revokeSessionFamilyById(replacementSessionId);
+    }
+
+    private void revokeSessionFamilyById(UUID sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+        userSessionRepository.findById(sessionId).ifPresent(childSession -> revokeSessionFamily(childSession, UserSessionState.REVOKED));
     }
 
     private record TokenIssuance(TokenResponse tokenResponse, UserSession session) {}

@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
-import com.fptu.exe.skillswap.shared.event.UserStatusChangedEvent;
+import com.fptu.exe.skillswap.modules.identity.event.UserStatusChangedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

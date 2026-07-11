@@ -38,7 +38,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import com.fptu.exe.skillswap.shared.event.UserStatusChangedEvent;
+import com.fptu.exe.skillswap.modules.identity.event.UserStatusChangedEvent;
 
 @Service
 @RequiredArgsConstructor

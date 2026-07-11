@@ -27,9 +27,9 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
@@ -37,6 +37,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,7 +62,7 @@ class MentorVerificationFlowIntegrationTest {
     private MentorVerificationService mentorVerificationService;
 
     @Autowired
-    private AdminMentorVerificationService adminMentorVerificationService;
+    private AdminMentorVerificationModerationService adminMentorVerificationService;
 
     @Autowired
     private MentorProfileRepository mentorProfileRepository;
@@ -92,6 +93,9 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
+
+    @Autowired
+    private StorageGateway storageGateway;
 
     private User mentorUser;
     private User otherUser;
@@ -177,24 +181,23 @@ class MentorVerificationFlowIntegrationTest {
         assertEquals("0912345678", savedProfile.phoneNumber());
         assertTrue(savedProfile.requiredFieldsCompleted());
 
-        // 3. Save documents as Cloudinary URLs sent from FE
+        String objectKey1 = "mentor-verification/integration/" + mentorId + "/fptu-proof.png";
         mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
-                        "mentor-verification/integration/fptu-proof",
-                        "proof.png",
+                        objectKey1,
+                        "fptu-proof.png",
                         "image/png",
                         1024L
                 )
         );
+        String objectKey2 = "mentor-verification/integration/" + mentorId + "/expertise-proof.png";
         mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.EXPERTISE_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
-                        "mentor-verification/integration/expertise-proof",
+                        objectKey2,
                         "expertise-proof.png",
                         "image/png",
                         2048L
@@ -548,23 +551,23 @@ class MentorVerificationFlowIntegrationTest {
 
     private MentorVerificationRequestResponse createDraftRequest(UUID mentorId) {
         mentorVerificationService.requestToBecomeMentor(mentorId);
+        String objectKey1 = "mentor-verification/integration/" + mentorId + "/fptu-proof.png";
         mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
-                        "mentor-verification/integration/" + mentorId + "/fptu-proof",
-                        "proof.png",
+                        objectKey1,
+                        "fptu-proof.png",
                         "image/png",
                         1024L
                 )
         );
+        String objectKey2 = "mentor-verification/integration/" + mentorId + "/expertise-proof.png";
         return mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.EXPERTISE_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
-                        "mentor-verification/integration/" + mentorId + "/expertise-proof",
+                        objectKey2,
                         "expertise-proof.png",
                         "image/png",
                         2048L
@@ -611,23 +614,23 @@ class MentorVerificationFlowIntegrationTest {
                 "0912345678"
         ));
 
+        String objectKey1 = "mentor-verification/integration/" + mentorId + "/fptu-proof.png";
         mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
-                        "mentor-verification/integration/" + mentorId + "/fptu-proof",
-                        "proof.png",
+                        objectKey1,
+                        "fptu-proof.png",
                         "image/png",
                         1024L
                 )
         );
+        String objectKey2 = "mentor-verification/integration/" + mentorId + "/expertise-proof.png";
         mentorVerificationService.uploadDocument(
                 mentorId,
                 new MentorVerificationDocumentUploadRequest(
                         VerificationDocumentType.EXPERTISE_PROOF,
-                        "https://res.cloudinary.com/demo/image/upload/v123/expertise-proof.png",
-                        "mentor-verification/integration/" + mentorId + "/expertise-proof",
+                        objectKey2,
                         "expertise-proof.png",
                         "image/png",
                         2048L

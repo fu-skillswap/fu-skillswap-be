@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
-import com.fptu.exe.skillswap.modules.mail.service.EmailService;
+import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mail.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
@@ -23,7 +23,7 @@ public class GoogleCalendarFallbackNotificationListener {
 
     private final ApplicationEventPublisher eventPublisher;
     private final BookingRepository bookingRepository;
-    private final EmailService emailService;
+    private final EmailDispatchService emailDispatchService;
 
     @Async("notificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -97,8 +97,22 @@ public class GoogleCalendarFallbackNotificationListener {
             ));
             String plain = subject + "\n\n" + summary + "\nBooking: " + bookingId;
             try {
-                emailService.sendHtmlEmail(booking.getMentee().getEmail(), subject, html, plain);
-                emailService.sendHtmlEmail(booking.getMentorProfile().getUser().getEmail(), subject, html, plain);
+                emailDispatchService.sendHtmlOnce(
+                        "GCALENDAR_FALLBACK:" + bookingId + ":" + booking.getMentee().getEmail(),
+                        booking.getMentee().getEmail(),
+                        subject,
+                        html,
+                        plain,
+                        "GOOGLE_CALENDAR_SYNC_FALLBACK"
+                );
+                emailDispatchService.sendHtmlOnce(
+                        "GCALENDAR_FALLBACK:" + bookingId + ":" + booking.getMentorProfile().getUser().getEmail(),
+                        booking.getMentorProfile().getUser().getEmail(),
+                        subject,
+                        html,
+                        plain,
+                        "GOOGLE_CALENDAR_SYNC_FALLBACK"
+                );
             } catch (Exception ex) {
                 log.warn("Google calendar fallback email failed for booking {}", bookingId, ex);
             }

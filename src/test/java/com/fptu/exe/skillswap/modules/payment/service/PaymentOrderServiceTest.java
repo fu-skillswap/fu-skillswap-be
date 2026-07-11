@@ -31,6 +31,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.lang.reflect.Method;
@@ -74,6 +75,7 @@ class PaymentOrderServiceTest {
     @Mock private NotificationService notificationService;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private InternalTelemetryService internalTelemetryService;
+    @Mock private TransactionTemplate transactionTemplate;
 
     private PaymentOrderService paymentOrderService;
 
@@ -91,6 +93,11 @@ class PaymentOrderServiceTest {
         paymentProperties.setMenteeSurchargeBps(0);
         paymentProperties.setMentorCommissionBps(0);
 
+        org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
         paymentOrderService = new PaymentOrderService(
                 bookingRepository,
                 paymentOrderRepository,
@@ -105,7 +112,8 @@ class PaymentOrderServiceTest {
                 conversationService,
                 notificationService,
                 eventPublisher,
-                internalTelemetryService
+                internalTelemetryService,
+                transactionTemplate
         );
 
         menteeId = UUID.randomUUID();
@@ -188,15 +196,14 @@ class PaymentOrderServiceTest {
                         .originType(CreditOriginType.MANUAL)
                         .build()));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(paymentAttemptRepository.countByPaymentOrderId(any())).thenReturn(0L);
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
         PaymentCheckoutResponse response = paymentOrderService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, null));
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         assertEquals(0, response.remainingPayableScoin());
         assertNull(response.paymentLink());
-        verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
+        verify(creditLedgerService).reserveCredit(eq(menteeId), eq(72_000), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any());
+        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
         // PayOsGateway must NOT be called for credit-covered checkout
         verify(payOsGateway, never()).createPaymentLink(any());
     }
@@ -335,6 +342,8 @@ class PaymentOrderServiceTest {
 
         // Gateway returns verified result (HMAC is correct per SdkPayOsGateway)
         when(payOsGateway.verifyWebhook(webhookRequest)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-1"));
+        // Optimistic (non-locking) read before entering the transaction
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
@@ -429,6 +438,8 @@ class PaymentOrderServiceTest {
                 .build();
 
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-dup"));
+        // Optimistic read before entering the transaction
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
@@ -467,6 +478,8 @@ class PaymentOrderServiceTest {
                 .build();
 
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-final"));
+        // Optimistic read before entering the transaction
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
@@ -628,7 +641,8 @@ class PaymentOrderServiceTest {
                 conversationService,
                 notificationService,
                 eventPublisher,
-                internalTelemetryService
+                internalTelemetryService,
+                transactionTemplate
         );
 
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
@@ -645,8 +659,7 @@ class PaymentOrderServiceTest {
         
         ArgumentCaptor<PaymentOrder> orderCaptor = ArgumentCaptor.forClass(PaymentOrder.class);
         when(paymentOrderRepository.save(orderCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
-        when(paymentAttemptRepository.countByPaymentOrderId(any())).thenReturn(0L);
-        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+
 
         PaymentCheckoutResponse response = customService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, null));
 

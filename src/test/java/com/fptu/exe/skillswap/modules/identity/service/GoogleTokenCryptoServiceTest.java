@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import org.junit.jupiter.api.Test;
 
 import java.util.Base64;
@@ -12,13 +12,13 @@ class GoogleTokenCryptoServiceTest {
 
     @Test
     void shouldEncryptAndDecryptRoundTrip() {
-        JwtProperties properties = new JwtProperties();
+        GoogleApiProperties properties = new GoogleApiProperties();
         byte[] key = new byte[32];
         for (int i = 0; i < key.length; i++) {
             key[i] = (byte) (i + 1);
         }
-        properties.getGoogle().setTokenEncryptionKey(Base64.getEncoder().encodeToString(key));
-        properties.getGoogle().setTokenEncryptionKeyVersion(2);
+        properties.setTokenEncryptionKey(Base64.getEncoder().encodeToString(key));
+        properties.setTokenEncryptionKeyVersion(2);
 
         GoogleTokenCryptoService service = new GoogleTokenCryptoService(properties);
         String encrypted = service.encrypt("refresh-token-value");

@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.Test;

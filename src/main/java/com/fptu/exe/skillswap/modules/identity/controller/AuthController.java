@@ -2,10 +2,11 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
+import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
+import com.fptu.exe.skillswap.modules.identity.service.GoogleOAuthStateService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -31,12 +32,29 @@ import org.springframework.util.StringUtils;
 public class AuthController {
 
     private final IdentityService identityService;
+    private final GoogleOAuthStateService googleOAuthStateService;
     private final InMemoryRateLimitService rateLimitService;
 
-    @Operation(summary = "Đăng nhập bằng Google", description = "Xác thực user bằng Google ID token hoặc authorization-code flow và phát hành token riêng của SkillSwap để gọi các API phía sau. FE dùng đây là API đầu tiên trong luồng authentication trước khi gọi API lấy current user. Nếu là lần đăng nhập đầu, backend có thể tự tạo account mới; refresh token được trả qua HttpOnly cookie còn body giữ access token.")
+    @Operation(summary = "Khởi tạo Google OAuth", description = "Phát hành state dùng một lần, ràng buộc với redirect URI và PKCE code challenge. FE phải gọi endpoint này trước khi chuyển user sang Google OAuth.")
+    @GetMapping("/google/authorization-context")
+    public ApiResponse<GoogleAuthorizationContextResponse> createGoogleAuthorizationContext(
+            @RequestParam String redirectUri,
+            @RequestParam String codeChallenge,
+            HttpServletRequest request
+    ) {
+        rateLimitService.check(
+                "auth:google-context:" + resolveClientKey(request),
+                20,
+                java.time.Duration.ofMinutes(10),
+                "Bạn đang khởi tạo đăng nhập quá nhanh, vui lòng thử lại sau"
+        );
+        return ApiResponse.success(googleOAuthStateService.issue(redirectUri, codeChallenge));
+    }
+
+    @Operation(summary = "Đăng nhập bằng Google", description = "Đổi Google authorization code bằng PKCE sau khi xác minh state dùng một lần. Refresh token chỉ được trả qua HttpOnly cookie; response body chỉ chứa access token.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng nhập thành công, trả về token"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "ID Token Google không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Authorization code, PKCE hoặc OAuth state không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Tài khoản bị khóa hoặc chưa kích hoạt")
     })
     @PostMapping("/google")
@@ -57,14 +75,13 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token còn hiệu lực. FE dùng khi access token hết hạn và cần gia hạn phiên đăng nhập mà không bắt user đăng nhập lại. Refresh token có thể được lấy từ request body hoặc từ HttpOnly cookie theo flow backend hiện tại. Khi cùng một refresh token cũ được dùng song song trong khoảng grace period, backend sẽ replay lại đúng cùng một token pair thay vì phát sinh token thứ ba.")
+    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie. Endpoint không nhận refresh token trong body. Các request song song trong grace period nhận cùng một token pair.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Làm mới token thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Refresh Token đã hết hạn hoặc bị thu hồi")
     })
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refreshToken(
-            @Valid @RequestBody(required = false) RefreshTokenRequest request,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
@@ -74,7 +91,7 @@ public class AuthController {
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang làm mới phiên đăng nhập quá nhanh, vui lòng thử lại sau"
         );
-        String refreshToken = resolveRefreshToken(request, httpServletRequest);
+        String refreshToken = resolveRefreshToken(httpServletRequest);
         TokenResponse tokenResponse = identityService.refreshToken(refreshToken);
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
         tokenResponse.setRefreshToken(null);
@@ -87,11 +104,10 @@ public class AuthController {
     })
     @PostMapping("/logout")
     public ApiResponse<String> logout(
-            @Valid @RequestBody(required = false) RefreshTokenRequest request,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
-        String refreshToken = resolveRefreshToken(request, httpServletRequest);
+        String refreshToken = resolveRefreshToken(httpServletRequest);
         identityService.logout(refreshToken);
         clearRefreshTokenCookie(response);
         return ApiResponse.success("Đăng xuất thành công");
@@ -112,10 +128,7 @@ public class AuthController {
         return ApiResponse.success(userMe);
     }
 
-    private String resolveRefreshToken(RefreshTokenRequest request, HttpServletRequest httpServletRequest) {
-        if (request != null && StringUtils.hasText(request.getRefreshToken())) {
-            return request.getRefreshToken();
-        }
+    private String resolveRefreshToken(HttpServletRequest httpServletRequest) {
         if (httpServletRequest != null && httpServletRequest.getCookies() != null) {
             String cookieName = identityService.getRefreshTokenCookieName();
             for (var cookie : httpServletRequest.getCookies()) {

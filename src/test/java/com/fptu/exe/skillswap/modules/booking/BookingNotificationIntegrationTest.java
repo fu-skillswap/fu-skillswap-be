@@ -343,6 +343,11 @@ class BookingNotificationIntegrationTest {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
         bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
         paymentOrderService.checkout(mentee1.getId(), new PaymentCheckoutRequest(b1.bookingId(), null));
+        
+        var bookingEntity = bookingRepository.findById(b1.bookingId()).orElseThrow();
+        bookingEntity.setStatus(BookingStatus.PAID);
+        bookingRepository.saveAndFlush(bookingEntity);
+
         commitTransaction();
         awaitAsyncNotifications();
 

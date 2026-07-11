@@ -1,4 +1,4 @@
-package com.fptu.exe.skillswap.modules.mentor;
+package com.fptu.exe.skillswap.modules.admin;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -12,15 +12,16 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStorageKind;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorVerificationQueueFilterRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
@@ -37,7 +38,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -55,7 +55,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class AdminMentorVerificationServiceTest {
+class AdminMentorVerificationModerationServiceTest {
 
     @Mock
     private MentorVerificationRequestRepository mentorVerificationRequestRepository;
@@ -73,9 +73,11 @@ class AdminMentorVerificationServiceTest {
     private MentorProfileService mentorProfileService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private AdminAuditWriterService adminAuditWriterService;
 
     @InjectMocks
-    private AdminMentorVerificationService adminMentorVerificationService;
+    private AdminMentorVerificationModerationService adminMentorVerificationService;
 
     @Test
     void getQueue_whenNoRequestExists_shouldReturnEmptyPage() {
@@ -153,11 +155,10 @@ class AdminMentorVerificationServiceTest {
         try {
             adminMentorVerificationService.approve(adminId, requestId, "OK");
         } catch (BaseException ignored) {
-            // Expected to fail at assertReviewLockOwnership or missing profile, 
-            // but findByIdForUpdate should have been called first.
+            // Expected to fail at assertReviewLockOwnership or missing profile
         }
 
-        org.mockito.Mockito.verify(mentorVerificationRequestRepository).findByIdForUpdate(requestId);
+        verify(mentorVerificationRequestRepository).findByIdForUpdate(requestId);
     }
 
     @Test
@@ -194,6 +195,9 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.APPROVED);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
+        
+
+        
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).hasSize(2);
@@ -217,6 +221,9 @@ class AdminMentorVerificationServiceTest {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@test.com").fullName("Admin").build();
         User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
         MentorVerificationRequest request = pendingLockedRequest(admin, mentor);
+        request.setSubmittedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsAcceptedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsVersion("SKILLSWAP_MENTOR_TERMS_V1");
         MentorProfile mentorProfile = MentorProfile.builder().userId(mentor.getId()).user(mentor).build();
 
         when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
@@ -239,6 +246,9 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.REJECTED);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
+
+
+
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         NotificationEvent notificationEvent = (NotificationEvent) eventCaptor.getValue();
@@ -252,6 +262,9 @@ class AdminMentorVerificationServiceTest {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@test.com").fullName("Admin").build();
         User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
         MentorVerificationRequest request = pendingLockedRequest(admin, mentor);
+        request.setSubmittedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsAcceptedAt(DateTimeUtil.now().minusMinutes(1));
+        request.setTermsVersion("SKILLSWAP_MENTOR_TERMS_V1");
         MentorProfile mentorProfile = MentorProfile.builder().userId(mentor.getId()).user(mentor).build();
 
         when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
@@ -274,6 +287,9 @@ class AdminMentorVerificationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.NEEDS_REVISION);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
+
+
+
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).hasSize(2);
@@ -365,7 +381,6 @@ class AdminMentorVerificationServiceTest {
                 .status(VerificationStatus.PENDING_REVIEW)
                 .method(VerificationMethod.MANUAL)
                 .lockedBy(admin)
-                // Use a very large TTL (e.g. 1 day) to completely avoid Flaky Tests on slow CI runners
                 .lockExpiresAt(DateTimeUtil.now().plusDays(1))
                 .build();
     }
@@ -377,7 +392,7 @@ class AdminMentorVerificationServiceTest {
     ) {
         StoredFile storedFile = StoredFile.builder()
                 .originalName(documentType.name().toLowerCase() + ".png")
-                .publicUrl("https://res.cloudinary.com/demo/image/upload/v1/" + documentType.name().toLowerCase() + ".png")
+                .publicUrl("https://localhost:8080/uploads/storage/" + documentType.name().toLowerCase() + ".png")
                 .mimeType("image/png")
                 .sizeBytes(1024L)
                 .build();

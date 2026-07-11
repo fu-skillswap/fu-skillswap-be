@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -202,6 +203,43 @@ class IdentityServiceTest {
         assertEquals(UserSessionState.REVOKED, replacementSession.getSessionState());
         assertEquals(true, rotatingSession.isRevoked());
         assertEquals(true, replacementSession.isRevoked());
+        verify(userSessionRepository, times(2)).save(any(UserSession.class));
+    }
+
+    @Test
+    void refreshToken_shouldRevokeReplacementChainAfterGraceExpiry() {
+        UserSession rotatingSession = new UserSession();
+        rotatingSession.setId(UUID.randomUUID());
+        rotatingSession.setUser(user);
+        rotatingSession.setRefreshTokenHash("hash-1");
+        rotatingSession.setExpiresAt(LocalDateTime.now().minusMinutes(5));
+        rotatingSession.setRevoked(false);
+        rotatingSession.setSessionState(UserSessionState.ROTATING_GRACE);
+        rotatingSession.setGraceExpiresAt(LocalDateTime.now().minusSeconds(1));
+        rotatingSession.setGraceReplacementSessionId(UUID.randomUUID());
+
+        UserSession replacementSession = new UserSession();
+        replacementSession.setId(rotatingSession.getGraceReplacementSessionId());
+        replacementSession.setUser(user);
+        replacementSession.setRefreshTokenHash("hash-2");
+        replacementSession.setExpiresAt(LocalDateTime.now().plusHours(1));
+        replacementSession.setRevoked(false);
+        replacementSession.setSessionState(UserSessionState.ACTIVE);
+
+        when(jwtTokenProvider.hashToken("refresh-token-1")).thenReturn("hash-1");
+        when(userSessionRepository.findByRefreshTokenHashForUpdate("hash-1")).thenReturn(Optional.of(rotatingSession));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userSessionRepository.findById(rotatingSession.getGraceReplacementSessionId())).thenReturn(Optional.of(replacementSession));
+        when(userSessionRepository.save(any(UserSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var ex = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> identityService.refreshToken("refresh-token-1"));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.SESSION_EXPIRED, ex.getErrorCode());
+        assertTrue(rotatingSession.isRevoked());
+        assertEquals(UserSessionState.EXPIRED, rotatingSession.getSessionState());
+        assertTrue(replacementSession.isRevoked());
+        assertEquals(UserSessionState.REVOKED, replacementSession.getSessionState());
         verify(userSessionRepository, times(2)).save(any(UserSession.class));
     }
 }

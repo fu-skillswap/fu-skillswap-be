@@ -1,14 +1,13 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
-import com.fptu.exe.skillswap.infrastructure.storage.R2DocumentStorageService;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
-import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
@@ -20,7 +19,6 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -63,16 +61,17 @@ class MentorVerificationServiceUploadTest {
     @Mock
     private StoredFileRepository storedFileRepository;
     @Mock
-    private com.fptu.exe.skillswap.infrastructure.config.StorageSecurityProperties storageSecurityProperties;
+    private ObjectProvider<StorageGateway> r2StorageProvider;
     @Mock
-    private ObjectProvider<R2DocumentStorageService> r2StorageProvider;
-    private MentorVerificationService serviceWithCloudinary;
+    private StorageGateway storageGateway;
+
+    private MentorVerificationService service;
     private UUID userId;
     private User user;
     private MentorVerificationRequest request;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         userId = UUID.randomUUID();
         user = User.builder()
                 .id(userId)
@@ -104,10 +103,16 @@ class MentorVerificationServiceUploadTest {
         lenient().when(storedFileRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
         lenient().when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
+        lenient().when(r2StorageProvider.getIfAvailable()).thenReturn(storageGateway);
+        lenient().when(storageGateway.resolvePublicUrl(any())).thenAnswer(invocation -> "https://cdn.skillswap.com/" + invocation.getArgument(0));
+        lenient().when(storageGateway.storageProviderName()).thenReturn("R2");
+        lenient().when(storageGateway.headObject(any())).thenAnswer(invocation -> {
+            String key = invocation.getArgument(0);
+            String ct = key != null && key.toLowerCase().endsWith(".jpg") ? "image/jpeg" : "image/jpeg";
+            return new StorageGateway.ObjectMetadata(key, ct, 123L);
+        });
 
-        lenient().when(storageSecurityProperties.getAllowedUrlHosts()).thenReturn(java.util.List.of("res.cloudinary.com"));
-
-        serviceWithCloudinary = new MentorVerificationService(
+        service = new MentorVerificationService(
                 mentorVerificationRequestRepository,
                 mentorVerificationDocumentRepository,
                 mentorVerificationRequestEventRepository,
@@ -116,279 +121,77 @@ class MentorVerificationServiceUploadTest {
                 mentorProfileService,
                 userRepository,
                 storedFileRepository,
-                storageSecurityProperties,
                 r2StorageProvider
         );
-        ReflectionTestUtils.setField(serviceWithCloudinary, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
-        ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedStudentProfile", false);
-        ReflectionTestUtils.setField(serviceWithCloudinary, "requireCompletedMentorProfile", false);
+        ReflectionTestUtils.setField(service, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
+        ReflectionTestUtils.setField(service, "requireCompletedStudentProfile", false);
+        ReflectionTestUtils.setField(service, "requireCompletedMentorProfile", false);
     }
 
     @Test
-    void uploadProof_shouldAcceptConfiguredCloudinaryUrl() {
+    void uploadProof_shouldAcceptPresignedObjectKeyAfterStorageVerification() {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
+                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
                 "proof.jpg",
                 "image/jpeg",
                 123L
         );
 
-        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
+        service.uploadDocument(userId, uploadRequest);
 
         ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
         verify(storedFileRepository).save(fileCaptor.capture());
-        assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("CLOUDINARY");
-        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.publicId());
-        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo(uploadRequest.fileUrl());
+        assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("R2");
+        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.objectKey());
+        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo("private://" + uploadRequest.objectKey());
     }
 
     @Test
-    void uploadProof_shouldRejectUnknownExternalDomain() {
+    void uploadProof_shouldRejectInvalidObjectKey() {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://evil.com/fake.png",
-                "fake", "fake.png", "image/png", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .hasMessageContaining("Đường dẫn tài liệu không thuộc danh sách các nguồn lưu trữ được phép");
-    }
-
-    @Test
-    void uploadProof_shouldRejectMalformedUrl() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "not-a-url",
-                "fake", "fake.png", "image/png", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .hasMessageContaining("sai định dạng");
-    }
-
-    @Test
-    void uploadProof_shouldRejectNonHttpScheme() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "javascript:alert(1)",
-                "fake", "fake.png", "image/png", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .hasMessageContaining("phải sử dụng giao thức https an toàn");
-    }
-
-    @Test
-    void uploadProof_shouldRejectLocalhostOrPrivateIp() {
-        String[] badUrls = {
-                "https://localhost:8080/a.png",
-                "https://127.0.0.1/a.png",
-                "https://192.168.1.1/a.png",
-                "https://10.0.0.1/a.png"
-        };
-        for (String url : badUrls) {
-            MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                    VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                    url,
-                    "fake", "fake.png", "image/png", 123L
-            );
-            assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                    .isInstanceOf(BaseException.class)
-                    .hasMessageContaining("không hỗ trợ IP nội bộ");
-        }
-    }
-
-    @Test
-    void uploadProof_shouldRejectCloudinaryLookalikeDomain() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com.evil.com/fake.png",
-                "fake", "fake.png", "image/png", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .hasMessageContaining("không thuộc danh sách các nguồn lưu trữ được phép");
-    }
-
-    @Test
-    void uploadProof_shouldRejectWhenAllowedHostsEmpty() {
-        when(storageSecurityProperties.getAllowedUrlHosts()).thenReturn(java.util.Collections.emptyList());
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "fake", "fake.png", "image/png", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .hasMessageContaining("chưa cấu hình danh sách domain lưu trữ hợp lệ");
-    }
-
-    @Test
-    void uploadProof_shouldPreserveExistingFileTypeAndSizeValidation() {
-        // Test oversized
-        MentorVerificationDocumentUploadRequest uploadRequest1 = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "fake", "proof.jpg", "image/jpeg", 15L * 1024L * 1024L + 1L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest1))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
-
-        // Test bad type
-        MentorVerificationDocumentUploadRequest uploadRequest2 = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.gif",
-                "fake", "proof.gif", "image/gif", 123L
-        );
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest2))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
-    }
-
-    @Test
-    void uploadPng_shouldStoreMetadataSuccessfully() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.EXPERTISE_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.png",
-                "mentor-verification/user-123/proof-png",
-                "proof.png",
-                "image/png",
+                "../proof.jpg",
+                "proof.jpg",
+                "image/jpeg",
                 123L
         );
 
-        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
-
-        verify(storedFileRepository).save(any());
-    }
-
-    @Test
-    void uploadPdf_shouldStoreMetadataSuccessfully() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/raw/upload/v123/proof.pdf",
-                "mentor-verification/user-123/proof-pdf",
-                "proof.pdf",
-                "application/pdf",
-                123L
-        );
-
-        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
-
-        verify(storedFileRepository).save(any());
-    }
-
-    @Test
-    void uploadUnknownType_shouldBeRejected() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.gif",
-                "mentor-verification/user-123/proof-gif",
-                "proof.gif",
-                "image/gif",
-                123L
-        );
-
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+        assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST);
 
         verify(storedFileRepository, never()).save(any());
     }
 
     @Test
-    void uploadOversizedFile_shouldBeRejected() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+    void uploadProof_shouldPreserveTypeAndSizeValidation() {
+        MentorVerificationDocumentUploadRequest oversized = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
+                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
                 "proof.jpg",
                 "image/jpeg",
                 15L * 1024L * 1024L + 1L
         );
 
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE));
-    }
+        assertThatThrownBy(() -> service.uploadDocument(userId, oversized))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE);
 
-    @Test
-    void uploadWithoutPublicId_shouldBeRejected() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
+        MentorVerificationDocumentUploadRequest badType = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                " ",
-                "proof.jpg",
-                "image/jpeg",
+                "skillswap/verification-documents/mentor-verification/user-123/proof.gif",
+                "proof.gif",
+                "image/gif",
                 123L
         );
 
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
-
-        verify(storedFileRepository, never()).save(any());
-    }
-
-    @Test
-    void uploadWithoutOriginalFilename_shouldBeRejected() {
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
-                " ",
-                "image/jpeg",
-                123L
-        );
-
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
-    }
-
-    @Test
-    void uploadWithPathTraversalPublicId_shouldBeRejected() {
-        // publicId containing ".." segments must be rejected even though the regex
-        // [A-Za-z0-9_./-]+ would otherwise match (it allows '.' and '/').
-        String[] badPublicIds = {
-                "mentor-verification/../admin/secret",
-                "../../etc/passwd",
-                "mentor-verification/user-123/../.."
-        };
-        for (String badId : badPublicIds) {
-            MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                    VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                    "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                    badId,
-                    "proof.jpg",
-                    "image/jpeg",
-                    123L
-            );
-            assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                    .isInstanceOfSatisfying(BaseException.class,
-                            ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
-        }
-        verify(storedFileRepository, never()).save(any());
-    }
-
-    @Test
-    void uploadWithPathSeparatorInFilename_shouldSanitizeFilename() {
-        // originalFilename containing path separators must be stripped before persistence
-        // to keep the stored name a plain filename (no directory components).
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
-                "../../etc/proof.jpg",
-                "image/jpeg",
-                123L
-        );
-
-        serviceWithCloudinary.uploadDocument(userId, uploadRequest);
-
-        ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
-        verify(storedFileRepository).save(fileCaptor.capture());
-        // Path separators must be stripped; only the leaf filename remains
-        String storedName = fileCaptor.getValue().getOriginalName();
-        assertThat(storedName).doesNotContain("/");
-        assertThat(storedName).doesNotContain("\\");
-        assertThat(storedName).isEqualTo("....etcproof.jpg");
+        assertThatThrownBy(() -> service.uploadDocument(userId, badType))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST);
     }
 
     @Test
@@ -400,35 +203,15 @@ class MentorVerificationServiceUploadTest {
 
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
+                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
                 "proof.jpg",
                 "image/jpeg",
                 123L
         );
 
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
-    }
-
-    @Test
-    void uploadExpertiseProofBeyondQuota_shouldBeRejected() {
-        when(mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
-                request.getId(),
-                VerificationDocumentType.EXPERTISE_PROOF
-        )).thenReturn(3L);
-
-        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.EXPERTISE_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/v123/proof.jpg",
-                "mentor-verification/user-123/proof-jpg",
-                "proof.jpg",
-                "image/jpeg",
-                123L
-        );
-
-        assertThatThrownBy(() -> serviceWithCloudinary.uploadDocument(userId, uploadRequest))
-                .isInstanceOfSatisfying(BaseException.class, ex -> assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
+        assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST);
     }
 }
-

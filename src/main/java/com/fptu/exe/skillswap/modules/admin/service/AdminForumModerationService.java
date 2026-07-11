@@ -33,6 +33,7 @@ import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -52,10 +53,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AdminForumModerationService {
+
+    private static final String PARENT_COMMENT_HIDDEN_REASON_PREFIX = "Parent comment hidden";
 
     private final AdminAuditWriterService adminAuditWriterService;
 
@@ -161,8 +167,9 @@ public class AdminForumModerationService {
         );
         boolean hasNext = commentWindow.size() > resolvedLimit;
         List<ForumComment> visibleComments = hasNext ? new ArrayList<>(commentWindow.subList(0, resolvedLimit)) : commentWindow;
+        Map<UUID, ForumComment> replyParentsById = loadReplyParentsById(visibleComments);
         List<ForumCommentResponse> items = visibleComments.stream()
-                .map(this::toCommentResponse)
+                .map(comment -> toCommentResponse(comment, replyParentsById))
                 .toList();
         String nextCursor = hasNext && !visibleComments.isEmpty()
                 ? encodeNextCommentCursor(visibleComments.get(visibleComments.size() - 1), filterHash)
@@ -214,9 +221,11 @@ public class AdminForumModerationService {
         comment.setHiddenByUserId(null);
         comment.setHiddenReason(null);
         ForumComment saved = forumCommentRepository.save(comment);
+        List<ForumComment> restoredReplies = restoreRepliesHiddenWithParent(comment);
+        ensureReplyParentVisible(saved);
         ForumPost post = forumPostRepository.findByIdForUpdate(saved.getPost().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1);
+        post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1 + restoredReplies.size());
         forumPostRepository.save(post);
         adminAuditWriterService.writeOperatorEvent(
                 adminUserId,
@@ -259,7 +268,7 @@ public class AdminForumModerationService {
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
 
-        notificationService.createNotification(
+        notifyBestEffort(
                 post.getAuthorUser().getId(),
                 NotificationType.FORUM_POST_HIDDEN,
                 "Bài viết forum của bạn đã bị ẩn",
@@ -283,11 +292,20 @@ public class AdminForumModerationService {
         comment.setHiddenByUserId(adminUserId);
         comment.setHiddenReason(cleanNote(reviewNote));
         forumCommentRepository.save(comment);
+        List<ForumComment> visibleReplies = forumCommentRepository.findByReplyToCommentIdAndStatus(comment.getId(), ForumCommentStatus.VISIBLE);
+        String replyHiddenReason = childHiddenReason(reviewNote);
+        visibleReplies.forEach(reply -> {
+            reply.setStatus(ForumCommentStatus.HIDDEN);
+            reply.setHiddenAt(DateTimeUtil.now());
+            reply.setHiddenByUserId(adminUserId);
+            reply.setHiddenReason(replyHiddenReason);
+            forumCommentRepository.save(reply);
+        });
 
         ForumPost post = forumPostRepository.findByIdForUpdate(comment.getPost().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         if (post.getCommentCount() != null && post.getCommentCount() > 0) {
-            post.setCommentCount(post.getCommentCount() - 1);
+            post.setCommentCount(Math.max(0, post.getCommentCount() - 1 - visibleReplies.size()));
             forumPostRepository.save(post);
         }
 
@@ -297,7 +315,7 @@ public class AdminForumModerationService {
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
 
-        notificationService.createNotification(
+        notifyBestEffort(
                 comment.getAuthorUser().getId(),
                 NotificationType.FORUM_COMMENT_HIDDEN,
                 "Bình luận forum của bạn đã bị ẩn",
@@ -428,6 +446,7 @@ public class AdminForumModerationService {
                 .myReactionType(myReactionType)
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
+                .imageUrls(post.getImageUrls())
                 .build();
     }
 
@@ -445,6 +464,13 @@ public class AdminForumModerationService {
     }
 
     private ForumCommentResponse toCommentResponse(ForumComment comment) {
+        return toCommentResponse(comment, loadReplyParentsById(List.of(comment)));
+    }
+
+    private ForumCommentResponse toCommentResponse(ForumComment comment, Map<UUID, ForumComment> replyParentsById) {
+        ForumComment replyParent = comment.getReplyToCommentId() == null
+                ? null
+                : replyParentsById.get(comment.getReplyToCommentId());
         return ForumCommentResponse.builder()
                 .commentId(comment.getId())
                 .postId(comment.getPost().getId())
@@ -455,9 +481,31 @@ public class AdminForumModerationService {
                 .content(comment.getContent())
                 .status(comment.getStatus().name())
                 .reportCount(comment.getReportCount() == null ? 0 : comment.getReportCount())
+                .reactionCount(comment.getReactionCount() == null ? 0 : comment.getReactionCount())
+                .reactedByCurrentUser(false)
+                .replyToCommentId(comment.getReplyToCommentId())
+                .replyToUserId(replyParent == null ? null : replyParent.getAuthorUser().getId())
+                .replyToUserName(replyParent == null ? null : replyParent.getAuthorUser().getFullName())
                 .createdAt(comment.getCreatedAt())
                 .updatedAt(comment.getUpdatedAt())
+                .imageUrls(comment.getImageUrls())
                 .build();
+    }
+
+    private Map<UUID, ForumComment> loadReplyParentsById(Collection<ForumComment> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return Map.of();
+        }
+        List<UUID> parentIds = comments.stream()
+                .map(ForumComment::getReplyToCommentId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (parentIds.isEmpty()) {
+            return Map.of();
+        }
+        return forumCommentRepository.findByIdIn(parentIds).stream()
+                .collect(Collectors.toMap(ForumComment::getId, Function.identity()));
     }
 
     private PageResponse<ForumReportResponse> toReportPageResponse(Page<ForumReportResponse> page) {
@@ -483,6 +531,58 @@ public class AdminForumModerationService {
         return forumTextPolicy.normalizeOptionalPlainText(note, "Ghi chú moderation");
     }
 
+    private String childHiddenReason(String parentNote) {
+        String cleaned = cleanNote(parentNote);
+        String reason = cleaned == null ? PARENT_COMMENT_HIDDEN_REASON_PREFIX : PARENT_COMMENT_HIDDEN_REASON_PREFIX + ": " + cleaned;
+        return reason.length() <= 500 ? reason : reason.substring(0, 500);
+    }
+
+    private List<ForumComment> restoreRepliesHiddenWithParent(ForumComment comment) {
+        if (comment.getReplyToCommentId() != null) {
+            return List.of();
+        }
+        List<ForumComment> hiddenReplies = forumCommentRepository.findByReplyToCommentIdAndStatus(comment.getId(), ForumCommentStatus.HIDDEN);
+        List<ForumComment> repliesToRestore = hiddenReplies.stream()
+                .filter(reply -> reply.getHiddenReason() != null && reply.getHiddenReason().startsWith(PARENT_COMMENT_HIDDEN_REASON_PREFIX))
+                .toList();
+        repliesToRestore.forEach(reply -> {
+            reply.setStatus(ForumCommentStatus.VISIBLE);
+            reply.setHiddenAt(null);
+            reply.setHiddenByUserId(null);
+            reply.setHiddenReason(null);
+            forumCommentRepository.save(reply);
+        });
+        return repliesToRestore;
+    }
+
+    private void ensureReplyParentVisible(ForumComment comment) {
+        if (comment.getReplyToCommentId() == null) {
+            return;
+        }
+        ForumComment parent = forumCommentRepository.findById(comment.getReplyToCommentId())
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể khôi phục reply khi bình luận gốc không tồn tại"));
+        if (parent.getStatus() != ForumCommentStatus.VISIBLE) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Cần khôi phục bình luận gốc trước khi khôi phục reply");
+        }
+    }
+
+    private void notifyBestEffort(UUID recipientUserId,
+                                  NotificationType type,
+                                  String title,
+                                  String message,
+                                  String relatedEntityType,
+                                  UUID relatedEntityId) {
+        try {
+            notificationService.createNotification(recipientUserId, type, title, message, relatedEntityType, relatedEntityId);
+        } catch (RuntimeException ex) {
+            log.warn("Không thể tạo notification forum moderation recipientUserId={} type={} relatedEntityId={}: {}",
+                    recipientUserId,
+                    type,
+                    relatedEntityId,
+                    ex.getMessage());
+        }
+    }
+
     private int defaultPage(Integer page) {
         return page == null || page < 0 ? 0 : page;
     }
@@ -505,14 +605,14 @@ public class AdminForumModerationService {
     }
 
     private String buildAdminPostFilterHash(AdminForumPostListRequest request) {
-        return "forum-posts:admin|keyword=" + normalizeFilterValue(request.keyword())
+        return "forum-posts:admin|keyword=" + normalizeKeywordFilterValue(request.keyword())
                 + "|helpTopicId=" + normalizeFilterValue(request.helpTopicId())
                 + "|authorId=" + normalizeFilterValue(request.authorId())
                 + "|status=" + normalizeFilterValue(request.status());
     }
 
     private String buildAdminCommentFilterHash(AdminForumCommentListRequest request) {
-        return "forum-comments:admin|keyword=" + normalizeFilterValue(request.keyword())
+        return "forum-comments:admin|keyword=" + normalizeKeywordFilterValue(request.keyword())
                 + "|postId=" + normalizeFilterValue(request.postId())
                 + "|authorId=" + normalizeFilterValue(request.authorId())
                 + "|status=" + normalizeFilterValue(request.status());
@@ -603,6 +703,14 @@ public class AdminForumModerationService {
             return "_";
         }
         String normalized = value.toString().trim();
+        return normalized.isEmpty() ? "_" : normalized;
+    }
+
+    private String normalizeKeywordFilterValue(String value) {
+        if (value == null) {
+            return "_";
+        }
+        String normalized = value.trim().toLowerCase();
         return normalized.isEmpty() ? "_" : normalized;
     }
 

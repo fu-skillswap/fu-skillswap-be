@@ -30,17 +30,18 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.system.dto.request.AdminUserListRequest;
-import com.fptu.exe.skillswap.modules.system.dto.response.AdminUserListItemResponse;
-import com.fptu.exe.skillswap.modules.system.service.AdminUserService;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.service.AdminUserModerationService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,9 +64,9 @@ class CoreMentorshipFlowSmokeTest {
 
     @Autowired private UserRepository userRepository;
     @Autowired private AcademicService academicService;
-    @Autowired private AdminUserService adminUserService;
+    @Autowired private AdminUserModerationService adminUserService;
     @Autowired private MentorVerificationService mentorVerificationService;
-    @Autowired private AdminMentorVerificationService adminMentorVerificationService;
+    @Autowired private AdminMentorVerificationModerationService adminMentorVerificationService;
     @Autowired private MentorDiscoveryService mentorDiscoveryService;
     @Autowired private MentorAvailabilityService mentorAvailabilityService;
     @Autowired private BookingService bookingService;
@@ -84,6 +85,7 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private CampusRepository campusRepository;
     @Autowired private AcademicProgramRepository programRepository;
     @Autowired private SpecializationRepository specializationRepository;
+    @Autowired private StorageGateway storageGateway;
 
     private User admin;
     private UUID campusId;
@@ -186,21 +188,21 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.clear();
 
         // Upload document
-        mentorVerificationService.uploadDocument(mentorApplicant.getId(), 
+        String smokeObjectKey1 = "mentor-verification/smoke/" + mentorApplicant.getId() + "/sample.jpg";
+        mentorVerificationService.uploadDocument(mentorApplicant.getId(),
             new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/sample.jpg",
-                "sample_public_id",
+                smokeObjectKey1,
                 "sample.jpg",
                 "image/jpeg",
                 1024L
             )
         );
-        mentorVerificationService.uploadDocument(mentorApplicant.getId(), 
+        String smokeObjectKey2 = "mentor-verification/smoke/" + mentorApplicant.getId() + "/expert.jpg";
+        mentorVerificationService.uploadDocument(mentorApplicant.getId(),
             new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.EXPERTISE_PROOF,
-                "https://res.cloudinary.com/demo/image/upload/expert.jpg",
-                "expert_public_id",
+                smokeObjectKey2,
                 "expert.jpg",
                 "image/jpeg",
                 1024L
@@ -405,6 +407,7 @@ class CoreMentorshipFlowSmokeTest {
         slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
+        booking.setStatus(BookingStatus.PAID);
         booking.setSelectedStartTime(DateTimeUtil.now().minusDays(1));
         booking.setSelectedEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
         booking.setRequestedStartTime(DateTimeUtil.now().minusDays(1));

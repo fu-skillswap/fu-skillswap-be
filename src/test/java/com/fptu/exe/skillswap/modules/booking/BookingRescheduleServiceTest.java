@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking;
 
-import com.fptu.exe.skillswap.modules.admin.repository.AuditLogRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleActorRole;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
@@ -57,8 +56,6 @@ class BookingRescheduleServiceTest {
     @Mock
     private NotificationService notificationService;
     @Mock
-    private AuditLogRepository auditLogRepository;
-    @Mock
     private UserRepository userRepository;
     @Mock
     private SessionService sessionService;
@@ -81,7 +78,6 @@ class BookingRescheduleServiceTest {
                 mentorAvailabilitySlotRepository,
                 bookingSlotValidator,
                 notificationService,
-                auditLogRepository,
                 userRepository,
                 sessionService,
                 eventPublisher
@@ -215,7 +211,7 @@ class BookingRescheduleServiceTest {
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(currentSlot.getId())).thenReturn(Optional.of(currentSlot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(bookingRescheduleRequestRepository.save(any(BookingRescheduleRequest.class))).thenAnswer(inv -> inv.getArgument(0));
-        when(userRepository.findById(adminId)).thenReturn(Optional.of(admin));
+
 
         BookingRescheduleRequestResponse response = bookingRescheduleService.acceptByAdmin(
                 adminId,
@@ -224,7 +220,6 @@ class BookingRescheduleServiceTest {
         );
 
         assertEquals("ACCEPTED", response.status());
-        verify(auditLogRepository).save(any());
         verify(eventPublisher, times(2)).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
     }
 

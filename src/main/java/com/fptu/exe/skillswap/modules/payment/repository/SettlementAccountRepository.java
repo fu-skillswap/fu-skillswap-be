@@ -27,18 +27,18 @@ public interface SettlementAccountRepository extends JpaRepository<SettlementAcc
     boolean existsByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
 
     @org.springframework.data.jpa.repository.Modifying
-    @Query("""
-            UPDATE SettlementAccount a
-            SET a.balance = a.balance - :amount
-            WHERE a.id = :id AND a.balance >= :amount
-            """)
+    @Query(value = """
+            UPDATE settlement_accounts
+            SET balance = balance - :amount
+            WHERE id = :id AND balance >= :amount
+            """, nativeQuery = true)
     int deductBalanceSafely(@Param("id") UUID id, @Param("amount") java.math.BigDecimal amount);
 
     @org.springframework.data.jpa.repository.Modifying
-    @Query("""
-            UPDATE SettlementAccount a
-            SET a.balance = a.balance + :amount
-            WHERE a.id = :id
-            """)
+    @Query(value = """
+            UPDATE settlement_accounts
+            SET balance = balance + :amount
+            WHERE id = :id
+            """, nativeQuery = true)
     int addBalance(@Param("id") UUID id, @Param("amount") java.math.BigDecimal amount);
 }

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
-import com.fptu.exe.skillswap.modules.mail.service.EmailService;
+import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mail.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,7 +21,7 @@ public class BookingEmailListener {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
     private static final String PAYMENT_DEADLINE_TEXT = "trong vòng 6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
 
-    private final EmailService emailService;
+    private final EmailDispatchService emailDispatchService;
 
     // Best-effort email must not hold the API response path after the business transaction commits.
     @Async("mailNotificationExecutor")
@@ -31,11 +31,13 @@ public class BookingEmailListener {
 
         EmailContent content = buildContent(event);
         try {
-            emailService.sendHtmlEmail(
+            emailDispatchService.sendHtmlOnce(
+                    dedupeKey(event),
                     event.getRecipientEmail(),
                     content.subject(),
                     renderHtml(event, content),
-                    renderPlainText(event, content)
+                    renderPlainText(event, content),
+                    event.getEventType().name()
             );
         } catch (Exception ex) {
             log.error("Booking email event failed but transaction remains committed. eventType={}, bookingId={}, recipient={}",
@@ -234,6 +236,10 @@ public class BookingEmailListener {
 
     private String escape(String value) {
         return HtmlEmailTemplate.escape(value);
+    }
+
+    private String dedupeKey(BookingEmailNotificationEvent event) {
+        return "BOOKING_EMAIL:" + event.getEventType().name() + ":" + event.getBookingId() + ":" + event.getRecipientEmail();
     }
 
     private record EmailContent(

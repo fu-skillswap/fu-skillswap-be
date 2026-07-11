@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarConnection;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarConnectionStatus;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
@@ -33,6 +34,8 @@ public class GoogleCalendarConnectionService {
     private final GoogleCalendarApiClient googleCalendarApiClient;
     private final GoogleTokenCryptoService googleTokenCryptoService;
     private final GoogleAuthService googleAuthService;
+    private final GoogleOAuthStateService googleOAuthStateService;
+    private final GoogleApiProperties googleApiProperties;
 
     @Transactional
     public GoogleCalendarStatusResponse connect(UUID userId, GoogleCalendarConnectRequest request) {
@@ -41,6 +44,7 @@ public class GoogleCalendarConnectionService {
         if (!user.getRoles().contains(RoleCode.MENTOR)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor mới có thể kết nối Google Calendar");
         }
+        validateConfiguredRedirectUri(request.redirectUri());
 
         GoogleCalendarApiClient.GoogleTokenResponse tokenResponse =
                 googleCalendarApiClient.exchangeAuthorizationCode(request.authorizationCode(), request.redirectUri(), request.codeVerifier());
@@ -175,14 +179,14 @@ public class GoogleCalendarConnectionService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu đăng nhập Google");
         }
-        if (StringUtils.hasText(request.getIdToken())) {
-            return googleAuthService.verifyToken(request.getIdToken());
-        }
         if (!StringUtils.hasText(request.getAuthorizationCode())
                 || !StringUtils.hasText(request.getRedirectUri())
-                || !StringUtils.hasText(request.getCodeVerifier())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cần cung cấp Google ID token hoặc authorization code flow đầy đủ");
+                || !StringUtils.hasText(request.getCodeVerifier())
+                || !StringUtils.hasText(request.getState())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Authorization code, redirect URI, PKCE verifier và state là bắt buộc");
         }
+        validateConfiguredRedirectUri(request.getRedirectUri());
+        googleOAuthStateService.consume(request.getState(), request.getRedirectUri(), request.getCodeVerifier());
         GoogleCalendarApiClient.GoogleTokenResponse tokenResponse =
                 googleCalendarApiClient.exchangeAuthorizationCode(
                         request.getAuthorizationCode(),
@@ -260,6 +264,16 @@ public class GoogleCalendarConnectionService {
             return googleTokenCryptoService.decrypt(ciphertext);
         } catch (Exception ex) {
             return null;
+        }
+    }
+
+    private void validateConfiguredRedirectUri(String requestRedirectUri) {
+        String configuredRedirectUri = googleApiProperties.getCalendarRedirectUri();
+        if (!StringUtils.hasText(configuredRedirectUri)) {
+            return;
+        }
+        if (!StringUtils.hasText(requestRedirectUri) || !configuredRedirectUri.equals(requestRedirectUri.trim())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "redirectUri không khớp với cấu hình Google Calendar của hệ thống");
         }
     }
 

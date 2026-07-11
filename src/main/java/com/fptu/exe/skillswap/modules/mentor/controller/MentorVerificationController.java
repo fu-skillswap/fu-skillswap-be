@@ -22,14 +22,12 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -120,46 +118,15 @@ public class MentorVerificationController {
     }
 
     @Operation(
-            summary = "Upload verification document",
-            description = "Nhận multipart file minh chứng, backend upload lên R2 và lưu metadata vào request hiện tại. Quota: FPTU_AFFILIATION_PROOF tối đa 1 file, EXPERTISE_PROOF tối đa 3 file."
-    )
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "File vượt quá giới hạn cho phép"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
-    })
-    @PostMapping(path = "/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocument(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam VerificationDocumentType documentType,
-            @RequestPart("file") MultipartFile file
-    ) {
-        ensureAuthenticated(principal);
-        rateLimitService.check(
-                "mentor-verification:upload:" + principal.getPublicId(),
-                12,
-                java.time.Duration.ofMinutes(15),
-                "Bạn đang upload minh chứng quá nhanh, vui lòng thử lại sau"
-        );
-        MentorVerificationRequestResponse response = mentorVerificationService.uploadDocument(
-                principal.getPublicId(),
-                documentType,
-                file
-        );
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
-    }
-
-    @Operation(
-            summary = "Lưu metadata verification document đã upload ngoài",
-            description = "Tương thích ngược cho FE đang upload file lên Cloudinary trước rồi gửi metadata JSON về BE. Quota giống multipart: FPTU_AFFILIATION_PROOF tối đa 1 file, EXPERTISE_PROOF tối đa 3 file."
+            summary = "Xác nhận verification document đã upload bằng presigned URL",
+            description = "FE gửi objectKey do BE đã cấp. Backend HEAD object trên private storage và đối chiếu content type/size trước khi gắn file vào request."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
     })
-    @PostMapping(path = "/documents", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping("/documents")
     public ResponseEntity<ApiResponse<MentorVerificationRequestResponse>> uploadDocumentMetadata(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody MentorVerificationDocumentUploadRequest request

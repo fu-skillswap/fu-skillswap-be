@@ -24,7 +24,9 @@ class SwaggerExposureEnabledIntegrationTest {
     @Test
     @WithMockUser(roles = "MENTEE")
     void apiDocs_shouldBeAvailableWhenSwaggerEnabled() throws Exception {
-        mockMvc.perform(get("/v3/api-docs"))
-                .andExpect(status().isOk());
+        String json = mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        java.nio.file.Files.writeString(java.nio.file.Path.of("openapi.json"), json);
     }
 }

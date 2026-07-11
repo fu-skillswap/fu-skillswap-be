@@ -27,11 +27,6 @@ import java.util.*;
 @Slf4j
 public class GoogleCalendarApiClient {
 
-    private static final String TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
-    private static final String REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
-    private static final String USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
-    private static final String CALENDAR_BASE_URL = "https://www.googleapis.com/calendar/v3/calendars";
-
     private final GoogleApiProperties googleApiProperties;
     private final ObjectMapper objectMapper;
     private final GoogleCalendarDateTimeMapper dateTimeMapper;
@@ -43,7 +38,7 @@ public class GoogleCalendarApiClient {
     public GoogleTokenResponse exchangeAuthorizationCode(String authorizationCode, String redirectUri, String codeVerifier) {
         ensureGoogleOauthConfigured();
         return sendForm(
-                TOKEN_ENDPOINT,
+                googleApiProperties.getTokenEndpoint(),
                 Map.of(
                         "code", authorizationCode,
                         "client_id", googleApiProperties.getClientId(),
@@ -58,7 +53,7 @@ public class GoogleCalendarApiClient {
     public GoogleTokenResponse refreshAccessToken(String refreshToken) {
         ensureGoogleOauthConfigured();
         return sendForm(
-                TOKEN_ENDPOINT,
+                googleApiProperties.getTokenEndpoint(),
                 Map.of(
                         "refresh_token", refreshToken,
                         "client_id", googleApiProperties.getClientId(),
@@ -70,7 +65,7 @@ public class GoogleCalendarApiClient {
 
     public GoogleUserInfoResponse fetchUserInfo(String accessToken) {
         Map<String, Object> payload = sendJson(
-                HttpRequest.newBuilder(URI.create(USERINFO_ENDPOINT))
+                HttpRequest.newBuilder(URI.create(googleApiProperties.getUserinfoEndpoint()))
                         .header("Authorization", "Bearer " + accessToken)
                         .GET()
                         .build(),
@@ -98,7 +93,7 @@ public class GoogleCalendarApiClient {
                         "conferenceSolutionKey", Map.of("type", "hangoutsMeet")
                 )
         ));
-        String url = CALENDAR_BASE_URL + "/" + urlEncode(calendarId) + "/events?conferenceDataVersion=1&sendUpdates=all";
+        String url = googleApiProperties.getCalendarBaseUrl() + "/" + urlEncode(calendarId) + "/events?conferenceDataVersion=1&sendUpdates=all";
         return sendCalendarWrite(accessToken, url, "POST", body);
     }
 
@@ -108,12 +103,12 @@ public class GoogleCalendarApiClient {
                                                           Booking booking,
                                                           Session session) {
         Map<String, Object> body = buildBaseEventBody(booking, session);
-        String url = CALENDAR_BASE_URL + "/" + urlEncode(calendarId) + "/events/" + urlEncode(eventId) + "?sendUpdates=all";
+        String url = googleApiProperties.getCalendarBaseUrl() + "/" + urlEncode(calendarId) + "/events/" + urlEncode(eventId) + "?sendUpdates=all";
         return sendCalendarWrite(accessToken, url, "PUT", body);
     }
 
     public void cancelBookingEvent(String accessToken, String calendarId, String eventId) {
-        String url = CALENDAR_BASE_URL + "/" + urlEncode(calendarId) + "/events/" + urlEncode(eventId) + "?sendUpdates=all";
+        String url = googleApiProperties.getCalendarBaseUrl() + "/" + urlEncode(calendarId) + "/events/" + urlEncode(eventId) + "?sendUpdates=all";
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(5))
                 .header("Authorization", "Bearer " + accessToken)
@@ -127,7 +122,7 @@ public class GoogleCalendarApiClient {
             return;
         }
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(REVOKE_ENDPOINT))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(googleApiProperties.getRevokeEndpoint()))
                     .timeout(Duration.ofSeconds(5))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString("token=" + urlEncode(token)))

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.event;
 
-import com.fptu.exe.skillswap.modules.mail.service.EmailService;
+import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mail.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ public class MentorVerificationEmailListener {
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
 
-    private final EmailService emailService;
+    private final EmailDispatchService emailDispatchService;
 
     @Async("mailNotificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -30,11 +30,13 @@ public class MentorVerificationEmailListener {
 
         EmailContent content = buildContent(event);
         try {
-            emailService.sendHtmlEmail(
+            emailDispatchService.sendHtmlOnce(
+                    dedupeKey(event),
                     event.getRecipientEmail(),
                     content.subject(),
                     renderHtml(event, content),
-                    renderPlainText(event, content)
+                    renderPlainText(event, content),
+                    event.getEventType().name()
             );
         } catch (Exception ex) {
             log.error("Mentor verification email failed but transaction remains committed. eventType={}, requestId={}, recipient={}",
@@ -135,6 +137,10 @@ public class MentorVerificationEmailListener {
 
     private String escape(String value) {
         return HtmlEmailTemplate.escape(value);
+    }
+
+    private String dedupeKey(MentorVerificationEmailNotificationEvent event) {
+        return "MENTOR_VERIFICATION_EMAIL:" + event.getEventType().name() + ":" + event.getRequestId() + ":" + event.getRecipientEmail();
     }
 
     private record EmailContent(

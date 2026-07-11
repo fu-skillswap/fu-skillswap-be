@@ -10,8 +10,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolution
 import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
