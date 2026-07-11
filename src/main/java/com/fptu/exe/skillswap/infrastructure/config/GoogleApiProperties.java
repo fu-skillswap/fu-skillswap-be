@@ -15,4 +15,9 @@ public class GoogleApiProperties {
     private String calendarRedirectUri;
     private String tokenEncryptionKey;
     private Integer tokenEncryptionKeyVersion = 1;
+
+    private String tokenEndpoint = "https://oauth2.googleapis.com/token";
+    private String revokeEndpoint = "https://oauth2.googleapis.com/revoke";
+    private String userinfoEndpoint = "https://openidconnect.googleapis.com/v1/userinfo";
+    private String calendarBaseUrl = "https://www.googleapis.com/calendar/v3/calendars";
 }

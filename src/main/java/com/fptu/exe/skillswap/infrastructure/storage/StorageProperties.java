@@ -2,35 +2,33 @@ package com.fptu.exe.skillswap.infrastructure.storage;
 
 import lombok.Getter;
 import lombok.Setter;
-import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.validation.annotation.Validated;
+
+import java.util.List;
 
 @Getter
 @Setter
 @ConfigurationProperties(prefix = "application.storage")
-@Validated
 public class StorageProperties {
 
-    private boolean enabled = true;
+    // Default false — storage must be explicitly enabled via STORAGE_ENABLED=true in .env
+    private boolean enabled = false;
 
-    @NotBlank(message = "application.storage.endpoint không được để trống")
     private String endpoint;
 
-    @NotBlank(message = "application.storage.access-key không được để trống")
     private String accessKey;
 
-    @NotBlank(message = "application.storage.secret-key không được để trống")
     private String secretKey;
 
-    @NotBlank(message = "application.storage.bucket không được để trống")
     private String bucket;
 
-    @NotBlank(message = "application.storage.region không được để trống")
     private String region = "auto";
 
-    @NotBlank(message = "application.storage.public-url-prefix không được để trống")
     private String publicUrlPrefix;
 
     private String documentsPrefix = "skillswap/verification-documents";
+
+    private int presignedTtlMinutes = 15;
+
+    private List<String> allowedContentTypes = List.of("image/jpeg", "image/png", "application/pdf");
 }

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
-import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxPublisherScheduler;
+import com.fptu.exe.skillswap.infrastructure.realtime.DomainEventOutboxPublisherScheduler;
 import com.fptu.exe.skillswap.shared.outbox.DynamicPeriodicTrigger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

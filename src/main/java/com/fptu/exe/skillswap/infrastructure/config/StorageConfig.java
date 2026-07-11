@@ -22,7 +22,7 @@ import java.net.URI;
 public class StorageConfig {
 
     @Bean
-    @ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true")
     public S3Client storageS3Client(StorageProperties properties) {
         validate(properties);
         return S3Client.builder()
@@ -38,7 +38,7 @@ public class StorageConfig {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true")
     public S3Presigner storageS3Presigner(StorageProperties properties) {
         validate(properties);
         return S3Presigner.builder()
@@ -60,7 +60,7 @@ public class StorageConfig {
                 || !StringUtils.hasText(properties.getBucket())) {
             throw new BaseException(
                     ErrorCode.CONFIGURATION_ERROR,
-                    "Storage Gateway cha `c cu hAnh ` y ` . HAy kim tra APPLICATION_STORAGE_ENDPOINT, ACCESS_KEY, SECRET_KEY, BUCKET"
+                    "Storage Gateway chưa cấu hình đầy đủ. Hãy kiểm tra APPLICATION_STORAGE_ENDPOINT, APPLICATION_STORAGE_ACCESS_KEY, APPLICATION_STORAGE_SECRET_KEY và APPLICATION_STORAGE_BUCKET"
             );
         }
     }

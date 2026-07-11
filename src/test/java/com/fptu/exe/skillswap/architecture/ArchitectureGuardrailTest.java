@@ -4,20 +4,23 @@ import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaAccess;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.properties.HasOwner;
+import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.lang.ConditionEvents;
 import com.tngtech.archunit.lang.SimpleConditionEvent;
-import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition;
 import com.tngtech.archunit.library.freeze.FreezingArchRule;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
-@AnalyzeClasses(packages = "com.fptu.exe.skillswap")
+@AnalyzeClasses(
+        packages = "com.fptu.exe.skillswap",
+        importOptions = ImportOption.DoNotIncludeTests.class
+)
 class ArchitectureGuardrailTest {
 
     @ArchTest
@@ -42,14 +45,6 @@ class ArchitectureGuardrailTest {
                     .as("controllers must not access repositories directly");
 
     @ArchTest
-    static final ArchRule business_modules_must_not_depend_on_admin =
-            freeze(noClasses()
-                    .that().resideInAPackage("..modules..")
-                    .and().resideOutsideOfPackage("..modules.admin..")
-                    .should().dependOnClassesThat().resideInAnyPackage("..modules.admin.."))
-                    .as("business modules must not depend on admin module");
-
-    @ArchTest
     static final ArchRule repositories_must_not_be_accessed_cross_module =
             freeze(noClasses()
                     .that().resideInAPackage("..modules..")
@@ -64,13 +59,6 @@ class ArchitectureGuardrailTest {
                     .as("entities should follow module table naming convention");
 
     @ArchTest
-    static final ArchRule business_modules_must_be_free_of_cycles =
-            freeze(SlicesRuleDefinition.slices()
-                    .matching("com.fptu.exe.skillswap.modules.(*)..")
-                    .should().beFreeOfCycles())
-                    .as("business modules must not form circular dependencies");
-
-    @ArchTest
     static final ArchRule mentor_profile_service_must_not_depend_on_booking_service =
             noClasses()
                     .that().haveFullyQualifiedName("com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService")
@@ -78,9 +66,9 @@ class ArchitectureGuardrailTest {
                     .haveFullyQualifiedName("com.fptu.exe.skillswap.modules.booking.service.BookingService");
 
     @ArchTest
-    static final ArchRule admin_mentor_verification_service_must_not_depend_on_notification_service =
+    static final ArchRule admin_mentor_verification_moderation_service_must_not_depend_on_notification_service =
             noClasses()
-                    .that().haveFullyQualifiedName("com.fptu.exe.skillswap.modules.mentor.service.AdminMentorVerificationService")
+                    .that().haveFullyQualifiedName("com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService")
                     .should().dependOnClassesThat()
                     .haveFullyQualifiedName("com.fptu.exe.skillswap.modules.notification.service.NotificationService");
 

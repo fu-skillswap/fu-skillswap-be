@@ -77,6 +77,8 @@ class SessionFeedbackServiceTest {
         mentorProfile = new MentorProfile();
         mentorProfile.setUserId(mentorId);
         mentorProfile.setUser(mentor);
+        mentorProfile.setTotalReviews(2);
+        mentorProfile.setAverageRating(new java.math.BigDecimal("4.50"));
 
         booking = new Booking();
         booking.setId(UUID.randomUUID());
@@ -139,8 +141,6 @@ class SessionFeedbackServiceTest {
             return feedback;
         });
         when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
-        when(sessionFeedbackRepository.countFeedbacksByRevieweeId(mentorId)).thenReturn(3L);
-        when(sessionFeedbackRepository.getAverageRatingByRevieweeId(mentorId)).thenReturn(4.666);
 
         SubmitFeedbackRequest request = request();
         request.setIsPublic(null);

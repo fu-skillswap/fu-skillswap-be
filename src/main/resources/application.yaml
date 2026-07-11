@@ -1,8 +1,10 @@
 spring:
   application:
     name: skillswap
-  profiles:
-    active: dev # Mặc định chạy ở máy sẽ dùng dev
+
+  cache:
+    caffeine:
+      spec: maximumSize=10000,expireAfterWrite=60m
 
   datasource:
     hikari:
@@ -43,6 +45,8 @@ spring:
     multipart:
       max-file-size: ${MAX_FILE_SIZE:15MB}
       max-request-size: ${MAX_REQUEST_SIZE:15MB}
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_SHUTDOWN_TIMEOUT:30s}
 
 springdoc:
   api-docs:
@@ -55,9 +59,11 @@ springdoc:
     persist-authorization: true
 
 server:
+  shutdown: graceful
   tomcat:
     threads:
       max: ${TOMCAT_MAX_THREADS:80}
+    connection-timeout: ${TOMCAT_CONNECTION_TIMEOUT:20000}
 
 management:
   health:
@@ -77,29 +83,25 @@ management:
       show-details: never
       group:
         liveness:
-          include: livenessstate
+          include: livenessState
         readiness:
-          include: readinessstate
+          include: readinessState,db,rabbit
 
 application:
   google:
     client-id: ${GOOGLE_CLIENT_ID}
     client-secret: ${GOOGLE_CLIENT_SECRET:}
     calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
-    token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
+    token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY}
     token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}
     calendar-sync-poll-ms: ${GOOGLE_CALENDAR_SYNC_POLL_MS:60000}
   cursor:
     crypto:
       version: ${CURSOR_CRYPTO_VERSION:v1}
-      # Override in production using CURSOR_AES_KEY and CURSOR_HMAC_KEY (base64-encoded keys).
-      aes-key: ${CURSOR_AES_KEY:Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=}
-      hmac-key: ${CURSOR_HMAC_KEY:Q3Vyc29yUGhhc2UxSG1hY0tleUZvclNraWxsU3dhcDAx}
+      aes-key: ${CURSOR_AES_KEY}
+      hmac-key: ${CURSOR_HMAC_KEY}
   upload:
-    dir: ./uploads/files
-  storage:
-    security:
-      allowed-url-hosts: ${STORAGE_ALLOWED_HOSTS:res.cloudinary.com}
+    dir: ${APP_UPLOAD_DIR:${java.io.tmpdir}/skillswap-storage}
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
@@ -148,12 +150,6 @@ application:
       notification-dlq-routing-key: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_ROUTING_KEY:notification.dlq}
       chat-routing-pattern: ${REALTIME_OUTBOX_CHAT_ROUTING_PATTERN:chat.#}
       notification-routing-pattern: ${REALTIME_OUTBOX_NOTIFICATION_ROUTING_PATTERN:notification.#}
-  cloudinary:
-    enabled: ${CLOUDINARY_ENABLED:false}
-    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
-    api-key: ${CLOUDINARY_API_KEY:}
-    api-secret: ${CLOUDINARY_API_SECRET:}
-    folder: skillswap # thư mục gốc trên Cloudinary
   storage:
     enabled: ${STORAGE_ENABLED:false}
     endpoint: ${STORAGE_ENDPOINT:}
@@ -163,6 +159,8 @@ application:
     region: ${STORAGE_REGION:auto}
     public-url-prefix: ${STORAGE_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
     documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:skillswap/verification-documents}
+    presigned-ttl-minutes: ${STORAGE_PRESIGNED_TTL_MINUTES:15}
+    allowed-content-types: ${STORAGE_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,application/pdf}
   system-admin:
     emails: ${SYSTEM_ADMIN_EMAILS:}
   mentor-verification:

@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.conversation.domain.Message;
 import com.fptu.exe.skillswap.modules.conversation.dto.request.SendMessageRequest;
 import com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse;
-import com.fptu.exe.skillswap.modules.conversation.event.ChatMessageSavedEvent;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
@@ -248,7 +248,7 @@ class ConversationServiceUnitTest {
     }
 
     @Test
-    void sendMessage_shouldPublishChatMessageSavedEvent() {
+    void sendMessage_shouldEnqueueDomainEventOutbox() {
         UUID conversationId = UUID.randomUUID();
         UUID senderId = UUID.randomUUID();
         SendMessageRequest request = new SendMessageRequest("Hello world!");
@@ -262,6 +262,7 @@ class ConversationServiceUnitTest {
         when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(userRepository.findById(senderId)).thenReturn(Optional.of(sender));
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
         Message savedMessage = Message.builder()
                 .id(UUID.randomUUID())
@@ -283,8 +284,7 @@ class ConversationServiceUnitTest {
                         ConversationParticipant.builder().conversation(conversation).user(sender).build(),
                         otherParticipant
                 ));
-        when(messageRepository.countUnreadMessages(eq(conversationId), eq(otherParticipant.getUser().getId()), any()))
-                .thenReturn(1L);
+
 
         MessageResponse response = conversationService.sendMessage(conversationId, senderId, request, messageRepository, userRepository);
 
@@ -292,16 +292,7 @@ class ConversationServiceUnitTest {
         assertEquals("Hello world!", response.content());
         assertTrue(response.isMine());
 
-        ArgumentCaptor<ChatMessageSavedEvent> eventCaptor = ArgumentCaptor.forClass(ChatMessageSavedEvent.class);
-        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
-
-        ChatMessageSavedEvent capturedEvent = eventCaptor.getValue();
-        assertNotNull(capturedEvent);
-        assertEquals("Hello world!", capturedEvent.getEvent().content());
-        assertEquals(1, capturedEvent.getDeliveries().size());
-        assertEquals(otherParticipant.getUser().getId(), capturedEvent.getDeliveries().getFirst().recipientUserId());
-        assertEquals(1L, capturedEvent.getDeliveries().getFirst().event().unreadCount());
-        assertFalse(Boolean.TRUE.equals(capturedEvent.getDeliveries().getFirst().event().isSelf()));
+        verify(domainEventOutboxService, times(4)).enqueue(any(), any(), any(), any());
     }
 
     @Test

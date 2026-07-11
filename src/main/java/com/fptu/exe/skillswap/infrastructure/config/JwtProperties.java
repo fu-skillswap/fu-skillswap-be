@@ -24,6 +24,10 @@ public class JwtProperties {
     public static class Jwt {
         @NotBlank
         private String secretKey;
+        @NotBlank
+        private String issuer = "skillswap";
+        @NotBlank
+        private String audience = "skillswap-api";
         @Min(1)
         private long expiration; // in milliseconds
         @Valid

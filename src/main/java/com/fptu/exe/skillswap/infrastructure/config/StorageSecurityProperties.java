@@ -17,9 +17,9 @@ import java.util.List;
 public class StorageSecurityProperties {
     
     /**
-     * Danh sách các host (domain) được phép upload file minh chứng.
-     * Mặc định là res.cloudinary.com
+     * Danh sách các host (domain) được phép xuất hiện trong URL minh chứng.
+     * Mặc định bao gồm CDN public của SkillSwap và local storage host.
      */
     @NotEmpty
-    private List<String> allowedUrlHosts = List.of("res.cloudinary.com");
+    private List<String> allowedUrlHosts = List.of("cdn.skillswap.com", "storage.skillswap.local");
 }

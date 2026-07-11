@@ -27,7 +27,9 @@ jobs:
     - name: Run Tests & Verify
       env:
         SPRING_PROFILES_ACTIVE: test
-      run: ./mvnw clean verify
+      run: |
+        chmod +x mvnw
+        ./mvnw clean verify
 
   security-scan:
     needs: build-and-test

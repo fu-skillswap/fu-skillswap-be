@@ -18,6 +18,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.filter.CorsFilter;
 
 @Configuration
@@ -35,7 +36,17 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .referrerPolicy(policy -> policy
+                                .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"))
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .preload(true)
+                                .maxAgeInSeconds(31_536_000)))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(securityErrorResponseHandler)
                         .accessDeniedHandler(securityErrorResponseHandler)
@@ -45,6 +56,7 @@ public class SecurityConfig {
                             // Public endpoints
                             .requestMatchers(
                                     "/api/auth/google",
+                                    "/api/auth/google/authorization-context",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",
                                     "/api/payments/webhook/**",
@@ -54,6 +66,7 @@ public class SecurityConfig {
                                     "/api/catalog/mentor-profile-options",
                                     "/api/specializations",
                                     "/api/academic-programs/**",
+                                    "/uploads/storage/**",
                                     "/health",
                                     "/actuator/health",
                                     "/actuator/health/**",

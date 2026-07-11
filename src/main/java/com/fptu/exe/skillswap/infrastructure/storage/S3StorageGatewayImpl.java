@@ -4,12 +4,14 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -23,7 +25,8 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true")
+@ConditionalOnMissingBean(StorageGateway.class)
 public class S3StorageGatewayImpl implements StorageGateway {
 
     private final S3Client s3Client;
@@ -73,7 +76,7 @@ public class S3StorageGatewayImpl implements StorageGateway {
         if (originalFilename != null && originalFilename.contains(".")) {
             extension = originalFilename.substring(originalFilename.lastIndexOf("."));
         }
-        String objectKey = UUID.randomUUID().toString() + extension;
+        String objectKey = buildObjectKey(originalFilename, null);
 
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(properties.getBucket())
@@ -82,7 +85,7 @@ public class S3StorageGatewayImpl implements StorageGateway {
                 .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(15))
+                .signatureDuration(Duration.ofMinutes(properties.getPresignedTtlMinutes()))
                 .putObjectRequest(putObjectRequest)
                 .build();
 
@@ -93,6 +96,37 @@ public class S3StorageGatewayImpl implements StorageGateway {
         } catch (S3Exception ex) {
             log.error("Lỗi khi tạo presigned URL S3/R2. bucket={}, key={}", properties.getBucket(), objectKey, ex);
             throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể tạo liên kết tải lên");
+        }
+    }
+
+    @Override
+    public String resolvePublicUrl(String objectKey) {
+        return buildPublicUrl(objectKey);
+    }
+
+    @Override
+    public String storageProviderName() {
+        return "R2";
+    }
+
+    @Override
+    public ObjectMetadata headObject(String objectKey) {
+        try {
+            var response = s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(properties.getBucket())
+                    .key(objectKey)
+                    .build());
+            return new ObjectMetadata(
+                    objectKey,
+                    response.contentType(),
+                    response.contentLength() == null ? 0L : response.contentLength()
+            );
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "File upload chưa tồn tại trên storage");
+            }
+            log.error("Lỗi khi head object trên S3/R2. bucket={}, key={}", properties.getBucket(), objectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể xác minh file đã upload");
         }
     }
 

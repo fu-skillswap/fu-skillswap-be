@@ -1,4 +1,4 @@
-package com.fptu.exe.skillswap.infrastructure.config;
+package com.fptu.exe.skillswap.modules.matching.config;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;

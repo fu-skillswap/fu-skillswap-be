@@ -9,6 +9,7 @@ import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
@@ -25,6 +26,9 @@ import java.util.UUID;
 @Slf4j
 public class JwtTokenProvider {
 
+    private static final String CLAIM_TOKEN_TYPE = "tokenType";
+    private static final String TOKEN_TYPE_ACCESS = "ACCESS";
+
     private final JwtProperties jwtProperties;
 
     private Key getSigningKey() {
@@ -36,8 +40,8 @@ public class JwtTokenProvider {
             byte[] keyBytes = Decoders.BASE64.decode(secret);
             return Keys.hmacShaKeyFor(keyBytes);
         } catch (Exception e) {
-            log.warn("Failed to decode JWT secret key as Base64, falling back to plaintext bytes", e);
-            return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+            log.error("JWT_SECRET_KEY must be a valid Base64-encoded secret", e);
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "JWT_SECRET_KEY phải là chuỗi Base64 hợp lệ", e);
         }
     }
 
@@ -49,10 +53,13 @@ public class JwtTokenProvider {
         claims.put("userId", userId.toString());
         claims.put("email", email);
         claims.put("roles", roles);
+        claims.put(CLAIM_TOKEN_TYPE, TOKEN_TYPE_ACCESS);
 
         return Jwts.builder()
                 .setClaims(claims)
                 .setSubject(userId.toString())
+                .setIssuer(jwtProperties.getJwt().getIssuer())
+                .setAudience(jwtProperties.getJwt().getAudience())
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
@@ -87,17 +94,7 @@ public class JwtTokenProvider {
 
     public boolean validateAccessToken(String token) {
         try {
-            Jws<Claims> claimsJws = Jwts.parserBuilder()
-                    .setSigningKey(getSigningKey())
-                    .build()
-                    .parseClaimsJws(token);
-                    
-            // Đóng chốt tường minh: Ép buộc hệ thống chỉ chấp nhận thuật toán HS256
-            if (!SignatureAlgorithm.HS256.getValue().equalsIgnoreCase(claimsJws.getHeader().getAlgorithm())) {
-                log.warn("Cảnh báo bảo mật: JWT sử dụng sai thuật toán. Yêu cầu: HS256, Thực tế: {}", claimsJws.getHeader().getAlgorithm());
-                return false;
-            }
-            
+            validateAccessClaims(parseClaims(token));
             return true;
         } catch (MalformedJwtException ex) {
             log.warn("Invalid JWT token: {}", ex.getMessage());
@@ -114,16 +111,38 @@ public class JwtTokenProvider {
     }
 
     public Claims getClaimsFromToken(String token) {
-        Jws<Claims> claimsJws = Jwts.parserBuilder()
+        Jws<Claims> claimsJws = parseClaims(token);
+        validateAccessClaims(claimsJws);
+        return claimsJws.getBody();
+    }
+
+    private Jws<Claims> parseClaims(String token) {
+        return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())
                 .build()
                 .parseClaimsJws(token);
-                
-        // Đóng chốt tường minh: Ép buộc hệ thống chỉ chấp nhận thuật toán HS256
+    }
+
+    private void validateAccessClaims(Jws<Claims> claimsJws) {
         if (!SignatureAlgorithm.HS256.getValue().equalsIgnoreCase(claimsJws.getHeader().getAlgorithm())) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Thuật toán JWT không hợp lệ. Hệ thống chỉ chấp nhận HS256.");
         }
-        
-        return claimsJws.getBody();
+
+        Claims claims = claimsJws.getBody();
+        String expectedIssuer = jwtProperties.getJwt().getIssuer();
+        String expectedAudience = jwtProperties.getJwt().getAudience();
+
+        if (StringUtils.hasText(expectedIssuer) && !expectedIssuer.equals(claims.getIssuer())) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Issuer của JWT không hợp lệ");
+        }
+
+        if (StringUtils.hasText(expectedAudience) && !expectedAudience.equals(claims.getAudience())) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Audience của JWT không hợp lệ");
+        }
+
+        String tokenType = claims.get(CLAIM_TOKEN_TYPE, String.class);
+        if (!TOKEN_TYPE_ACCESS.equals(tokenType)) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Token JWT không đúng mục đích sử dụng");
+        }
     }
 }

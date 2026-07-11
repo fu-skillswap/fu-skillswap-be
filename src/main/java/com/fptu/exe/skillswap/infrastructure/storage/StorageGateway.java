@@ -12,7 +12,15 @@ public interface StorageGateway {
 
     PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType);
 
+    String resolvePublicUrl(String objectKey);
+
+    String storageProviderName();
+
+    ObjectMetadata headObject(String objectKey);
+
     record StorageUploadResult(String objectKey, String publicUrl) {}
 
     record PresignedUpload(String uploadUrl, String publicUrl, String objectKey) {}
+
+    record ObjectMetadata(String objectKey, String contentType, long sizeBytes) {}
 }

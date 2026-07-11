@@ -1,15 +1,15 @@
 spring:
   datasource:
-    # Lấy từ Environment Variables trên Neon
     url: ${DATABASE_URL}
     username: ${DATABASE_USERNAME}
     password: ${DATABASE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: ${HIBERNATE_DDL_AUTO:validate}
     show-sql: false
   flyway:
-    enabled: ${FLYWAY_ENABLED:false}
+    enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: false
 
 springdoc:
@@ -21,9 +21,26 @@ springdoc:
 logging:
   level:
     root: INFO
+    # Reduce noise in production
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
 
 application:
+  security:
+    jwt:
+      issuer: ${JWT_ISSUER}
+      audience: ${JWT_AUDIENCE}
+  cors:
+    # IMPORTANT: Replace with your actual frontend domain before deploying.
+    # Defaults in base application.yaml include localhost — must be overridden for prod.
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
   swagger:
     # Swagger is disabled in production by default.
-    # Set APPLICATION_SWAGGER_ENABLED=true only if you need to expose API docs in prod.
+    # Set APPLICATION_SWAGGER_ENABLED=true ONLY if you intentionally want public API docs.
     enabled: ${APPLICATION_SWAGGER_ENABLED:false}
+  cursor:
+    crypto:
+      # IMPORTANT: Override both keys with strong random values in production.
+      # Production must not start without explicit cursor crypto keys.
+      aes-key: ${CURSOR_AES_KEY}
+      hmac-key: ${CURSOR_HMAC_KEY}
