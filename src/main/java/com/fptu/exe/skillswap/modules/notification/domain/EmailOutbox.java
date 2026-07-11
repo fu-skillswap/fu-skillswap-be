@@ -35,6 +35,10 @@ public class EmailOutbox {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String body;
 
+    @Column(name = "payload_data", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String payloadData = "{}";
+
     @Column(name = "template_code", length = 100)
     private String templateCode;
 

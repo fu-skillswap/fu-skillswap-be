@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.shared.outbox;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.infrastructure.realtime.DomainEventOutboxPublisherScheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -27,9 +27,7 @@ import static org.mockito.Mockito.when;
 class DomainEventOutboxPublisherSchedulerTest {
 
     @Mock
-    private DomainEventOutboxPollingRepository pollingRepository;
-    @Mock
-    private DomainEventOutboxRepository domainEventOutboxRepository;
+    private DomainEventOutboxTxHelper txHelper;
     @Mock
     private RabbitTemplate rabbitTemplate;
     @Mock
@@ -54,7 +52,7 @@ class DomainEventOutboxPublisherSchedulerTest {
                 .availableAt(LocalDateTime.now().minusMinutes(1))
                 .status(DomainEventOutboxStatus.PENDING)
                 .build();
-        when(pollingRepository.lockNextPendingBatch(100)).thenReturn(List.of(outbox));
+        when(txHelper.reserveNextBatch(100)).thenReturn(List.of(outbox));
 
         boolean hadWork = scheduler.pollAndPublishPendingEvents();
         assertTrue(hadWork);
@@ -65,10 +63,7 @@ class DomainEventOutboxPublisherSchedulerTest {
                 eq(outbox.getPayloadJson()),
                 any(MessagePostProcessor.class)
         );
-        ArgumentCaptor<DomainEventOutbox> captor = ArgumentCaptor.forClass(DomainEventOutbox.class);
-        verify(domainEventOutboxRepository).save(captor.capture());
-        assertEquals(DomainEventOutboxStatus.PUBLISHED, captor.getValue().getStatus());
-        assertTrue(captor.getValue().getPublishedAt() != null);
+        verify(txHelper).markAsPublished(outbox.getId());
     }
 
     @Test
@@ -83,7 +78,7 @@ class DomainEventOutboxPublisherSchedulerTest {
                 .status(DomainEventOutboxStatus.PENDING)
                 .attemptCount(0)
                 .build();
-        when(pollingRepository.lockNextPendingBatch(100)).thenReturn(List.of(outbox));
+        when(txHelper.reserveNextBatch(100)).thenReturn(List.of(outbox));
         doThrow(new RuntimeException("broker unavailable"))
                 .when(rabbitTemplate).convertAndSend(
                         eq("skillswap.domain-events"),
@@ -95,10 +90,6 @@ class DomainEventOutboxPublisherSchedulerTest {
         boolean hadWork = scheduler.pollAndPublishPendingEvents();
         assertTrue(hadWork);
 
-        ArgumentCaptor<DomainEventOutbox> captor = ArgumentCaptor.forClass(DomainEventOutbox.class);
-        verify(domainEventOutboxRepository).save(captor.capture());
-        assertEquals(DomainEventOutboxStatus.PENDING, captor.getValue().getStatus());
-        assertEquals(1, captor.getValue().getAttemptCount());
-        assertEquals("broker unavailable", captor.getValue().getLastError());
+        verify(txHelper).handlePublishFailure(outbox.getId(), 0, "broker unavailable");
     }
 }

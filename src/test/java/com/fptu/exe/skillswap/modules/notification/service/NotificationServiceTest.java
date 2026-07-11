@@ -6,8 +6,6 @@ import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationBadgeChangedEvent;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationCreatedEvent;
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -42,8 +40,7 @@ class NotificationServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+
     @Mock
     private CursorCodec cursorCodec;
     @Mock
@@ -68,7 +65,7 @@ class NotificationServiceTest {
     void createNotification_shouldPersistUnreadNotification() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(mockUser));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(1L);
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
         notificationService.createNotification(userId, NotificationType.BOOKING_ACCEPTED, "Title", "Message", "BOOKING", UUID.randomUUID());
 
@@ -79,7 +76,7 @@ class NotificationServiceTest {
         assertEquals(userId, saved.getRecipientUser().getId());
         assertEquals("Mentor đã nhận lịch", saved.getTitle());
         assertNull(saved.getReadAt());
-        verify(eventPublisher).publishEvent(any(NotificationCreatedEvent.class));
+        verify(domainEventOutboxService, times(2)).enqueue(any(), any(), any(), any());
     }
 
     @Test
@@ -119,13 +116,13 @@ class NotificationServiceTest {
         UUID notifId = UUID.randomUUID();
         Notification notif = Notification.builder().id(notifId).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
         when(notificationRepository.findByIdAndRecipientUserId(notifId, userId)).thenReturn(Optional.of(notif));
-        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(0L);
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
         notificationService.markAsRead(userId, notifId);
 
         assertNotNull(notif.getReadAt());
         verify(notificationRepository).save(notif);
-        verify(eventPublisher).publishEvent(any(NotificationBadgeChangedEvent.class));
+        verify(domainEventOutboxService, times(1)).enqueue(any(), any(), any(), any());
     }
 
     @Test
@@ -151,10 +148,10 @@ class NotificationServiceTest {
 
     @Test
     void markAllAsRead_shouldOnlyMarkCurrentUserNotifications() {
-        when(notificationRepository.countByRecipientUserIdAndReadAtIsNull(userId)).thenReturn(0L);
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
         notificationService.markAllAsRead(userId);
         verify(notificationRepository).markAllAsRead(eq(userId), any(LocalDateTime.class));
-        verify(eventPublisher).publishEvent(any(NotificationBadgeChangedEvent.class));
+        verify(domainEventOutboxService, times(1)).enqueue(any(), any(), any(), any());
     }
 
     @Test

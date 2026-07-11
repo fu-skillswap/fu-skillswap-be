@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
 import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,7 +30,11 @@ public class EmailRetryScheduler {
             log.warn("[{}] Đã chuyển {} email FAILED sang FATAL_ERROR do vượt quá số lần retry.", threadName, fatalCount);
         }
         
-        List<EmailOutbox> failedEmails = emailOutboxRepository.findTop10ByStatusAndRetryCountLessThanOrderByCreatedAtAsc(NotificationStatus.FAILED, 3);
+        List<EmailOutbox> failedEmails = emailOutboxRepository.findRetryBatchForUpdate(
+                NotificationStatus.FAILED,
+                3,
+                PageRequest.of(0, 10)
+        );
         if (failedEmails.isEmpty()) {
             log.info("[{}] Không có email FAILED nào cần retry.", threadName);
             return;

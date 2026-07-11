@@ -52,7 +52,19 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
             Pageable pageable
     );
 
-    java.util.List<EmailOutbox> findTop10ByStatusAndRetryCountLessThanOrderByCreatedAtAsc(NotificationStatus status, int retryCount);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select emailOutbox
+            from EmailOutbox emailOutbox
+            where emailOutbox.status = :status
+              and emailOutbox.retryCount < :retryCount
+            order by emailOutbox.createdAt asc
+            """)
+    java.util.List<EmailOutbox> findRetryBatchForUpdate(
+            @Param("status") NotificationStatus status,
+            @Param("retryCount") int retryCount,
+            Pageable pageable
+    );
 
     @org.springframework.data.jpa.repository.Modifying
     @Query("""

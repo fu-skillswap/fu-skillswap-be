@@ -1,6 +1,9 @@
-package com.fptu.exe.skillswap.shared.outbox;
+package com.fptu.exe.skillswap.infrastructure.realtime;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutbox;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxTxHelper;
+import com.fptu.exe.skillswap.shared.outbox.OutboxWakeupEvent;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.TraceContext;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -62,6 +64,4 @@ public class DomainEventOutboxPublisherScheduler {
         }
         return true;
     }
-
-
 }
