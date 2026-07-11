@@ -1,3 +1,53 @@
+# API Contract - Production Authentication and Current Modules
+
+## Authentication contract (breaking change)
+
+### `GET /api/auth/google/authorization-context`
+
+Khởi tạo Google OAuth state dùng một lần. Query bắt buộc:
+
+- `redirectUri`: callback URI đã đăng ký và sẽ dùng khi đổi code.
+- `codeChallenge`: PKCE S256 challenge do FE tạo từ verifier.
+
+Response `data`:
+
+```json
+{
+  "state": "opaque-one-time-value",
+  "expiresAt": "2026-07-11T04:15:00Z"
+}
+```
+
+FE không decode hoặc tự tạo `state`; state hết hạn sau 5 phút và chỉ dùng được một lần.
+
+### `POST /api/auth/google`
+
+Request body:
+
+```json
+{
+  "authorizationCode": "4/0AQ...",
+  "redirectUri": "https://skillswap.asia/auth/google/callback",
+  "codeVerifier": "pkce-verifier-created-by-fe",
+  "state": "opaque-one-time-value"
+}
+```
+
+Backend xác minh state, redirect URI và PKCE trước khi đổi code với Google. `idToken` do FE gửi trực tiếp không còn được hỗ trợ.
+
+Response body chỉ có access token; refresh token nằm trong cookie `HttpOnly; Secure`:
+
+```json
+{
+  "accessToken": "eyJ...",
+  "tokenType": "Bearer"
+}
+```
+
+### `POST /api/auth/refresh` và `POST /api/auth/logout`
+
+Không có request body. Browser phải gửi cookie bằng `credentials: "include"`. Backend rotate refresh token và trả cookie mới. Refresh token không được lưu trong localStorage/sessionStorage hoặc gửi trong JSON.
+
 # API Document Addendum - Forum Post Cursor List
 
 Tài liệu này chỉ chuẩn hóa 2 endpoint post list đang chuyển sang cursor pagination.

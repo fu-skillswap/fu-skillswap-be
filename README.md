@@ -14,8 +14,8 @@ Backend service cho FU SkillSwap, một ứng dụng Spring Boot modular monolit
 - H2 cho test
 - JWT authentication
 - Google OAuth login
-- Cloudinary cho ảnh
-- Cloudflare R2 cho PDF/document
+- Cloudflare R2 cho upload file minh chứng
+- RabbitMQ cho hàng đợi nội bộ / realtime
 - Maven Wrapper
 - Docker Compose
 
@@ -46,10 +46,12 @@ Tạo file môi trường local:
 copy .env.example .env
 ```
 
-Chạy PostgreSQL:
+Nếu chỉ chạy local development, đổi `SPRING_PROFILES_ACTIVE=dev` trong `.env`. Khi deploy VPS production, giữ `SPRING_PROFILES_ACTIVE=prod`.
+
+Chạy hạ tầng cốt lõi:
 
 ```powershell
-docker compose up -d postgres-db
+docker compose up -d postgres-db rabbitmq
 ```
 
 Chạy test:
@@ -82,7 +84,7 @@ Endpoint smoke test public:
 http://localhost:8080/api/campuses
 ```
 
-Lưu ý: `/actuator/health` hiện đang được bảo vệ bởi Spring Security. Khi cần smoke test không cần token, dùng catalog endpoint như `/api/campuses`.
+Lưu ý: `/actuator/health/readiness` và `/actuator/health/liveness` được dùng cho kiểm tra vận hành nội bộ. Khi cần smoke test không cần token, dùng catalog endpoint như `/api/campuses`.
 
 ## Environment Variables
 
@@ -93,7 +95,7 @@ Các biến quan trọng:
 ```text
 DATABASE_URL=jdbc:postgresql://localhost:5444/skillswapdb
 DATABASE_USERNAME=postgres
-DATABASE_PASSWORD=123456
+DATABASE_PASSWORD=change-me
 
 JWT_SECRET_KEY=replace-with-a-base64-encoded-secret-at-least-32-bytes
 JWT_EXPIRATION=3600000
@@ -103,11 +105,6 @@ GOOGLE_CLIENT_ID=
 SYSTEM_ADMIN_EMAILS=
 CORS_ALLOWED_ORIGIN_PATTERNS=http://localhost:3000,http://localhost:5173,http://localhost:8080
 
-CLOUDINARY_ENABLED=false
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-
 R2_ENABLED=false
 R2_ENDPOINT=
 R2_ACCESS_KEY_ID=
@@ -116,9 +113,14 @@ R2_BUCKET=
 R2_REGION=auto
 R2_DOCUMENTS_PREFIX=skillswap/verification-documents
 
+RABBITMQ_DEFAULT_USER=skillswap
+RABBITMQ_DEFAULT_PASS=change-me
+
 FLYWAY_ENABLED=false
-HIBERNATE_DDL_AUTO=update
+HIBERNATE_DDL_AUTO=validate
 ```
+
+RabbitMQ chạy nội bộ trong Docker Compose, không publish port ra ngoài. Backend lấy host nội bộ qua `SPRING_RABBITMQ_HOST=rabbitmq`.
 
 Khi chạy bằng Docker Compose, các biến này không nên để trống:
 
@@ -133,11 +135,6 @@ CORS_ALLOWED_ORIGIN_PATTERNS
 Nếu bật mentor verification upload trên VPS:
 
 ```text
-CLOUDINARY_ENABLED=true
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
-
 R2_ENABLED=true
 R2_ENDPOINT=
 R2_ACCESS_KEY_ID=
@@ -159,9 +156,9 @@ Nếu một biến được khai báo rỗng trong `.env`, nó sẽ override def
 
 ### dev
 
-Profile mặc định khi chạy local.
+Profile dành cho local development.
 
-- PostgreSQL port `5444`
+- PostgreSQL port chỉ bind trên localhost (`127.0.0.1:5444`)
 - `ddl-auto: create`
 - Bật SQL logging
 - Phù hợp để tạo schema sạch trong giai đoạn phát triển
@@ -181,7 +178,7 @@ Dùng cho Maven tests.
 Dùng cho môi trường deploy.
 
 - Đọc database config từ environment variables
-- `HIBERNATE_DDL_AUTO` default hiện tại là `update` trong giai đoạn MVP.
+- `HIBERNATE_DDL_AUTO` nên đặt là `validate`
 - Dự án đã tích hợp sẵn các SQL Migration (`V1` đến `V16`) tại `src/main/resources/db/migration`. Flyway được khuyến nghị bật khi deploy Beta/Production (`FLYWAY_ENABLED=true`) để đảm bảo các index được khởi tạo đầy đủ.
 
 Các bản cập nhật Migration gần đây giúp tối ưu hóa hiệu năng và tránh Lost Update cho Beta V1.0:
@@ -233,23 +230,24 @@ Project đi theo hướng Spring Modulith. Mỗi package trong `modules` đại 
 
 Luồng đăng nhập hiện tại:
 
+- `GET /api/auth/google/authorization-context`
 - `POST /api/auth/google`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 
-FE lấy Google `idToken` qua Google Identity Services, gửi về:
+FE tạo PKCE verifier/challenge, lấy `state` dùng một lần từ backend, sau đó chuyển user sang Google OAuth. Khi nhận authorization code, FE gửi:
 
 ```text
 POST /api/auth/google
 ```
 
-BE verify `idToken`, tạo hoặc liên kết tài khoản, sau đó trả:
+Request gồm `authorizationCode`, `redirectUri`, `codeVerifier`, `state`. Backend xác minh state + PKCE, đổi code với Google, tạo hoặc liên kết tài khoản. Refresh token chỉ được đặt trong cookie `HttpOnly + Secure`; body trả:
 
 ```json
 {
   "accessToken": "...",
-  "refreshToken": "..."
+  "tokenType": "Bearer"
 }
 ```
 
@@ -387,9 +385,8 @@ Các cấu hình liên quan:
 
 Upload document:
 
-- API nhận `multipart/form-data` gồm `documentType` và `file`, backend upload lên Cloudflare R2.
-- File hỗ trợ `JPG`, `JPEG`, `PNG`, `PDF`.
-- File upload qua BE tối đa `15MB`.
+- API cấp **Presigned URL** (`GET /api/v1/mentor/verifications/presigned-url`), FE upload trực tiếp file lên Cloudflare R2 thông qua URL này (tối đa `15MB`, hỗ trợ `JPG`, `JPEG`, `PNG`, `PDF`).
+- Sau khi upload lên R2 thành công, FE gọi `POST /api/v1/mentor/verifications/documents` kèm `objectKey` và `documentType` để backend xác nhận metadata.
 - `FPTU_AFFILIATION_PROOF`: minh chứng là sinh viên/cựu sinh viên FPTU, tối đa `1` file đang hoạt động.
 - `EXPERTISE_PROOF`: minh chứng năng lực mentor, tối đa `3` file đang hoạt động.
 - API upload không dùng `isPrimary`; FE chỉ cần gửi `documentType` và `file`.
@@ -728,7 +725,7 @@ Sau đó chạy lại app.
 Kiểm tra:
 
 - `GOOGLE_CLIENT_ID`
-- FE gửi đúng Google `idToken`
+- FE gửi đúng authorization code, state và PKCE verifier
 - Token audience khớp `GOOGLE_CLIENT_ID`
 
 ### User không có role SYSTEM_ADMIN sau khi thêm env
@@ -739,16 +736,6 @@ Kiểm tra:
 - Không có khoảng trắng sai hoặc typo
 - User đã login Google lại sau khi cập nhật env
 - Access token mới có chứa role `SYSTEM_ADMIN`
-
-### Cloudinary lỗi khi startup
-
-Nếu `CLOUDINARY_ENABLED=true`, cần đủ:
-
-```text
-CLOUDINARY_CLOUD_NAME
-CLOUDINARY_API_KEY
-CLOUDINARY_API_SECRET
-```
 
 ### R2 lỗi khi upload PDF
 
@@ -768,3 +755,11 @@ R2_DOCUMENTS_PREFIX
 ```text
 https://<account-id>.r2.cloudflarestorage.com
 ```
+
+### RabbitMQ lỗi khi khởi động realtime
+
+Nếu bật realtime outbox hoặc STOMP relay, cần đảm bảo:
+
+- `RABBITMQ_DEFAULT_USER`
+- `RABBITMQ_DEFAULT_PASS`
+- `SPRING_RABBITMQ_HOST` trỏ đúng hostname nội bộ của container RabbitMQ
