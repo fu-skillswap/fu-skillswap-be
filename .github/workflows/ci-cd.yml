@@ -111,6 +111,10 @@ jobs:
           # Cập nhật file compose
           curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
           curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.prod.yml
+          
+          # Cập nhật script vận hành
+          mkdir -p ops
+          curl -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/main/ops/backup-postgres.sh
 
           # Immutable image tag
           export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
