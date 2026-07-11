@@ -2,7 +2,7 @@ spring:
   datasource:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5444/skillswapdb}
     username: ${DATABASE_USERNAME:postgres}
-    password: ${DATABASE_PASSWORD:123456}
+    password: ${DATABASE_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -11,14 +11,27 @@ spring:
       ddl-auto: create
     show-sql: true
 
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:false}
+
 application:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
   security:
     jwt:
-      secret-key: ${JWT_SECRET_KEY:c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0}
-    google:
-      client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
+      secret-key: ${JWT_SECRET_KEY}
   upload:
     dir: ./uploads/files
+  mail:
+    enabled: ${APPLICATION_MAIL_ENABLED:false}
+    from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
+    from-name: ${APPLICATION_MAIL_FROM_NAME:SkillSwap}
 
 logging:
   level:

@@ -1,10 +1,8 @@
 package com.fptu.exe.skillswap.shared.exception;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 @Getter
-@AllArgsConstructor
 public enum ErrorCode {
     // System & General
     UNCATEGORIZED_EXCEPTION(500, "SYS_9999", "error.sys.unknown", "Lỗi hệ thống không xác định"),
@@ -15,10 +13,14 @@ public enum ErrorCode {
     DATABASE_ERROR(500, "SYS_0006", "error.sys.database", "Hệ thống dữ liệu gặp sự cố"),
     RESOURCE_CONFLICT(409, "SYS_0007", "error.sys.conflict", "Dữ liệu xung đột với trạng thái hiện tại"),
     PAYLOAD_TOO_LARGE(413, "SYS_0008", "error.sys.payload_too_large", "Dữ liệu tải lên vượt quá giới hạn cho phép"),
+    UNSUPPORTED_MEDIA_TYPE(415, "SYS_0009", "error.sys.unsupported_media_type", "Kiểu dữ liệu gửi lên không được hỗ trợ"),
+    TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Bạn đang thao tác quá nhanh, vui lòng thử lại sau"),
+    METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức HTTP không được hỗ trợ cho endpoint này"),
 
     // Auth
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),
     UNAUTHORIZED(403, "AUTH_1002", "error.auth.unauthorized", "Bạn không có quyền truy cập tài nguyên này"),
+    ACCESS_DENIED(403, "AUTH_1007", "error.auth.access_denied", "Bạn không có quyền thực hiện hành động này"),
     SESSION_EXPIRED(401, "AUTH_1003", "error.auth.session_expired", "Phiên đăng nhập đã hết hạn hoặc không hợp lệ"),
     USER_BANNED(403, "AUTH_1004", "error.auth.user_banned", "Tài khoản của bạn đã bị khóa"),
     USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản của bạn chưa hoạt động"),
@@ -30,6 +32,10 @@ public enum ErrorCode {
     USER_NOT_FOUND(404, "USER_2003", "error.user.not_found", "Không tìm thấy người dùng"),
     NOT_FOUND(404, "SYS_0003", "error.sys.not_found", "Không tìm thấy tài nguyên"),
 
+    // Payment
+    PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang có sự cố, vui lòng thử lại sau"),
+    INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
+
     // Validation
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
 
@@ -37,5 +43,11 @@ public enum ErrorCode {
     private final String code;
     private final String key;
     private final String message;
-}
 
+    ErrorCode(int status, String code, String key, String message) {
+        this.status = status;
+        this.code = code;
+        this.key = key;
+        this.message = message;
+    }
+}

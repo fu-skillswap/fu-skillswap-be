@@ -6,7 +6,6 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,14 +22,10 @@ public interface MentorVerificationDocumentRepository extends JpaRepository<Ment
             VerificationDocumentType documentType
     );
 
+    @EntityGraph(attributePaths = {"storedFile", "uploadedBy"})
     Optional<MentorVerificationDocument> findByIdAndRequestId(UUID id, UUID requestId);
 
     long countByRequestIdAndDocumentTypeAndIsActiveTrue(UUID requestId, VerificationDocumentType documentType);
 
-    Optional<MentorVerificationDocument> findFirstByRequestIdAndDocumentTypeAndIsPrimaryTrueAndIsActiveTrue(
-            UUID requestId,
-            VerificationDocumentType documentType
-    );
-
-    List<MentorVerificationDocument> findByRequestIdAndDocumentTypeInAndIsActiveTrue(UUID requestId, Collection<VerificationDocumentType> types);
+    List<MentorVerificationDocument> findByRequestIdAndDocumentTypeInAndIsActiveTrue(UUID requestId, java.util.Collection<VerificationDocumentType> types);
 }

@@ -1,0 +1,157 @@
+package com.fptu.exe.skillswap.modules.booking.dto.response;
+
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Builder;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Builder
+@Schema(description = "Thông tin booking mentoring dùng chung cho mentee, mentor và admin")
+public record BookingResponse(
+        @Schema(description = "ID của booking", example = "019f4234-aaaa-bbbb-cccc-1234567890ab")
+        UUID bookingId,
+        @Deprecated(forRemoval = false)
+        @Schema(
+                description = "Legacy alias giữ tương thích ngược. Hiện vẫn map theo bookingId nội bộ.",
+                nullable = true,
+                deprecated = true
+        )
+        UUID sessionId,
+        @Deprecated(forRemoval = false)
+        @Schema(
+                description = "Legacy alias giữ tương thích ngược. Hiện vẫn map theo BookingStatus nội bộ.",
+                nullable = true,
+                deprecated = true
+        )
+        BookingStatus sessionStatus,
+        @Schema(
+                description = "ID của session thật do backend tạo từ booking",
+                nullable = true
+        )
+        UUID actualSessionId,
+        @Schema(
+                description = "Trạng thái session thật do backend tạo từ booking",
+                nullable = true,
+                example = "COMPLETED"
+        )
+        SessionStatus actualSessionStatus,
+        @Schema(description = "userId của mentor")
+        UUID mentorUserId,
+        @Schema(description = "Tên hiển thị của mentor")
+        String mentorDisplayName,
+        @Schema(description = "Avatar của mentor", nullable = true)
+        String mentorAvatarUrl,
+        @Schema(description = "userId của mentee")
+        UUID menteeUserId,
+        @Schema(description = "Tên hiển thị của mentee")
+        String menteeDisplayName,
+        @Schema(description = "Avatar của mentee", nullable = true)
+        String menteeAvatarUrl,
+        @Schema(description = "slotId đã dùng để tạo booking")
+        UUID availabilitySlotId,
+        @Schema(description = "serviceId được gắn với booking nếu mentee chọn service cụ thể", nullable = true)
+        UUID serviceId,
+        @Schema(description = "Tiêu đề service nếu có", nullable = true)
+        String serviceTitle,
+        @Schema(description = "Mô tả service tại thời điểm booking được tạo", nullable = true)
+        String serviceDescriptionSnapshot,
+        @Schema(description = "Kết quả kỳ vọng của service tại thời điểm booking được tạo", nullable = true)
+        String serviceExpectedOutcomeSnapshot,
+        @Schema(description = "Thời lượng service snapshot tính theo phút", nullable = true)
+        Integer serviceDurationSnapshot,
+        @Schema(description = "Snapshot cờ miễn phí của service", nullable = true)
+        Boolean serviceIsFreeSnapshot,
+        @Schema(description = "Snapshot giá dịch vụ theo SCoin", nullable = true)
+        Integer servicePriceScoinSnapshot,
+        @Schema(description = "Giá mentee nhìn thấy trước coupon/credit, đã cộng phụ phí nền tảng theo cấu hình PAYMENT_MENTEE_SURCHARGE_BPS", nullable = true, example = "110")
+        Integer servicePriceWithSurchargeScoin,
+        @Schema(description = "Trạng thái booking hiện tại", example = "PENDING")
+        BookingStatus status,
+        @Schema(description = "Tiêu đề mục tiêu học tập")
+        String learningGoalTitle,
+        @Schema(description = "Mô tả chi tiết mục tiêu học tập", nullable = true)
+        String learningGoalDescription,
+        @Schema(description = "Ghi chú phản hồi của mentor khi accept/reject", nullable = true)
+        String mentorResponseNote,
+        @Schema(description = "Lý do từ chối booking", nullable = true)
+        String rejectReason,
+        @Schema(description = "Lý do hủy booking", nullable = true)
+        String cancelReason,
+        @Schema(description = "Nền tảng meeting mentor cấu hình", nullable = true, example = "GOOGLE_MEET")
+        MeetingPlatform meetingPlatform,
+        @Schema(description = "Đường dẫn meeting online", nullable = true)
+        String meetingLink,
+        @Schema(description = "Trạng thái đồng bộ Google Calendar cho booking này", nullable = true, example = "SYNCED")
+        String calendarSyncStatus,
+        @Schema(description = "Mã lỗi sync Google Calendar gần nhất nếu có", nullable = true)
+        String calendarSyncErrorCode,
+        @Schema(description = "Mô tả lỗi sync Google Calendar gần nhất nếu có", nullable = true)
+        String calendarSyncErrorMessage,
+        @Schema(description = "true nếu link Google Meet được backend tự sinh qua Google Calendar API", nullable = true)
+        Boolean googleMeetAutoGenerated,
+        @Schema(description = "true nếu booking hiện do Google Calendar quản lý và không cho override link thủ công", nullable = true)
+        Boolean googleCalendarManaged,
+        @Schema(description = "Địa điểm gặp nếu mentoring offline hoặc ghi chú vị trí", nullable = true)
+        String location,
+        @Schema(description = "Thời gian bắt đầu thực sự được chọn cho booking")
+        LocalDateTime selectedStartTime,
+        @Schema(description = "Thời gian kết thúc thực sự được chọn cho booking")
+        LocalDateTime selectedEndTime,
+        @Schema(description = "Thời gian bắt đầu thực tế nếu có", nullable = true)
+        LocalDateTime actualStartTime,
+        @Schema(description = "Thời gian kết thúc thực tế nếu có", nullable = true)
+        LocalDateTime actualEndTime,
+        @Schema(description = "Thời điểm mentor accept booking", nullable = true)
+        LocalDateTime acceptedAt,
+        @Schema(description = "Thời điểm mentor reject booking", nullable = true)
+        LocalDateTime rejectedAt,
+        @Schema(description = "Thời điểm booking bị hủy", nullable = true)
+        LocalDateTime cancelledAt,
+        @Schema(description = "Thời điểm booking được đánh dấu hoàn thành", nullable = true)
+        LocalDateTime completedAt,
+        @Schema(description = "Thời điểm closure cuối cùng của booking", nullable = true)
+        LocalDateTime finalizedAt,
+        @Schema(description = "Thời điểm booking tự đóng do quá hạn phản hồi", nullable = true)
+        LocalDateTime autoClosedAt,
+        @Schema(description = "Kết quả closure analytics của booking", nullable = true)
+        BookingCompletionOutcome completionOutcome,
+        @Schema(description = "Thời điểm participant gửi issue", nullable = true)
+        LocalDateTime issueSubmittedAt,
+        @Schema(description = "Loại issue participant đã gửi", nullable = true)
+        BookingIssueType issueType,
+        @Schema(description = "Mô tả issue participant đã gửi", nullable = true)
+        String issueDescription,
+        @Schema(description = "Participant có yêu cầu admin review hay không", nullable = true)
+        Boolean wantsAdminReview,
+        @Schema(description = "Thời điểm admin resolve issue", nullable = true)
+        LocalDateTime issueResolvedAt,
+        @Schema(description = "admin userId đã resolve issue", nullable = true)
+        UUID issueResolvedByUserId,
+        @Schema(description = "Ghi chú xử lý issue của admin", nullable = true)
+        String issueResolutionNote,
+        @Schema(description = "Ghi chú của mentor sau buổi học", nullable = true)
+        String mentorNote,
+        @Schema(description = "Ghi chú của mentee sau buổi học", nullable = true)
+        String menteeNote,
+        @Schema(description = "Thời điểm tạo booking")
+        LocalDateTime createdAt,
+        @Schema(description = "Thời điểm cập nhật booking gần nhất")
+        LocalDateTime updatedAt,
+        @Schema(description = "ID cuộc hội thoại chat tương ứng của booking nếu có", nullable = true)
+        UUID conversationId,
+        @Schema(description = "true nếu user hiện tại có thể hủy booking")
+        boolean canCancel,
+        @Schema(description = "true nếu user hiện tại có thể hoàn tất booking")
+        boolean canComplete,
+        @Schema(description = "true nếu user hiện tại có thể đề xuất dời lịch")
+        boolean canReschedule,
+        @Schema(description = "true nếu user hiện tại có thể viết đánh giá feedback")
+        boolean canSubmitFeedback
+) {
+}

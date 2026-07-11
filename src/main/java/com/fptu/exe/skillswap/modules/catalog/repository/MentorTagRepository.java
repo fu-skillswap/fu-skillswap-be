@@ -18,6 +18,9 @@ public interface MentorTagRepository extends JpaRepository<MentorTag, MentorTagI
     @EntityGraph(attributePaths = {"tag"})
     List<MentorTag> findByIdMentorUserIdAndIdTagTypeIn(UUID mentorUserId, Collection<MentorTagType> tagTypes);
 
+    @EntityGraph(attributePaths = {"tag"})
+    List<MentorTag> findByIdMentorUserIdInAndIdTagTypeIn(Collection<UUID> mentorUserIds, Collection<MentorTagType> tagTypes);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     void deleteByIdMentorUserId(UUID mentorUserId);
 }

@@ -1,16 +1,24 @@
 spring:
   application:
     name: skillswap
-  profiles:
-    active: dev # Mặc định chạy ở máy sẽ dùng dev
+
+  cache:
+    caffeine:
+      spec: maximumSize=10000,expireAfterWrite=60m
 
   datasource:
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
-      minimum-idle: ${DB_POOL_MIN_IDLE:2}
-      connection-timeout: ${DB_CONNECTION_TIMEOUT:3000}
-      idle-timeout: 30000
-      max-lifetime: 600000
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:16}
+      minimum-idle: ${DB_POOL_MIN_IDLE:4}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:2000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT:1000}
+      idle-timeout: ${DB_IDLE_TIMEOUT:30000}
+      max-lifetime: ${DB_MAX_LIFETIME:600000}
+      keepalive-time: ${DB_KEEPALIVE_TIME:300000}
+      leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD:20000}
+      register-mbeans: ${DB_POOL_REGISTER_MBEANS:true}
+      data-source-properties:
+        options: "-c lock_timeout=${DB_LOCK_TIMEOUT_MS:5000} -c statement_timeout=${DB_STATEMENT_TIMEOUT_MS:30000} -c idle_in_transaction_session_timeout=${DB_IDLE_IN_TX_TIMEOUT_MS:15000}"
 
   jpa:
     open-in-view: false
@@ -23,43 +31,164 @@ spring:
     baseline-on-migrate: false
     locations: classpath:db/migration
 
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp-relay.brevo.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+
   servlet:
     multipart:
-      max-file-size: ${MAX_FILE_SIZE:1MB}
-      max-request-size: ${MAX_REQUEST_SIZE:1MB}
+      max-file-size: ${MAX_FILE_SIZE:15MB}
+      max-request-size: ${MAX_REQUEST_SIZE:15MB}
+  lifecycle:
+    timeout-per-shutdown-phase: ${SPRING_SHUTDOWN_TIMEOUT:30s}
+
+springdoc:
+  api-docs:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+  swagger-ui:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+    filter: true
+    doc-expansion: none
+    display-request-duration: true
+    persist-authorization: true
 
 server:
+  shutdown: graceful
   tomcat:
     threads:
       max: ${TOMCAT_MAX_THREADS:80}
+    connection-timeout: ${TOMCAT_CONNECTION_TIMEOUT:20000}
+
+management:
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+        add-additional-paths: true
+      show-details: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,rabbit
 
 application:
+  google:
+    client-id: ${GOOGLE_CLIENT_ID}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
+    token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY}
+    token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}
+    calendar-sync-poll-ms: ${GOOGLE_CALENDAR_SYNC_POLL_MS:60000}
+  cursor:
+    crypto:
+      version: ${CURSOR_CRYPTO_VERSION:v1}
+      aes-key: ${CURSOR_AES_KEY}
+      hmac-key: ${CURSOR_HMAC_KEY}
   upload:
-    dir: ./uploads/files
+    dir: ${APP_UPLOAD_DIR:${java.io.tmpdir}/skillswap-storage}
   security:
     jwt:
       secret-key: ${JWT_SECRET_KEY}
       expiration: ${JWT_EXPIRATION:3600000} # 1 hour
       refresh-token:
         expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
-    google:
-      client-id: ${GOOGLE_CLIENT_ID}
+        cookie:
+          name: skillswap_refresh_token
+          path: /
+          secure: true
+          same-site: Lax
   cors:
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
-  cloudinary:
-    enabled: ${CLOUDINARY_ENABLED:false}
-    cloud-name: ${CLOUDINARY_CLOUD_NAME:}
-    api-key: ${CLOUDINARY_API_KEY:}
-    api-secret: ${CLOUDINARY_API_SECRET:}
-    folder: skillswap # thư mục gốc trên Cloudinary
-  r2:
-    enabled: ${R2_ENABLED:false}
-    endpoint: ${R2_ENDPOINT:}
-    access-key-id: ${R2_ACCESS_KEY_ID:}
-    secret-access-key: ${R2_SECRET_ACCESS_KEY:}
-    bucket: ${R2_BUCKET:}
-    region: ${R2_REGION:auto}
-    documents-prefix: ${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}
+  websocket:
+    stomp:
+      enabled: ${WEBSOCKET_STOMP_ENABLED:false}
+      endpoint: ${WEBSOCKET_STOMP_ENDPOINT:/ws-stomp}
+      app-destination-prefix: ${WEBSOCKET_STOMP_APP_PREFIX:/app}
+      user-destination-prefix: ${WEBSOCKET_STOMP_USER_PREFIX:/user}
+      auto-startup: ${WEBSOCKET_STOMP_AUTO_STARTUP:true}
+      system-heartbeat-send-interval-ms: ${WEBSOCKET_STOMP_SYSTEM_HEARTBEAT_SEND_INTERVAL_MS:10000}
+      system-heartbeat-receive-interval-ms: ${WEBSOCKET_STOMP_SYSTEM_HEARTBEAT_RECEIVE_INTERVAL_MS:10000}
+      message-size-limit: ${WEBSOCKET_STOMP_MESSAGE_SIZE_LIMIT:131072}
+      send-buffer-size-limit: ${WEBSOCKET_STOMP_SEND_BUFFER_SIZE_LIMIT:524288}
+      send-time-limit-ms: ${WEBSOCKET_STOMP_SEND_TIME_LIMIT_MS:15000}
+      relay:
+        host: ${WEBSOCKET_STOMP_RELAY_HOST:localhost}
+        port: ${WEBSOCKET_STOMP_RELAY_PORT:61613}
+        username: ${WEBSOCKET_STOMP_RELAY_USERNAME:guest}
+        password: ${WEBSOCKET_STOMP_RELAY_PASSWORD:guest}
+      client-login: ${WEBSOCKET_STOMP_CLIENT_LOGIN:guest}
+      client-passcode: ${WEBSOCKET_STOMP_CLIENT_PASSCODE:guest}
+      system-login: ${WEBSOCKET_STOMP_SYSTEM_LOGIN:guest}
+      system-passcode: ${WEBSOCKET_STOMP_SYSTEM_PASSCODE:guest}
+  realtime:
+    outbox:
+      enabled: ${REALTIME_OUTBOX_ENABLED:false}
+      poll-ms: ${REALTIME_OUTBOX_POLL_MS:1000}
+      exchange: ${REALTIME_OUTBOX_EXCHANGE:skillswap.domain-events}
+      chat-queue: ${REALTIME_OUTBOX_CHAT_QUEUE:skillswap.chat.realtime}
+      notification-queue: ${REALTIME_OUTBOX_NOTIFICATION_QUEUE:skillswap.notification.realtime}
+      dead-letter-exchange: ${REALTIME_OUTBOX_DLX:skillswap.domain-events.dlx}
+      chat-dlq-queue: ${REALTIME_OUTBOX_CHAT_DLQ_QUEUE:skillswap.chat.realtime.dlq}
+      notification-dlq-queue: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_QUEUE:skillswap.notification.realtime.dlq}
+      chat-dlq-routing-key: ${REALTIME_OUTBOX_CHAT_DLQ_ROUTING_KEY:chat.dlq}
+      notification-dlq-routing-key: ${REALTIME_OUTBOX_NOTIFICATION_DLQ_ROUTING_KEY:notification.dlq}
+      chat-routing-pattern: ${REALTIME_OUTBOX_CHAT_ROUTING_PATTERN:chat.#}
+      notification-routing-pattern: ${REALTIME_OUTBOX_NOTIFICATION_ROUTING_PATTERN:notification.#}
+  storage:
+    enabled: ${STORAGE_ENABLED:false}
+    endpoint: ${STORAGE_ENDPOINT:}
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    bucket: ${STORAGE_BUCKET:}
+    region: ${STORAGE_REGION:auto}
+    public-url-prefix: ${STORAGE_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
+    documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:skillswap/verification-documents}
+    presigned-ttl-minutes: ${STORAGE_PRESIGNED_TTL_MINUTES:15}
+    allowed-content-types: ${STORAGE_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,application/pdf}
+  system-admin:
+    emails: ${SYSTEM_ADMIN_EMAILS:}
+  mentor-verification:
+    terms-version: ${MENTOR_TERMS_VERSION:SKILLSWAP_MENTOR_TERMS_V1}
+    submit-requirements:
+      student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
+      mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
+  payment:
+    platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
+    mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
+    mentor-commission-bps: ${PAYMENT_MENTOR_COMMISSION_BPS:1000}
+    payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
+    payos:
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      return-url: ${PAYOS_RETURN_URL:http://localhost:3000/payment/return}
+      cancel-url: ${PAYOS_CANCEL_URL:http://localhost:3000/payment/cancel}
+      webhook-url: ${PAYOS_WEBHOOK_URL:}
+      webhook-secret: ${PAYOS_WEBHOOK_SECRET:}
+  mail:
+    enabled: ${APPLICATION_MAIL_ENABLED:false}
+    from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
+    from-name: ${APPLICATION_MAIL_FROM_NAME:SkillSwap}
+  swagger:
+    # Set APPLICATION_SWAGGER_ENABLED=false in production to block public Swagger/OpenAPI access.
+    # Default true for local development convenience.
+    enabled: ${APPLICATION_SWAGGER_ENABLED:true}
 
 logging:
   pattern:

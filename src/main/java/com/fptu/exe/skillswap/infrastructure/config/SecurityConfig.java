@@ -1,7 +1,9 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
+import com.fptu.exe.skillswap.infrastructure.filter.LegacyRawWebSocketGoneFilter;
 import com.fptu.exe.skillswap.infrastructure.security.JwtAuthenticationFilter;
 import com.fptu.exe.skillswap.infrastructure.security.SecurityErrorResponseHandler;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,6 +18,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.web.filter.CorsFilter;
 
 @Configuration
 @EnableWebSecurity
@@ -25,41 +29,72 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final SecurityErrorResponseHandler securityErrorResponseHandler;
+    private final LegacyRawWebSocketGoneFilter legacyRawWebSocketGoneFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(Customizer.withDefaults())
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .referrerPolicy(policy -> policy
+                                .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
+                        .contentSecurityPolicy(csp -> csp
+                                .policyDirectives("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"))
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .preload(true)
+                                .maxAgeInSeconds(31_536_000)))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(securityErrorResponseHandler)
                         .accessDeniedHandler(securityErrorResponseHandler)
                 )
-                .authorizeHttpRequests(auth -> auth
-                        // Public endpoints
-                        .requestMatchers(
-                                "/api/auth/google",
-                                "/api/auth/refresh",
-                                "/api/auth/logout",
-                                "/api/campuses",
-                                "/api/academic-programs",
-                                "/api/specializations",
-                                "/api/academic-programs/**"
-                        ).permitAll()
-                        // Swagger UI and API Docs
-                        .requestMatchers(
-                                "/v3/api-docs/**",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html"
-                        ).permitAll()
-                        // Secure everything else
-                        .anyRequest().authenticated()
-                )
+                .authorizeHttpRequests(auth -> {
+                    auth
+                            // Public endpoints
+                            .requestMatchers(
+                                    "/api/auth/google",
+                                    "/api/auth/google/authorization-context",
+                                    "/api/auth/refresh",
+                                    "/api/auth/logout",
+                                    "/api/payments/webhook/**",
+                                    "/api/campuses",
+                                    "/api/academic-programs",
+                                    "/api/catalog/help-topics",
+                                    "/api/catalog/mentor-profile-options",
+                                    "/api/specializations",
+                                    "/api/academic-programs/**",
+                                    "/uploads/storage/**",
+                                    "/health",
+                                    "/actuator/health",
+                                    "/actuator/health/**",
+                                    "/livez",
+                                    "/readyz",
+                                    "/ws-stomp",
+                                    "/ws-stomp/**",
+                                    "/v3/api-docs/**",
+                                    "/swagger-ui/**",
+                                    "/swagger-ui.html"
+                            ).permitAll();
+
+                    // Secure everything else
+                    auth.anyRequest().authenticated();
+                })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
+        http.addFilterAfter(legacyRawWebSocketGoneFilter, CorsFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<LegacyRawWebSocketGoneFilter> legacyRawWebSocketGoneFilterRegistration() {
+        FilterRegistrationBean<LegacyRawWebSocketGoneFilter> registration = new FilterRegistrationBean<>(legacyRawWebSocketGoneFilter);
+        registration.setEnabled(false);
+        return registration;
     }
 
     @Bean
@@ -70,7 +105,7 @@ public class SecurityConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            throw new UsernameNotFoundException("Username/password authentication is disabled");
+            throw new UsernameNotFoundException("Hệ thống hiện không hỗ trợ đăng nhập bằng tài khoản và mật khẩu");
         };
     }
 }

@@ -1,0 +1,18 @@
+include:
+  - path: docker-compose.yml
+
+# Production uses the hardened base topology. The backend and PostgreSQL are
+# bound to loopback only; the reverse proxy is the sole public entry point.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
+
+services:
+  spring-backend:
+    build: !reset null
+    image: ${APP_IMAGE:?APP_IMAGE is required}
+    restart: always
+    logging: *default-logging
+

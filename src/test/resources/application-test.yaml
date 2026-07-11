@@ -1,0 +1,25 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  mail:
+    host: localhost
+    port: 2525
+    username: test
+    password: test
+
+management:
+  health:
+    rabbit:
+      enabled: false
+    mail:
+      enabled: false
+
+application:
+  cursor:
+    crypto:
+      version: v1
+      aes-key: Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=
+      hmac-key: Q3Vyc29yUGhhc2UxSG1hY0tleUZvclNraWxsU3dhcDAx

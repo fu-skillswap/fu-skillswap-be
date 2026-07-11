@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.feedback.domain;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
@@ -11,7 +13,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "session_feedbacks", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_session_feedbacks", columnNames = {"session_id", "reviewer_user_id"})
+    @UniqueConstraint(name = "uq_session_feedbacks", columnNames = {"booking_id", "reviewer_user_id"})
 }, indexes = {
     @Index(name = "idx_feedbacks_reviewee_id", columnList = "reviewee_user_id"),
     @Index(name = "idx_feedbacks_rating", columnList = "rating")
@@ -28,8 +30,8 @@ public class SessionFeedback {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "session_id", nullable = false, foreignKey = @ForeignKey(name = "fk_feedbacks_session"))
-    private Session session;
+    @JoinColumn(name = "booking_id", nullable = false, foreignKey = @ForeignKey(name = "fk_feedbacks_booking"))
+    private Booking booking;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "reviewer_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_feedbacks_reviewer"))
@@ -63,12 +65,16 @@ public class SessionFeedback {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

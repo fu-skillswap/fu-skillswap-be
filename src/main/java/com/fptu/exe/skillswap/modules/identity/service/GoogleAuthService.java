@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
@@ -17,14 +17,16 @@ import org.springframework.util.StringUtils;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class GoogleAuthService {
 
-    private final JwtProperties jwtProperties;
+    private final GoogleApiProperties googleApiProperties;
     private volatile GoogleIdTokenVerifier verifier;
+    private static final Set<String> ALLOWED_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
     public GoogleUserInfo verifyToken(String idToken) {
         if (!StringUtils.hasText(idToken)) {
@@ -36,26 +38,15 @@ public class GoogleAuthService {
             if (googleIdToken == null || googleIdToken.getPayload() == null) {
                 throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
             }
-
-            String expectedClientId = jwtProperties.getGoogle().getClientId();
-            if (!StringUtils.hasText(expectedClientId)) {
-                throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
-            }
-            GoogleIdToken.Payload payload = googleIdToken.getPayload();
-            if (!expectedClientId.equals(payload.getAudience())) {
-                log.error("Google Token Client ID mismatch. Expected: {}, Got: {}", expectedClientId, payload.getAudience());
-                throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Không khớp Client ID xác thực Google");
-            }
-            if (!Boolean.TRUE.equals(payload.getEmailVerified())) {
-                log.error("Google Token email is not verified for email: {}", payload.getEmail());
-                throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Email liên kết với tài khoản Google chưa được xác thực");
-            }
-            return toUserInfo(payload);
+            return verifyPayload(googleIdToken.getPayload());
         } catch (BaseException e) {
             throw e;
         } catch (GeneralSecurityException | IOException e) {
             log.error("Error verifying Google ID token: {}", e.getMessage(), e);
-            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Lỗi kết nối hệ thống Google: " + e.getMessage());
+            throw new BaseException(
+                    ErrorCode.OAUTH_VERIFICATION_FAILED,
+                    "Không thể xác thực đăng nhập Google do kết nối tới hệ thống Google tạm thời không ổn định"
+            );
         }
     }
 
@@ -65,7 +56,7 @@ public class GoogleAuthService {
             synchronized (this) {
                 current = verifier;
                 if (current == null) {
-                    String clientId = jwtProperties.getGoogle().getClientId();
+                    String clientId = googleApiProperties.getClientId();
                     if (!StringUtils.hasText(clientId)) {
                         throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
                     }
@@ -82,15 +73,46 @@ public class GoogleAuthService {
         return current;
     }
 
-    private GoogleUserInfo toUserInfo(GoogleIdToken.Payload payload) {
+    GoogleUserInfo verifyPayload(GoogleIdToken.Payload payload) {
+        String expectedClientId = googleApiProperties.getClientId();
+        if (!StringUtils.hasText(expectedClientId)) {
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
+        }
+        if (payload == null) {
+            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
+        }
+        if (!expectedClientId.equals(payload.getAudience())) {
+            log.error("Google Token Client ID mismatch. Expected: {}, Got: {}", expectedClientId, payload.getAudience());
+            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Không khớp Client ID xác thực Google");
+        }
+        String issuer = payload.getIssuer();
+        if (!StringUtils.hasText(issuer) || !ALLOWED_ISSUERS.contains(issuer)) {
+            log.error("Google Token issuer mismatch. Got: {}", issuer);
+            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Issuer Google không hợp lệ");
+        }
+        if (!Boolean.TRUE.equals(payload.getEmailVerified())) {
+            log.error("Google Token email is not verified for email: {}", payload.getEmail());
+            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Email liên kết với tài khoản Google chưa được xác thực");
+        }
+        if (!StringUtils.hasText(payload.getSubject()) || !StringUtils.hasText(payload.getEmail())) {
+            throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Thông tin tài khoản Google không đầy đủ");
+        }
+        return fromOpenIdProfile(
+                payload.getSubject(),
+                payload.getEmail(),
+                payload.get("name") != null ? String.valueOf(payload.get("name")) : null,
+                payload.get("picture") != null ? String.valueOf(payload.get("picture")) : null,
+                true
+        );
+    }
+
+    public GoogleUserInfo fromOpenIdProfile(String sub, String email, String name, String picture, boolean emailVerified) {
         GoogleUserInfo info = new GoogleUserInfo();
-        info.setIss(payload.getIssuer() != null ? String.valueOf(payload.getIssuer()) : null);
-        info.setSub(payload.getSubject() != null ? String.valueOf(payload.getSubject()) : null);
-        info.setAud(payload.getAudience() != null ? String.valueOf(payload.getAudience()) : null);
-        info.setEmail(payload.getEmail() != null ? String.valueOf(payload.getEmail()) : null);
-        info.setEmail_verified(String.valueOf(payload.getEmailVerified()));
-        info.setName(payload.get("name") != null ? String.valueOf(payload.get("name")) : null);
-        info.setPicture(payload.get("picture") != null ? String.valueOf(payload.get("picture")) : null);
+        info.setSub(sub);
+        info.setEmail(email);
+        info.setEmail_verified(String.valueOf(emailVerified));
+        info.setName(name);
+        info.setPicture(picture);
         return info;
     }
 

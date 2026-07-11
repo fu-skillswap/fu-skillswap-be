@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -13,8 +15,9 @@ import java.util.UUID;
     @Index(name = "idx_mentor_profiles_status", columnList = "status"),
     @Index(name = "idx_mentor_profiles_avg_rating", columnList = "average_rating"),
     @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
-    @Index(name = "idx_mentor_profiles_industry", columnList = "industry"),
-    @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode")
+    @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode"),
+    @Index(name = "idx_mentor_profiles_booking_suspended_until", columnList = "booking_suspended_until"),
+    @Index(name = "idx_mentor_profiles_last_active_at", columnList = "last_active_at")
 })
 @Getter
 @Setter
@@ -24,11 +27,12 @@ import java.util.UUID;
 public class MentorProfile {
 
     @Id
-    @Column(name = "user_id")
+    @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
+    @MapsId
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @PrimaryKeyJoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_profiles_user"))
     private User user;
 
     @Enumerated(EnumType.STRING)
@@ -39,20 +43,23 @@ public class MentorProfile {
     @Column(length = 200)
     private String headline;
 
-    @Column(columnDefinition = "TEXT")
-    private String bio;
+    @Column(name = "expertise_description", columnDefinition = "TEXT")
+    private String expertiseDescription;
 
-    @Column(name = "expertise_summary", columnDefinition = "TEXT")
-    private String expertiseSummary;
+    @Column(name = "supporting_subjects", columnDefinition = "TEXT")
+    private String supportingSubjects;
 
-    @Column(name = "current_position", length = 150)
-    private String currentPosition;
+    @Column(name = "search_document", columnDefinition = "TEXT")
+    private String searchDocument;
 
-    @Column(name = "current_company", length = 150)
-    private String currentCompany;
+    @Column(name = "foundation_support_level")
+    private Integer foundationSupportLevel;
 
-    @Column(name = "industry", length = 120)
-    private String industry;
+    @Column(name = "output_review_support_level")
+    private Integer outputReviewSupportLevel;
+
+    @Column(name = "direction_support_level")
+    private Integer directionSupportLevel;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "teaching_mode", length = 20)
@@ -61,16 +68,6 @@ public class MentorProfile {
     @Column(name = "session_duration", nullable = false)
     @Builder.Default
     private Integer sessionDuration = 60;
-
-    @Column(name = "hourly_rate", nullable = false, precision = 12, scale = 2)
-    @Builder.Default
-    private BigDecimal hourlyRate = BigDecimal.ZERO;
-
-    @Column(name = "mentoring_style", columnDefinition = "TEXT")
-    private String mentoringStyle;
-
-    @Column(name = "target_mentees", columnDefinition = "TEXT")
-    private String targetMentees;
 
     @Column(name = "portfolio_url", columnDefinition = "TEXT")
     private String portfolioUrl;
@@ -81,8 +78,8 @@ public class MentorProfile {
     @Column(name = "github_url", columnDefinition = "TEXT")
     private String githubUrl;
 
-    @Column(name = "years_of_experience", precision = 4, scale = 1)
-    private BigDecimal yearsOfExperience;
+    @Column(name = "phone_number", length = 20)
+    private String phoneNumber;
 
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @Builder.Default
@@ -100,12 +97,34 @@ public class MentorProfile {
     @Builder.Default
     private Integer totalCompletedSessions = 0;
 
+    @Column(name = "total_rejected_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalRejectedBookings = 0;
+
+    @Column(name = "total_accepted_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalAcceptedBookings = 0;
+
+    @Column(name = "total_mentor_cancelled_bookings", nullable = false)
+    @Builder.Default
+    private Integer totalMentorCancelledBookings = 0;
+
+    @Column(name = "late_cancellation_penalty_points", nullable = false, precision = 6, scale = 2)
+    @Builder.Default
+    private BigDecimal lateCancellationPenaltyPoints = BigDecimal.ZERO;
+
     @Column(name = "is_available", nullable = false)
     @Builder.Default
     private boolean isAvailable = true;
 
+    @Column(name = "booking_suspended_until")
+    private LocalDateTime bookingSuspendedUntil;
+
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
+
+    @Column(name = "last_active_at")
+    private LocalDateTime lastActiveAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "verified_by", foreignKey = @ForeignKey(name = "fk_mentor_profiles_verifier"))
@@ -119,12 +138,16 @@ public class MentorProfile {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
@@ -12,7 +14,9 @@ import java.util.UUID;
     @Index(name = "idx_mentor_verification_mentor_id", columnList = "mentor_user_id"),
     @Index(name = "idx_mentor_verification_status", columnList = "status"),
     @Index(name = "idx_mentor_verification_method", columnList = "method"),
-    @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at")
+    @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at"),
+    @Index(name = "idx_mentor_verification_status_submitted_at_id", columnList = "status, submitted_at, id"),
+    @Index(name = "idx_mentor_verification_mentor_status", columnList = "mentor_user_id, status")
 })
 @Getter
 @Setter
@@ -52,6 +56,12 @@ public class MentorVerificationRequest {
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
 
+    @Column(name = "terms_accepted_at")
+    private LocalDateTime termsAcceptedAt;
+
+    @Column(name = "terms_version", length = 80)
+    private String termsVersion;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_reviewer"))
     private User reviewedBy;
@@ -69,6 +79,16 @@ public class MentorVerificationRequest {
     private String rejectionReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "locked_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_locked_by"))
+    private User lockedBy;
+
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
+    @Column(name = "lock_expires_at")
+    private LocalDateTime lockExpiresAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "previous_request_id", foreignKey = @ForeignKey(name = "fk_mentor_verification_previous"))
     private MentorVerificationRequest previousRequest;
 
@@ -80,12 +100,16 @@ public class MentorVerificationRequest {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

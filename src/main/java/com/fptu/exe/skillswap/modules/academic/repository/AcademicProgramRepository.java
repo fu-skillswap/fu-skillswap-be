@@ -12,4 +12,6 @@ import java.util.UUID;
 public interface AcademicProgramRepository extends JpaRepository<AcademicProgram, UUID> {
     Optional<AcademicProgram> findByCode(String code);
     List<AcademicProgram> findByIsActiveTrue();
+    Optional<AcademicProgram> findByIdAndIsActiveTrue(UUID id);
+    boolean existsByIdAndIsActiveTrue(UUID id);
 }

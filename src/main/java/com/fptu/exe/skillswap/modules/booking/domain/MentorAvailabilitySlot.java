@@ -1,11 +1,15 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -31,6 +35,10 @@ public class MentorAvailabilitySlot {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_mentor"))
     private MentorProfile mentorProfile;
 
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "rule_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rule"))
+    private MentorAvailabilityRule rule;
+
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
 
@@ -52,6 +60,13 @@ public class MentorAvailabilitySlot {
     @Column(name = "recurrence_rule", columnDefinition = "TEXT")
     private String recurrenceRule;
 
+    @Column(name = "note", length = 200)
+    private String note;
+
+    @OneToMany(mappedBy = "slot", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private Set<AvailabilitySlotService> slotServices = new LinkedHashSet<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -60,12 +75,16 @@ public class MentorAvailabilitySlot {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

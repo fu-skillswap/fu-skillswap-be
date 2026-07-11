@@ -1,17 +1,17 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
+import com.fptu.exe.skillswap.infrastructure.config.SystemAdminProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.modules.identity.domain.OauthAccount;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRole;
-import com.fptu.exe.skillswap.modules.identity.domain.UserRoleId;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRoleRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -32,10 +33,10 @@ public class IdentityLoginTransactionService {
 
     private final UserRepository userRepository;
     private final OauthAccountRepository oauthAccountRepository;
-    private final UserRoleRepository userRoleRepository;
     private final UserSessionRepository userSessionRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
+    private final SystemAdminProperties systemAdminProperties;
 
     @Transactional
     public TokenResponse loginWithVerifiedGoogleUser(GoogleAuthService.GoogleUserInfo googleUser) {
@@ -45,8 +46,9 @@ public class IdentityLoginTransactionService {
                 .orElseGet(() -> findByEmailOrRegister(googleUser));
 
         checkUserStatus(user);
+        assignSystemAdminRoleIfWhitelisted(user);
 
-        user.setLastLoginAt(LocalDateTime.now());
+        user.setLastLoginAt(DateTimeUtil.now());
         userRepository.save(user);
 
         return generateTokensAndCreateSession(user);
@@ -81,15 +83,34 @@ public class IdentityLoginTransactionService {
 
         User savedUser = userRepository.save(user);
 
-        UserRole userRole = UserRole.builder()
-                .id(new UserRoleId(savedUser.getId(), RoleCode.MENTEE))
-                .user(savedUser)
-                .assignedAt(LocalDateTime.now())
-                .build();
-        userRoleRepository.save(userRole);
+        savedUser.getRoles().add(RoleCode.MENTEE);
+        userRepository.save(savedUser);
 
         createOauthAccount(savedUser, googleUser.getSub(), googleUser.getEmail());
         return savedUser;
+    }
+
+    private void assignSystemAdminRoleIfWhitelisted(User user) {
+        if (user == null || user.getId() == null || user.getEmail() == null || !isSystemAdminEmail(user.getEmail())) {
+            return;
+        }
+
+        if (user.getRoles().contains(RoleCode.SYSTEM_ADMIN)) {
+            return;
+        }
+        user.getRoles().add(RoleCode.SYSTEM_ADMIN);
+        userRepository.save(user);
+    }
+
+    private boolean isSystemAdminEmail(String email) {
+        String normalizedEmail = normalizeEmail(email);
+        if (systemAdminProperties.getEmails() == null) {
+            return false;
+        }
+        return systemAdminProperties.getEmails()
+                .stream()
+                .map(this::normalizeEmail)
+                .anyMatch(normalizedEmail::equals);
     }
 
     private void createOauthAccount(User user, String providerUserId, String providerEmail) {
@@ -115,9 +136,9 @@ public class IdentityLoginTransactionService {
     }
 
     private TokenResponse generateTokensAndCreateSession(User user) {
-        List<String> roleNames = userRoleRepository.findByUserId(user.getId())
+        List<String> roleNames = user.getRoles()
                 .stream()
-                .map(ur -> ur.getId().getRole().name())
+                .map(RoleCode::name)
                 .toList();
 
         if (roleNames.isEmpty()) {
@@ -129,7 +150,7 @@ public class IdentityLoginTransactionService {
         String hashedRefresh = jwtTokenProvider.hashToken(refreshToken);
 
         long refreshExpirationMs = jwtProperties.getJwt().getRefreshToken().getExpiration();
-        LocalDateTime expiresAt = LocalDateTime.now().plusNanos(refreshExpirationMs * 1_000_000);
+        LocalDateTime expiresAt = DateTimeUtil.now().plusNanos(refreshExpirationMs * 1_000_000);
 
         UserSession session = UserSession.builder()
                 .user(user)
@@ -151,4 +172,12 @@ public class IdentityLoginTransactionService {
         }
         return email.split("@")[0];
     }
+
+    private String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
 }
+
+
+
+

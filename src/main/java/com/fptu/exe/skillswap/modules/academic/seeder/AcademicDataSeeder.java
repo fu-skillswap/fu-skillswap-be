@@ -7,23 +7,31 @@ import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
+import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
+import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@Order(1)
 public class AcademicDataSeeder implements CommandLineRunner {
 
     private final CampusRepository campusRepository;
     private final AcademicProgramRepository academicProgramRepository;
     private final SpecializationRepository specializationRepository;
+    private final TagRepository tagRepository;
 
     @Override
     @Transactional
@@ -32,6 +40,7 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
         seedCampuses();
         seedAcademicProgramsAndSpecializations();
+        seedMentorSelectionTags();
 
         log.info("FPTU Academic Data Seeding completed successfully!");
     }
@@ -46,21 +55,40 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
     private void seedCampus(CampusCode code, String name, String city) {
         Optional<Campus> existing = campusRepository.findByCode(code);
-        if (existing.isEmpty()) {
-            Campus campus = Campus.builder()
-                    .code(code)
-                    .name(name)
-                    .city(city)
-                    .isActive(true)
-                    .build();
-            campusRepository.save(campus);
-            log.info("Seeded Campus: {}", code);
+        if (existing.isPresent()) {
+            Campus campus = existing.get();
+            boolean changed = false;
+            if (!name.equals(campus.getName())) {
+                campus.setName(name);
+                changed = true;
+            }
+            if (city != null && !city.equals(campus.getCity())) {
+                campus.setCity(city);
+                changed = true;
+            }
+            if (!campus.isActive()) {
+                campus.setActive(true);
+                changed = true;
+            }
+            if (changed) {
+                campusRepository.save(campus);
+                log.info("Updated Campus: {} (Name: {}, City: {})", code, name, city);
+            }
+            return;
         }
+        Campus campus = Campus.builder()
+                .code(code)
+                .name(name)
+                .city(city)
+                .isActive(true)
+                .build();
+        campusRepository.save(campus);
+        log.info("Seeded Campus: {}", code);
     }
 
     private void seedAcademicProgramsAndSpecializations() {
         // 1. CNTT
-        AcademicProgram cntt = seedProgram("CNTT", "Khối ngành Công nghệ thông tin", "Information Technology");
+        AcademicProgram cntt = seedProgram("CNTT", "Công nghệ thông tin", "Information Technology");
         seedSpecialization(cntt, "CNTT_KTPM", "Kỹ thuật phần mềm", "Software Engineering");
         seedSpecialization(cntt, "CNTT_TTNT", "Trí tuệ nhân tạo", "Artificial Intelligence");
         seedSpecialization(cntt, "CNTT_ATTT", "An toàn thông tin", "Information Assurance");
@@ -68,29 +96,41 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(cntt, "CNTT_CNOTS", "Công nghệ ô tô số", "Digital Automotive Technology");
         seedSpecialization(cntt, "CNTT_HTTT", "Hệ thống thông tin", "Information Systems");
         seedSpecialization(cntt, "CNTT_TKDHMT", "Thiết kế đồ hoạ và mỹ thuật số", "Graphic and Digital Art Design");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(cntt, "CNTT_RBT_TTNT", "Robot và trí tuệ nhân tạo", "Robotics and Artificial Intelligence");
+        seedSpecialization(cntt, "CNTT_KHDL_UD", "Khoa học dữ liệu và ứng dụng", "Applied Data Science");
+        seedSpecialization(cntt, "CNTT_TTNT_KHDL", "Trí tuệ nhân tạo và khoa học dữ liệu", "Artificial Intelligence and Data Science");
+        seedSpecialization(cntt, "CNTT_ANM_ATS", "An ninh mạng và an toàn số", "Cybersecurity and Digital Safety");
         seedSpecialization(cntt, "CNTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 2. CTTT
-        AcademicProgram cttt = seedProgram("CTTT", "Khối ngành Công nghệ truyền thông", "Communication Technology");
+        AcademicProgram cttt = seedProgram("CTTT", "Công nghệ truyền thông", "Communication Technology");
         seedSpecialization(cttt, "CTTT_TTDPM", "Truyền thông đa phương tiện", "Multimedia Communications");
         seedSpecialization(cttt, "CTTT_QHCC", "Quan hệ công chúng", "Public Relations");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(cttt, "CTTT_TT_MKT_TH", "Truyền thông Marketing tích hợp", "Integrated Marketing Communications");
+        seedSpecialization(cttt, "CTTT_TTTH", "Truyền thông thương hiệu", "Brand Communications");
         seedSpecialization(cttt, "CTTT_OTHER", "Chuyên ngành khác", "Other");
 
         // 3. NN
-        AcademicProgram nn = seedProgram("NN", "Khối ngành Ngôn ngữ", "Languages");
+        AcademicProgram nn = seedProgram("NN", "Ngôn ngữ", "Languages");
         seedSpecialization(nn, "NN_NNA", "Ngôn ngữ Anh", "English Linguistics");
         seedSpecialization(nn, "NN_NNHQ", "Ngôn ngữ Hàn Quốc", "Korean Linguistics");
         seedSpecialization(nn, "NN_NNTQ", "Ngôn ngữ Trung Quốc", "Chinese Linguistics");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(nn, "NN_TATM", "Tiếng Anh thương mại", "Business English");
+        seedSpecialization(nn, "NN_THTM", "Tiếng Hàn thương mại", "Business Korean");
+        seedSpecialization(nn, "NN_TTTM", "Tiếng Trung thương mại", "Business Chinese");
         seedSpecialization(nn, "NN_OTHER", "Chuyên ngành khác", "Other");
 
         // 4. LUAT
-        AcademicProgram luat = seedProgram("LUAT", "Khối ngành Luật", "Law");
+        AcademicProgram luat = seedProgram("LUAT", "Luật", "Law");
         seedSpecialization(luat, "LUAT_L", "Luật", "Law");
         seedSpecialization(luat, "LUAT_LKT", "Luật Kinh tế", "Economic Law");
         seedSpecialization(luat, "LUAT_OTHER", "Chuyên ngành khác", "Other");
 
         // 5. QTKD
-        AcademicProgram qtkd = seedProgram("QTKD", "Khối ngành Quản trị kinh doanh", "Business Administration");
+        AcademicProgram qtkd = seedProgram("QTKD", "Quản trị kinh doanh", "Business Administration");
         seedSpecialization(qtkd, "QTKD_MKT", "Digital Marketing", "Digital Marketing");
         seedSpecialization(qtkd, "QTKD_KDQT", "Kinh doanh quốc tế", "International Business");
         seedSpecialization(qtkd, "QTKD_TMDT", "Thương mại điện tử", "E-Commerce");
@@ -99,6 +139,8 @@ public class AcademicDataSeeder implements CommandLineRunner {
         seedSpecialization(qtkd, "QTKD_LQLCCUGC", "Logistics và Quản lý chuỗi cung ứng toàn cầu", "Logistics and Global Supply Chain Management");
         seedSpecialization(qtkd, "QTKD_CNTC", "Công nghệ tài chính", "Financial Technology");
         seedSpecialization(qtkd, "QTKD_TCNH", "Tài chính ngân hàng", "Finance and Banking");
+        // Chuyên ngành mới thêm:
+        seedSpecialization(qtkd, "QTKD_TCDN", "Tài chính doanh nghiệp", "Corporate Finance");
         seedSpecialization(qtkd, "QTKD_OTHER", "Chuyên ngành khác", "Other");
     }
 
@@ -106,9 +148,17 @@ public class AcademicDataSeeder implements CommandLineRunner {
         Optional<AcademicProgram> existing = academicProgramRepository.findByCode(code);
         if (existing.isPresent()) {
             AcademicProgram program = existing.get();
+            boolean changed = false;
             if (!nameVi.equals(program.getNameVi()) || !nameEn.equals(program.getNameEn())) {
                 program.setNameVi(nameVi);
                 program.setNameEn(nameEn);
+                changed = true;
+            }
+            if (!program.isActive()) {
+                program.setActive(true);
+                changed = true;
+            }
+            if (changed) {
                 academicProgramRepository.save(program);
                 log.info("Updated Academic Program: {} (Vi: {}, En: {})", code, nameVi, nameEn);
             }
@@ -140,12 +190,120 @@ public class AcademicDataSeeder implements CommandLineRunner {
             log.info("Seeded Specialization: {}", code);
         } else {
             Specialization spec = existing.get();
+            boolean changed = false;
+            if (spec.getProgram() == null || !program.getId().equals(spec.getProgram().getId())) {
+                spec.setProgram(program);
+                changed = true;
+            }
             if (!nameVi.equals(spec.getNameVi()) || !nameEn.equals(spec.getNameEn())) {
                 spec.setNameVi(nameVi);
                 spec.setNameEn(nameEn);
+                changed = true;
+            }
+            if (spec.isExpected()) {
+                spec.setExpected(false);
+                changed = true;
+            }
+            if (!spec.isActive()) {
+                spec.setActive(true);
+                changed = true;
+            }
+            if (changed) {
                 specializationRepository.save(spec);
                 log.info("Updated Specialization: {} (Vi: {}, En: {})", code, nameVi, nameEn);
             }
         }
+    }
+
+    private void seedMentorSelectionTags() {
+        Set<String> activeHelpTopics = Set.of(
+                "HELP_STUDY_PLAN",
+                "HELP_MAJOR_ORIENTATION",
+                "HELP_CAREER_PATH",
+                "HELP_INTERNSHIP",
+                "HELP_CV_REVIEW",
+                "HELP_INTERVIEW",
+                "HELP_GRADUATION_THESIS",
+                "HELP_FOREIGN_LANGUAGE",
+                "HELP_CAMPUS_LIFE",
+                "HELP_INFORMATION",
+                "HELP_QA",
+                "HELP_PROJECT_REVIEW"
+        );
+
+        retireActiveTags(TagType.TECH_SKILL, Set.of());
+        retireActiveTags(TagType.HELP_TOPIC, activeHelpTopics);
+
+        seedTag("HELP_STUDY_PLAN", "Hỗ trợ môn học", "Subject Support", TagType.HELP_TOPIC, 100);
+        seedTag("HELP_MAJOR_ORIENTATION", "Định hướng ngành/chuyên ngành", "Major and Specialization Guidance", TagType.HELP_TOPIC, 98);
+        seedTag("HELP_CAREER_PATH", "Định hướng nghề nghiệp", "Career Guidance", TagType.HELP_TOPIC, 96);
+        seedTag("HELP_INTERNSHIP", "Giải đáp OJT/thực tập", "OJT and Internship Guidance", TagType.HELP_TOPIC, 94);
+        seedTag("HELP_CV_REVIEW", "Đánh giá CV", "CV Review", TagType.HELP_TOPIC, 92);
+        seedTag("HELP_INTERVIEW", "Luyện phỏng vấn", "Mock Interview", TagType.HELP_TOPIC, 90);
+        seedTag("HELP_GRADUATION_THESIS", "Hỗ trợ đồ án/khóa luận", "Capstone and Thesis Support", TagType.HELP_TOPIC, 88);
+        seedTag("HELP_FOREIGN_LANGUAGE", "Hỗ trợ ngoại ngữ", "Foreign Language Support", TagType.HELP_TOPIC, 86);
+        seedTag("HELP_CAMPUS_LIFE", "Thích nghi FPTU & campus life", "FPTU and Campus Life Support", TagType.HELP_TOPIC, 84);
+        seedTag("HELP_INFORMATION", "Cung cấp thông tin", "Information Support", TagType.HELP_TOPIC, 82);
+        seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 80);
+        seedTag("HELP_PROJECT_REVIEW", "Góp ý dự án/case study", "Project and Case Study Feedback", TagType.HELP_TOPIC, 78);
+    }
+
+    private void retireActiveTags(TagType type, Set<String> retainedCodes) {
+        tagRepository.findByTypeAndStatusOrderByWeightDescNameViAsc(type, TagStatus.ACTIVE).stream()
+                .filter(tag -> !retainedCodes.contains(tag.getCode()))
+                .forEach(tag -> {
+                    tag.setStatus(TagStatus.INACTIVE);
+                    tagRepository.save(tag);
+                    log.info("Retired Tag: {} ({})", tag.getCode(), type);
+                });
+    }
+
+    private void seedTag(String code, String nameVi, String nameEn, TagType type, int weight) {
+        Optional<Tag> existing = tagRepository.findByCode(code);
+        if (existing.isPresent()) {
+            Tag tag = existing.get();
+            boolean changed = false;
+            if (!nameVi.equals(tag.getNameVi())) {
+                tag.setNameVi(nameVi);
+                changed = true;
+            }
+            if (nameEn != null && !nameEn.equals(tag.getNameEn())) {
+                tag.setNameEn(nameEn);
+                changed = true;
+            }
+            if (tag.getType() != type) {
+                tag.setType(type);
+                changed = true;
+            }
+            if (tag.getWeight() == null || tag.getWeight() != weight) {
+                tag.setWeight(weight);
+                changed = true;
+            }
+            if (!tag.isFixed()) {
+                tag.setFixed(true);
+                changed = true;
+            }
+            if (tag.getStatus() != TagStatus.ACTIVE) {
+                tag.setStatus(TagStatus.ACTIVE);
+                changed = true;
+            }
+            if (changed) {
+                tagRepository.save(tag);
+                log.info("Updated Tag: {} ({})", code, type);
+            }
+            return;
+        }
+
+        Tag tag = Tag.builder()
+                .code(code)
+                .nameVi(nameVi)
+                .nameEn(nameEn)
+                .type(type)
+                .status(TagStatus.ACTIVE)
+                .weight(weight)
+                .isFixed(true)
+                .build();
+        tagRepository.save(tag);
+        log.info("Seeded Tag: {} ({})", code, type);
     }
 }

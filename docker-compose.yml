@@ -1,20 +1,58 @@
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   postgres-db:
     image: postgres:17-alpine
     container_name: skillswap-postgres
+    restart: unless-stopped
+    logging: *default-logging
 
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-skillswapdb}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-123456}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
 
     ports:
-      - "5444:5432"
+      - "127.0.0.1:5444:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
     mem_limit: 512m
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - skillswap-network
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: skillswap-rabbitmq
+    restart: unless-stopped
+    logging: *default-logging
+
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS is required}
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    mem_limit: 384m
+
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
     networks:
       - skillswap-network
@@ -22,50 +60,93 @@ services:
   spring-backend:
     build: .
     container_name: skillswap-backend
+    restart: unless-stopped
 
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
     environment:
-      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-dev}
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
 
-      - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:-skillswapdb}
-      - DATABASE_USERNAME=${POSTGRES_USER:-postgres}
-      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-123456}
+      - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      - DATABASE_USERNAME=${POSTGRES_USER:?POSTGRES_USER is required}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
 
-      - FLYWAY_ENABLED=false
+      - FLYWAY_ENABLED=${FLYWAY_ENABLED:-true}
+      - HIBERNATE_DDL_AUTO=${HIBERNATE_DDL_AUTO:-validate}
 
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ISSUER=${JWT_ISSUER:?JWT_ISSUER is required}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:?JWT_AUDIENCE is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION}
       - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION}
 
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_CALENDAR_REDIRECT_URI=${GOOGLE_CALENDAR_REDIRECT_URI:-}
+      - GOOGLE_TOKEN_ENCRYPTION_KEY=${GOOGLE_TOKEN_ENCRYPTION_KEY:-}
+      - GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION=${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:-1}
+      - SYSTEM_ADMIN_EMAILS=${SYSTEM_ADMIN_EMAILS:-}
+      # Cursor pagination encryption — MUST be overridden in production
+      - CURSOR_AES_KEY=${CURSOR_AES_KEY}
+      - CURSOR_HMAC_KEY=${CURSOR_HMAC_KEY}
 
-      - CLOUDINARY_ENABLED=${CLOUDINARY_ENABLED:-false}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - SPRING_RABBITMQ_HOST=${SPRING_RABBITMQ_HOST:-rabbitmq}
+      - SPRING_RABBITMQ_PORT=${SPRING_RABBITMQ_PORT:-5672}
+      - SPRING_RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
+      - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS is required}
 
-      - R2_ENABLED=${R2_ENABLED:-false}
-      - R2_ENDPOINT=${R2_ENDPOINT}
-      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-      - R2_BUCKET=${R2_BUCKET}
-      - R2_REGION=${R2_REGION:-auto}
-      - R2_DOCUMENTS_PREFIX=${R2_DOCUMENTS_PREFIX:-skillswap/verification-documents}
+      - PAYOS_CLIENT_ID=${PAYOS_CLIENT_ID:-}
+      - PAYOS_API_KEY=${PAYOS_API_KEY:-}
+      - PAYOS_CHECKSUM_KEY=${PAYOS_CHECKSUM_KEY:-}
+      - PAYOS_RETURN_URL=${PAYOS_RETURN_URL:-http://localhost:3000/payment/return}
+      - PAYOS_CANCEL_URL=${PAYOS_CANCEL_URL:-http://localhost:3000/payment/cancel}
+      - PAYOS_WEBHOOK_URL=${PAYOS_WEBHOOK_URL:-}
+      - PAYOS_WEBHOOK_SECRET=${PAYOS_WEBHOOK_SECRET:-}
+
+      - APPLICATION_MAIL_ENABLED=${APPLICATION_MAIL_ENABLED:-false}
+      - APPLICATION_MAIL_FROM=${APPLICATION_MAIL_FROM:-no-reply@skillswap.asia}
+      - APPLICATION_SWAGGER_ENABLED=${APPLICATION_SWAGGER_ENABLED:-false}
+
+      - SPRING_MAIL_HOST=${SPRING_MAIL_HOST:-smtp-relay.brevo.com}
+      - SPRING_MAIL_PORT=${SPRING_MAIL_PORT:-587}
+      - SPRING_MAIL_USERNAME=${SPRING_MAIL_USERNAME:-}
+      - SPRING_MAIL_PASSWORD=${SPRING_MAIL_PASSWORD:-}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH=${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:-true}
+      - SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE=${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:-true}
+
+      - STORAGE_ENABLED=${STORAGE_ENABLED:-false}
+      - STORAGE_ENDPOINT=${STORAGE_ENDPOINT:-}
+      - STORAGE_ACCESS_KEY=${STORAGE_ACCESS_KEY:-}
+      - STORAGE_SECRET_KEY=${STORAGE_SECRET_KEY:-}
+      - STORAGE_BUCKET=${STORAGE_BUCKET:-}
+      - STORAGE_REGION=${STORAGE_REGION:-auto}
+      - STORAGE_PUBLIC_URL_PREFIX=${STORAGE_PUBLIC_URL_PREFIX:-}
+      - STORAGE_DOCUMENTS_PREFIX=${STORAGE_DOCUMENTS_PREFIX:-skillswap/verification-documents}
 
       - CORS_ALLOWED_ORIGIN_PATTERNS=${CORS_ALLOWED_ORIGIN_PATTERNS}
 
     depends_on:
-      - postgres-db
+      postgres-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
     mem_limit: 768m
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
     networks:
       - skillswap-network
 
 volumes:
   postgres_data:
+  rabbitmq_data:
 
 networks:
   skillswap-network:

@@ -4,5 +4,5 @@ public enum RoleCode {
     MENTEE,
     MENTOR,
     ADMIN,
-    STAFF
+    SYSTEM_ADMIN
 }

@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.academic.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,9 +10,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "student_profiles", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_student_profiles_code", columnNames = {"student_code"})
-}, indexes = {
+@Table(name = "student_profiles", indexes = {
     @Index(name = "idx_student_profiles_campus_id", columnList = "campus_id"),
     @Index(name = "idx_student_profiles_program_id", columnList = "program_id"),
     @Index(name = "idx_student_profiles_spec_id", columnList = "specialization_id")
@@ -23,15 +23,16 @@ import java.util.UUID;
 public class StudentProfile {
 
     @Id
-    @Column(name = "user_id")
+    @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
+    @MapsId
     @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @PrimaryKeyJoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_student_profiles_user"))
     private User user;
 
     @Column(name = "student_code", length = 30)
-    private String studentCode;
+    private String claimedStudentCode;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "campus_id", foreignKey = @ForeignKey(name = "fk_student_profiles_campus"))
@@ -68,12 +69,16 @@ public class StudentProfile {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedAt = DateTimeUtil.now();
     }
 }
+
+
+
+

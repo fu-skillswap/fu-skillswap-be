@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.notification.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -33,8 +35,15 @@ public class EmailOutbox {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String body;
 
+    @Column(name = "payload_data", nullable = false, columnDefinition = "jsonb")
+    @Builder.Default
+    private String payloadData = "{}";
+
     @Column(name = "template_code", length = 100)
     private String templateCode;
+
+    @Column(name = "dedupe_key", length = 180, unique = true)
+    private String dedupeKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -56,6 +65,10 @@ public class EmailOutbox {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = DateTimeUtil.now();
     }
 }
+
+
+
+

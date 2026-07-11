@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.notification.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
@@ -10,10 +12,8 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "notifications", indexes = {
-    @Index(name = "idx_notifications_user_id", columnList = "user_id"),
-    @Index(name = "idx_notifications_type", columnList = "type"),
-    @Index(name = "idx_notifications_status", columnList = "status"),
-    @Index(name = "idx_notifications_created_at", columnList = "created_at")
+    @Index(name = "idx_notifications_recipient_created", columnList = "recipient_user_id, created_at DESC"),
+    @Index(name = "idx_notifications_recipient_read", columnList = "recipient_user_id, read_at")
 })
 @Getter
 @Setter
@@ -27,17 +27,12 @@ public class Notification {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_notifications_user"))
-    private User user;
+    @JoinColumn(name = "recipient_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_notifications_recipient"))
+    private User recipientUser;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 100)
     private NotificationType type;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    @Builder.Default
-    private NotificationStatus status = NotificationStatus.PENDING;
 
     @Column(nullable = false, length = 200)
     private String title;
@@ -45,17 +40,11 @@ public class Notification {
     @Column(columnDefinition = "TEXT")
     private String message;
 
-    @Column(name = "action_url", columnDefinition = "TEXT")
-    private String actionUrl;
-
     @Column(name = "related_entity_type", length = 80)
     private String relatedEntityType;
 
     @Column(name = "related_entity_id")
     private UUID relatedEntityId;
-
-    @Column(name = "sent_at")
-    private LocalDateTime sentAt;
 
     @Column(name = "read_at")
     private LocalDateTime readAt;
@@ -65,6 +54,12 @@ public class Notification {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = DateTimeUtil.now();
+        }
     }
 }
+
+
+
+

@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,6 +32,20 @@ public class UserSession {
     @Column(name = "refresh_token_hash", nullable = false, columnDefinition = "TEXT")
     private String refreshTokenHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "session_state", nullable = false, length = 30)
+    @Builder.Default
+    private UserSessionState sessionState = UserSessionState.ACTIVE;
+
+    @Column(name = "grace_expires_at")
+    private LocalDateTime graceExpiresAt;
+
+    @Column(name = "grace_replacement_session_id")
+    private UUID graceReplacementSessionId;
+
+    @Column(name = "grace_replay_ciphertext", columnDefinition = "TEXT")
+    private String graceReplayCiphertext;
+
     @Column(name = "device_info", columnDefinition = "TEXT")
     private String deviceInfo;
 
@@ -48,6 +64,13 @@ public class UserSession {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (sessionState == null) {
+            sessionState = UserSessionState.ACTIVE;
+        }
+        createdAt = DateTimeUtil.now();
     }
 }
+
+
+
+
