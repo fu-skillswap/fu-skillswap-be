@@ -6,7 +6,7 @@ UPDATE credit_ledger_accounts a
 SET balance = COALESCE((SELECT SUM(balance_effect_scoin) FROM credit_ledger_entries e WHERE e.account_id = a.id), 0);
 
 UPDATE settlement_accounts a
-SET balance = COALESCE((SELECT SUM(balance_effect) FROM settlement_entries e WHERE e.account_id = a.id), 0);
+SET balance = COALESCE((SELECT SUM(balance_effect_scoin) FROM settlement_entries e WHERE e.account_id = a.id), 0);
 
 -- Gài chốt chặn SQL để bảo vệ an toàn tài chính tuyệt đối
 ALTER TABLE credit_ledger_accounts ADD CONSTRAINT chk_credit_ledger_balance_non_negative CHECK (balance >= 0);
