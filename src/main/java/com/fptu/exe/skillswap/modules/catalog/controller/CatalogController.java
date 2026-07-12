@@ -52,5 +52,6 @@ public class CatalogController {
 
     private void applyCacheHeader(HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=86400");
+        response.setHeader(HttpHeaders.ETAG, "\"catalog-v1\"");
     }
 }

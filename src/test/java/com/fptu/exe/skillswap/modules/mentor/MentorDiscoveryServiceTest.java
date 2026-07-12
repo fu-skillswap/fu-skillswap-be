@@ -179,11 +179,20 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
-    void searchMentors_unauthenticated_shouldThrow() {
-        BaseException exception = assertThrows(BaseException.class,
-                () -> mentorDiscoveryService.searchMentors(null, new MentorDiscoverySearchRequest()));
+    void searchMentors_anonymous_shouldUseNonPersonalizedDiscovery() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setPage(0);
+        request.setSize(5);
+        when(discoveryKeywordSupport.normalizeSearchText(nullable(String.class))).thenReturn("");
+        when(discoveryKeywordSupport.toLikePattern(nullable(String.class))).thenReturn(null);
+        when(discoveryCandidateProvider.recallForSearch(eq(request), eq(""), isNull(), isNull(), eq(true), anyList(), any(), anyInt()))
+                .thenReturn(new CandidateWindow(List.of(), 0));
 
-        assertEquals(ErrorCode.UNAUTHENTICATED, exception.getErrorCode());
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(null, request);
+
+        assertTrue(response.getContent().isEmpty());
+        verify(menteeMatchingFeatureProvider, never()).getLatestFeatures(any());
+        verify(studentProfileRepository, never()).findWithDetailsByUserId(any());
     }
 
     @Test

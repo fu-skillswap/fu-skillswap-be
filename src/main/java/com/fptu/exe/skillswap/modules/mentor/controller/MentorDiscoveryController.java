@@ -38,7 +38,6 @@ import java.util.UUID;
 @RequestMapping("/api/mentors")
 @RequiredArgsConstructor
 @Tag(name = "Mentor Discovery", description = "Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking.")
-@SecurityRequirement(name = "bearerAuth")
 public class MentorDiscoveryController {
 
     private final MentorDiscoveryService mentorDiscoveryService;
@@ -66,15 +65,14 @@ public class MentorDiscoveryController {
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chỉ áp dụng cho các luồng yêu cầu đăng nhập")
     })
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @ParameterObject @ModelAttribute MentorDiscoverySearchRequest request
     ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorDiscoveryService.searchMentors(principal.getPublicId(), request));
+        return ApiResponse.success(mentorDiscoveryService.searchMentors(principal == null ? null : principal.getPublicId(), request));
     }
 
     @Operation(
@@ -91,7 +89,6 @@ public class MentorDiscoveryController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID mentorUserId
     ) {
-        ensureAuthenticated(principal);
         return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
     }
 
@@ -165,7 +162,6 @@ public class MentorDiscoveryController {
             @PathVariable UUID mentorUserId,
             @ParameterObject @ModelAttribute BasePageRequest pageRequest
     ) {
-        ensureAuthenticated(principal);
         return ApiResponse.success(mentorDiscoveryService.getMentorReviews(mentorUserId, pageRequest));
     }
 

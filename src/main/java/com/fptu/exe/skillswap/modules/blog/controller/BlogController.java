@@ -12,10 +12,12 @@ import com.fptu.exe.skillswap.modules.blog.dto.request.BlogViewRequest;
 import com.fptu.exe.skillswap.modules.blog.service.BlogService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/blog")
@@ -37,6 +40,7 @@ import java.util.UUID;
 public class BlogController {
 
     private final BlogService blogService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @GetMapping("/posts")
     @Operation(
@@ -113,9 +117,12 @@ public class BlogController {
     public ApiResponse<Void> recordView(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
-            @RequestBody(required = false) BlogViewRequest request
+            @RequestBody(required = false) BlogViewRequest request,
+            HttpServletRequest httpRequest
     ) {
-        blogService.recordView(principal, postId, request);
+        String fingerprint = anonymousFingerprint(httpRequest);
+        rateLimitService.check("blog:view:" + fingerprint, 120, Duration.ofMinutes(1), "Bạn đang gửi quá nhiều lượt xem blog");
+        blogService.recordView(principal, postId, request, fingerprint);
         return ApiResponse.success(null);
     }
 
@@ -245,5 +252,14 @@ public class BlogController {
     @Operation(summary = "List active blog tags")
     public ApiResponse<List<BlogTagResponse>> tags() {
         return ApiResponse.success(blogService.tags());
+    }
+
+    private String anonymousFingerprint(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        String ip = forwardedFor == null || forwardedFor.isBlank()
+                ? request.getRemoteAddr()
+                : forwardedFor.split(",")[0].trim();
+        String userAgent = request.getHeader("User-Agent");
+        return (ip == null ? "unknown-ip" : ip) + "|" + (userAgent == null ? "unknown-ua" : userAgent);
     }
 }

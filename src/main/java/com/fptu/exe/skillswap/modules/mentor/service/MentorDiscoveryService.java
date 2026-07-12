@@ -89,13 +89,9 @@ public class MentorDiscoveryService {
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
-        if (currentUserId == null) {
-            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
-        }
-
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
-        MenteeMatchingFeatures menteeFeatures = menteeMatchingFeatureProvider.getLatestFeatures(currentUserId);
+        MenteeMatchingFeatures menteeFeatures = currentUserId == null ? null : menteeMatchingFeatureProvider.getLatestFeatures(currentUserId);
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
         String normalizedKeyword = discoveryKeywordSupport.normalizeSearchText(safeRequest.getKeyword());
         String keywordPattern = discoveryKeywordSupport.toLikePattern(safeRequest.getKeyword());

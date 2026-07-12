@@ -400,10 +400,15 @@ public class BlogService {
 
     @Transactional
     public void recordView(UserPrincipal principal, UUID postId, BlogViewRequest request) {
+        recordView(principal, postId, request, null);
+    }
+
+    @Transactional
+    public void recordView(UserPrincipal principal, UUID postId, BlogViewRequest request, String serverFingerprint) {
         BlogPost post = blogPostRepository.findById(postId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
         ensureReadable(principal, post);
-        String dedupeKey = "BLOG_VIEW:" + postId + ":" + viewerKey(principal, request == null ? null : request.sessionId());
+        String dedupeKey = "BLOG_VIEW:" + postId + ":" + viewerKey(principal, request == null ? null : request.sessionId(), serverFingerprint);
         if (viewDedupeCache.asMap().putIfAbsent(dedupeKey, Boolean.TRUE) == null) {
             blogPostRepository.incrementViewCount(postId);
             internalTelemetryService.record("BLOG_VIEW", userId(principal), "BLOG_POST", postId, Map.of(
@@ -587,12 +592,15 @@ public class BlogService {
         return principal.getPublicId();
     }
 
-    private String viewerKey(UserPrincipal principal, String sessionId) {
+    private String viewerKey(UserPrincipal principal, String sessionId, String serverFingerprint) {
         if (principal != null) {
             return "u:" + principal.getPublicId();
         }
+        if (contentPolicy.hasText(serverFingerprint)) {
+            return "a:" + sha256(serverFingerprint);
+        }
         if (contentPolicy.hasText(sessionId)) {
-            return "s:" + sessionId.trim();
+            return "s:" + sha256(sessionId.trim());
         }
         return "anon";
     }
@@ -645,6 +653,10 @@ public class BlogService {
     }
 
     private String filterHash(String value) {
+        return sha256(value);
+    }
+
+    private String sha256(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
