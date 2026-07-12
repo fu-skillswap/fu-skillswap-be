@@ -111,7 +111,7 @@ public class GoogleCalendarSyncService {
                 case UPDATE_BOOKING_EVENT -> handleUpdate(job, booking, session);
                 case CANCEL_BOOKING_EVENT -> handleCancel(job, booking, session);
             }
-            
+
             transactionTemplate.executeWithoutResult(status -> {
                 GoogleCalendarSyncJob j = jobRepository.findById(jobId).orElse(null);
                 if (j != null && j.getStatus() == GoogleCalendarSyncJobStatus.PROCESSING) {
