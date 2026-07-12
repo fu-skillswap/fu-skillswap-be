@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.blog.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogCategoryResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogFollowResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogPostCardResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogPostDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
@@ -13,13 +14,14 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -68,6 +70,35 @@ public class BlogController {
         return ApiResponse.success(blogService.featured(principal, limit == null ? 6 : limit));
     }
 
+    @GetMapping("/trending")
+    @Operation(summary = "List trending blog posts with lightweight cached ranking")
+    public ApiResponse<List<BlogPostCardResponse>> trending(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(defaultValue = "10") Integer limit
+    ) {
+        return ApiResponse.success(blogService.trending(principal, limit == null ? 10 : limit));
+    }
+
+    @GetMapping("/posts/{slug}/related")
+    @Operation(summary = "List related blog posts by category, tag and audience")
+    public ApiResponse<List<BlogPostCardResponse>> related(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "6") Integer limit
+    ) {
+        return ApiResponse.success(blogService.related(principal, slug, limit == null ? 6 : limit));
+    }
+
+    @GetMapping("/posts/{slug}/recommendations")
+    @Operation(summary = "List rule-based blog recommendations")
+    public ApiResponse<List<BlogPostCardResponse>> recommendations(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "6") Integer limit
+    ) {
+        return ApiResponse.success(blogService.recommendations(principal, slug, limit == null ? 6 : limit));
+    }
+
     @GetMapping("/posts/{slug}")
     @Operation(summary = "Get blog post detail by slug")
     public ApiResponse<BlogPostDetailResponse> getBySlug(
@@ -97,6 +128,111 @@ public class BlogController {
     ) {
         blogService.recordAuthorCtaClick(principal, postId, request);
         return ApiResponse.success(null);
+    }
+
+    @PostMapping("/posts/{postId}/booking-started")
+    @Operation(summary = "Record that a user started booking from a blog CTA")
+    public ApiResponse<Void> recordBookingStarted(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId,
+            @RequestBody(required = false) BlogAuthorCtaClickRequest request
+    ) {
+        blogService.recordBookingStarted(principal, postId, request);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/posts/{postId}/notification-click")
+    @Operation(summary = "Record blog notification click event")
+    public ApiResponse<Void> recordNotificationClick(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId,
+            @RequestBody(required = false) BlogAuthorCtaClickRequest request
+    ) {
+        blogService.recordNotificationClick(principal, postId, request);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/posts/{postId}/recommendation-click")
+    @Operation(summary = "Record blog recommendation click event")
+    public ApiResponse<Void> recordRecommendationClick(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId,
+            @RequestBody(required = false) BlogAuthorCtaClickRequest request
+    ) {
+        blogService.recordRecommendationClick(principal, postId, request);
+        return ApiResponse.success(null);
+    }
+
+    @PutMapping("/posts/{postId}/like")
+    @Operation(summary = "Like a blog post. Idempotent.")
+    public ApiResponse<BlogPostDetailResponse> like(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId
+    ) {
+        return ApiResponse.success(blogService.like(principal, postId));
+    }
+
+    @DeleteMapping("/posts/{postId}/like")
+    @Operation(summary = "Remove my like from a blog post. Idempotent.")
+    public ApiResponse<BlogPostDetailResponse> unlike(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId
+    ) {
+        return ApiResponse.success(blogService.unlike(principal, postId));
+    }
+
+    @PutMapping("/posts/{postId}/bookmark")
+    @Operation(summary = "Bookmark a blog post. Idempotent.")
+    public ApiResponse<BlogPostDetailResponse> bookmark(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId
+    ) {
+        return ApiResponse.success(blogService.bookmark(principal, postId));
+    }
+
+    @DeleteMapping("/posts/{postId}/bookmark")
+    @Operation(summary = "Remove my bookmark from a blog post. Idempotent.")
+    public ApiResponse<BlogPostDetailResponse> unbookmark(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID postId
+    ) {
+        return ApiResponse.success(blogService.unbookmark(principal, postId));
+    }
+
+    @PutMapping("/categories/{categoryId}/follow")
+    @Operation(summary = "Follow a blog category. Idempotent.")
+    public ApiResponse<BlogFollowResponse> followCategory(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID categoryId
+    ) {
+        return ApiResponse.success(blogService.followCategory(principal, categoryId));
+    }
+
+    @DeleteMapping("/categories/{categoryId}/follow")
+    @Operation(summary = "Unfollow a blog category. Idempotent.")
+    public ApiResponse<BlogFollowResponse> unfollowCategory(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID categoryId
+    ) {
+        return ApiResponse.success(blogService.unfollowCategory(principal, categoryId));
+    }
+
+    @PutMapping("/tags/{tagId}/follow")
+    @Operation(summary = "Follow a blog tag. Idempotent.")
+    public ApiResponse<BlogFollowResponse> followTag(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID tagId
+    ) {
+        return ApiResponse.success(blogService.followTag(principal, tagId));
+    }
+
+    @DeleteMapping("/tags/{tagId}/follow")
+    @Operation(summary = "Unfollow a blog tag. Idempotent.")
+    public ApiResponse<BlogFollowResponse> unfollowTag(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID tagId
+    ) {
+        return ApiResponse.success(blogService.unfollowTag(principal, tagId));
     }
 
     @GetMapping("/categories")

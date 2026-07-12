@@ -131,6 +131,51 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         return query.setMaxResults(fetchLimit).getResultList();
     }
 
+    @Override
+    public List<BlogPost> findPersonalizedFeedWindow(
+            Collection<BlogVisibility> allowedVisibilities,
+            Collection<UUID> followedCategoryIds,
+            Collection<UUID> followedTagIds,
+            LocalDateTime cursorPublishedAt,
+            UUID cursorPostId,
+            int fetchLimit
+    ) {
+        boolean hasCategories = followedCategoryIds != null && !followedCategoryIds.isEmpty();
+        boolean hasTags = followedTagIds != null && !followedTagIds.isEmpty();
+        StringBuilder jpql = new StringBuilder("""
+                select p
+                from BlogPost p
+                join fetch p.authorUser author
+                where p.status = :status
+                  and p.publishedAt is not null
+                  and p.visibility in :allowedVisibilities
+                """);
+        List<String> filters = new ArrayList<>();
+        if (cursorPublishedAt != null && cursorPostId != null) {
+            filters.add("(p.publishedAt < :cursorPublishedAt or (p.publishedAt = :cursorPublishedAt and p.id < :cursorPostId))");
+        }
+        if (hasCategories || hasTags) {
+            filters.add("""
+                    ((:hasCategories = true and exists (select 1 from p.categories fc where fc.id in :followedCategoryIds))
+                     or (:hasTags = true and exists (select 1 from p.tags ft where ft.id in :followedTagIds)))
+                    """);
+        }
+        appendFilters(jpql, filters);
+        jpql.append(" order by p.publishedAt desc, p.id desc");
+        TypedQuery<BlogPost> query = entityManager.createQuery(jpql.toString(), BlogPost.class);
+        query.setParameter("status", BlogPostStatus.PUBLISHED);
+        query.setParameter("allowedVisibilities", allowedVisibilities);
+        query.setParameter("hasCategories", hasCategories);
+        query.setParameter("hasTags", hasTags);
+        query.setParameter("followedCategoryIds", hasCategories ? followedCategoryIds : List.of(new UUID(0L, 0L)));
+        query.setParameter("followedTagIds", hasTags ? followedTagIds : List.of(new UUID(0L, 0L)));
+        if (cursorPublishedAt != null && cursorPostId != null) {
+            query.setParameter("cursorPublishedAt", cursorPublishedAt);
+            query.setParameter("cursorPostId", cursorPostId);
+        }
+        return query.setMaxResults(fetchLimit).getResultList();
+    }
+
     private void appendFilters(StringBuilder jpql, List<String> filters) {
         for (String filter : filters) {
             jpql.append(" and ").append(filter).append('\n');

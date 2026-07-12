@@ -46,6 +46,9 @@ public class Notification {
     @Column(name = "related_entity_id")
     private UUID relatedEntityId;
 
+    @Column(name = "deep_link", length = 500)
+    private String deepLink;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 

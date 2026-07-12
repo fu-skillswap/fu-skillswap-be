@@ -13,6 +13,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -41,6 +42,8 @@ class AdminBlogServiceTest {
     private CursorCodec cursorCodec;
     @Mock
     private EntityManager entityManager;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private AdminBlogService service;
 
@@ -53,7 +56,8 @@ class AdminBlogServiceTest {
                 blogMapper,
                 new BlogContentPolicy(),
                 cursorCodec,
-                entityManager
+                entityManager,
+                eventPublisher
         );
     }
 
@@ -90,8 +94,12 @@ class AdminBlogServiceTest {
     @Test
     void publish_shouldLockSlugAndSetPublishedState() {
         UUID postId = UUID.fromString("018f3abf-0a22-7132-9748-6cf000c47b6e");
+        User author = new User();
+        author.setId(UUID.fromString("018f3abf-0a22-7133-9748-6cf000c47b6e"));
+        author.setFullName("Author");
         BlogPost post = BlogPost.builder()
                 .id(postId)
+                .authorUser(author)
                 .title("Title")
                 .slug("title")
                 .contentMarkdown("Content")

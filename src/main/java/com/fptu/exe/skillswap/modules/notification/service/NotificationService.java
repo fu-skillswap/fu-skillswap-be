@@ -41,6 +41,17 @@ public class NotificationService {
 
     @Transactional
     public void createNotification(UUID recipientUserId, NotificationType type, String title, String message, String relatedEntityType, UUID relatedEntityId) {
+        createNotification(recipientUserId, type, title, message, relatedEntityType, relatedEntityId, null);
+    }
+
+    @Transactional
+    public void createNotification(UUID recipientUserId,
+                                   NotificationType type,
+                                   String title,
+                                   String message,
+                                   String relatedEntityType,
+                                   UUID relatedEntityId,
+                                   String deepLink) {
         User recipient = userRepository.findById(recipientUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận"));
 
@@ -51,6 +62,7 @@ public class NotificationService {
                 .message(message)
                 .relatedEntityType(relatedEntityType)
                 .relatedEntityId(relatedEntityId)
+                .deepLink(deepLink)
                 .build();
 
         notification = notificationRepository.save(notification);
@@ -166,10 +178,15 @@ public class NotificationService {
         String relatedEntityType = notification.getRelatedEntityType();
         UUID relatedEntityId = notification.getRelatedEntityId();
 
-        String deepLink = "";
+        String deepLink = notification.getDeepLink() == null ? "" : notification.getDeepLink();
         String actionType = "VIEW_DETAIL";
 
-        if ("BOOKING".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
+        if (!deepLink.isBlank()) {
+            actionType = "VIEW_DETAIL";
+            if ("BLOG_POST".equalsIgnoreCase(relatedEntityType)) {
+                actionType = "VIEW_BLOG_POST";
+            }
+        } else if ("BOOKING".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
             deepLink = "/bookings/" + relatedEntityId;
             actionType = "VIEW_BOOKING";
         } else if ("CONVERSATION".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
@@ -178,6 +195,9 @@ public class NotificationService {
         } else if ("FORUM_POST".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
             deepLink = "/forum/posts/" + relatedEntityId;
             actionType = "VIEW_FORUM_POST";
+        } else if ("BLOG_POST".equalsIgnoreCase(relatedEntityType) && relatedEntityId != null) {
+            deepLink = "/blog/posts/" + relatedEntityId;
+            actionType = "VIEW_BLOG_POST";
         } else if ("MENTOR_VERIFICATION".equalsIgnoreCase(relatedEntityType)) {
             deepLink = "/mentor/verification";
             actionType = "VIEW_MENTOR_VERIFICATION";
@@ -229,6 +249,7 @@ public class NotificationService {
             case FORUM_COMMENT_REPLY -> "Bình luận của bạn có người trả lời";
             case FORUM_POST_HIDDEN -> "Bài viết đã bị ẩn";
             case FORUM_COMMENT_HIDDEN -> "Bình luận đã bị ẩn";
+            case BLOG_POST_PUBLISHED -> "Bài blog mới từ SkillSwap";
             case ACCOUNT_UNLOCKED -> "Tài khoản đã được mở khóa";
         };
     }

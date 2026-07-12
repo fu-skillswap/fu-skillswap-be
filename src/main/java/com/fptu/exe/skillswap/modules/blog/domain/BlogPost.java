@@ -113,6 +113,14 @@ public class BlogPost {
     @Builder.Default
     private Long viewCount = 0L;
 
+    @Column(name = "like_count", nullable = false)
+    @Builder.Default
+    private Long likeCount = 0L;
+
+    @Column(name = "bookmark_count", nullable = false)
+    @Builder.Default
+    private Long bookmarkCount = 0L;
+
     @Column(name = "is_featured", nullable = false)
     @Builder.Default
     private boolean featured = false;

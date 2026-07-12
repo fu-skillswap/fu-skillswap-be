@@ -32,4 +32,13 @@ public interface BlogPostRepositoryCustom {
             UUID cursorPostId,
             int fetchLimit
     );
+
+    List<BlogPost> findPersonalizedFeedWindow(
+            Collection<BlogVisibility> allowedVisibilities,
+            Collection<UUID> followedCategoryIds,
+            Collection<UUID> followedTagIds,
+            LocalDateTime cursorPublishedAt,
+            UUID cursorPostId,
+            int fetchLimit
+    );
 }

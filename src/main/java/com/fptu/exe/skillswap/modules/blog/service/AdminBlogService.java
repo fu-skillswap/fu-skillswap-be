@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.blog.dto.request.BlogCategoryUpsertRequest
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogFeatureRequest;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogTagUpsertRequest;
+import com.fptu.exe.skillswap.modules.blog.event.BlogPostPublishedEvent;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
@@ -24,8 +25,10 @@ import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +41,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +58,7 @@ public class AdminBlogService {
     private final BlogContentPolicy contentPolicy;
     private final CursorCodec cursorCodec;
     private final EntityManager entityManager;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<BlogPostCardResponse> listPosts(String cursor,
@@ -130,6 +135,7 @@ public class AdminBlogService {
         if (!contentPolicy.hasText(post.getContentMarkdown())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể publish bài blog chưa có nội dung");
         }
+        BlogPostStatus previousStatus = post.getStatus();
         LocalDateTime now = DateTimeUtil.now();
         if (post.getPublishedAt() == null) {
             post.setPublishedAt(now);
@@ -137,7 +143,22 @@ public class AdminBlogService {
         post.setLastPublishedAt(now);
         post.setStatus(BlogPostStatus.PUBLISHED);
         post.setSlugLocked(true);
-        return blogMapper.toDetail(blogPostRepository.save(post));
+        BlogPost saved = blogPostRepository.save(post);
+        if (previousStatus != BlogPostStatus.PUBLISHED) {
+            eventPublisher.publishEvent(new BlogPostPublishedEvent(
+                    UuidUtil.generateUuidV7(),
+                    saved.getId(),
+                    saved.getSlug(),
+                    saved.getTitle(),
+                    saved.getAuthorUser().getId(),
+                    saved.getAuthorUser().getFullName(),
+                    saved.getVisibility(),
+                    saved.getCategories().stream().map(BlogCategory::getId).collect(Collectors.toSet()),
+                    saved.getTags().stream().map(BlogTag::getId).collect(Collectors.toSet()),
+                    now
+            ));
+        }
+        return blogMapper.toDetail(saved);
     }
 
     @Transactional
