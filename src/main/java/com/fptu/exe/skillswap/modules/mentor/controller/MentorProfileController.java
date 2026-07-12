@@ -45,7 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 2. Downstream mentor-only operations (accept booking, manage services) still require
  *    the MENTOR role enforced at their own controllers/services.
  */
-@PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
+@PreAuthorize("hasAnyRole('MENTEE', 'MENTOR')")
 public class MentorProfileController {
 
     private final MentorProfileService mentorProfileService;

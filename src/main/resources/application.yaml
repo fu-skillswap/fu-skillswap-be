@@ -59,6 +59,7 @@ springdoc:
     persist-authorization: true
 
 server:
+  forward-headers-strategy: framework
   shutdown: graceful
   tomcat:
     threads:

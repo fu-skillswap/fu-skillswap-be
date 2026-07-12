@@ -92,18 +92,6 @@ public class MentorDiscoveryController {
         return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
     }
 
-    @Hidden
-    @Deprecated
-    @GetMapping("/{mentorUserId}/availability")
-    public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailability(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID mentorUserId,
-            @ParameterObject @ModelAttribute AvailabilityQueryRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorDiscoveryService.getMentorAvailability(mentorUserId, request));
-    }
-
     @Operation(
             summary = "Lấy danh sách availability slot còn hiển thị theo contract Phase 2",
             description = """

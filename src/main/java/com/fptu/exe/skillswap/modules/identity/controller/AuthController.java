@@ -152,11 +152,6 @@ public class AuthController {
         if (request == null) {
             return "unknown";
         }
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwarded)) {
-            int commaIndex = forwarded.indexOf(',');
-            return commaIndex >= 0 ? forwarded.substring(0, commaIndex).trim() : forwarded.trim();
-        }
         return StringUtils.hasText(request.getRemoteAddr()) ? request.getRemoteAddr() : "unknown";
     }
 }
