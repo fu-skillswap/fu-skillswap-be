@@ -108,60 +108,226 @@ jobs:
     needs: docker-publish
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
     steps:
+    - name: Validate VPS deployment secrets
+      shell: bash
+      env:
+        VPS_HOST: ${{ secrets.VPS_HOST }}
+        VPS_USER: ${{ secrets.VPS_USER }}
+        VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+      run: |
+        set -euo pipefail
+        missing=0
+        for name in VPS_HOST VPS_USER VPS_SSH_KEY; do
+          if [ -z "${!name:-}" ]; then
+            echo "::error::Required GitHub Actions secret ${name} is missing or empty."
+            missing=1
+          else
+            echo "${name}=configured"
+          fi
+        done
+        if [ "$missing" -ne 0 ]; then
+          echo "Fix: configure the missing secret in repository Settings > Secrets and variables > Actions."
+          exit 1
+        fi
+
     - name: Deploy to VPS via SSH
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
+        command_timeout: 30m
+        script_stop: false
+        debug: true
         script: |
-          mkdir -p /opt/fu-skillswap/backend
-          cd /opt/fu-skillswap/backend
+          set -euxo pipefail
 
-          # Cập nhật file compose
-          curl --fail --silent --show-error --location -O https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml
-          curl --fail --silent --show-error --location -O https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml
-          
-          # Cập nhật script vận hành
-          mkdir -p ops
-          curl --fail --silent --show-error --location -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/backup-postgres.sh
-          curl --fail --silent --show-error --location -o ops/smoke-test.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/smoke-test.sh
+          DEPLOY_DIR="/opt/fu-skillswap/backend"
+          DEPLOY_LOG_DIR="/tmp/skillswap-deploy-${{ github.sha }}-$(date -u +%Y%m%dT%H%M%SZ)"
+          FAILURE_REPORT="${DEPLOY_LOG_DIR}/failure-report.txt"
+          FAILED_STEPS=""
+          mkdir -p "$DEPLOY_LOG_DIR"
+          : > "$FAILURE_REPORT"
 
-          if [ -f ".env" ]; then
-            set -a; source .env; set +a
-          fi
-
-          # Immutable image tag
-          export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          export APP_IMAGE=$(echo "$APP_IMAGE" | tr '[:upper:]' '[:lower:]')
-
-          docker compose -f docker-compose.prod.yml config --quiet
-
-          # Login (để pull private nếu cần)
-          # echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          
-          echo "Pulling image $APP_IMAGE..."
-          docker compose -f docker-compose.prod.yml pull spring-backend
-
-          # Backup DB trước khi up
-          bash ops/backup-postgres.sh || exit 1
-
-          echo "Current Flyway schema history:"
-          docker exec skillswap-postgres psql \
-            --username "$POSTGRES_USER" \
-            --dbname "$POSTGRES_DB" \
-            --tuples-only \
-            --command "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;" || true
-
-          echo "Starting containers..."
-          # Deploy và wait readiness
-          docker compose -f docker-compose.prod.yml up -d --wait || {
-            echo "Deployment failed healthcheck. Fetching logs..."
-            docker compose -f docker-compose.prod.yml logs --tail=500 spring-backend
-            exit 1
+          append_failure() {
+            step_name="$1"
+            exit_code="$2"
+            reason="$3"
+            FAILED_STEPS="${FAILED_STEPS}
+          - ${step_name}: exit=${exit_code}; reason=${reason}"
+            {
+              echo "STEP=${step_name}"
+              echo "EXIT_CODE=${exit_code}"
+              echo "REASON=${reason}"
+              echo "VERIFY="
+              echo "  - Check stdout/stderr blocks for this step above."
+              echo "  - Re-run the printed command manually on VPS if needed."
+              echo "FIX="
+              echo "  - Fix the specific missing permission/config/service shown by stderr."
+              echo
+            } >> "$FAILURE_REPORT"
           }
 
-          bash ops/smoke-test.sh
+          run_step() {
+            step_name="$1"
+            shift
+            command="$*"
+            safe_command="$command"
+            stdout_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stdout.log"
+            stderr_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stderr.log"
+            start_time="$(date -Is)"
+            echo "::group::${step_name}"
+            echo "started_at=${start_time}"
+            echo "command=${safe_command}"
+            set +e
+            bash -lc "$command" >"$stdout_file" 2>"$stderr_file"
+            exit_code=$?
+            set -e
+            end_time="$(date -Is)"
+            echo "ended_at=${end_time}"
+            echo "exit_code=${exit_code}"
+            echo "--- stdout ---"
+            cat "$stdout_file" || true
+            echo "--- stderr ---"
+            cat "$stderr_file" || true
+            echo "::endgroup::"
+            if [ "$exit_code" -ne 0 ]; then
+              append_failure "$step_name" "$exit_code" "Command failed: ${safe_command}"
+            fi
+            return 0
+          }
 
-          echo "Deployment successful for $APP_IMAGE!"
+          run_diagnostic_step() {
+            step_name="$1"
+            shift
+            command="$*"
+            stdout_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stdout.log"
+            stderr_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stderr.log"
+            start_time="$(date -Is)"
+            echo "::group::${step_name}"
+            echo "started_at=${start_time}"
+            echo "command=${command}"
+            set +e
+            bash -lc "$command" >"$stdout_file" 2>"$stderr_file"
+            exit_code=$?
+            set -e
+            end_time="$(date -Is)"
+            echo "ended_at=${end_time}"
+            echo "exit_code=${exit_code}"
+            echo "--- stdout ---"
+            cat "$stdout_file" || true
+            echo "--- stderr ---"
+            cat "$stderr_file" || true
+            echo "::endgroup::"
+            return 0
+          }
+
+          run_sensitive_step() {
+            step_name="$1"
+            safe_command="$2"
+            actual_command="$3"
+            stdout_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stdout.log"
+            stderr_file="${DEPLOY_LOG_DIR}/$(echo "$step_name" | tr ' /:' '___').stderr.log"
+            start_time="$(date -Is)"
+            echo "::group::${step_name}"
+            echo "started_at=${start_time}"
+            echo "command=${safe_command}"
+            set +e
+            set +x
+            bash -lc "$actual_command" >"$stdout_file" 2>"$stderr_file"
+            exit_code=$?
+            set -x
+            set -e
+            end_time="$(date -Is)"
+            echo "ended_at=${end_time}"
+            echo "exit_code=${exit_code}"
+            echo "--- stdout ---"
+            cat "$stdout_file" || true
+            echo "--- stderr ---"
+            cat "$stderr_file" || true
+            echo "::endgroup::"
+            if [ "$exit_code" -ne 0 ]; then
+              append_failure "$step_name" "$exit_code" "Command failed: ${safe_command}"
+            fi
+            return 0
+          }
+
+          echo "::group::deploy context"
+          echo "github_sha=${{ github.sha }}"
+          echo "github_repository=${{ github.repository }}"
+          echo "deploy_dir=${DEPLOY_DIR}"
+          echo "deploy_log_dir=${DEPLOY_LOG_DIR}"
+          date -Is
+          echo "::endgroup::"
+
+          run_step "preflight ssh identity" "whoami && id && hostname && pwd && date -Is"
+          run_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
+          if ! cd "$DEPLOY_DIR"; then
+            append_failure "enter deploy directory" 1 "Cannot cd into ${DEPLOY_DIR}. Verify VPS_USER permissions and deploy directory ownership."
+          fi
+
+          run_step "preflight required tools" "command -v curl && command -v docker && docker --version && docker compose version"
+          run_step "preflight docker daemon" "docker info"
+          run_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
+
+          run_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
+          run_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
+          run_step "download ops scripts" "mkdir -p ops && curl --fail --silent --show-error --location -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/backup-postgres.sh && curl --fail --silent --show-error --location -o ops/smoke-test.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/smoke-test.sh && test -s ops/backup-postgres.sh && test -s ops/smoke-test.sh && chmod +x ops/backup-postgres.sh ops/smoke-test.sh"
+
+          run_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
+          if [ -f ".env" ]; then
+            set +x
+            set +e
+            set +u
+            set -a
+            # shellcheck disable=SC1091
+            source .env
+            source_exit=$?
+            set +a
+            set -u
+            set -e
+            set -x
+            if [ "$source_exit" -ne 0 ]; then
+              append_failure "source .env" "$source_exit" "The .env file exists but cannot be sourced. Verify shell syntax and file encoding."
+            fi
+          fi
+
+          export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          export APP_IMAGE="$(echo "$APP_IMAGE" | tr '[:upper:]' '[:lower:]')"
+
+          run_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
+          run_step "docker compose config" "docker compose -f docker-compose.prod.yml config --quiet"
+
+          run_sensitive_step "docker login ghcr" "echo *** | docker login ghcr.io -u ${{ github.actor }} --password-stdin" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+          run_step "docker pull image" "docker pull '${APP_IMAGE}'"
+          run_step "docker compose pull spring-backend" "docker compose -f docker-compose.prod.yml pull spring-backend"
+          run_step "backup postgres" "bash ops/backup-postgres.sh"
+          run_diagnostic_step "flyway schema history before deploy" "docker exec skillswap-postgres psql --username \"${POSTGRES_USER:-}\" --dbname \"${POSTGRES_DB:-}\" --tuples-only --command \"select installed_rank, version, description, success from flyway_schema_history order by installed_rank;\""
+          run_step "docker compose up wait" "docker compose -f docker-compose.prod.yml up -d --wait"
+          run_step "backend readiness healthcheck" "curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness"
+          run_step "smoke test" "bash ops/smoke-test.sh"
+
+          echo "::group::failure diagnostics"
+          run_diagnostic_step "diagnostic docker ps" "docker ps"
+          run_diagnostic_step "diagnostic docker ps all" "docker ps -a"
+          run_diagnostic_step "diagnostic backend logs" "docker logs skillswap-backend --tail 200"
+          run_diagnostic_step "diagnostic compose ps" "docker compose -f docker-compose.prod.yml ps"
+          run_diagnostic_step "diagnostic compose logs" "docker compose -f docker-compose.prod.yml logs --tail 200"
+          run_diagnostic_step "diagnostic disk" "df -h"
+          run_diagnostic_step "diagnostic memory" "free -m"
+          run_diagnostic_step "diagnostic docker service" "systemctl status docker --no-pager || service docker status || true"
+          echo "::endgroup::"
+
+          if [ -n "$FAILED_STEPS" ]; then
+            echo "::error::Deploy failed. Failure report:"
+            cat "$FAILURE_REPORT"
+            echo "Failed steps:${FAILED_STEPS}"
+            echo "Diagnostic logs are in ${DEPLOY_LOG_DIR} on VPS."
+            exit 1
+          fi
+
+          echo "Deployment successful for ${APP_IMAGE}"
