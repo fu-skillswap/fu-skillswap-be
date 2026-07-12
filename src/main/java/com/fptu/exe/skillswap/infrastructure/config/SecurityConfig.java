@@ -42,7 +42,7 @@ public class SecurityConfig {
                         .referrerPolicy(policy -> policy
                                 .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                         .contentSecurityPolicy(csp -> csp
-                                .policyDirectives("default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"))
+                                .policyDirectives("default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"))
                         .httpStrictTransportSecurity(hsts -> hsts
                                 .includeSubDomains(true)
                                 .preload(true)
@@ -64,6 +64,7 @@ public class SecurityConfig {
                                     "/api/academic-programs",
                                     "/api/catalog/help-topics",
                                     "/api/catalog/mentor-profile-options",
+                                    "/api/blog/**",
                                     "/api/specializations",
                                     "/api/academic-programs/**",
                                     "/uploads/storage/**",

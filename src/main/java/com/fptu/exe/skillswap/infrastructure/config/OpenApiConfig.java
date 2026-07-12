@@ -42,7 +42,7 @@ public class OpenApiConfig {
                             
                             SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
                             Backend hiện cung cấp REST API cho xác thực, hồ sơ, questionnaire nhu cầu mentoring,
-                            mentor service, availability, booking, payment, notification, forum, chat và Google Calendar sync.
+                            mentor service, availability, booking, payment, notification, forum, blog, chat và Google Calendar sync.
                             
                             ### Quy ước tài liệu API
                             - Mọi API business trả về `ApiResponse<T>`.
@@ -131,6 +131,7 @@ public class OpenApiConfig {
                         new Tag().name("Payout Requests").description("Nhóm API mentor tạo payout request và admin duyệt/từ chối/mark-paid. FE mentor và FE admin dùng ở các màn tài chính beta."),
                         new Tag().name("Mentor Payout Profiles").description("Nhóm API mentor quản lý tài khoản nhận tiền payout. FE dùng để tạo, cập nhật và chọn payout profile trước khi tạo payout request."),
                         new Tag().name("Forum").description("Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và report nội dung theo help topic. FE dùng để xây forum text-only MVP cho cộng đồng SkillSwap."),
+                        new Tag().name("Blog").description("Nhóm API public blog cho bài viết SEO, kiến thức dev/non-tech, featured articles, view tracking nhẹ và author CTA tracking."),
                         new Tag().name("Review & Rating").description("Nhóm API để mentee gửi feedback sau buổi mentoring và để hệ thống hiển thị dữ liệu review của mentor. FE dùng sau khi booking đã hoàn thành."),
                         new Tag().name("Admin - Dashboard").description("Nhóm API snapshot, queue cards, queue drill-down và timeseries dành cho admin dashboard/workbench. FE admin dùng để hiển thị tổng quan vận hành, backlog cần xử lý và mở từng queue case cụ thể."),
                         new Tag().name("Admin - Audit Logs").description("Nhóm API read-only để admin duyệt audit logs nội bộ theo actor, entity và action mà không cần truy vấn trực tiếp database."),
@@ -143,6 +144,7 @@ public class OpenApiConfig {
                         new Tag().name("Admin - Users").description("Nhóm API vận hành nội bộ để xem danh sách user visible và thay đổi trạng thái tài khoản như ban hoặc unban. FE admin dùng trong các màn moderation user."),
                         new Tag().name("Admin - Bookings").description("Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking."),
                         new Tag().name("Admin - Forum").description("Nhóm API moderation forum dành cho admin để đọc queue report, ẩn hoặc khôi phục nội dung forum khi cần xử lý vi phạm."),
+                        new Tag().name("Admin - Blog").description("Nhóm API admin quản trị blog: draft, update, publish, archive, feature, category và tag."),
                         new Tag().name("System Admin - Roles").description("Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Grant ADMIN sẽ gỡ MENTEE/MENTOR để tài khoản thành admin-only; revoke ADMIN sẽ trả user về MENTEE mặc định. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này."),
                         new Tag().name("System").description("Nhóm API kỹ thuật để kiểm tra sức khỏe dịch vụ và chẩn đoán cơ bản. FE hoặc đội vận hành dùng để smoke check theo đúng cấu hình security hiện tại.")
                 ));
@@ -185,6 +187,7 @@ public class OpenApiConfig {
                     "Mentor Payout Profiles",
                     "Payout Requests",
                     "Forum",
+                    "Blog",
                     "Admin - Dashboard",
                     "Admin - Audit Logs",
                     "Admin - Notes",
@@ -196,6 +199,7 @@ public class OpenApiConfig {
                     "Admin - Users",
                     "Admin - Bookings",
                     "Admin - Forum",
+                    "Admin - Blog",
                     "System Admin - Roles",
                     "System"
             );
