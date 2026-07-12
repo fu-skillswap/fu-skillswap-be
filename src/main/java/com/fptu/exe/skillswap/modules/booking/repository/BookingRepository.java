@@ -355,6 +355,28 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endTime") java.time.LocalDateTime endTime
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            where booking.mentee.id = :menteeId
+              and booking.status in :statuses
+              and booking.selectedStartTime < :endTime
+              and booking.selectedEndTime > :startTime
+            order by booking.id asc
+            """)
+    List<Booking> findMenteeOverlappingBookingsForUpdate(
+            @Param("menteeId") UUID menteeId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTime") java.time.LocalDateTime startTime,
+            @Param("endTime") java.time.LocalDateTime endTime
+    );
+
     @Query("""
             select b.selectedStartTime as startTime,
                    b.selectedEndTime as endTime,

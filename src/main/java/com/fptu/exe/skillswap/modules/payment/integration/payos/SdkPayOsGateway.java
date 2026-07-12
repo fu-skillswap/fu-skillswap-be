@@ -103,7 +103,8 @@ public class SdkPayOsGateway implements PayOsGateway {
                     normalizeText(verified.getReference()),
                     normalizeText(verified.getCode()),
                     Boolean.TRUE.equals(request.success()),
-                    parseWebhookPaidAt(verified.getTransactionDateTime())
+                    parseWebhookPaidAt(verified.getTransactionDateTime()),
+                    verified.getAmount() == null ? 0L : verified.getAmount().longValue()
             );
         } catch (PayOSException ex) {
             throw new BaseException(ErrorCode.UNAUTHORIZED,

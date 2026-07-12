@@ -233,7 +233,8 @@ public class PaymentOrderService {
 
         PaymentAttempt optimisticAttempt = paymentAttemptRepository.findByProviderOrderCode(verified.providerOrderCode())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment attempt"));
-        if ("PAID".equals(optimisticAttempt.getProviderStatus()) || "SUCCESS".equals(optimisticAttempt.getProviderStatus()) || "00".equals(optimisticAttempt.getProviderStatus())) {
+        if (optimisticAttempt.getStatus() == PaymentAttemptStatus.SUCCEEDED
+                || optimisticAttempt.getStatus() == PaymentAttemptStatus.SUCCEEDED_SURPLUS) {
             PaymentOrder optimisticOrder = paymentOrderRepository.findById(optimisticAttempt.getPaymentOrderId()).orElseThrow();
             return toResponse(optimisticOrder, optimisticAttempt);
         }
@@ -254,9 +255,17 @@ public class PaymentOrderService {
                 return toResponse(order, attempt);
             }
             if (order.getStatus() == PaymentOrderStatus.PAID) {
+                if (attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED && attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED_SURPLUS) {
+                    attempt.setProviderOrderCode(verified.providerOrderCode());
+                    attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+                    attempt.setProviderStatus("PAID");
+                    issueSurplusCreditIfNeeded(order, attempt, verified.amount(), 0L);
+                    markAttemptFinalState(attempt, PaymentAttemptStatus.SUCCEEDED_SURPLUS, verified.providerTransactionId(), providerEventId, "PAID", null);
+                }
                 return toResponse(order, attempt);
             }
 
+            validateProviderPaidAmount(order, verified.amount());
             order.setProviderOrderCode(verified.providerOrderCode());
             order.setProviderPaymentLinkId(verified.providerPaymentLinkId());
             order.setProviderStatus("PAID");
@@ -270,6 +279,7 @@ public class PaymentOrderService {
             attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
             attempt.setProviderStatus("PAID");
             finalizeInternalPayment(order, attempt, verified.providerTransactionId(), providerEventId, "PAID", lockedBooking);
+            issueSurplusCreditIfNeeded(order, attempt, verified.amount(), expectedProviderPayable(order));
             order = paymentOrderRepository.save(order);
             return toResponse(order, attempt);
         });
@@ -725,6 +735,54 @@ public class PaymentOrderService {
         order.setPaidAt(order.getPaidAt() == null ? DateTimeUtil.now() : order.getPaidAt());
         markAttemptFinalState(attempt, PaymentAttemptStatus.SUCCEEDED, providerTransactionId, providerEventId, providerStatus, null);
         finalizePaidBooking(order, lockedBooking);
+    }
+
+    private void validateProviderPaidAmount(PaymentOrder order, long verifiedAmount) {
+        long expectedAmount = expectedProviderPayable(order);
+        if (expectedAmount <= 0) {
+            return;
+        }
+        if (verifiedAmount < expectedAmount) {
+            throw new BaseException(
+                    ErrorCode.BAD_REQUEST,
+                    "Webhook PayOS xác nhận số tiền nhỏ hơn số tiền cần thanh toán"
+            );
+        }
+    }
+
+    private long expectedProviderPayable(PaymentOrder order) {
+        return order == null || order.getRemainingPayableScoin() == null
+                ? 0L
+                : Math.max(0L, order.getRemainingPayableScoin().longValue());
+    }
+
+    private void issueSurplusCreditIfNeeded(PaymentOrder order,
+                                            PaymentAttempt attempt,
+                                            long verifiedAmount,
+                                            long expectedAmount) {
+        if (order == null || attempt == null || attempt.getId() == null) {
+            return;
+        }
+        long surplusAmount = verifiedAmount - Math.max(0L, expectedAmount);
+        if (surplusAmount <= 0) {
+            return;
+        }
+        if (surplusAmount > Integer.MAX_VALUE) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Số tiền thanh toán dư vượt quá giới hạn hệ thống");
+        }
+        if (creditLedgerService.hasIssuedCreditForSource(LedgerSourceType.PAYMENT_ATTEMPT, attempt.getId())) {
+            return;
+        }
+        creditLedgerService.issueCredit(
+                order.getPayerUserId(),
+                CreditOriginType.PAYMENT_SURPLUS,
+                LedgerSourceType.PAYMENT_ATTEMPT,
+                attempt.getId(),
+                (int) surplusAmount,
+                "Hoàn tiền thanh toán dư cho order " + order.getOrderCode()
+        );
+        log.info("Issued payment surplus credit for attempt {} order {} amount {} SCoin",
+                attempt.getId(), order.getOrderCode(), surplusAmount);
     }
 
     private void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {

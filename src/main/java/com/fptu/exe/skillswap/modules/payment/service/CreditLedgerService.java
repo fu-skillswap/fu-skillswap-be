@@ -57,6 +57,11 @@ public class CreditLedgerService {
     }
 
     @Transactional(readOnly = true)
+    public boolean hasIssuedCreditForSource(LedgerSourceType sourceType, UUID sourceId) {
+        return entryRepository.existsBySourceTypeAndSourceIdAndEntryType(sourceType, sourceId, LedgerEntryType.ISSUE);
+    }
+
+    @Transactional(readOnly = true)
     public int getAvailableBalance(UUID userId) {
         CreditLedgerAccount account = ensureUserAccount(userId);
         return entryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();

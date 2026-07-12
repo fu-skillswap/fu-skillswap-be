@@ -13,6 +13,8 @@ import java.util.UUID;
 
 public interface CreditLedgerEntryRepository extends JpaRepository<CreditLedgerEntry, UUID> {
 
+    boolean existsBySourceTypeAndSourceIdAndEntryType(LedgerSourceType sourceType, UUID sourceId, LedgerEntryType entryType);
+
     @Query("""
             select coalesce(sum(e.balanceEffectScoin), 0)
             from CreditLedgerEntry e

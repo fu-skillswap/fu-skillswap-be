@@ -352,6 +352,21 @@ public class BookingService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Segment này đã được chấp nhận cho booking khác");
         }
 
+        // 4.5. Lock Mentee overlapping bookings to prevent double booking race condition
+        List<Booking> menteeOverlappingBookings = bookingRepository.findMenteeOverlappingBookingsForUpdate(
+                booking.getMentee().getId(),
+                SLOT_LOCKING_STATUSES,
+                selectedStartTime,
+                selectedEndTime
+        );
+        if (!menteeOverlappingBookings.isEmpty()) {
+            booking.setStatus(BookingStatus.REJECTED);
+            booking.setRejectedAt(now);
+            booking.setRejectReason("Mentee đã có lịch học khác trùng thời gian này");
+            bookingRepository.save(booking);
+            return toBookingResponse(booking);
+        }
+
         // 5. Lock sibling pending bookings overlap the same selected segment in deterministic order
         List<Booking> pendingBookings = bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
                 slot.getId(),

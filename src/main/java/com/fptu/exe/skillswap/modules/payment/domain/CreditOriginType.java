@@ -5,5 +5,6 @@ public enum CreditOriginType {
     COUPON_BONUS,
     REFUND,
     MANUAL,
-    PAYMENT_RESERVATION
+    PAYMENT_RESERVATION,
+    PAYMENT_SURPLUS
 }

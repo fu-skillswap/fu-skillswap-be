@@ -7,5 +7,6 @@ public enum LedgerSourceType {
     COUPON,
     MANUAL,
     PAYOUT_REQUEST,
-    REFUND
+    REFUND,
+    PAYMENT_ATTEMPT
 }

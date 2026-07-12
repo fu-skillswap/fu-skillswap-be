@@ -177,7 +177,8 @@ class PaymentOrderServiceTest {
                 transactionId,
                 "PAID",
                 true,
-                LocalDateTime.now()
+                LocalDateTime.now(),
+                100_000L
         );
     }
 
@@ -402,7 +403,8 @@ class PaymentOrderServiceTest {
                 String.valueOf(orderCode), "pl-111", "evt-111", "txn-111",
                 "CANCELLED",  // not PAID
                 false,        // success = false
-                null
+                null,
+                0L
         );
         when(payOsGateway.verifyWebhook(request)).thenReturn(notPaid);
 
@@ -480,16 +482,108 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-final"));
         // Optimistic read before entering the transaction
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
-        when(paymentOrderRepository.existsByProviderEventId(any())).thenReturn(false);
-        when(paymentAttemptRepository.existsByProviderEventId(any())).thenReturn(false);
+        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+
+        paymentOrderService.handleWebhook(request);
 
         paymentOrderService.handleWebhook(request);
 
         verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
         verify(paymentOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void handleWebhook_paidAmountLowerThanExpected_shouldRejectWithoutFinalizing() {
+        Long orderCode = 445L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .bookingId(bookingId)
+                .providerOrderCode(String.valueOf(orderCode))
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(100_000)
+                .remainingPayableScoin(100_000)
+                .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
+                .build();
+        PaymentAttempt attempt = PaymentAttempt.builder()
+                .id(UUID.randomUUID())
+                .paymentOrderId(order.getId())
+                .attemptNo(1)
+                .status(PaymentAttemptStatus.REDIRECTED)
+                .build();
+
+        PayOsGateway.VerifiedWebhook underpaid = new PayOsGateway.VerifiedWebhook(
+                String.valueOf(orderCode),
+                "pl-" + orderCode,
+                "evt-" + orderCode,
+                "txn-underpaid",
+                "PAID",
+                true,
+                LocalDateTime.now(),
+                90_000L
+        );
+        when(payOsGateway.verifyWebhook(request)).thenReturn(underpaid);
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
+
+        BaseException ex = assertThrows(BaseException.class, () -> paymentOrderService.handleWebhook(request));
+
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+        verify(creditLedgerService, never()).issueCredit(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any());
+        verify(paymentOrderRepository, never()).save(any());
+        verify(paymentAttemptRepository, never()).save(any());
+    }
+
+    @Test
+    void handleWebhook_orderAlreadyPaid_attemptNotPaid_shouldIssueSurplusCredit() {
+        Long orderCode = 444L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .bookingId(bookingId)
+                .orderCode("PAY-SURPLUS")
+                .providerOrderCode(String.valueOf(111L)) // Original successful code
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(100_000)
+                .remainingPayableScoin(0)
+                .status(PaymentOrderStatus.PAID) // already finalized
+                .build();
+        PaymentAttempt attempt = PaymentAttempt.builder()
+                .id(UUID.randomUUID())
+                .paymentOrderId(order.getId())
+                .attemptNo(2)
+                .status(PaymentAttemptStatus.REDIRECTED) // NOT PAID yet
+                .build();
+
+        when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-surplus"));
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentAttemptRepository.findByProviderOrderCodeForUpdate(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.existsByProviderEventId(any())).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId(any())).thenReturn(false);
+        when(creditLedgerService.hasIssuedCreditForSource(LedgerSourceType.PAYMENT_ATTEMPT, attempt.getId())).thenReturn(false);
+
+        paymentOrderService.handleWebhook(request);
+
+        verify(creditLedgerService).issueCredit(
+                eq(menteeId),
+                eq(CreditOriginType.PAYMENT_SURPLUS),
+                eq(LedgerSourceType.PAYMENT_ATTEMPT),
+                eq(attempt.getId()),
+                eq(100_000), // verified.amount() from verifiedWebhook
+                any()
+        );
+        assertEquals(PaymentAttemptStatus.SUCCEEDED_SURPLUS, attempt.getStatus());
     }
 
     @Test

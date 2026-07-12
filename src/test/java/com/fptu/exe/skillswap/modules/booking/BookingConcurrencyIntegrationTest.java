@@ -236,6 +236,187 @@ class BookingConcurrencyIntegrationTest {
         }
     }
 
+    @Test
+    void menteeDoubleBooking_concurrentAccept_onlyOneSucceeds() throws Exception {
+        SetupMenteeDoubleBookingData setupData = transactionTemplate.execute(status -> {
+            User mentee = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-double"))
+                    .fullName("Mentee Double Booking")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            User mentorUser1 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentor-1"))
+                    .fullName("Mentor 1")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            User mentorUser2 = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentor-2"))
+                    .fullName("Mentor 2")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+
+            completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
+
+            MentorProfile mentorProfile1 = mentorProfileRepository.save(MentorProfile.builder()
+                    .user(mentorUser1)
+                    .status(MentorStatus.ACTIVE)
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
+                    .isAvailable(true)
+                    .headline("Spring Boot Mentor 1")
+                    .expertiseDescription("Backend 1")
+                    .foundationSupportLevel(3)
+                    .outputReviewSupportLevel(3)
+                    .directionSupportLevel(2)
+                    .teachingMode(TeachingMode.ONLINE)
+                    .sessionDuration(60)
+                    .build());
+
+            MentorProfile mentorProfile2 = mentorProfileRepository.save(MentorProfile.builder()
+                    .user(mentorUser2)
+                    .status(MentorStatus.ACTIVE)
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
+                    .isAvailable(true)
+                    .headline("Spring Boot Mentor 2")
+                    .expertiseDescription("Backend 2")
+                    .foundationSupportLevel(3)
+                    .outputReviewSupportLevel(3)
+                    .directionSupportLevel(2)
+                    .teachingMode(TeachingMode.ONLINE)
+                    .sessionDuration(60)
+                    .build());
+
+            LocalDateTime slotStart = DateTimeUtil.now().plusDays(2)
+                    .withMinute(0)
+                    .withSecond(0)
+                    .withNano(0);
+            LocalDateTime slotEnd = slotStart.plusHours(1);
+
+            MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile1)
+                    .rule(createAvailabilityRule(mentorProfile1, slotStart, slotEnd))
+                    .startTime(slotStart)
+                    .endTime(slotEnd)
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(false)
+                    .build());
+
+            MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
+                    .mentorProfile(mentorProfile2)
+                    .rule(createAvailabilityRule(mentorProfile2, slotStart, slotEnd))
+                    .startTime(slotStart)
+                    .endTime(slotEnd)
+                    .timezone("Asia/Ho_Chi_Minh")
+                    .isActive(true)
+                    .isBooked(false)
+                    .build());
+
+            var mentorService1 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile1)
+                    .title("Service 1")
+                    .description("Desc 1")
+                    .durationMinutes(60)
+                    .isFree(false)
+                    .priceScoin(72_000)
+                    .isActive(true)
+                    .build());
+
+            var mentorService2 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile2)
+                    .title("Service 2")
+                    .description("Desc 2")
+                    .durationMinutes(60)
+                    .isFree(false)
+                    .priceScoin(72_000)
+                    .isActive(true)
+                    .build());
+
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                    .id(new AvailabilitySlotServiceId(slot1.getId(), mentorService1.getId()))
+                    .slot(slot1)
+                    .service(mentorService1)
+                    .build());
+
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                    .id(new AvailabilitySlotServiceId(slot2.getId(), mentorService2.getId()))
+                    .slot(slot2)
+                    .service(mentorService2)
+                    .build());
+
+            return new SetupMenteeDoubleBookingData(
+                    mentee.getId(),
+                    mentorUser1.getId(), slot1.getId(), mentorService1.getId(),
+                    mentorUser2.getId(), slot2.getId(), mentorService2.getId(),
+                    slotStart, slotEnd
+            );
+        });
+
+        assertNotNull(setupData);
+
+        // Mentee tạo 2 booking trùng thời gian
+        BookingResponse booking1 = bookingService.createBooking(
+                setupData.menteeId(),
+                new CreateBookingRequest(setupData.slot1Id(), setupData.service1Id(), setupData.slotStart(), setupData.slotEnd(), "Need help 1", "Goal 1")
+        );
+
+        BookingResponse booking2 = bookingService.createBooking(
+                setupData.menteeId(),
+                new CreateBookingRequest(setupData.slot2Id(), setupData.service2Id(), setupData.slotStart(), setupData.slotEnd(), "Need help 2", "Goal 2")
+        );
+
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Boolean> accept1 = executorService.submit(acceptTaskWith200Status(setupData.mentor1Id(), booking1.bookingId(), readyLatch, startLatch));
+            Future<Boolean> accept2 = executorService.submit(acceptTaskWith200Status(setupData.mentor2Id(), booking2.bookingId(), readyLatch, startLatch));
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startLatch.countDown();
+
+            boolean accept1Success = getFuture(accept1);
+            boolean accept2Success = getFuture(accept2);
+
+            // Cả 2 thread đều chạy code và return 200 (không throw Exception), nên success flag sẽ bằng true
+            assertTrue(accept1Success);
+            assertTrue(accept2Success);
+
+            // Kiểm tra DB: Phải có ĐÚNG 1 booking ACCEPTED_AWAITING_PAYMENT, và 1 booking bị REJECTED do conflict
+            BookingStatus status1 = bookingRepository.findById(booking1.bookingId()).orElseThrow().getStatus();
+            BookingStatus status2 = bookingRepository.findById(booking2.bookingId()).orElseThrow().getStatus();
+
+            int acceptedCount = 0;
+            int rejectedCount = 0;
+            if (status1 == BookingStatus.ACCEPTED_AWAITING_PAYMENT) acceptedCount++;
+            if (status2 == BookingStatus.ACCEPTED_AWAITING_PAYMENT) acceptedCount++;
+            if (status1 == BookingStatus.REJECTED) rejectedCount++;
+            if (status2 == BookingStatus.REJECTED) rejectedCount++;
+
+            assertEquals(1, acceptedCount);
+            assertEquals(1, rejectedCount);
+
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private Callable<Boolean> acceptTaskWith200Status(UUID mentorId, UUID bookingId, CountDownLatch readyLatch, CountDownLatch startLatch) {
+        return () -> {
+            readyLatch.countDown();
+            assertTrue(startLatch.await(5, TimeUnit.SECONDS));
+            try {
+                // Sẽ không văng exception (do trả về BookingResponse status REJECTED thay vì throw)
+                bookingService.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("Confirmed"));
+                return true;
+            } catch (Exception exception) {
+                return false;
+            }
+        };
+    }
+
     private void completeAcademicProfile(UUID userId, String studentCode) {
         var campus = campusRepository.findAll().stream().findFirst().orElseThrow();
         var program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
@@ -584,5 +765,9 @@ class BookingConcurrencyIntegrationTest {
     private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId, UUID serviceId, LocalDateTime slotStart, LocalDateTime slotEnd) {}
     private record SetupFeedbackData(UUID mentorId, UUID booking1Id, UUID booking2Id, UUID booking3Id, UUID mentee1Id, UUID mentee2Id, UUID mentee3Id) {}
     private record SetupFeedbackAndCancelData(UUID mentorId, UUID bookingCompletedId, UUID bookingAcceptedId, UUID menteeId) {}
+    private record SetupMenteeDoubleBookingData(
+            UUID menteeId,
+            UUID mentor1Id, UUID slot1Id, UUID service1Id,
+            UUID mentor2Id, UUID slot2Id, UUID service2Id,
+            LocalDateTime slotStart, LocalDateTime slotEnd) {}
 }
-

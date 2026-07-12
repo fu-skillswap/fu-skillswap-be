@@ -42,11 +42,13 @@ class GoogleCalendarConnectionServiceTest {
     void setUp() {
         GoogleApiProperties googleApiProperties = new GoogleApiProperties();
         googleApiProperties.setCalendarRedirectUri("https://skillswap.asia/google-calendar/callback");
+        org.springframework.transaction.support.TransactionTemplate transactionTemplate = org.mockito.Mockito.mock(org.springframework.transaction.support.TransactionTemplate.class);
         service = new GoogleCalendarConnectionService(
                 userRepository,
                 connectionRepository,
                 googleCalendarApiClient,
                 googleTokenCryptoService,
+                transactionTemplate,
                 googleAuthService,
                 googleOAuthStateService,
                 googleApiProperties

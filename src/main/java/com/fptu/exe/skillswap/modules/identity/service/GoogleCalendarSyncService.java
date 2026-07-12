@@ -42,6 +42,7 @@ public class GoogleCalendarSyncService {
     private final GoogleCalendarConnectionRepository connectionRepository;
     private final GoogleCalendarApiClient apiClient;
     private final ApplicationEventPublisher eventPublisher;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     @Transactional
     public void enqueueCreate(UUID bookingId) {
@@ -59,32 +60,49 @@ public class GoogleCalendarSyncService {
         enqueueJob(bookingId, GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT, "BOOKING_CANCEL:" + bookingId + ":" + status);
     }
 
-    @Transactional
     public void processDueJobs() {
-        List<GoogleCalendarSyncJob> jobs = jobRepository.findTop20RunnableForUpdate(
-                List.of(GoogleCalendarSyncJobStatus.PENDING, GoogleCalendarSyncJobStatus.RETRYING),
-                DateTimeUtil.now(),
-                PageRequest.of(0, 20)
-        );
-        for (GoogleCalendarSyncJob job : jobs) {
-            processSingleJob(job.getId());
+        List<UUID> jobIds = transactionTemplate.execute(status -> {
+            List<GoogleCalendarSyncJob> jobs = jobRepository.findTop20RunnableForUpdate(
+                    List.of(GoogleCalendarSyncJobStatus.PENDING, GoogleCalendarSyncJobStatus.RETRYING),
+                    DateTimeUtil.now(),
+                    PageRequest.of(0, 20)
+            );
+            for (GoogleCalendarSyncJob job : jobs) {
+                job.setStatus(GoogleCalendarSyncJobStatus.PROCESSING);
+            }
+            if (!jobs.isEmpty()) {
+                jobRepository.saveAll(jobs);
+            }
+            return jobs.stream().map(GoogleCalendarSyncJob::getId).toList();
+        });
+
+        if (jobIds != null) {
+            for (UUID jobId : jobIds) {
+                processSingleJob(jobId);
+            }
         }
     }
 
-    @Transactional
     public void processSingleJob(UUID jobId) {
         GoogleCalendarSyncJob job = jobRepository.findById(jobId).orElse(null);
-        if (job == null || (job.getStatus() != GoogleCalendarSyncJobStatus.PENDING && job.getStatus() != GoogleCalendarSyncJobStatus.RETRYING)) {
+        if (job == null || job.getStatus() != GoogleCalendarSyncJobStatus.PROCESSING) {
             return;
         }
-        job.setStatus(GoogleCalendarSyncJobStatus.PROCESSING);
-        jobRepository.save(job);
 
-        Booking booking = bookingRepository.findByIdForSessionUpdate(job.getBookingId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để sync Google Calendar"));
-        Session session = sessionService.findByBookingId(booking.getId());
-        if (session == null && job.getJobType() != GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT) {
-            session = sessionService.createForAcceptedBooking(booking);
+        Booking booking;
+        Session session;
+        try {
+            booking = bookingRepository.findById(job.getBookingId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để sync Google Calendar"));
+            Session existingSession = sessionService.findByBookingId(booking.getId());
+            if (existingSession == null && job.getJobType() != GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT) {
+                session = sessionService.createForAcceptedBooking(booking);
+            } else {
+                session = existingSession;
+            }
+        } catch (Exception ex) {
+            handleTerminalFailure(job, null, null, "INTERNAL_ERROR", ex.getMessage(), "INTERNAL_ERROR");
+            return;
         }
 
         try {
@@ -93,13 +111,17 @@ public class GoogleCalendarSyncService {
                 case UPDATE_BOOKING_EVENT -> handleUpdate(job, booking, session);
                 case CANCEL_BOOKING_EVENT -> handleCancel(job, booking, session);
             }
-            if (job.getStatus() == GoogleCalendarSyncJobStatus.PROCESSING) {
-                job.setStatus(GoogleCalendarSyncJobStatus.SUCCEEDED);
-                job.setCompletedAt(DateTimeUtil.now());
-                job.setLastErrorCode(null);
-                job.setLastErrorMessage(null);
-                jobRepository.save(job);
-            }
+            
+            transactionTemplate.executeWithoutResult(status -> {
+                GoogleCalendarSyncJob j = jobRepository.findById(jobId).orElse(null);
+                if (j != null && j.getStatus() == GoogleCalendarSyncJobStatus.PROCESSING) {
+                    j.setStatus(GoogleCalendarSyncJobStatus.SUCCEEDED);
+                    j.setCompletedAt(DateTimeUtil.now());
+                    j.setLastErrorCode(null);
+                    j.setLastErrorMessage(null);
+                    jobRepository.save(j);
+                }
+            });
         } catch (GoogleCalendarApiClient.GoogleCalendarTransientException ex) {
             handleRetryableFailure(job, booking, session, ex.getErrorCode(), ex.getMessage());
         } catch (GoogleCalendarApiClient.GoogleCalendarApiException ex) {
@@ -130,7 +152,7 @@ public class GoogleCalendarSyncService {
             markSynced(session, connection, eventLinkRepository.findByBookingId(booking.getId()).orElseThrow().getGoogleMeetUrl());
             return;
         }
-        String accessToken = connectionService.resolveAccessTokenForSync(connection);
+        String accessToken = connectionService.resolveAccessTokenForSync(connection.getId());
         GoogleCalendarApiClient.GoogleCalendarEventResponse response = apiClient.createBookingEvent(
                 accessToken,
                 connection.getCalendarId(),
@@ -174,7 +196,7 @@ public class GoogleCalendarSyncService {
             handleCreate(job, booking, session);
             return;
         }
-        String accessToken = connectionService.resolveAccessTokenForSync(connection);
+        String accessToken = connectionService.resolveAccessTokenForSync(connection.getId());
         GoogleCalendarApiClient.GoogleCalendarEventResponse response = apiClient.updateBookingEvent(
                 accessToken,
                 connection.getCalendarId(),
@@ -216,7 +238,7 @@ public class GoogleCalendarSyncService {
             markRevoked(job, booking, session, connection);
             return;
         }
-        String accessToken = connectionService.resolveAccessTokenForSync(connection);
+        String accessToken = connectionService.resolveAccessTokenForSync(connection.getId());
         apiClient.cancelBookingEvent(accessToken, connection.getCalendarId(), link.getGoogleEventId());
         link.setEventStatus(GoogleCalendarEventStatus.CANCELLED);
         link.setLastErrorCode(null);

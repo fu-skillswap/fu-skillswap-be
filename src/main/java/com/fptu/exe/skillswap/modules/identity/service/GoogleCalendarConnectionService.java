@@ -33,6 +33,7 @@ public class GoogleCalendarConnectionService {
     private final GoogleCalendarConnectionRepository connectionRepository;
     private final GoogleCalendarApiClient googleCalendarApiClient;
     private final GoogleTokenCryptoService googleTokenCryptoService;
+    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
     private final GoogleAuthService googleAuthService;
     private final GoogleOAuthStateService googleOAuthStateService;
     private final GoogleApiProperties googleApiProperties;
@@ -123,56 +124,68 @@ public class GoogleCalendarConnectionService {
         return connectionRepository.findByUserIdForUpdate(userId).orElse(null);
     }
 
-    @Transactional
-    public String resolveAccessTokenForSync(GoogleCalendarConnection connection) {
-        if (connection == null) {
-            return null;
-        }
-        if (connection.getConnectionStatus() != GoogleCalendarConnectionStatus.ACTIVE) {
-            throw new GoogleCalendarApiClient.GoogleCalendarApiException(
-                    "GOOGLE_CALENDAR_NOT_ACTIVE",
-                    "Google Calendar connection không còn active",
-                    409
-            );
-        }
-        if (connection.getTokenExpiresAt() == null || connection.getTokenExpiresAt().isAfter(DateTimeUtil.now().plusMinutes(2))) {
-            return googleTokenCryptoService.decrypt(connection.getAccessTokenCiphertext());
+    public String resolveAccessTokenForSync(UUID connectionId) {
+        if (connectionId == null) return null;
+
+        // Transaction 1: Check token validity
+        String validToken = transactionTemplate.execute(status -> {
+            GoogleCalendarConnection conn = connectionRepository.findByIdForUpdate(connectionId).orElse(null);
+            if (conn == null) return null;
+            if (conn.getConnectionStatus() != GoogleCalendarConnectionStatus.ACTIVE) {
+                throw new GoogleCalendarApiClient.GoogleCalendarApiException(
+                        "GOOGLE_CALENDAR_NOT_ACTIVE",
+                        "Google Calendar connection không còn active",
+                        409
+                );
+            }
+            if (conn.getTokenExpiresAt() == null || conn.getTokenExpiresAt().isAfter(DateTimeUtil.now().plusMinutes(2))) {
+                return googleTokenCryptoService.decrypt(conn.getAccessTokenCiphertext());
+            }
+            return null; // Token is expired, need refresh
+        });
+
+        if (validToken != null) {
+            return validToken;
         }
 
+        // Token is expired. Fetch refresh token without lock
+        GoogleCalendarConnection connection = connectionRepository.findById(connectionId).orElseThrow();
         String refreshToken = googleTokenCryptoService.decrypt(connection.getRefreshTokenCiphertext());
         if (!StringUtils.hasText(refreshToken)) {
-            connection.setConnectionStatus(GoogleCalendarConnectionStatus.REQUIRES_RECONNECT);
-            connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REQUIRES_RECONNECT");
-            connection.setLastSyncErrorMessage("Refresh token của Google Calendar không còn khả dụng.");
-            connectionRepository.save(connection);
-            throw new GoogleCalendarApiClient.GoogleCalendarApiException(
-                    "invalid_grant",
-                    "Google Calendar cần được kết nối lại",
-                    401
-            );
+            transactionTemplate.executeWithoutResult(status -> {
+                GoogleCalendarConnection conn = connectionRepository.findById(connectionId).orElseThrow();
+                conn.setConnectionStatus(GoogleCalendarConnectionStatus.REQUIRES_RECONNECT);
+                conn.setLastSyncErrorCode("GOOGLE_CALENDAR_REQUIRES_RECONNECT");
+                conn.setLastSyncErrorMessage("Refresh token của Google Calendar không còn khả dụng.");
+                connectionRepository.save(conn);
+            });
+            throw new GoogleCalendarApiClient.GoogleCalendarApiException("invalid_grant", "Google Calendar cần được kết nối lại", 401);
         }
+
+        // Network Call: Refresh token (NO TRANSACTION HELD)
         GoogleCalendarApiClient.GoogleTokenResponse refreshed = googleCalendarApiClient.refreshAccessToken(refreshToken);
-        if (!StringUtils.hasText(refreshed.accessToken())) {
-            connection.setConnectionStatus(GoogleCalendarConnectionStatus.REQUIRES_RECONNECT);
-            connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REQUIRES_RECONNECT");
-            connection.setLastSyncErrorMessage("Không thể làm mới access token Google Calendar.");
-            connectionRepository.save(connection);
-            throw new GoogleCalendarApiClient.GoogleCalendarApiException(
-                    "invalid_grant",
-                    "Google Calendar cần được kết nối lại",
-                    401
-            );
-        }
-        connection.setAccessTokenCiphertext(googleTokenCryptoService.encrypt(refreshed.accessToken()));
-        if (StringUtils.hasText(refreshed.refreshToken())) {
-            connection.setRefreshTokenCiphertext(googleTokenCryptoService.encrypt(refreshed.refreshToken()));
-        }
-        connection.setTokenExpiresAt(resolveTokenExpiry(refreshed.expiresInSeconds()));
-        if (StringUtils.hasText(refreshed.scope())) {
-            connection.setGrantedScopes(refreshed.scope());
-        }
-        connectionRepository.save(connection);
-        return refreshed.accessToken();
+
+        // Transaction 2: Update connection with new token
+        return transactionTemplate.execute(status -> {
+            GoogleCalendarConnection conn = connectionRepository.findByIdForUpdate(connectionId).orElseThrow();
+            if (!StringUtils.hasText(refreshed.accessToken())) {
+                conn.setConnectionStatus(GoogleCalendarConnectionStatus.REQUIRES_RECONNECT);
+                conn.setLastSyncErrorCode("GOOGLE_CALENDAR_REQUIRES_RECONNECT");
+                conn.setLastSyncErrorMessage("Không thể làm mới access token Google Calendar.");
+                connectionRepository.save(conn);
+                throw new GoogleCalendarApiClient.GoogleCalendarApiException("invalid_grant", "Google Calendar cần được kết nối lại", 401);
+            }
+            conn.setAccessTokenCiphertext(googleTokenCryptoService.encrypt(refreshed.accessToken()));
+            if (StringUtils.hasText(refreshed.refreshToken())) {
+                conn.setRefreshTokenCiphertext(googleTokenCryptoService.encrypt(refreshed.refreshToken()));
+            }
+            conn.setTokenExpiresAt(resolveTokenExpiry(refreshed.expiresInSeconds()));
+            if (StringUtils.hasText(refreshed.scope())) {
+                conn.setGrantedScopes(refreshed.scope());
+            }
+            connectionRepository.save(conn);
+            return refreshed.accessToken();
+        });
     }
 
     public GoogleAuthService.GoogleUserInfo resolveUserInfoForLogin(GoogleLoginRequest request) {

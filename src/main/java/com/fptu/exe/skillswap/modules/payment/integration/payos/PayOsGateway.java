@@ -58,7 +58,8 @@ public interface PayOsGateway {
             String providerTransactionId,
             String providerStatus,
             boolean success,
-            LocalDateTime paidAt
+            LocalDateTime paidAt,
+            long amount
     ) {
     }
 }

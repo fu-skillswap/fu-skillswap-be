@@ -19,5 +19,9 @@ public interface GoogleCalendarConnectionRepository extends JpaRepository<Google
     @Query("select c from GoogleCalendarConnection c join fetch c.user u where u.id = :userId")
     Optional<GoogleCalendarConnection> findByUserIdForUpdate(@Param("userId") UUID userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from GoogleCalendarConnection c where c.id = :id")
+    Optional<GoogleCalendarConnection> findByIdForUpdate(@Param("id") UUID id);
+
     boolean existsByUserIdAndConnectionStatus(UUID userId, GoogleCalendarConnectionStatus connectionStatus);
 }
