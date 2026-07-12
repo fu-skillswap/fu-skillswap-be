@@ -72,7 +72,10 @@ public class SecurityConfig {
                                     "/ws-stomp/**",
                                     "/v3/api-docs/**",
                                     "/swagger-ui/**",
-                                    "/swagger-ui.html"
+                                    "/swagger-ui.html",
+                                    "/share/**",
+                                    "/sitemap.xml",
+                                    "/robots.txt"
                             ).permitAll();
                     auth
                             .requestMatchers(HttpMethod.GET,
