@@ -151,14 +151,14 @@ application:
       chat-routing-pattern: ${REALTIME_OUTBOX_CHAT_ROUTING_PATTERN:chat.#}
       notification-routing-pattern: ${REALTIME_OUTBOX_NOTIFICATION_ROUTING_PATTERN:notification.#}
   storage:
-    enabled: ${STORAGE_ENABLED:false}
-    endpoint: ${STORAGE_ENDPOINT:}
-    access-key: ${STORAGE_ACCESS_KEY:}
-    secret-key: ${STORAGE_SECRET_KEY:}
-    bucket: ${STORAGE_BUCKET:}
-    region: ${STORAGE_REGION:auto}
+    enabled: ${STORAGE_ENABLED:${R2_ENABLED:false}}
+    endpoint: ${STORAGE_ENDPOINT:${R2_ENDPOINT:}}
+    access-key: ${STORAGE_ACCESS_KEY:${R2_ACCESS_KEY_ID:}}
+    secret-key: ${STORAGE_SECRET_KEY:${R2_SECRET_ACCESS_KEY:}}
+    bucket: ${STORAGE_BUCKET:${R2_BUCKET:}}
+    region: ${STORAGE_REGION:${R2_REGION:auto}}
     public-url-prefix: ${STORAGE_PUBLIC_URL_PREFIX:https://cdn.skillswap.com}
-    documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:skillswap/verification-documents}
+    documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}}
     presigned-ttl-minutes: ${STORAGE_PRESIGNED_TTL_MINUTES:15}
     allowed-content-types: ${STORAGE_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,application/pdf}
   system-admin:

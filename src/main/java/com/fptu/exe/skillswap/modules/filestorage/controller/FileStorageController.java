@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
@@ -39,7 +40,7 @@ import java.nio.file.StandardCopyOption;
 @Tag(name = "File Storage", description = "API liên quan đến lưu trữ file và Cloudflare R2")
 public class FileStorageController {
 
-    private final StorageGateway storageGateway;
+    private final ObjectProvider<StorageGateway> storageGatewayProvider;
     private final StorageProperties storageProperties;
     private final Environment environment;
 
@@ -55,6 +56,7 @@ public class FileStorageController {
             @RequestParam(required = false, defaultValue = "application/octet-stream") String contentType
     ) {
         validatePresignedUploadRequest(filename, contentType);
+        StorageGateway storageGateway = requireStorageGateway();
         var presigned = storageGateway.generatePresignedUploadUrl(filename, contentType);
         return ApiResponse.success(PresignedUploadResponse.builder()
                 .uploadUrl(presigned.uploadUrl())
@@ -72,6 +74,7 @@ public class FileStorageController {
             @RequestPart("file") MultipartFile file
     ) {
         ensureLocalProfile();
+        StorageGateway storageGateway = requireStorageGateway();
         if (file == null || file.isEmpty()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "File upload local không được để trống");
         }
@@ -92,6 +95,7 @@ public class FileStorageController {
             @RequestBody byte[] body
     ) {
         ensureLocalProfile();
+        StorageGateway storageGateway = requireStorageGateway();
         if (body == null || body.length == 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Body upload local không được để trống");
         }
@@ -157,5 +161,13 @@ public class FileStorageController {
         if (!storageProperties.getAllowedContentTypes().contains(normalizedContentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "contentType không được hỗ trợ cho presigned upload");
         }
+    }
+
+    private StorageGateway requireStorageGateway() {
+        StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+        if (storageGateway == null) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình storage để upload file");
+        }
+        return storageGateway;
     }
 }
