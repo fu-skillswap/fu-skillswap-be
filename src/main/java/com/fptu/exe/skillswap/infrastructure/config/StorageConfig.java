@@ -60,7 +60,7 @@ public class StorageConfig {
                 || !StringUtils.hasText(properties.getBucket())) {
             throw new BaseException(
                     ErrorCode.CONFIGURATION_ERROR,
-                    "Storage Gateway chưa cấu hình đầy đủ. Hãy kiểm tra APPLICATION_STORAGE_ENDPOINT, APPLICATION_STORAGE_ACCESS_KEY, APPLICATION_STORAGE_SECRET_KEY và APPLICATION_STORAGE_BUCKET"
+                    "Storage Gateway chưa cấu hình đầy đủ. Hãy kiểm tra STORAGE_ENDPOINT, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY và STORAGE_BUCKET"
             );
         }
     }

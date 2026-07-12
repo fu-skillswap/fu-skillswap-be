@@ -25,11 +25,22 @@ jobs:
         cache: maven
 
     - name: Run Tests & Verify
+      timeout-minutes: 25
       env:
         SPRING_PROFILES_ACTIVE: test
       run: |
         chmod +x mvnw
         ./mvnw clean verify
+
+    - name: Upload test reports on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-reports
+        path: |
+          target/surefire-reports/**
+          target/failsafe-reports/**
+        if-no-files-found: ignore
 
   security-scan:
     needs: build-and-test
@@ -109,16 +120,23 @@ jobs:
           cd /opt/fu-skillswap/backend
 
           # Cập nhật file compose
-          curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
-          curl -O https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.prod.yml
+          curl --fail --silent --show-error --location -O https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml
+          curl --fail --silent --show-error --location -O https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml
           
           # Cập nhật script vận hành
           mkdir -p ops
-          curl -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/main/ops/backup-postgres.sh
+          curl --fail --silent --show-error --location -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/backup-postgres.sh
+          curl --fail --silent --show-error --location -o ops/smoke-test.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/smoke-test.sh
+
+          if [ -f ".env" ]; then
+            set -a; source .env; set +a
+          fi
 
           # Immutable image tag
           export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           export APP_IMAGE=$(echo "$APP_IMAGE" | tr '[:upper:]' '[:lower:]')
+
+          docker compose -f docker-compose.prod.yml config --quiet
 
           # Login (để pull private nếu cần)
           # echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -127,17 +145,16 @@ jobs:
           docker compose -f docker-compose.prod.yml pull spring-backend
 
           # Backup DB trước khi up
-          if [ -f ".env" ]; then
-            set -a; source .env; set +a
-          fi
           bash ops/backup-postgres.sh || exit 1
 
           echo "Starting containers..."
           # Deploy và wait readiness
           docker compose -f docker-compose.prod.yml up -d --wait || {
             echo "Deployment failed healthcheck. Fetching logs..."
-            docker compose -f docker-compose.prod.yml logs --tail=100
+            docker compose -f docker-compose.prod.yml logs --tail=300
             exit 1
           }
-          
+
+          bash ops/smoke-test.sh
+
           echo "Deployment successful for $APP_IMAGE!"
