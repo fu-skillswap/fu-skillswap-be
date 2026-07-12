@@ -147,11 +147,18 @@ jobs:
           # Backup DB trước khi up
           bash ops/backup-postgres.sh || exit 1
 
+          echo "Current Flyway schema history:"
+          docker exec skillswap-postgres psql \
+            --username "$POSTGRES_USER" \
+            --dbname "$POSTGRES_DB" \
+            --tuples-only \
+            --command "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;" || true
+
           echo "Starting containers..."
           # Deploy và wait readiness
           docker compose -f docker-compose.prod.yml up -d --wait || {
             echo "Deployment failed healthcheck. Fetching logs..."
-            docker compose -f docker-compose.prod.yml logs --tail=300
+            docker compose -f docker-compose.prod.yml logs --tail=500 spring-backend
             exit 1
           }
 
