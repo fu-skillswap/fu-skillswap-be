@@ -22,7 +22,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BookingReminderEmailService {
 
-    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID);
+    // Reminder should cover both paid bookings and legacy accepted bookings that are already confirmed for scheduling.
+    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID, BookingStatus.ACCEPTED);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
     private static final DateTimeFormatter DIGEST_SLOT_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
