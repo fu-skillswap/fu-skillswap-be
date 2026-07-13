@@ -32,6 +32,12 @@ class BlogContentPolicyTest {
     }
 
     @Test
+    void validateMarkdown_shouldRejectRawHtmlButAllowCodeSamples() {
+        assertThrows(BaseException.class, () -> policy.validateMarkdown("<img src=x onerror=alert(1)>"));
+        policy.validateMarkdown("```java\\nList<String> values = List.of();\\n```");
+    }
+
+    @Test
     void readingTime_shouldReturnAtLeastOneForContent() {
         assertEquals(1, policy.readingTimeMinutes("Short content"));
         assertNotNull(policy.cleanRequired(" value ", "field"));

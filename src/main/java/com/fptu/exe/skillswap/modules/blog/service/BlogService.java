@@ -55,6 +55,7 @@ import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -196,7 +197,7 @@ public class BlogService {
     @Transactional
     public BlogPostDetailResponse like(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
-        BlogPost post = loadReadablePost(principal, postId);
+        BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (!blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)) {
             try {
                 blogPostLikeRepository.save(BlogPostLike.builder()
@@ -215,7 +216,7 @@ public class BlogService {
     @Transactional
     public BlogPostDetailResponse unlike(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
-        BlogPost post = loadReadablePost(principal, postId);
+        BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)) {
             blogPostLikeRepository.deleteByPostIdAndUserId(postId, userId);
             blogPostRepository.decrementLikeCount(postId);
@@ -226,7 +227,7 @@ public class BlogService {
     @Transactional
     public BlogPostDetailResponse bookmark(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
-        BlogPost post = loadReadablePost(principal, postId);
+        BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (!blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)) {
             try {
                 blogBookmarkRepository.save(BlogBookmark.builder()
@@ -245,7 +246,7 @@ public class BlogService {
     @Transactional
     public BlogPostDetailResponse unbookmark(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
-        BlogPost post = loadReadablePost(principal, postId);
+        BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)) {
             blogBookmarkRepository.deleteByPostIdAndUserId(postId, userId);
             blogPostRepository.decrementBookmarkCount(postId);
@@ -349,7 +350,9 @@ public class BlogService {
         int resolvedLimit = resolveLimit(limit);
         Set<UUID> categoryIds = blogCategoryFollowRepository.findCategoryIdsByUserId(userId);
         Set<UUID> tagIds = blogTagFollowRepository.findTagIdsByUserId(userId);
-        String filterHash = filterHash("blog-feed|userId=" + userId + "|categories=" + categoryIds + "|tags=" + tagIds);
+        String filterHash = filterHash("blog-feed|userId=" + userId
+                + "|categories=" + canonicalIds(categoryIds)
+                + "|tags=" + canonicalIds(tagIds));
         DecodedCursor decodedCursor = decodeCursor(cursor, filterHash);
         List<BlogPost> window;
         if (categoryIds.isEmpty() && tagIds.isEmpty()) {
@@ -494,6 +497,13 @@ public class BlogService {
         return post;
     }
 
+    private BlogPost loadReadablePostForEngagement(UserPrincipal principal, UUID postId) {
+        BlogPost post = blogPostRepository.findByIdForEngagementUpdate(postId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
+        ensureReadable(principal, post);
+        return post;
+    }
+
     private BlogPost loadPost(UUID postId) {
         return blogPostRepository.findById(postId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
@@ -625,6 +635,14 @@ public class BlogService {
 
     private String normalize(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private String canonicalIds(Collection<UUID> ids) {
+        return ids == null ? "" : ids.stream()
+                .filter(Objects::nonNull)
+                .map(UUID::toString)
+                .sorted()
+                .collect(Collectors.joining(","));
     }
 
     private DecodedCursor decodeCursor(String cursor, String expectedFilterHash) {

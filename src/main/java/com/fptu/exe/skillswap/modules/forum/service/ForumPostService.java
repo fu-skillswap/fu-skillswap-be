@@ -72,7 +72,6 @@ public class ForumPostService {
     private final ForumTextPolicy forumTextPolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
     private final CursorCodec cursorCodec;
-    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID helpTopicId, Boolean mine) {
@@ -165,8 +164,10 @@ public class ForumPostService {
         User currentUser = requireForumUser(currentUserId);
         ForumPost post = loadOwnedEditablePost(postId, currentUser.getId());
         ForumPostResponse response = toPostResponse(post, currentUser.getId());
+        forumCommentReactionRepository.deleteByPostId(postId);
+        forumPostReactionRepository.deleteByPostId(postId);
+        forumCommentRepository.softDeleteByPostId(postId);
         forumPostRepository.delete(post);
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.forum.event.ForumPostDeletedEvent(postId));
         return response;
     }
 

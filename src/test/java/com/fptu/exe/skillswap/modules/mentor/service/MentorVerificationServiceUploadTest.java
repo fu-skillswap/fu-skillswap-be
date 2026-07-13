@@ -132,7 +132,7 @@ class MentorVerificationServiceUploadTest {
     void uploadProof_shouldAcceptPresignedObjectKeyAfterStorageVerification() {
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
+                verificationObjectKey("proof.jpg"),
                 "proof.jpg",
                 "image/jpeg",
                 123L
@@ -169,7 +169,7 @@ class MentorVerificationServiceUploadTest {
     void uploadProof_shouldPreserveTypeAndSizeValidation() {
         MentorVerificationDocumentUploadRequest oversized = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
+                verificationObjectKey("proof.jpg"),
                 "proof.jpg",
                 "image/jpeg",
                 15L * 1024L * 1024L + 1L
@@ -182,7 +182,7 @@ class MentorVerificationServiceUploadTest {
 
         MentorVerificationDocumentUploadRequest badType = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "skillswap/verification-documents/mentor-verification/user-123/proof.gif",
+                verificationObjectKey("proof.gif"),
                 "proof.gif",
                 "image/gif",
                 123L
@@ -203,7 +203,7 @@ class MentorVerificationServiceUploadTest {
 
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "skillswap/verification-documents/mentor-verification/user-123/proof.jpg",
+                verificationObjectKey("proof.jpg"),
                 "proof.jpg",
                 "image/jpeg",
                 123L
@@ -213,5 +213,9 @@ class MentorVerificationServiceUploadTest {
                 .isInstanceOf(BaseException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.BAD_REQUEST);
+    }
+
+    private String verificationObjectKey(String filename) {
+        return "skillswap/verification-documents/users/" + userId + "/" + filename;
     }
 }

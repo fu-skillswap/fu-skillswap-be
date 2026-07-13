@@ -121,12 +121,14 @@ public class AdminUserModerationService {
                 session.setRevoked(true);
             }
             userSessionRepository.saveAll(activeSessions);
-            eventPublisher.publishEvent(new UserBannedEvent(userId));
         } else {
             user.setStatus(UserStatus.ACTIVE);
         }
 
         userRepository.save(user);
+        if (ban) {
+            eventPublisher.publishEvent(new UserBannedEvent(userId));
+        }
         eventPublisher.publishEvent(new UserStatusChangedEvent(userId, oldStatus, user.getStatus()));
         if (!ban && oldStatus == UserStatus.BANNED) {
             notifyAccountUnlockedSafely(userId);

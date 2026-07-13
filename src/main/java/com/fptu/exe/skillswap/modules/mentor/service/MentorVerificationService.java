@@ -58,6 +58,9 @@ public class MentorVerificationService {
     @Value("${application.mentor-verification.submit-requirements.mentor-profile-completed:true}")
     private boolean requireCompletedMentorProfile = true;
 
+    @Value("${application.storage.documents-prefix:skillswap/verification-documents}")
+    private String verificationDocumentsPrefix = "skillswap/verification-documents";
+
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
     private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
@@ -341,6 +344,10 @@ public class MentorVerificationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xác định người dùng tải tài liệu");
         }
         String objectKey = trimToNull(request.objectKey());
+        String expectedPrefix = verificationObjectPrefix(user.getId());
+        if (objectKey == null || !objectKey.startsWith(expectedPrefix)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi minh chứng của người dùng");
+        }
         // Strip path separators from the client-supplied filename to prevent path separator
         // injection into the stored record (the file is never written to disk here, but we
         // keep the persisted name clean for admin display and future use).
@@ -351,6 +358,9 @@ public class MentorVerificationService {
         String uploadedContentType = canonicalizeContentType(objectMetadata.contentType());
         if (!contentType.equals(uploadedContentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "contentType xác nhận không khớp file đã upload");
+        }
+        if (objectMetadata.sizeBytes() > MAX_DOCUMENT_SIZE_BYTES) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file đã upload không được vượt quá 15MB");
         }
         // sizeBytes == 0 is the local-profile sentinel for "unknown size" (file not on disk).
         // Skip the size check in that case; production storage always returns the actual size.
@@ -367,7 +377,7 @@ public class MentorVerificationService {
                 .storageKey(objectKey)
                 .publicUrl("private://" + objectKey)
                 .mimeType(contentType)
-                .sizeBytes(request.sizeBytes())
+                .sizeBytes(objectMetadata.sizeBytes() > 0 ? objectMetadata.sizeBytes() : request.sizeBytes())
                 .build());
     }
 
@@ -394,6 +404,10 @@ public class MentorVerificationService {
         if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
         }
+    }
+
+    private String verificationObjectPrefix(UUID userId) {
+        return verificationDocumentsPrefix.replaceAll("^/+|/+$", "") + "/users/" + userId + "/";
     }
 
     private void enforceDocumentCountLimit(UUID requestId, VerificationDocumentType documentType) {

@@ -188,7 +188,7 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.clear();
 
         // Upload document
-        String smokeObjectKey1 = "mentor-verification/smoke/" + mentorApplicant.getId() + "/sample.jpg";
+        String smokeObjectKey1 = "skillswap/verification-documents/users/" + mentorApplicant.getId() + "/sample.jpg";
         mentorVerificationService.uploadDocument(mentorApplicant.getId(),
             new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.FPTU_AFFILIATION_PROOF,
@@ -198,7 +198,7 @@ class CoreMentorshipFlowSmokeTest {
                 1024L
             )
         );
-        String smokeObjectKey2 = "mentor-verification/smoke/" + mentorApplicant.getId() + "/expert.jpg";
+        String smokeObjectKey2 = "skillswap/verification-documents/users/" + mentorApplicant.getId() + "/expert.jpg";
         mentorVerificationService.uploadDocument(mentorApplicant.getId(),
             new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.EXPERTISE_PROOF,

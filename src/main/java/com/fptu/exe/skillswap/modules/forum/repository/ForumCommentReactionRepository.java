@@ -21,4 +21,8 @@ public interface ForumCommentReactionRepository extends JpaRepository<ForumComme
             @Param("userId") UUID userId,
             @Param("commentIds") Collection<UUID> commentIds
     );
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("delete from ForumCommentReaction r where r.comment.post.id = :postId")
+    void deleteByPostId(@Param("postId") UUID postId);
 }

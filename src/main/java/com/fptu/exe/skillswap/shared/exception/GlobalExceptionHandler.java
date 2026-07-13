@@ -17,6 +17,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import jakarta.validation.ConstraintViolationException;
@@ -63,7 +64,7 @@ public class GlobalExceptionHandler {
         ValidationErrorResponse error = new ValidationErrorResponse(
                 ex.getName(),
                 String.format("Giá trị không hợp lệ cho tham số '%s'", ex.getName()),
-                ex.getValue()
+                null
         );
         return buildResponse(ErrorCode.INVALID_INPUT, error.message(), List.of(error));
     }
@@ -85,7 +86,7 @@ public class GlobalExceptionHandler {
                 .map(violation -> new ValidationErrorResponse(
                         violation.getPropertyPath() == null ? null : violation.getPropertyPath().toString(),
                         violation.getMessage(),
-                        violation.getInvalidValue()
+                        null
                 ))
                 .collect(Collectors.toList());
         String message = errors.isEmpty() ? "Dữ liệu đầu vào không hợp lệ" : errors.getFirst().message();
@@ -171,7 +172,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        return buildResponse(ErrorCode.INVALID_INPUT, ex.getMessage());
+        log.warn("Invalid argument traceId={}", TraceContext.getCurrentTraceId(), ex);
+        return buildResponse(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage());
     }
 
     @ExceptionHandler(IllegalStateException.class)
@@ -179,14 +181,26 @@ public class GlobalExceptionHandler {
         log.error("Illegal state traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(
                 ErrorCode.CONFIGURATION_ERROR,
-                ex.getMessage() != null ? ex.getMessage() : "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu"
+                "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu"
         );
     }
 
     @ExceptionHandler(IOException.class)
     public ResponseEntity<ApiResponse<Object>> handleIOException(IOException ex) {
         log.error("I/O error traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.STORAGE_ERROR, ex.getMessage() != null ? ex.getMessage() : ErrorCode.STORAGE_ERROR.getMessage());
+        return buildResponse(ErrorCode.STORAGE_ERROR, ErrorCode.STORAGE_ERROR.getMessage());
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ApiResponse<Object>> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        ErrorCode errorCode = switch (status) {
+            case NOT_FOUND -> ErrorCode.NOT_FOUND;
+            case FORBIDDEN -> ErrorCode.ACCESS_DENIED;
+            case UNAUTHORIZED -> ErrorCode.UNAUTHORIZED;
+            default -> ErrorCode.INVALID_INPUT;
+        };
+        return buildResponse(errorCode, errorCode.getMessage());
     }
 
     private ResponseEntity<ApiResponse<Object>> buildResponse(ErrorCode errorCode, String message) {
@@ -212,7 +226,7 @@ public class GlobalExceptionHandler {
                 .map(error -> new ValidationErrorResponse(
                         error.getField(),
                         error.getDefaultMessage(),
-                        error.getRejectedValue()
+                        null
                 ))
                 .collect(Collectors.toList());
         String message = errors.isEmpty() ? "Dữ liệu đầu vào không hợp lệ" : errors.getFirst().message();

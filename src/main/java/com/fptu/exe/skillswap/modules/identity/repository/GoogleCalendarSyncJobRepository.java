@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncJobStatu
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
@@ -31,5 +32,21 @@ public interface GoogleCalendarSyncJobRepository extends JpaRepository<GoogleCal
             @Param("statuses") Collection<GoogleCalendarSyncJobStatus> statuses,
             @Param("now") LocalDateTime now,
             Pageable pageable
+    );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update GoogleCalendarSyncJob j
+            set j.status = :processingStatus,
+                j.updatedAt = :now
+            where j.id = :jobId
+              and j.status in :runnableStatuses
+              and j.runAfter <= :now
+            """)
+    int claimForProcessing(
+            @Param("jobId") UUID jobId,
+            @Param("runnableStatuses") Collection<GoogleCalendarSyncJobStatus> runnableStatuses,
+            @Param("processingStatus") GoogleCalendarSyncJobStatus processingStatus,
+            @Param("now") LocalDateTime now
     );
 }

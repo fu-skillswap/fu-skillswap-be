@@ -7,9 +7,11 @@ import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 @RequiredArgsConstructor
@@ -18,8 +20,8 @@ public class MentorUserEventListener {
 
     private final MentorProfileRepository mentorProfileRepository;
 
-    @EventListener
-    @Transactional
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onUserBanned(UserBannedEvent event) {
         log.info("Handling UserBannedEvent for user: {}", event.getUserId());
         mentorProfileRepository.findById(event.getUserId()).ifPresent(profile -> {
@@ -29,8 +31,8 @@ public class MentorUserEventListener {
         });
     }
 
-    @EventListener
-    @Transactional
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void onUserDeleted(UserDeletedEvent event) {
         log.info("Handling UserDeletedEvent for user: {}", event.getUserId());
         mentorProfileRepository.findById(event.getUserId()).ifPresent(profile -> {

@@ -83,11 +83,12 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
 
     @Override
     public PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType) {
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String objectKey = "local/" + UUID.randomUUID() + extension;
+        return generatePresignedUploadUrl(originalFilename, contentType, null);
+    }
+
+    @Override
+    public PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType, String objectPrefix) {
+        String objectKey = buildObjectKey(originalFilename, objectPrefix);
         String publicUrl = resolvePublicUrl(objectKey);
         log.info("Local presigned URL simulated for key={}", objectKey);
         return new PresignedUpload(
@@ -159,9 +160,11 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
                 extension = originalFilename.substring(extensionIndex);
             }
         }
-        StringBuilder keyBuilder = new StringBuilder("local");
+        StringBuilder keyBuilder = new StringBuilder();
         if (subFolder != null && !subFolder.isBlank()) {
-            keyBuilder.append('/').append(subFolder.trim());
+            keyBuilder.append(subFolder.trim().replaceAll("^/+|/+$", ""));
+        } else {
+            keyBuilder.append("local");
         }
         keyBuilder.append('/').append(UUID.randomUUID()).append(extension);
         return keyBuilder.toString();

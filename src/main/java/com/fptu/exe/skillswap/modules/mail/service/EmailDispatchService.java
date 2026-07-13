@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.mail.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.modules.notification.domain.EmailOutbox;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
@@ -108,20 +109,36 @@ public class EmailDispatchService {
 
     private EmailPayload deserializePayload(EmailOutbox outbox) {
         if (outbox.getPayloadData() == null || outbox.getPayloadData().isBlank()) {
-            log.warn("Email outbox {} is missing payload_data. Falling back to legacy columns.", outbox.getId());
-            return new EmailPayload(
-                    outbox.getToEmail(),
-                    outbox.getSubject(),
-                    outbox.getBody(),
-                    outbox.getBody(),
-                    outbox.getTemplateCode()
-            );
+            return legacyPayload(outbox, "missing payload_data");
         }
         try {
-            return objectMapper.readValue(outbox.getPayloadData(), EmailPayload.class);
+            JsonNode payloadNode = objectMapper.readTree(outbox.getPayloadData());
+            // PostgreSQL JSONB values written through older mappings can be returned as a
+            // JSON string containing the actual object. Accept it so queued mail is recoverable.
+            if (payloadNode.isTextual()) {
+                payloadNode = objectMapper.readTree(payloadNode.textValue());
+            }
+            if (!payloadNode.isObject()
+                    || !payloadNode.hasNonNull("toEmail")
+                    || !payloadNode.hasNonNull("subject")
+                    || !payloadNode.hasNonNull("htmlBody")) {
+                return legacyPayload(outbox, "incomplete payload_data");
+            }
+            return objectMapper.treeToValue(payloadNode, EmailPayload.class);
         } catch (JsonProcessingException ex) {
-            throw new BaseException(ErrorCode.UNCATEGORIZED_EXCEPTION, "Không thể deserialize email payload");
+            return legacyPayload(outbox, "invalid payload_data");
         }
+    }
+
+    private EmailPayload legacyPayload(EmailOutbox outbox, String reason) {
+        log.warn("Email outbox {} has {}. Falling back to legacy columns.", outbox.getId(), reason);
+        return new EmailPayload(
+                outbox.getToEmail(),
+                outbox.getSubject(),
+                outbox.getBody(),
+                outbox.getBody(),
+                outbox.getTemplateCode()
+        );
     }
 
     private record EmailPayload(

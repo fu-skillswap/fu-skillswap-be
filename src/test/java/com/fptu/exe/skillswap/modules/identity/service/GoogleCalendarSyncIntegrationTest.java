@@ -63,10 +63,14 @@ class GoogleCalendarSyncIntegrationTest {
     @MockBean
     private GoogleCalendarApiClient apiClient;
 
+    @MockBean
+    private GoogleCalendarConnectionService connectionService;
+
     private User mentorUser;
     private MentorProfile mentorProfile;
     private User menteeUser;
     private Booking booking;
+    private GoogleCalendarConnection connection;
 
     @BeforeEach
     void setUp() {
@@ -98,7 +102,7 @@ class GoogleCalendarSyncIntegrationTest {
                     .selectedEndTime(DateTimeUtil.now().plusDays(1).plusHours(1))
                     .build());
 
-            connectionRepository.save(GoogleCalendarConnection.builder()
+            connection = connectionRepository.save(GoogleCalendarConnection.builder()
                     .user(mentorUser)
                     .connectionStatus(GoogleCalendarConnectionStatus.ACTIVE)
                     .accessTokenCiphertext("ENCRYPTED_ACCESS_TOKEN")
@@ -110,6 +114,8 @@ class GoogleCalendarSyncIntegrationTest {
                     .googleSubject("subject123")
                     .build());
         });
+        when(connectionService.getActiveConnectionForSync(mentorUser.getId())).thenReturn(connection);
+        when(connectionService.resolveAccessTokenForSync(connection.getId())).thenReturn("test-access-token");
     }
 
     @Test

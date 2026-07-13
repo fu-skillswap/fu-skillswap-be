@@ -67,8 +67,6 @@ class ForumReportServiceTest {
     @Mock
     private CursorCodec cursorCodec;
     @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
-    @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
 
     private ForumReportService forumReportService;
@@ -88,8 +86,7 @@ class ForumReportServiceTest {
                 notificationService,
                 forumTextPolicy,
                 forumAbuseGuardService,
-                cursorCodec,
-                eventPublisher
+                cursorCodec
         );
         forumReportService = new ForumReportService(
                 forumPostService,

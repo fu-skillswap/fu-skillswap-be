@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.filestorage.controller;
 import com.fptu.exe.skillswap.modules.filestorage.dto.response.PresignedUploadResponse;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -52,12 +54,16 @@ public class FileStorageController {
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/upload-url")
     public ApiResponse<PresignedUploadResponse> getUploadUrl(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String filename,
             @RequestParam(required = false, defaultValue = "application/octet-stream") String contentType
     ) {
         validatePresignedUploadRequest(filename, contentType);
+        if (principal == null || principal.getPublicId() == null) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Cần đăng nhập để upload file");
+        }
         StorageGateway storageGateway = requireStorageGateway();
-        var presigned = storageGateway.generatePresignedUploadUrl(filename, contentType);
+        var presigned = storageGateway.generatePresignedUploadUrl(filename, contentType, verificationPrefix(principal));
         return ApiResponse.success(PresignedUploadResponse.builder()
                 .uploadUrl(presigned.uploadUrl())
                 .publicUrl(presigned.publicUrl())
@@ -70,6 +76,7 @@ public class FileStorageController {
     @PreAuthorize("isAuthenticated()")
     @PostMapping(path = "/local-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PresignedUploadResponse> localUpload(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam String objectKey,
             @RequestPart("file") MultipartFile file
     ) {
@@ -78,6 +85,7 @@ public class FileStorageController {
         if (file == null || file.isEmpty()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "File upload local không được để trống");
         }
+        validateOwnedObjectKey(principal, objectKey);
         writeLocalObject(objectKey, file);
         return ApiResponse.created(PresignedUploadResponse.builder()
                 .uploadUrl(null)
@@ -91,6 +99,7 @@ public class FileStorageController {
     @PreAuthorize("isAuthenticated()")
     @PutMapping(path = "/local-upload")
     public ApiResponse<PresignedUploadResponse> localUploadRaw(
+            @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam String objectKey,
             @RequestBody byte[] body
     ) {
@@ -99,6 +108,7 @@ public class FileStorageController {
         if (body == null || body.length == 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Body upload local không được để trống");
         }
+        validateOwnedObjectKey(principal, objectKey);
         writeLocalObject(objectKey, body);
         return ApiResponse.created(PresignedUploadResponse.builder()
                 .uploadUrl(null)
@@ -160,6 +170,17 @@ public class FileStorageController {
         String normalizedContentType = contentType == null ? "" : contentType.trim().toLowerCase();
         if (!storageProperties.getAllowedContentTypes().contains(normalizedContentType)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "contentType không được hỗ trợ cho presigned upload");
+        }
+    }
+
+    private String verificationPrefix(UserPrincipal principal) {
+        String basePrefix = storageProperties.getDocumentsPrefix() == null ? "skillswap/verification-documents" : storageProperties.getDocumentsPrefix();
+        return basePrefix.replaceAll("^/+|/+$", "") + "/users/" + principal.getPublicId();
+    }
+
+    private void validateOwnedObjectKey(UserPrincipal principal, String objectKey) {
+        if (principal == null || principal.getPublicId() == null || !requireSafeObjectKey(objectKey).startsWith(verificationPrefix(principal) + "/")) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi upload của người dùng");
         }
     }
 

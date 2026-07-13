@@ -38,13 +38,12 @@ public class BlogContentPolicy {
         if (!hasText(markdown)) {
             return;
         }
-        String lower = markdown.toLowerCase(Locale.ROOT);
-        if (lower.contains("<script")
-                || lower.contains("javascript:")
-                || lower.contains("onerror=")
-                || lower.contains("onload=")
-                || lower.contains("data:text/html")) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung markdown chứa pattern không an toàn");
+        // Raw HTML makes safety dependent on whichever renderer the client happens to use.
+        // Keep authored content to Markdown and allow code samples inside fenced code blocks.
+        String withoutCodeBlocks = markdown.replaceAll("(?s)```.*?```", "");
+        if (withoutCodeBlocks.contains("<") || withoutCodeBlocks.contains(">")
+                || withoutCodeBlocks.matches("(?s).*\\]\\s*\\(\\s*(?:javascript|vbscript|data)\\s*:.*")) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung markdown chứa HTML hoặc liên kết không an toàn");
         }
     }
 

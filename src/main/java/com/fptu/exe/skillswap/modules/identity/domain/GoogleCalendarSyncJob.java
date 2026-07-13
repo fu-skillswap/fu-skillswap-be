@@ -66,6 +66,9 @@ public class GoogleCalendarSyncJob {
 
     @PrePersist
     protected void onCreate() {
+        if (runAfter == null) {
+            runAfter = DateTimeUtil.now();
+        }
         createdAt = DateTimeUtil.now();
         updatedAt = DateTimeUtil.now();
     }

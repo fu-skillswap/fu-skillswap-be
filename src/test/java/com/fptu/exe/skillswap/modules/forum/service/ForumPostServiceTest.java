@@ -76,8 +76,6 @@ class ForumPostServiceTest {
     @Mock
     private CursorCodec cursorCodec;
     @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
-    @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
 
     private ForumPostService forumPostService;
@@ -96,8 +94,7 @@ class ForumPostServiceTest {
                 notificationService,
                 forumTextPolicy,
                 forumAbuseGuardService,
-                cursorCodec,
-                eventPublisher
+                cursorCodec
         );
 
         mentee = User.builder()

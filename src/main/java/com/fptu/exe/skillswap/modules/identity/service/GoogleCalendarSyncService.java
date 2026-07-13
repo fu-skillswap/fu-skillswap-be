@@ -67,12 +67,6 @@ public class GoogleCalendarSyncService {
                     DateTimeUtil.now(),
                     PageRequest.of(0, 20)
             );
-            for (GoogleCalendarSyncJob job : jobs) {
-                job.setStatus(GoogleCalendarSyncJobStatus.PROCESSING);
-            }
-            if (!jobs.isEmpty()) {
-                jobRepository.saveAll(jobs);
-            }
             return jobs.stream().map(GoogleCalendarSyncJob::getId).toList();
         });
 
@@ -84,8 +78,20 @@ public class GoogleCalendarSyncService {
     }
 
     public void processSingleJob(UUID jobId) {
+        boolean claimed = Boolean.TRUE.equals(transactionTemplate.execute(status ->
+                jobRepository.claimForProcessing(
+                        jobId,
+                        List.of(GoogleCalendarSyncJobStatus.PENDING, GoogleCalendarSyncJobStatus.RETRYING),
+                        GoogleCalendarSyncJobStatus.PROCESSING,
+                        DateTimeUtil.now()
+                ) == 1
+        ));
+        if (!claimed) {
+            return;
+        }
+
         GoogleCalendarSyncJob job = jobRepository.findById(jobId).orElse(null);
-        if (job == null || job.getStatus() != GoogleCalendarSyncJobStatus.PROCESSING) {
+        if (job == null) {
             return;
         }
 

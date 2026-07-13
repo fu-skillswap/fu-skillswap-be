@@ -95,7 +95,8 @@ class BlogEngagementServiceTest {
 
     @Test
     void like_existingLike_shouldNotIncrementCounter() {
-        when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post), Optional.of(post));
+        when(blogPostRepository.findByIdForEngagementUpdate(postId)).thenReturn(Optional.of(post));
+        when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post));
         when(blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(true);
         when(blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
         when(mentorContentAccessService.getBlogAuthorSummaries(any())).thenReturn(java.util.Map.of());
@@ -108,7 +109,8 @@ class BlogEngagementServiceTest {
 
     @Test
     void bookmark_newBookmark_shouldIncrementCounterAtomically() {
-        when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post), Optional.of(post));
+        when(blogPostRepository.findByIdForEngagementUpdate(postId)).thenReturn(Optional.of(post));
+        when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post));
         when(blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false, true);
         when(blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
         when(entityManager.getReference(BlogPost.class, postId)).thenReturn(post);

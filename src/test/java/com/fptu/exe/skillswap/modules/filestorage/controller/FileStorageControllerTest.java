@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.filestorage.controller;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -9,6 +11,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -29,7 +32,8 @@ class FileStorageControllerTest {
                 environment
         );
 
-        assertThatThrownBy(() -> controller.getUploadUrl("proof.png", "image/png"))
+        UserPrincipal principal = UserPrincipal.create(UUID.randomUUID(), "user@test.com", List.of(RoleCode.MENTEE));
+        assertThatThrownBy(() -> controller.getUploadUrl(principal, "proof.png", "image/png"))
                 .isInstanceOfSatisfying(BaseException.class, exception -> {
                     assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.STORAGE_ERROR);
                     assertThat(exception.getMessage()).contains("chưa cấu hình storage");

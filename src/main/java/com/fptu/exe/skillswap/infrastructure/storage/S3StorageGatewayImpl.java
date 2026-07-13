@@ -72,11 +72,12 @@ public class S3StorageGatewayImpl implements StorageGateway {
 
     @Override
     public PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType) {
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String objectKey = buildObjectKey(originalFilename, null);
+        return generatePresignedUploadUrl(originalFilename, contentType, null);
+    }
+
+    @Override
+    public PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType, String objectPrefix) {
+        String objectKey = buildObjectKey(originalFilename, objectPrefix);
 
         PutObjectRequest putObjectRequest = PutObjectRequest.builder()
                 .bucket(properties.getBucket())
@@ -85,7 +86,7 @@ public class S3StorageGatewayImpl implements StorageGateway {
                 .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(properties.getPresignedTtlMinutes()))
+                .signatureDuration(Duration.ofMinutes(Math.min(Math.max(properties.getPresignedTtlMinutes(), 1), 15)))
                 .putObjectRequest(putObjectRequest)
                 .build();
 

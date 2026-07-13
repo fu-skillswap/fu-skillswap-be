@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
 
@@ -24,6 +26,10 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
 
     @EntityGraph(attributePaths = {"authorUser", "categories", "tags"})
     Optional<BlogPost> findById(UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from BlogPost p where p.id = :postId")
+    Optional<BlogPost> findByIdForEngagementUpdate(@Param("postId") UUID postId);
 
     @EntityGraph(attributePaths = {"authorUser", "categories", "tags"})
     Optional<BlogPost> findBySlug(String slug);

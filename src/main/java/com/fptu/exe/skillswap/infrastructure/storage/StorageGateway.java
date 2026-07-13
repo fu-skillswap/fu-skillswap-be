@@ -12,6 +12,10 @@ public interface StorageGateway {
 
     PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType);
 
+    default PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType, String objectPrefix) {
+        return generatePresignedUploadUrl(originalFilename, contentType);
+    }
+
     String resolvePublicUrl(String objectKey);
 
     String storageProviderName();

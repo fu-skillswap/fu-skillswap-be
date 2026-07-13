@@ -87,6 +87,49 @@ class EmailDispatchServiceTest {
         verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.FAILED, "EmailService returned false");
     }
 
+    @Test
+    void dispatchEmailAsync_shouldAcceptJsonbPayloadStoredAsJsonString() throws Exception {
+        UUID outboxId = UUID.randomUUID();
+        String payload = objectMapper.writeValueAsString(new PayloadFixture());
+        EmailOutbox outbox = EmailOutbox.builder()
+                .id(outboxId)
+                .toEmail("legacy@test.com")
+                .subject("Legacy subject")
+                .body("Legacy body")
+                .payloadData(objectMapper.writeValueAsString(payload))
+                .status(NotificationStatus.PENDING)
+                .retryCount(0)
+                .build();
+        when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
+        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body")).thenReturn(true);
+
+        service.dispatchEmailAsync(outboxId);
+
+        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body");
+        verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.SENT, null);
+    }
+
+    @Test
+    void dispatchEmailAsync_shouldFallbackToLegacyColumnsForIncompletePayload() {
+        UUID outboxId = UUID.randomUUID();
+        EmailOutbox outbox = EmailOutbox.builder()
+                .id(outboxId)
+                .toEmail("legacy@test.com")
+                .subject("Legacy subject")
+                .body("Legacy body")
+                .payloadData("{}")
+                .status(NotificationStatus.PENDING)
+                .retryCount(0)
+                .build();
+        when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
+        when(emailService.sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body")).thenReturn(true);
+
+        service.dispatchEmailAsync(outboxId);
+
+        verify(emailService).sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body");
+        verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.SENT, null);
+    }
+
     private EmailOutbox savedOutbox(UUID id) throws Exception {
         EmailOutbox outbox = EmailOutbox.builder()
                 .id(id)
