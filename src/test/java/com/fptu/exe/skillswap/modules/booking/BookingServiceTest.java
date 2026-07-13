@@ -1199,11 +1199,11 @@ class BookingServiceTest {
         BookingResponse response = bookingService.resolveBookingIssue(
                 adminUserId,
                 booking.getId(),
-                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.COMPLETE, "Issue verified and closed")
+                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.CONFIRM_SESSION, "Issue verified and closed")
         );
 
         assertEquals(BookingStatus.COMPLETED, response.status());
-        assertEquals(BookingCompletionOutcome.COMPLETED_CONFIRMED, response.completionOutcome());
+        assertEquals(BookingCompletionOutcome.USER_CONFIRMED, response.completionOutcome());
         assertEquals(adminUserId, response.issueResolvedByUserId());
         assertEquals("Issue verified and closed", response.issueResolutionNote());
         verify(settlementService).releaseForBooking(booking);
@@ -1217,7 +1217,7 @@ class BookingServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.resolveBookingIssue(
                 UUID.randomUUID(),
                 booking.getId(),
-                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.AUTO_CLOSE, "Manual close")
+                new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.CONFIRM_SESSION, "Manual close")
         ));
 
         assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());

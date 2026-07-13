@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
@@ -12,6 +13,8 @@ import java.util.UUID;
 public record BookingIssueResponse(
         UUID bookingId,
         BookingStatus status,
-        LocalDateTime issueSubmittedAt
+        LocalDateTime issueSubmittedAt,
+        BookingIssueType issueType,
+        LocalDateTime issueRespondedAt
 ) {
 }

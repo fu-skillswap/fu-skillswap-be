@@ -133,6 +133,9 @@ public class Booking {
     @Column(name = "issue_submitted_at")
     private LocalDateTime issueSubmittedAt;
 
+    @Column(name = "issue_submitted_by_user_id")
+    private UUID issueSubmittedByUserId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "issue_type")
     private BookingIssueType issueType;
@@ -140,8 +143,40 @@ public class Booking {
     @Column(name = "issue_description", columnDefinition = "TEXT")
     private String issueDescription;
 
+    /** Deprecated DB column retained only for migration compatibility. */
+    @Deprecated
     @Column(name = "wants_admin_review")
     private Boolean wantsAdminReview;
+
+    @Column(name = "issue_responded_at")
+    private LocalDateTime issueRespondedAt;
+
+    @Column(name = "issue_responded_by_user_id")
+    private UUID issueRespondedByUserId;
+
+    @Column(name = "issue_response_note", columnDefinition = "TEXT")
+    private String issueResponseNote;
+
+    @Column(name = "mentor_completion_overdue_at")
+    private LocalDateTime mentorCompletionOverdueAt;
+
+    @Column(name = "post_session_prompted_at")
+    private LocalDateTime postSessionPromptedAt;
+
+    @Column(name = "mentor_completion_reminder_30m_at")
+    private LocalDateTime mentorCompletionReminder30mAt;
+
+    @Column(name = "mentor_completion_reminder_1h_at")
+    private LocalDateTime mentorCompletionReminder1hAt;
+
+    @Column(name = "mentee_completion_prompted_at")
+    private LocalDateTime menteeCompletionPromptedAt;
+
+    @Column(name = "auto_close_warning_sent_at")
+    private LocalDateTime autoCloseWarningSentAt;
+
+    @Column(name = "issue_escalation_sent_at")
+    private LocalDateTime issueEscalationSentAt;
 
     @Column(name = "issue_resolved_at")
     private LocalDateTime issueResolvedAt;

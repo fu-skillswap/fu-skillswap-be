@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequ
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingRescheduleService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -210,7 +211,7 @@ public class MyBookingController {
 
     @Operation(
             summary = "Participant báo vấn đề sau buổi mentoring",
-            description = "Participant hợp lệ của booking báo vấn đề trong cửa sổ 24 giờ sau khi session kết thúc. Phase 1 mới chuẩn bị contract và validation skeleton cho flow này."
+            description = "Participant hợp lệ của booking báo vấn đề trong cửa sổ 4 giờ sau khi session kết thúc. Phase 1 mới chuẩn bị contract và validation skeleton cho flow này."
     )
     @PostMapping("/{bookingId}/issue")
     public ApiResponse<BookingIssueResponse> submitIssue(
@@ -220,6 +221,17 @@ public class MyBookingController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.submitBookingIssue(principal.getPublicId(), bookingId, request));
+    }
+
+    @PostMapping("/{bookingId}/issue/respond")
+    @Operation(summary = "Phản hồi booking issue", description = "Chỉ counterparty của người đã report được phản hồi một lần trong 24 giờ. Phản hồi không tự giải quyết dispute.")
+    public ApiResponse<BookingIssueResponse> respondToIssue(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody RespondBookingIssueRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.respondToBookingIssue(principal.getPublicId(), bookingId, request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

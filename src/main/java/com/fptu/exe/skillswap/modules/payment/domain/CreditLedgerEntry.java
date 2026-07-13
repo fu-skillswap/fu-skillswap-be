@@ -62,6 +62,9 @@ public class CreditLedgerEntry {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Column(name = "operation_key", unique = true, length = 160)
+    private String operationKey;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

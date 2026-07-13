@@ -8,17 +8,13 @@ import jakarta.validation.constraints.Size;
 
 @Schema(description = "Payload để participant báo vấn đề sau buổi mentoring")
 public record SubmitBookingIssueRequest(
-        @Schema(example = "NO_SHOW_OR_QUALITY_OR_OTHER")
+        @Schema(example = "MENTOR_NO_SHOW")
         @NotNull(message = "issueType là bắt buộc")
         BookingIssueType issueType,
 
         @Schema(example = "Mentor không tham gia đúng giờ hẹn và không báo trước.")
         @NotBlank(message = "Mô tả vấn đề không được để trống")
         @Size(max = 2000, message = "Mô tả vấn đề không được vượt quá 2000 ký tự")
-        String description,
-
-        @Schema(example = "true")
-        @NotNull(message = "wantsAdminReview là bắt buộc")
-        Boolean wantsAdminReview
+        String description
 ) {
 }

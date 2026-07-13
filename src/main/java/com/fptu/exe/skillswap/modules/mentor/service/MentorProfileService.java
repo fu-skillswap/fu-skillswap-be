@@ -26,12 +26,14 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,7 +50,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class MentorProfileService {
 
     private static final Set<Integer> SUPPORT_LEVELS = Set.of(1, 2, 3, 4);
@@ -61,6 +63,28 @@ public class MentorProfileService {
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final MentorBookingPolicyService mentorBookingPolicyService;
+
+    public MentorProfileService(
+            MentorProfileRepository mentorProfileRepository,
+            MentorTagRepository mentorTagRepository,
+            TagRepository tagRepository,
+            UserRepository userRepository,
+            MentorSubjectResultRepository mentorSubjectResultRepository,
+            MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
+            MentorAchievementRepository mentorAchievementRepository,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this(mentorProfileRepository,
+                mentorTagRepository,
+                tagRepository,
+                userRepository,
+                mentorSubjectResultRepository,
+                mentorFeaturedProjectRepository,
+                mentorAchievementRepository,
+                eventPublisher,
+                null);
+    }
 
     @Transactional(readOnly = true)
     public MentorProfileResponse getMyProfile(UUID userId) {
@@ -110,6 +134,14 @@ public class MentorProfileService {
         touchMentorActivity(profile, LocalDateTime.now());
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
+        if (mentorBookingPolicyService != null) {
+            mentorBookingPolicyService.upsertPolicy(
+                    savedProfile.getUserId(),
+                    request.minimumBookingLeadTimeMinutes(),
+                    request.maximumBookingHorizonDays(),
+                    request.bookingTimezone()
+            );
+        }
         replaceHelpTopics(savedProfile, helpTopics);
         replaceSubjectResults(savedProfile, request.subjectResults());
         publishAvailabilityChangedEventIfNeeded(savedProfile, previousAvailability, currentAvailability);
@@ -192,6 +224,9 @@ public class MentorProfileService {
         List<MentorSubjectResultResponse> subjectResults = loadSubjectResults(profile.getUserId());
         List<MentorFeaturedProjectResponse> featuredProjects = loadFeaturedProjects(profile.getUserId());
         List<MentorAchievementResponse> achievements = loadAchievements(profile.getUserId());
+        MentorBookingPolicyService.MentorBookingPolicySnapshot policy = mentorBookingPolicyService == null
+                ? MentorBookingPolicyService.MentorBookingPolicySnapshot.defaults()
+                : mentorBookingPolicyService.getEffectivePolicy(profile.getUserId());
         return MentorProfileResponse.builder()
                 .exists(true)
                 .requiredFieldsCompleted(isRequiredFieldsCompleted(profile, helpTopics))
@@ -206,6 +241,9 @@ public class MentorProfileService {
                 .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
                 .lateCancellationPenaltyPoints(profile.getLateCancellationPenaltyPoints())
                 .verifiedAt(profile.getVerifiedAt())
+                .minimumBookingLeadTimeMinutes(policy.minimumBookingLeadTimeMinutes())
+                .maximumBookingHorizonDays(policy.maximumBookingHorizonDays())
+                .bookingTimezone(policy.timezone())
                 .helpTopics(helpTopics)
                 .subjectResults(subjectResults)
                 .foundationSupportLevel(profile.getFoundationSupportLevel())

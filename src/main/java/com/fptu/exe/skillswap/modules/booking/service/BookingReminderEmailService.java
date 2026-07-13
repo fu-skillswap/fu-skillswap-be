@@ -22,7 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BookingReminderEmailService {
 
-    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.ACCEPTED, BookingStatus.PAID);
+    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
     private static final DateTimeFormatter DIGEST_SLOT_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
@@ -81,9 +81,8 @@ public class BookingReminderEmailService {
 
     public int sendAutoCloseWarningEmails() {
         LocalDateTime now = DateTimeUtil.now();
-        // 48 hours after selectedEndTime means there is exactly 24 hours left before the 72h POST_SESSION_REVIEW_WINDOW
-        // We look for selectedEndTime between now - 48h - 1min and now - 48h
-        LocalDateTime endExclusive = now.minusHours(48);
+        // Auto-close is anchored to mentor completion, never to raw selectedEndTime.
+        LocalDateTime endExclusive = now.minusHours(3);
         LocalDateTime startInclusive = endExclusive.minusMinutes(1);
         
         List<Booking> bookings = bookingRepository.findBookingsAboutToAutoClose(
@@ -111,7 +110,7 @@ public class BookingReminderEmailService {
                 "Đang chờ xác nhận",
                 defaultText(booking.getMentee().getFullName(), "bạn"),
                 mentorName(booking),
-                "Chỉ còn 24 giờ nữa buổi học với " + mentorName(booking) + " sẽ tự động đóng và giải ngân cho mentor.",
+                "Chỉ còn 1 giờ nữa buổi học với " + mentorName(booking) + " sẽ tự động đóng và giải ngân cho mentor.",
                 "Vui lòng vào SkillSwap để xác nhận hoàn tất hoặc báo cáo sự cố nếu có.",
                 "Đến trang quản lý"
         );
@@ -137,7 +136,7 @@ public class BookingReminderEmailService {
                 "Đang chờ xác nhận",
                 mentorName(booking),
                 menteeName(booking),
-                "Chỉ còn 24 giờ nữa buổi học với " + menteeName(booking) + " sẽ tự động đóng. Nếu không có khiếu nại, tiền sẽ được chuyển vào ví của bạn.",
+                "Chỉ còn 1 giờ nữa buổi học với " + menteeName(booking) + " sẽ tự động đóng. Nếu không có khiếu nại, tiền sẽ được chuyển vào ví của bạn.",
                 "Theo dõi trạng thái buổi mentoring trên hệ thống.",
                 "Đến trang quản lý"
         );

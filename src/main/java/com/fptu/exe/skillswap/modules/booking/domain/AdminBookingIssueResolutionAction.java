@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
 public enum AdminBookingIssueResolutionAction {
-    COMPLETE,
-    AUTO_CLOSE
+    CONFIRM_SESSION,
+    CONFIRM_MENTOR_NO_SHOW_REFUND,
+    CONFIRM_MENTEE_NO_SHOW_RELEASE
 }

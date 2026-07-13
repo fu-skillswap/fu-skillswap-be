@@ -109,6 +109,14 @@ public class MentorProfile {
     @Builder.Default
     private Integer totalMentorCancelledBookings = 0;
 
+    @Column(name = "mentor_no_show_count", nullable = false)
+    @Builder.Default
+    private Integer mentorNoShowCount = 0;
+
+    @Column(name = "mentor_completion_overdue_count", nullable = false)
+    @Builder.Default
+    private Integer mentorCompletionOverdueCount = 0;
+
     @Column(name = "late_cancellation_penalty_points", nullable = false, precision = 6, scale = 2)
     @Builder.Default
     private BigDecimal lateCancellationPenaltyPoints = BigDecimal.ZERO;

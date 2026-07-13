@@ -13,6 +13,8 @@ import java.util.UUID;
 
 public interface CreditLedgerEntryRepository extends JpaRepository<CreditLedgerEntry, UUID> {
 
+    Optional<CreditLedgerEntry> findByOperationKey(String operationKey);
+
     boolean existsBySourceTypeAndSourceIdAndEntryType(LedgerSourceType sourceType, UUID sourceId, LedgerEntryType entryType);
 
     @Query("""

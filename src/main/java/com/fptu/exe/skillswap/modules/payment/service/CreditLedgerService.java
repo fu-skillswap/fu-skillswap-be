@@ -202,21 +202,47 @@ public class CreditLedgerService {
                              UUID sourceId,
                              int amountScoin,
                              String memo) {
+        refundCredit(userId, originType, sourceType, sourceId, amountScoin, memo, null);
+    }
+
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
+    @Transactional
+    public void refundCredit(UUID userId,
+                             CreditOriginType originType,
+                             LedgerSourceType sourceType,
+                             UUID sourceId,
+                             int amountScoin,
+                             String memo,
+                             String operationKey) {
         if (amountScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Số credit hoàn trả phải lớn hơn 0");
         }
+        if (operationKey != null && entryRepository.findByOperationKey(operationKey).isPresent()) {
+            return;
+        }
         CreditLedgerAccount account = getUserAccountForUpdate(userId);
+        if (operationKey != null && entryRepository.findByOperationKey(operationKey).isPresent()) {
+            return;
+        }
         accountRepository.addBalance(account.getId(), amountScoin);
-        entryRepository.save(CreditLedgerEntry.builder()
-                .accountId(account.getId())
-                .entryType(LedgerEntryType.REFUND)
-                .originType(originType)
-                .sourceType(sourceType)
-                .sourceId(sourceId)
-                .amountScoin(amountScoin)
-                .balanceEffectScoin(amountScoin)
-                .memo(memo)
-                .build());
+        try {
+            entryRepository.save(CreditLedgerEntry.builder()
+                    .accountId(account.getId())
+                    .entryType(LedgerEntryType.REFUND)
+                    .originType(originType)
+                    .sourceType(sourceType)
+                    .sourceId(sourceId)
+                    .amountScoin(amountScoin)
+                    .balanceEffectScoin(amountScoin)
+                    .memo(memo)
+                    .operationKey(operationKey)
+                    .build());
+        } catch (DataIntegrityViolationException duplicate) {
+            // The unique operation key is the final idempotency guard. The enclosing transaction rolls back balance addition.
+            if (operationKey == null || entryRepository.findByOperationKey(operationKey).isEmpty()) {
+                throw duplicate;
+            }
+        }
     }
 
     private CreditLedgerAccount ensureAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {

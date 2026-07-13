@@ -6,9 +6,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -17,7 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class BookingSlotValidator {
 
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
@@ -28,6 +30,12 @@ public class BookingSlotValidator {
 
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final BookingRepository bookingRepository;
+    private final MentorBookingPolicyService mentorBookingPolicyService;
+
+    public BookingSlotValidator(AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
+                                BookingRepository bookingRepository) {
+        this(availabilitySlotServiceRepository, bookingRepository, null);
+    }
 
     public void validateSelectedRange(
             MentorAvailabilitySlot slot,
@@ -57,6 +65,11 @@ public class BookingSlotValidator {
         }
         if (durationMinutes != mentorService.getDurationMinutes()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải đúng bằng thời lượng của service");
+        }
+        if (mentorBookingPolicyService != null
+                && slot.getMentorProfile() != null
+                && slot.getMentorProfile().getUserId() != null) {
+            mentorBookingPolicyService.validateBookingWindow(slot.getMentorProfile().getUserId(), selectedStartTime, now);
         }
     }
 

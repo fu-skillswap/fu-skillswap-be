@@ -480,7 +480,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             where booking.status = :status
-              and booking.selectedEndTime between :startInclusive and :endExclusive
+              and booking.completedAt between :startInclusive and :endExclusive
             """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
     List<Booking> findBookingsAboutToAutoClose(
@@ -488,4 +488,16 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("startInclusive") LocalDateTime startInclusive,
             @Param("endExclusive") LocalDateTime endExclusive
     );
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
+            BookingStatus status, LocalDateTime selectedEndTimeBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
+            BookingStatus status, LocalDateTime completedAtBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
+            BookingStatus status, LocalDateTime issueSubmittedAtBefore);
 }

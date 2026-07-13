@@ -38,6 +38,12 @@ public record MentorProfileResponse(
         BigDecimal lateCancellationPenaltyPoints,
         @Schema(description = "Timestamp when the mentor was verified by admin", nullable = true, example = "2026-06-20T14:30:00")
         LocalDateTime verifiedAt,
+        @Schema(description = "Số phút tối thiểu trước giờ bắt đầu mentor cho phép mentee đặt lịch", example = "120")
+        Integer minimumBookingLeadTimeMinutes,
+        @Schema(description = "Số ngày tối đa cho phép mentee đặt lịch tính từ hiện tại", example = "30")
+        Integer maximumBookingHorizonDays,
+        @Schema(description = "Timezone áp dụng cho policy đặt lịch", example = "Asia/Ho_Chi_Minh")
+        String bookingTimezone,
         @Schema(description = "Selected help topics that describe what the mentor can support")
         List<MentorTagResponse> helpTopics,
         @Schema(description = "Môn - điểm mentor dùng cho peer matching")
@@ -77,6 +83,9 @@ public record MentorProfileResponse(
                 .userId(userId)
                 .isAvailable(true)
                 .lateCancellationPenaltyPoints(BigDecimal.ZERO)
+                .minimumBookingLeadTimeMinutes(120)
+                .maximumBookingHorizonDays(30)
+                .bookingTimezone("Asia/Ho_Chi_Minh")
                 .helpTopics(List.of())
                 .subjectResults(List.of())
                 .featuredProjects(List.of())

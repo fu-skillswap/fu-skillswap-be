@@ -52,7 +52,9 @@ public class SessionService {
                 .build();
 
         try {
-            return sessionRepository.save(session);
+            Session saved = sessionRepository.save(session);
+            sessionRepository.flush();
+            return saved;
         } catch (org.springframework.dao.DataIntegrityViolationException ex) {
             return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.getId())
                     .orElseThrow(() -> ex);

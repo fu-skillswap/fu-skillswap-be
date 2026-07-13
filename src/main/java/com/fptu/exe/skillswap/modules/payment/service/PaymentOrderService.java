@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentProvider;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
@@ -137,10 +138,14 @@ public class PaymentOrderService {
                             ? PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT
                             : PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT
                         : PaymentOrderStatus.PAID);
+                if (draftOrder.getStatus() == PaymentOrderStatus.PAID) {
+                    draftOrder.setSettlementStatus(PaymentSettlementStatus.HELD);
+                }
             } else {
                 draftOrder.setUserCreditScoin(0);
                 draftOrder.setRemainingPayableScoin(0);
                 draftOrder.setStatus(PaymentOrderStatus.PAID);
+                draftOrder.setSettlementStatus(PaymentSettlementStatus.HELD);
             }
 
             return paymentOrderRepository.save(draftOrder);
@@ -729,6 +734,7 @@ public class PaymentOrderService {
         }
         couponService.markRedeemed(order.getId());
         order.setStatus(PaymentOrderStatus.PAID);
+        order.setSettlementStatus(PaymentSettlementStatus.HELD);
         order.setProviderTransactionId(providerTransactionId);
         order.setProviderEventId(providerEventId);
         order.setProviderStatus(providerStatus);
@@ -791,6 +797,8 @@ public class PaymentOrderService {
                 : bookingRepository.findByIdForSessionUpdate(order.getBookingId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         if (booking.getStatus() == BookingStatus.PAID) {
+            sessionService.createForAcceptedBooking(booking);
+            conversationService.createDirectForAcceptedBooking(booking);
             return;
         }
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT

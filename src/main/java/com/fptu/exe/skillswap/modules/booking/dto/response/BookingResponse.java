@@ -1,9 +1,12 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -71,8 +74,23 @@ public record BookingResponse(
         Integer servicePriceScoinSnapshot,
         @Schema(description = "Giá mentee nhìn thấy trước coupon/credit, đã cộng phụ phí nền tảng theo cấu hình PAYMENT_MENTEE_SURCHARGE_BPS", nullable = true, example = "110")
         Integer servicePriceWithSurchargeScoin,
-        @Schema(description = "Trạng thái booking hiện tại", example = "PENDING")
+        @Deprecated(forRemoval = false)
+        @Schema(description = "Legacy persisted BookingStatus. FE phải dùng bookingStatus.", example = "PENDING", deprecated = true)
         BookingStatus status,
+        @Schema(description = "Canonical booking lifecycle status dùng cho public contract mới", example = "REQUESTED")
+        BookingLifecycleStatus bookingStatus,
+        @Schema(description = "Canonical payment lifecycle status dùng cho public contract mới", example = "PENDING")
+        BookingPaymentStatus paymentStatus,
+        @Schema(description = "Settlement summary của payment order; null khi booking free/chưa có payment order", nullable = true)
+        PaymentSettlementStatus settlementStatus,
+        @Schema(nullable = true)
+        LocalDateTime releasedAt,
+        @Schema(nullable = true)
+        LocalDateTime refundedAt,
+        @Schema(nullable = true)
+        Integer refundedScoin,
+        @Schema(nullable = true)
+        String refundReason,
         @Schema(description = "Tiêu đề mục tiêu học tập")
         String learningGoalTitle,
         @Schema(description = "Mô tả chi tiết mục tiêu học tập", nullable = true)
@@ -127,8 +145,12 @@ public record BookingResponse(
         BookingIssueType issueType,
         @Schema(description = "Mô tả issue participant đã gửi", nullable = true)
         String issueDescription,
-        @Schema(description = "Participant có yêu cầu admin review hay không", nullable = true)
-        Boolean wantsAdminReview,
+        @Schema(description = "Thời điểm counterparty phản hồi issue; phase này chỉ nhận một response", nullable = true)
+        LocalDateTime issueRespondedAt,
+        @Schema(nullable = true)
+        UUID issueRespondedByUserId,
+        @Schema(nullable = true)
+        String issueResponseNote,
         @Schema(description = "Thời điểm admin resolve issue", nullable = true)
         LocalDateTime issueResolvedAt,
         @Schema(description = "admin userId đã resolve issue", nullable = true)

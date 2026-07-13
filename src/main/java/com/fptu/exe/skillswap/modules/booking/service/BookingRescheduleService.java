@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleActorRole;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
@@ -352,7 +353,7 @@ public class BookingRescheduleService {
     }
 
     private void validateRescheduleableBooking(Booking booking) {
-        if (booking.getStatus() != BookingStatus.PAID && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (!BookingStateMapper.isPaidOrReservedForSchedule(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking đã xác nhận mới được reschedule");
         }
         if (booking.getService() == null || booking.getService().getId() == null) {

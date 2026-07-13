@@ -32,6 +32,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidateIt
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
@@ -40,6 +41,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -66,7 +68,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class MentorAvailabilityService {
 
@@ -92,6 +94,30 @@ public class MentorAvailabilityService {
     private final NotificationService notificationService;
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
     private final PaymentProperties paymentProperties;
+    private final MentorBookingPolicyService mentorBookingPolicyService;
+
+    public MentorAvailabilityService(
+            MentorProfileRepository mentorProfileRepository,
+            MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository,
+            MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository,
+            AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
+            MentorServiceRepository mentorServiceRepository,
+            BookingRepository bookingRepository,
+            NotificationService notificationService,
+            AvailabilityCalendarWindowCalculator calendarWindowCalculator,
+            PaymentProperties paymentProperties
+    ) {
+        this(mentorProfileRepository,
+                mentorAvailabilityRuleRepository,
+                mentorAvailabilitySlotRepository,
+                availabilitySlotServiceRepository,
+                mentorServiceRepository,
+                bookingRepository,
+                notificationService,
+                calendarWindowCalculator,
+                paymentProperties,
+                null);
+    }
 
     @Deprecated(forRemoval = false)
     @Transactional(readOnly = true)
@@ -365,12 +391,13 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor");
         }
 
+        LocalDateTime now = now();
         AvailabilityCalendarWindowCalculator.DateRange dateRange = calendarWindowCalculator.resolveClientQueryRange(
                 LocalDate.now(APP_ZONE),
                 fromDate,
                 toDate
         );
-        LocalDateTime fromTime = max(dateRange.startDate().atStartOfDay(), now());
+        LocalDateTime fromTime = max(dateRange.startDate().atStartOfDay(), now);
         LocalDateTime toTimeExclusive = dateRange.endDate().plusDays(1).atStartOfDay();
 
         List<MentorAvailabilitySlot> slots = mentorAvailabilitySlotRepository.findVisibleSlotsByMentorUserId(
@@ -378,6 +405,16 @@ public class MentorAvailabilityService {
                 fromTime,
                 toTimeExclusive
         );
+        if (slots.isEmpty()) {
+            return List.of();
+        }
+
+        slots = slots.stream()
+                .filter(slot -> mentorBookingPolicyService == null
+                        || (slot.getMentorProfile() != null
+                        && slot.getMentorProfile().getUserId() != null
+                        && mentorBookingPolicyService.isBookableStartTime(slot.getMentorProfile().getUserId(), slot.getStartTime(), now)))
+                .toList();
         if (slots.isEmpty()) {
             return List.of();
         }
@@ -410,6 +447,8 @@ public class MentorAvailabilityService {
         }
 
         List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service).stream()
+                .filter(candidate -> mentorBookingPolicyService == null
+                        || mentorBookingPolicyService.isBookableStartTime(mentorUserId, candidate.startTime(), now()))
                 .filter(ServiceSlotCandidateItemResponse::isSelectable)
                 .toList();
         return ServiceSlotCandidatesResponse.builder()

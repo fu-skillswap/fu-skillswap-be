@@ -402,16 +402,16 @@ class CoreMentorshipFlowSmokeTest {
         paymentOrderService.checkout(mentee.getId(), new PaymentCheckoutRequest(bk.bookingId(), null));
 
         // Fast-forward time so we can complete it
-        slot.setStartTime(DateTimeUtil.now().minusDays(1));
-        slot.setEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
+        slot.setStartTime(DateTimeUtil.now().minusHours(2));
+        slot.setEndTime(DateTimeUtil.now().minusHours(1));
         slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
         booking.setStatus(BookingStatus.PAID);
-        booking.setSelectedStartTime(DateTimeUtil.now().minusDays(1));
-        booking.setSelectedEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
-        booking.setRequestedStartTime(DateTimeUtil.now().minusDays(1));
-        booking.setRequestedEndTime(DateTimeUtil.now().minusDays(1).plusHours(2));
+        booking.setSelectedStartTime(DateTimeUtil.now().minusHours(2));
+        booking.setSelectedEndTime(DateTimeUtil.now().minusHours(1));
+        booking.setRequestedStartTime(DateTimeUtil.now().minusHours(2));
+        booking.setRequestedEndTime(DateTimeUtil.now().minusHours(1));
         bookingRepository.saveAndFlush(booking);
 
         // Complete booking

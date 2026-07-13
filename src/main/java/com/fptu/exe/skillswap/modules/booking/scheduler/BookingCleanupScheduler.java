@@ -33,4 +33,16 @@ public class BookingCleanupScheduler {
             log.error("Error occurred while expiring stale pending bookings", ex);
         }
     }
+
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void processPostSessionLifecycle() {
+        try {
+            int changed = bookingService.processPostSessionLifecycle();
+            if (changed > 0) {
+                log.info("Processed {} post-session booking lifecycle transitions/reminders.", changed);
+            }
+        } catch (Exception ex) {
+            log.error("Post-session booking lifecycle job failed", ex);
+        }
+    }
 }

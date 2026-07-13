@@ -161,7 +161,7 @@ public class MentorBookingController {
 
     @Operation(
             summary = "Mentor xác nhận hoàn tất buổi mentoring",
-            description = "Mentor đánh dấu buổi mentoring đã diễn ra xong. Phase 1 chuyển booking sang trạng thái chờ participant còn lại xác nhận hoặc báo issue trong 24 giờ."
+            description = "Mentor đánh dấu buổi mentoring đã diễn ra xong. Phase 1 chuyển booking sang trạng thái chờ participant còn lại xác nhận hoặc báo issue trong 4 giờ."
     )
     @PostMapping("/{bookingId}/complete")
     public ApiResponse<BookingResponse> completeBooking(
@@ -175,7 +175,7 @@ public class MentorBookingController {
 
     @Operation(
             summary = "Lưu meeting link",
-            description = "Lưu hoặc cập nhật thông tin meeting cho một booking đã ACCEPTED thuộc về mentor hiện tại. FE dùng sau khi booking đã được xác nhận để mentee có thể tham gia đúng platform, meeting link hoặc địa điểm offline."
+            description = "Lưu hoặc cập nhật thông tin meeting cho một booking đã được mentor chấp nhận thuộc về mentor hiện tại. FE dùng sau khi booking đã được xác nhận để mentee có thể tham gia đúng platform, meeting link hoặc địa điểm offline."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu meeting link thành công"),
@@ -183,7 +183,7 @@ public class MentorBookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người gọi không phải mentor của booking này"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy booking"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Booking chưa được ACCEPTED hoặc không còn cho phép cập nhật meeting link")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Booking chưa được xác nhận hoặc không còn cho phép cập nhật meeting link")
     })
     @PatchMapping("/{bookingId}/meeting-link")
     public ApiResponse<BookingResponse> saveMeetingLink(

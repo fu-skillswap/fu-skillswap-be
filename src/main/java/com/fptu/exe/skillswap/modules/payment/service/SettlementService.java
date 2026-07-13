@@ -13,6 +13,8 @@ import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntryType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerEntryRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementAccountRepository;
@@ -70,16 +72,23 @@ public class SettlementService {
         if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
             return;
         }
-        if (booking.getStatus() != BookingStatus.COMPLETED
-                && booking.getStatus() != BookingStatus.AUTO_CLOSED) {
+        if (booking.getStatus() != BookingStatus.COMPLETED) {
             return;
         }
-        if (booking.getCompletionOutcome() == BookingCompletionOutcome.REVIEW_PENDING_DECISION) {
+        if (booking.getCompletionOutcome() != BookingCompletionOutcome.USER_CONFIRMED
+                && booking.getCompletionOutcome() != BookingCompletionOutcome.AUTO_CLOSED
+                && booking.getCompletionOutcome() != BookingCompletionOutcome.NO_SHOW_MENTEE) {
             return;
         }
         PaymentOrder paymentOrder = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
+        }
+        if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.RELEASED) {
+            return;
+        }
+        if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.REFUNDED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Payment đã được hoàn tiền, không thể release settlement");
         }
         SettlementAccount mentorAccount = lockMentorAccount(booking.getMentorProfile().getUserId());
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
@@ -133,6 +142,46 @@ public class SettlementService {
                 .mentorNetScoin(releasableScoin)
                 .memo("Platform commission for booking " + booking.getId())
                 .build());
+        paymentOrder.setSettlementStatus(PaymentSettlementStatus.RELEASED);
+        paymentOrder.setReleasedAt(DateTimeUtil.now());
+        paymentOrderRepository.save(paymentOrder);
+    }
+
+    /** Full refund used only for the resolved mentor no-show path. */
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
+    @Transactional
+    public void refundForMentorNoShow(Booking booking) {
+        if (booking == null || booking.getId() == null || booking.getMentee() == null) {
+            return;
+        }
+        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
+            return;
+        }
+        if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.REFUNDED) {
+            return;
+        }
+        if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.RELEASED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Settlement đã release, không thể hoàn tiền tự động");
+        }
+        int amount = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
+        if (amount == 0) {
+            paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
+            paymentOrder.setRefundedAt(DateTimeUtil.now());
+            paymentOrder.setRefundedScoin(0);
+            paymentOrder.setRefundReason("MENTOR_NO_SHOW");
+            paymentOrderRepository.save(paymentOrder);
+            return;
+        }
+        String operationKey = "PAYMENT_REFUND:" + paymentOrder.getId();
+        creditLedgerService.refundCredit(
+                booking.getMentee().getId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
+                booking.getId(), amount, "Full refund for mentor no-show booking " + booking.getId(), operationKey);
+        paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
+        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedScoin(amount);
+        paymentOrder.setRefundReason("MENTOR_NO_SHOW");
+        paymentOrderRepository.save(paymentOrder);
     }
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))

@@ -11,11 +11,14 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 import java.util.List;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.UUID;
 
 public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID> {
 
     Optional<PaymentOrder> findByBookingId(UUID bookingId);
+
+    List<PaymentOrder> findByBookingIdIn(Collection<UUID> bookingIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select po from PaymentOrder po where po.bookingId = :bookingId")

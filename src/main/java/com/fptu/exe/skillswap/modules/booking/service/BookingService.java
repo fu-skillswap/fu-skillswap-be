@@ -5,6 +5,9 @@ import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
@@ -23,6 +26,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -31,17 +35,27 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +64,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -59,7 +74,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class BookingService {
 
     private static final long MENTEE_FREE_CANCEL_DEADLINE_MINUTES = 6 * 60;
@@ -67,7 +82,7 @@ public class BookingService {
     private static final long MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES = 6 * 60;
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
-    private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 72;
+    private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 4;
     private static final long PAYMENT_WINDOW_MINUTES = 360;
     private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
@@ -93,6 +108,8 @@ public class BookingService {
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
+    private final PaymentOrderRepository paymentOrderRepository;
+    private final BookingEventService bookingEventService;
     private final EntityManager entityManager;
     private final com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
     private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
@@ -100,8 +117,48 @@ public class BookingService {
     private final com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService paymentOrderService;
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final MentorBookingPolicyService mentorBookingPolicyService;
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
+
+    public BookingService(
+            BookingRepository bookingRepository,
+            MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository,
+            MentorServiceRepository mentorServiceRepository,
+            UserRepository userRepository,
+            NotificationService notificationService,
+            ApplicationEventPublisher eventPublisher,
+            MentorProfileRepository mentorProfileRepository,
+            EntityManager entityManager,
+            SessionService sessionService,
+            ConversationService conversationService,
+            SettlementService settlementService,
+            PaymentOrderService paymentOrderService,
+            BookingSlotValidator bookingSlotValidator,
+            BookingEligibilityPolicy bookingEligibilityPolicy,
+            PaymentProperties paymentProperties,
+            InternalTelemetryService internalTelemetryService
+    ) {
+        this(bookingRepository,
+                mentorAvailabilitySlotRepository,
+                mentorServiceRepository,
+                userRepository,
+                notificationService,
+                eventPublisher,
+                mentorProfileRepository,
+                null,
+                null,
+                entityManager,
+                sessionService,
+                conversationService,
+                settlementService,
+                paymentOrderService,
+                bookingSlotValidator,
+                bookingEligibilityPolicy,
+                null,
+                paymentProperties,
+                internalTelemetryService);
+    }
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -164,6 +221,9 @@ public class BookingService {
         bookingSlotValidator.validateSelectedRange(slot, mentorService, selectedStartTime, selectedEndTime, now);
         bookingSlotValidator.validateServiceAttachedToSlot(slot.getId(), mentorService.getId());
         bookingSlotValidator.validateCandidateSelection(slot, mentorService, menteeUserId, selectedStartTime, selectedEndTime);
+        if (mentorBookingPolicyService != null) {
+            mentorBookingPolicyService.validateBookingWindow(mentorProfile.getUserId(), selectedStartTime, now);
+        }
 
         if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
                 menteeUserId,
@@ -276,10 +336,20 @@ public class BookingService {
         java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
                 : java.util.Collections.emptyMap();
+        java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId =
+                bookingIds.isEmpty() || paymentOrderRepository == null
+                        ? java.util.Collections.emptyMap()
+                        : paymentOrderRepository.findByBookingIdIn(bookingIds).stream()
+                        .collect(Collectors.toMap(
+                                com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder::getBookingId,
+                                Function.identity(),
+                                (left, right) -> left,
+                                java.util.LinkedHashMap::new
+                        ));
 
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream()
-                        .map(b -> toBookingResponse(b, bookingToConvMap, sessionsByBookingId))
+                        .map(b -> toBookingResponse(b, bookingToConvMap, sessionsByBookingId, paymentOrdersByBookingId))
                         .toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -302,8 +372,14 @@ public class BookingService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
         recoverAwaitingPaymentBooking(booking);
+        ensureSessionExistsForConfirmedBooking(booking);
 
-        return toBookingResponse(booking);
+        com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder paymentOrder = paymentOrderRepository == null
+                ? null
+                : paymentOrderRepository.findByBookingId(bookingId).orElse(null);
+        return toBookingResponse(booking, null, null,
+                paymentOrder == null ? java.util.Collections.emptyMap()
+                        : java.util.Map.of(bookingId, paymentOrder));
     }
 
     @Transactional
@@ -696,6 +772,7 @@ public class BookingService {
 
         String completionNote = trimToNull(request == null ? null : request.completionNote());
         booking.setMentorNote(completionNote);
+        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(BookingStatus.AWAITING_MENTEE_CONFIRMATION);
         booking.setCompletedAt(now);
 
@@ -727,11 +804,13 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        recordBookingEvent(savedBooking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.MENTOR_COMPLETED,
+                oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.USER, mentorUserId, null);
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 savedBooking.getMentee().getId(),
                 com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
                 "Mentor đã xác nhận hoàn tất buổi mentoring",
-                "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong 24 giờ.",
+                "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong 4 giờ.",
                 "BOOKING",
                 savedBooking.getId()
         ));
@@ -770,10 +849,10 @@ public class BookingService {
         }
         ensureWithinPostSessionReviewWindow(booking, now);
 
+        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(BookingStatus.COMPLETED);
         booking.setFinalizedAt(now);
-        booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_CONFIRMED);
-        booking.setCompletedAt(now);
+        booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMenteeNote(trimToNull(request == null ? null : request.confirmationNote()));
 
         MentorProfile mentorProfile = booking.getMentorProfile();
@@ -789,6 +868,8 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
         settlementService.releaseForBooking(savedBooking);
+        recordBookingEvent(savedBooking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.MENTEE_CONFIRMED,
+                oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.USER, currentUserId, null);
         internalTelemetryService.record(
                 "BOOKING_COMPLETED",
                 currentUserId,
@@ -834,16 +915,20 @@ public class BookingService {
         if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể báo vấn đề sau khi buổi mentoring đã kết thúc");
         }
-        ensureWithinPostSessionReviewWindow(booking, now);
+        ensureWithinIssueWindow(booking, now);
+        validateIssueReporter(booking, currentUserId, request.issueType());
 
+        BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(BookingStatus.UNDER_REVIEW);
         booking.setIssueSubmittedAt(now);
+        booking.setIssueSubmittedByUserId(currentUserId);
         booking.setIssueType(request.issueType());
         booking.setIssueDescription(trim(request.description()));
-        booking.setWantsAdminReview(request.wantsAdminReview());
-        booking.setCompletionOutcome(BookingCompletionOutcome.REVIEW_PENDING_DECISION);
+        booking.setCompletionOutcome(BookingCompletionOutcome.UNDER_REVIEW);
 
         Booking savedBooking = bookingRepository.save(booking);
+        recordBookingEvent(savedBooking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.ISSUE_CREATED,
+                oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.USER, currentUserId, null);
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
@@ -856,7 +941,43 @@ public class BookingService {
                 .bookingId(savedBooking.getId())
                 .status(savedBooking.getStatus())
                 .issueSubmittedAt(savedBooking.getIssueSubmittedAt())
+                .issueType(savedBooking.getIssueType())
+                .issueRespondedAt(savedBooking.getIssueRespondedAt())
                 .build();
+    }
+
+    @Transactional
+    public BookingIssueResponse respondToBookingIssue(UUID currentUserId, UUID bookingId, RespondBookingIssueRequest request) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (request == null || trimToNull(request.responseNote()) == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu nội dung phản hồi issue");
+        }
+        Booking booking = getBookingForSessionAction(currentUserId, bookingId);
+        assertBookingAccess(booking, currentUserId);
+        if (booking.getStatus() != BookingStatus.UNDER_REVIEW || booking.getIssueSubmittedAt() == null) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện không có issue đang mở");
+        }
+        if (booking.getIssueRespondedAt() != null) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Issue này đã có phản hồi từ counterparty");
+        }
+        if (currentUserId.equals(booking.getIssueSubmittedByUserId())) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ counterparty của người báo issue mới được phản hồi");
+        }
+        LocalDateTime now = DateTimeUtil.now();
+        if (now.isAfter(booking.getIssueSubmittedAt().plusHours(24))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn phản hồi issue");
+        }
+        booking.setIssueRespondedAt(now);
+        booking.setIssueRespondedByUserId(currentUserId);
+        booking.setIssueResponseNote(trimToNull(request.responseNote()));
+        Booking saved = bookingRepository.save(booking);
+        recordBookingEvent(saved, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.ISSUE_RESPONDED,
+                BookingStatus.UNDER_REVIEW, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.USER, currentUserId, null);
+        return BookingIssueResponse.builder().bookingId(saved.getId()).status(saved.getStatus())
+                .issueSubmittedAt(saved.getIssueSubmittedAt()).issueType(saved.getIssueType())
+                .issueRespondedAt(saved.getIssueRespondedAt()).build();
     }
 
     @Transactional(readOnly = true)
@@ -910,20 +1031,29 @@ public class BookingService {
         booking.setIssueResolvedByUserId(adminUserId);
         booking.setIssueResolutionNote(trimToNull(request.adminNote()));
 
-        if (request.action() == com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction.COMPLETE) {
+        BookingStatus oldStatus = booking.getStatus();
+        if (request.action() == com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setCompletedAt(booking.getCompletedAt() == null ? now : booking.getCompletedAt());
             booking.setFinalizedAt(now);
-            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_CONFIRMED);
-        } else {
-            booking.setStatus(BookingStatus.AUTO_CLOSED);
-            booking.setAutoClosedAt(now);
+            booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
+            settlementService.releaseForBooking(booking);
+        } else if (request.action() == com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
+            booking.setStatus(BookingStatus.COMPLETED);
             booking.setFinalizedAt(now);
-            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_AUTO_CLOSED);
+            booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
+            settlementService.refundForMentorNoShow(booking);
+            incrementMentorNoShow(booking);
+        } else {
+            booking.setStatus(BookingStatus.COMPLETED);
+            booking.setFinalizedAt(now);
+            booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
+            settlementService.releaseForBooking(booking);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
-        settlementService.releaseForBooking(savedBooking);
+        recordBookingEvent(savedBooking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.ISSUE_RESOLVED,
+                oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.ADMIN, adminUserId, null);
         return toBookingResponse(savedBooking);
     }
 
@@ -934,6 +1064,7 @@ public class BookingService {
         }
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+        ensureSessionExistsForConfirmedBooking(booking);
         return toBookingResponse(booking);
     }
 
@@ -988,21 +1119,32 @@ public class BookingService {
     }
 
     private BookingResponse toBookingResponse(Booking booking) {
-        return toBookingResponse(booking, null);
+        return toBookingResponse(booking, null, null, null);
     }
 
     private BookingResponse toBookingResponse(Booking booking, java.util.Map<UUID, UUID> bookingToConversationMap) {
-        return toBookingResponse(booking, bookingToConversationMap, null);
+        return toBookingResponse(booking, bookingToConversationMap, null, null);
     }
 
     private BookingResponse toBookingResponse(Booking booking,
                                               java.util.Map<UUID, UUID> bookingToConversationMap,
                                               java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId) {
+        return toBookingResponse(booking, bookingToConversationMap, sessionsByBookingId, null);
+    }
+
+    private BookingResponse toBookingResponse(Booking booking,
+                                              java.util.Map<UUID, UUID> bookingToConversationMap,
+                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId,
+                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId) {
         User mentee = booking.getMentee();
         MentorProfile mentorProfile = booking.getMentorProfile();
         User mentorUser = mentorProfile == null ? null : mentorProfile.getUser();
         MentorService mentorService = booking.getService();
         MentorAvailabilitySlot slot = booking.getSlot();
+        com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder paymentOrder = resolvePaymentOrder(
+                booking,
+                paymentOrdersByBookingId
+        );
 
         com.fptu.exe.skillswap.modules.session.domain.Session session = null;
         if (sessionsByBookingId != null) {
@@ -1059,7 +1201,8 @@ public class BookingService {
                         && endTime != null && now.isAfter(endTime);
             } else if (isMenteeUser) {
                 canComplete = booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
-                        && endTime != null && now.isBefore(endTime.plusHours(24));
+                        && booking.getCompletedAt() != null
+                        && now.isBefore(booking.getCompletedAt().plusHours(POST_SESSION_REVIEW_WINDOW_HOURS));
             }
 
             canReschedule = (isMenteeUser || isMentorUser)
@@ -1069,7 +1212,15 @@ public class BookingService {
                     && java.time.Duration.between(now, startTime).toMinutes() >= 6 * 60;
 
             canSubmitFeedback = isMenteeUser
-                    && (booking.getStatus() == BookingStatus.COMPLETED || booking.getStatus() == BookingStatus.AUTO_CLOSED);
+                    && booking.getStatus() == BookingStatus.COMPLETED
+                    && BookingStateMapper.toCanonicalCompletionOutcome(booking) == BookingCompletionOutcome.USER_CONFIRMED;
+        }
+
+        BookingLifecycleStatus bookingLifecycleStatus = BookingStateMapper.toLifecycleStatus(booking);
+        BookingPaymentStatus bookingPaymentStatus = BookingStateMapper.toPaymentStatus(booking, paymentOrder);
+        BookingCompletionOutcome completionOutcome = booking.getCompletionOutcome();
+        if (completionOutcome == null) {
+            completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
         }
 
         return BookingResponse.builder()
@@ -1094,6 +1245,13 @@ public class BookingService {
                 .servicePriceScoinSnapshot(booking.getServicePriceScoinSnapshot())
                 .servicePriceWithSurchargeScoin(calculateMenteeVisiblePrice(booking.getServiceIsFreeSnapshot(), booking.getServicePriceScoinSnapshot()))
                 .status(booking.getStatus())
+                .bookingStatus(bookingLifecycleStatus)
+                .paymentStatus(bookingPaymentStatus)
+                .settlementStatus(paymentOrder == null ? null : paymentOrder.getSettlementStatus())
+                .releasedAt(paymentOrder == null ? null : paymentOrder.getReleasedAt())
+                .refundedAt(paymentOrder == null ? null : paymentOrder.getRefundedAt())
+                .refundedScoin(paymentOrder == null ? null : paymentOrder.getRefundedScoin())
+                .refundReason(paymentOrder == null ? null : paymentOrder.getRefundReason())
                 .learningGoalTitle(booking.getLearningGoalTitle())
                 .learningGoalDescription(booking.getLearningGoalDescription())
                 .mentorResponseNote(booking.getMentorResponseNote())
@@ -1112,11 +1270,13 @@ public class BookingService {
                 .completedAt(booking.getCompletedAt())
                 .finalizedAt(booking.getFinalizedAt())
                 .autoClosedAt(booking.getAutoClosedAt())
-                .completionOutcome(booking.getCompletionOutcome())
+                .completionOutcome(completionOutcome)
                 .issueSubmittedAt(booking.getIssueSubmittedAt())
                 .issueType(booking.getIssueType())
                 .issueDescription(booking.getIssueDescription())
-                .wantsAdminReview(booking.getWantsAdminReview())
+                .issueRespondedAt(booking.getIssueRespondedAt())
+                .issueRespondedByUserId(booking.getIssueRespondedByUserId())
+                .issueResponseNote(booking.getIssueResponseNote())
                 .issueResolvedAt(booking.getIssueResolvedAt())
                 .issueResolvedByUserId(booking.getIssueResolvedByUserId())
                 .issueResolutionNote(booking.getIssueResolutionNote())
@@ -1130,6 +1290,22 @@ public class BookingService {
                 .canReschedule(canReschedule)
                 .canSubmitFeedback(canSubmitFeedback)
                 .build();
+    }
+
+    private com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder resolvePaymentOrder(
+            Booking booking,
+            java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId
+    ) {
+        if (booking == null || booking.getId() == null) {
+            return null;
+        }
+        if (paymentOrdersByBookingId != null && paymentOrdersByBookingId.containsKey(booking.getId())) {
+            return paymentOrdersByBookingId.get(booking.getId());
+        }
+        if (paymentOrderRepository == null) {
+            return null;
+        }
+        return paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
     }
 
     private int calculateMenteeVisiblePrice(Boolean isFree, Integer basePriceScoin) {
@@ -1264,29 +1440,79 @@ public class BookingService {
             return;
         }
         if (isConfirmedBookingStatus(booking.getStatus())
+                && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION
                 && selectedEndTime(booking) != null
                 && !now.isBefore(selectedEndTime(booking))) {
             booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
         }
-        if (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
-                && selectedEndTime(booking) != null
-                && now.isAfter(selectedEndTime(booking).plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
-            booking.setStatus(BookingStatus.AUTO_CLOSED);
-            booking.setAutoClosedAt(now);
-            booking.setFinalizedAt(now);
-            booking.setCompletionOutcome(BookingCompletionOutcome.COMPLETED_AUTO_CLOSED);
-            settlementService.releaseForBooking(booking);
-        }
     }
 
     private void ensureWithinPostSessionReviewWindow(Booking booking, LocalDateTime now) {
-        LocalDateTime bookingEnd = selectedEndTime(booking);
-        if (bookingEnd == null) {
+        LocalDateTime reviewAnchor = postSessionReviewAnchor(booking);
+        if (reviewAnchor == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc booking không hợp lệ");
         }
-        if (now.isAfter(bookingEnd.plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn 24 giờ để phản hồi sau buổi mentoring");
+        if (now.isAfter(reviewAnchor.plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn 4 giờ để phản hồi sau buổi mentoring");
         }
+    }
+
+    private void ensureWithinIssueWindow(Booking booking, LocalDateTime now) {
+        LocalDateTime anchor = booking.getCompletedAt() == null ? selectedEndTime(booking) : booking.getCompletedAt();
+        if (anchor == null || now.isAfter(anchor.plusHours(booking.getCompletedAt() == null ? 24 : POST_SESSION_REVIEW_WINDOW_HOURS))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn để báo vấn đề sau buổi mentoring");
+        }
+    }
+
+    private void validateIssueReporter(Booking booking, UUID currentUserId, BookingIssueType issueType) {
+        if (issueType == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại issue không hợp lệ");
+        }
+        boolean mentor = isMentorOfBooking(booking, currentUserId);
+        if ((issueType == BookingIssueType.MENTOR_NO_SHOW && mentor)
+                || (issueType == BookingIssueType.MENTEE_NO_SHOW && !mentor)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền báo loại issue này");
+        }
+    }
+
+    private void incrementMentorNoShow(Booking booking) {
+        MentorProfile profile = booking.getMentorProfile();
+        if (profile == null) {
+            return;
+        }
+        MentorProfile locked = mentorProfileRepository.findByIdForUpdate(profile.getUserId()).orElse(null);
+        if (locked != null) {
+            locked.setMentorNoShowCount(defaultInteger(locked.getMentorNoShowCount()) + 1);
+        }
+    }
+
+    private void incrementMentorCompletionOverdue(Booking booking) {
+        MentorProfile profile = booking.getMentorProfile();
+        if (profile == null) {
+            return;
+        }
+        MentorProfile locked = mentorProfileRepository.findByIdForUpdate(profile.getUserId()).orElse(null);
+        if (locked != null) {
+            locked.setMentorCompletionOverdueCount(defaultInteger(locked.getMentorCompletionOverdueCount()) + 1);
+        }
+    }
+
+    private void recordBookingEvent(Booking booking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType eventType,
+                                    BookingStatus oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType actorType,
+                                    UUID actorUserId, String metadataJson) {
+        if (bookingEventService != null) {
+            bookingEventService.record(booking, eventType, oldStatus, actorType, actorUserId, metadataJson);
+        }
+    }
+
+    private LocalDateTime postSessionReviewAnchor(Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+        if (booking.getCompletedAt() != null) {
+            return booking.getCompletedAt();
+        }
+        return selectedEndTime(booking);
     }
 
     private LocalDateTime selectedStartTime(Booking booking) {
@@ -1340,7 +1566,7 @@ public class BookingService {
     }
 
     private boolean isConfirmedBookingStatus(BookingStatus status) {
-        return status == BookingStatus.PAID || status == BookingStatus.ACCEPTED;
+        return BookingStateMapper.isLegacyConfirmedForScheduling(status);
     }
 
     private void recoverAwaitingPaymentBookings(List<Booking> bookings) {
@@ -1357,6 +1583,18 @@ public class BookingService {
             return;
         }
         paymentOrderService.synchronizeProviderStatusForBooking(booking.getId());
+    }
+
+    private void ensureSessionExistsForConfirmedBooking(Booking booking) {
+        if (booking == null || booking.getId() == null || sessionService == null) {
+            return;
+        }
+        if (booking.getStatus() != BookingStatus.PAID && booking.getStatus() != BookingStatus.ACCEPTED) {
+            return;
+        }
+        if (sessionService.findByBookingId(booking.getId()) == null) {
+            sessionService.createForAcceptedBooking(booking);
+        }
     }
 
     private LocalDateTime resolvePaymentDeadline(Booking booking) {
@@ -1716,6 +1954,161 @@ public class BookingService {
             ));
         }
         return staleBookings.size();
+    }
+
+    /**
+     * Single-node post-session worker. Each candidate is reloaded with a row lock before a
+     * transition, so retrying this method is safe and never relies on a stale read.
+     */
+    @Transactional
+    public int processPostSessionLifecycle() {
+        LocalDateTime now = DateTimeUtil.now();
+        int changed = 0;
+        List<Booking> confirmed = new ArrayList<>();
+        confirmed.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.PAID, now));
+        confirmed.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.ACCEPTED, now));
+        for (Booking candidate : confirmed) {
+            changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
+        }
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
+                BookingStatus.AWAITING_MENTOR_COMPLETION, now)) {
+            changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
+        }
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
+                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(4))) {
+            changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
+        }
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
+                BookingStatus.UNDER_REVIEW, now.minusHours(12))) {
+            changed += processIssueDeadline(candidate.getId(), now) ? 1 : 0;
+        }
+        return changed;
+    }
+
+    private boolean processPostSessionCandidate(UUID bookingId, LocalDateTime now) {
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
+        if (booking == null) {
+            return false;
+        }
+        BookingStatus oldStatus = booking.getStatus();
+        if ((booking.getStatus() == BookingStatus.PAID || booking.getStatus() == BookingStatus.ACCEPTED)
+                && selectedEndTime(booking) != null && !now.isBefore(selectedEndTime(booking))) {
+            booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
+            booking.setPostSessionPromptedAt(now);
+            recordBookingEvent(booking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.POST_SESSION_STARTED,
+                    oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.SYSTEM, null, null);
+            notifyPostSessionPrompt(booking);
+            return true;
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION) {
+            LocalDateTime end = selectedEndTime(booking);
+            if (end == null) {
+                return false;
+            }
+            if (booking.getMentorCompletionReminder30mAt() == null && !now.isBefore(end.plusMinutes(30))) {
+                booking.setMentorCompletionReminder30mAt(now);
+                notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Buổi mentoring đã kết thúc. Vui lòng xác nhận hoàn tất trong thời hạn cho phép.");
+                return true;
+            }
+            if (booking.getMentorCompletionReminder1hAt() == null && !now.isBefore(end.plusHours(1))) {
+                booking.setMentorCompletionReminder1hAt(now);
+                notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Bạn vẫn chưa xác nhận hoàn tất buổi mentoring.");
+                return true;
+            }
+            if (booking.getMenteeCompletionPromptedAt() == null && !now.isBefore(end.plusHours(2))) {
+                booking.setMenteeCompletionPromptedAt(now);
+                notifyMentee(booking, "Chưa nhận được xác nhận từ mentor", "Bạn có thể tiếp tục chờ hoặc báo vấn đề nếu buổi mentoring không diễn ra.");
+                return true;
+            }
+            if (booking.getMentorCompletionOverdueAt() == null && !now.isBefore(end.plusHours(24))) {
+                booking.setMentorCompletionOverdueAt(now);
+                incrementMentorCompletionOverdue(booking);
+                recordBookingEvent(booking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.MENTOR_COMPLETION_OVERDUE,
+                        BookingStatus.AWAITING_MENTOR_COMPLETION, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.SYSTEM, null, null);
+                notifyMentor(booking, "Booking quá hạn xác nhận", "Booking đã được đưa vào hàng chờ vận hành vì bạn chưa xác nhận hoàn tất.");
+                return true;
+            }
+            return false;
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION && booking.getCompletedAt() != null) {
+            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(booking.getCompletedAt().plusHours(3))) {
+                booking.setAutoCloseWarningSentAt(now);
+                notifyMentee(booking, "Buổi mentoring sắp tự đóng", "Bạn còn một giờ để xác nhận hoặc báo vấn đề.");
+                notifyMentor(booking, "Buổi mentoring sắp tự đóng", "Nếu không có issue, settlement sẽ được release khi booking tự đóng.");
+                return true;
+            }
+            if (!now.isBefore(booking.getCompletedAt().plusHours(4))) {
+                booking.setStatus(BookingStatus.COMPLETED);
+                booking.setAutoClosedAt(now);
+                booking.setFinalizedAt(now);
+                booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
+                settlementService.releaseForBooking(booking);
+                recordBookingEvent(booking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.AUTO_CLOSED,
+                        BookingStatus.AWAITING_MENTEE_CONFIRMATION, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.SYSTEM, null, null);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean processIssueDeadline(UUID bookingId, LocalDateTime now) {
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
+        if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW || booking.getIssueSubmittedAt() == null) {
+            return false;
+        }
+        if ((booking.getIssueType() != BookingIssueType.MENTOR_NO_SHOW && booking.getIssueType() != BookingIssueType.MENTEE_NO_SHOW)
+                || booking.getIssueRespondedAt() != null) {
+            return false;
+        }
+        if (booking.getIssueEscalationSentAt() == null && !now.isBefore(booking.getIssueSubmittedAt().plusHours(12))) {
+            booking.setIssueEscalationSentAt(now);
+            if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
+                notifyMentor(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            } else {
+                notifyMentee(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            }
+            return true;
+        }
+        if (!now.isBefore(booking.getIssueSubmittedAt().plusHours(24))) {
+            BookingStatus old = booking.getStatus();
+            booking.setStatus(BookingStatus.COMPLETED);
+            booking.setFinalizedAt(now);
+            if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
+                booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
+                settlementService.refundForMentorNoShow(booking);
+                incrementMentorNoShow(booking);
+            } else {
+                booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
+                settlementService.releaseForBooking(booking);
+            }
+            booking.setIssueResolvedAt(now);
+            booking.setIssueResolutionNote("SYSTEM_AUTO_RESOLUTION_NO_COUNTERPARTY_RESPONSE");
+            recordBookingEvent(booking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.ISSUE_RESOLVED,
+                    old, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.SYSTEM, null, null);
+            return true;
+        }
+        return false;
+    }
+
+    private void notifyPostSessionPrompt(Booking booking) {
+        notifyMentor(booking, "Buổi mentoring đã kết thúc", "Vui lòng xác nhận hoàn tất trong 24 giờ.");
+        notifyMentee(booking, "Buổi mentoring đã kết thúc", "Bạn có thể báo vấn đề nếu buổi mentoring không diễn ra như mong đợi.");
+    }
+
+    private void notifyMentor(Booking booking, String title, String message) {
+        if (booking.getMentorProfile() != null) {
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+                    booking.getMentorProfile().getUserId(), com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
+                    title, message, "BOOKING", booking.getId()));
+        }
+    }
+
+    private void notifyMentee(Booking booking, String title, String message) {
+        if (booking.getMentee() != null) {
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+                    booking.getMentee().getId(), com.fptu.exe.skillswap.modules.notification.domain.NotificationType.SESSION_COMPLETED,
+                    title, message, "BOOKING", booking.getId()));
+        }
     }
 
     private String buildAutoRejectedMessage(String reason) {

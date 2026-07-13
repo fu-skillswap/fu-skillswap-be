@@ -143,6 +143,22 @@ public class PaymentOrder {
     @Column(name = "credit_finalized_at")
     private LocalDateTime creditFinalizedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "settlement_status", length = 20)
+    private PaymentSettlementStatus settlementStatus;
+
+    @Column(name = "released_at")
+    private LocalDateTime releasedAt;
+
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
+    @Column(name = "refunded_scoin")
+    private Integer refundedScoin;
+
+    @Column(name = "refund_reason", length = 120)
+    private String refundReason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -65,6 +65,47 @@ public record MentorProfileUpsertRequest(
         @Schema(example = "0912345678", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank(message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
         @Pattern(regexp = "^(0)(3|5|7|8|9)[0-9]{8}$", message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
-        String phoneNumber
+        String phoneNumber,
+
+        @Schema(description = "Số phút tối thiểu trước giờ bắt đầu mentor cho phép mentee đặt lịch", example = "120")
+        @Min(value = 0, message = "Lead time đặt lịch phải lớn hơn hoặc bằng 0")
+        Integer minimumBookingLeadTimeMinutes,
+
+        @Schema(description = "Số ngày tối đa cho phép mentee đặt lịch tính từ hiện tại", example = "30")
+        @Min(value = 1, message = "Horizon đặt lịch phải lớn hơn hoặc bằng 1")
+        Integer maximumBookingHorizonDays,
+
+        @Schema(description = "Timezone áp dụng cho policy đặt lịch", example = "Asia/Ho_Chi_Minh")
+        @Size(max = 64, message = "Timezone không được quá 64 ký tự")
+        String bookingTimezone
 ) {
+
+    public MentorProfileUpsertRequest(
+            String headline,
+            String expertiseDescription,
+            Boolean isAvailable,
+            List<UUID> helpTopicIds,
+            List<@Valid MentorSubjectResultRequest> subjectResults,
+            Integer foundationSupportLevel,
+            Integer outputReviewSupportLevel,
+            Integer directionSupportLevel,
+            String githubUrl,
+            String portfolioUrl,
+            String phoneNumber
+    ) {
+        this(headline,
+                expertiseDescription,
+                isAvailable,
+                helpTopicIds,
+                subjectResults,
+                foundationSupportLevel,
+                outputReviewSupportLevel,
+                directionSupportLevel,
+                githubUrl,
+                portfolioUrl,
+                phoneNumber,
+                null,
+                null,
+                null);
+    }
 }
