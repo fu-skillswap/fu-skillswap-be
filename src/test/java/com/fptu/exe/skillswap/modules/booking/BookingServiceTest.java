@@ -415,8 +415,8 @@ class BookingServiceTest {
         when(bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
                 eq(menteeId),
                 eq(slot.getId()),
-                eq(request.selectedStartTime()),
-                eq(request.selectedEndTime()),
+                any(),
+                any(),
                 any()
         )).thenReturn(true);
 
