@@ -78,15 +78,22 @@ class ChatControllerTest {
         UUID convId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         UserPrincipal principal = UserPrincipal.create(userId, "user@test.com", List.of(RoleCode.MENTEE));
+        com.fptu.exe.skillswap.modules.conversation.dto.request.ConversationReadRequest req =
+                new com.fptu.exe.skillswap.modules.conversation.dto.request.ConversationReadRequest(5L);
+        com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationReadResponse res =
+                new com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationReadResponse(convId, 5L, 5L, 0L);
 
-        doNothing().when(conversationService).markConversationAsRead(convId, userId);
+        when(conversationService.markConversationAsRead(convId, userId, 5L)).thenReturn(res);
 
         mockMvc.perform(patch("/api/me/conversations/" + convId + "/read")
+                        .contentType("application/json")
+                        .content(new ObjectMapper().writeValueAsString(req))
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value(200))
-                .andExpect(jsonPath("$.data").value("Đánh dấu đã đọc thành công"));
+                .andExpect(jsonPath("$.data.conversationId").value(convId.toString()))
+                .andExpect(jsonPath("$.data.myLastReadSequence").value(5));
 
-        verify(conversationService, times(1)).markConversationAsRead(convId, userId);
+        verify(conversationService, times(1)).markConversationAsRead(convId, userId, 5L);
     }
 }

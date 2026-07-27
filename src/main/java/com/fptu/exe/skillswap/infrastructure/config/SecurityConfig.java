@@ -114,7 +114,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http.addFilterAfter(legacyRawWebSocketGoneFilter, CorsFilter.class);
-        http.addFilterBefore(cookieAuthOriginProtectionFilter, JwtAuthenticationFilter.class);
+        http.addFilterBefore(cookieAuthOriginProtectionFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

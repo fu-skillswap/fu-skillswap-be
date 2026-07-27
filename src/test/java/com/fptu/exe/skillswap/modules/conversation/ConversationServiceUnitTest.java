@@ -99,6 +99,28 @@ class ConversationServiceUnitTest {
                 .mentorProfile(mentorProfile)
                 .mentee(menteeUser)
                 .build();
+
+        lenient().when(messageRepository.findByBookingIdAndSystemEventType(any(), eq("BOOKING_CONFIRMED")))
+                .thenReturn(Optional.of(new Message()));
+        lenient().when(conversationRepository.findByIdForUpdate(any())).thenAnswer(inv -> {
+            UUID id = inv.getArgument(0);
+            return Optional.of(Conversation.builder()
+                    .id(id)
+                    .sourceType(ConversationSourceType.BOOKING)
+                    .sourceId(bookingId)
+                    .nextSequence(0L)
+                    .build());
+        });
+        lenient().when(messageRepository.save(any(Message.class))).thenAnswer(inv -> {
+            Message msg = inv.getArgument(0);
+            if (msg.getId() == null) {
+                msg.setId(UUID.randomUUID());
+            }
+            if (msg.getSequence() == null) {
+                msg.setSequence(1L);
+            }
+            return msg;
+        });
     }
 
     @Test
@@ -163,7 +185,9 @@ class ConversationServiceUnitTest {
 
         when(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, secondBookingId))
                 .thenReturn(Optional.empty());
-        when(conversationRepository.findDirectActiveByParticipantPair(
+        when(conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
+                .thenReturn(Optional.of(existing));
+        lenient().when(conversationRepository.findDirectActiveByParticipantPair(
                 mentorUser.getId(),
                 menteeUser.getId(),
                 ConversationType.DIRECT,
@@ -260,7 +284,7 @@ class ConversationServiceUnitTest {
         UserRepository userRepository = mock(UserRepository.class);
 
         when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
-        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        lenient().when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(userRepository.findById(senderId)).thenReturn(Optional.of(sender));
         when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
@@ -269,6 +293,7 @@ class ConversationServiceUnitTest {
                 .content("Hello world!")
                 .sender(sender)
                 .conversation(conversation)
+                .sequence(1L)
                 .createdAt(LocalDateTime.now())
                 .build();
         when(messageRepository.save(any(Message.class))).thenReturn(savedMessage);
