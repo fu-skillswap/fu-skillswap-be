@@ -1,18 +1,22 @@
 package com.fptu.exe.skillswap.modules.blog.service;
 
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogCategory;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogTag;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.AdminBlogPostCardResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.AdminBlogPostDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorConversionResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogCategoryResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogEngagementState;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostCardResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostDetailResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBlogAuthorSummary;
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.util.Comparator;
@@ -20,26 +24,21 @@ import java.util.List;
 import java.util.Set;
 
 @Component
+@RequiredArgsConstructor
 public class BlogMapper {
 
-    public BlogPostCardResponse toCard(BlogPost post) {
-        return toCard(post, BlogEngagementState.empty(), null);
-    }
+    private final ObjectProvider<StorageGateway> storageGatewayProvider;
 
-    public BlogPostCardResponse toCard(BlogPost post,
-                                       BlogEngagementState engagement,
-                                       MentorBlogAuthorSummary authorSummary) {
-        return new BlogPostCardResponse(
+    public BlogPostReaderCardResponse toReaderCard(BlogPost post,
+                                                   BlogEngagementState engagement,
+                                                   MentorBlogAuthorSummary authorSummary) {
+        return new BlogPostReaderCardResponse(
                 post.getId(),
                 post.getTitle(),
                 post.getSlug(),
                 post.getExcerpt(),
-                post.getCoverImageUrl(),
-                post.getOgImageUrl(),
-                post.getAudienceType(),
-                post.getVisibility(),
-                post.getStatus(),
-                toAuthor(post.getAuthorUser()),
+                resolveImageUrl(post.getCoverImageUrl(), post.getCoverImageObjectKey()),
+                toAuthor(post),
                 toAuthorConversion(authorSummary),
                 toCategoryResponses(post),
                 toTagResponses(post),
@@ -50,8 +49,6 @@ public class BlogMapper {
                 engagement != null && engagement.likedByCurrentUser(),
                 engagement != null && engagement.bookmarkedByCurrentUser(),
                 post.isFeatured(),
-                post.getFeaturedOrder(),
-                post.getFeaturedUntil(),
                 post.getPublishedAt(),
                 post.getLastPublishedAt(),
                 post.getCreatedAt(),
@@ -59,61 +56,54 @@ public class BlogMapper {
         );
     }
 
-    public BlogPostDetailResponse toDetail(BlogPost post) {
-        return toDetail(post, BlogEngagementState.empty(), null);
-    }
-
-    public BlogPostDetailResponse toDetail(BlogPost post,
-                                           BlogEngagementState engagement,
-                                           MentorBlogAuthorSummary authorSummary) {
-        return new BlogPostDetailResponse(
-                post.getId(),
-                post.getTitle(),
-                post.getSlug(),
-                post.isSlugLocked(),
-                post.getExcerpt(),
+    public BlogPostReaderDetailResponse toReaderDetail(BlogPost post,
+                                                       BlogEngagementState engagement,
+                                                       MentorBlogAuthorSummary authorSummary) {
+        BlogPostReaderCardResponse card = toReaderCard(post, engagement, authorSummary);
+        return new BlogPostReaderDetailResponse(
+                card.id(), card.title(), card.slug(), card.excerpt(), card.coverImageUrl(),
+                card.author(), card.authorConversion(), card.categories(), card.tags(),
+                card.readingTimeMinutes(), card.viewCount(), card.likeCount(), card.bookmarkCount(),
+                card.likedByCurrentUser(), card.bookmarkedByCurrentUser(), card.featured(),
+                card.publishedAt(), card.lastPublishedAt(), card.createdAt(), card.updatedAt(),
                 post.getContentMarkdown(),
-                post.getContentHash(),
-                post.getCoverImageUrl(),
-                post.getCoverImageObjectKey(),
-                post.getOgImageUrl(),
-                post.getOgImageObjectKey(),
-                post.getAudienceType(),
-                post.getVisibility(),
-                post.getStatus(),
+                resolveImageUrl(post.getOgImageUrl(), post.getOgImageObjectKey()),
                 post.getSeoTitle(),
                 post.getSeoDescription(),
-                post.getCanonicalUrl(),
-                toAuthor(post.getAuthorUser()),
-                toAuthorConversion(authorSummary),
-                toCategoryResponses(post),
-                toTagResponses(post),
-                post.getReadingTimeMinutes(),
-                post.getViewCount(),
-                post.getLikeCount(),
-                post.getBookmarkCount(),
-                engagement != null && engagement.likedByCurrentUser(),
-                engagement != null && engagement.bookmarkedByCurrentUser(),
-                post.isFeatured(),
-                post.getFeaturedOrder(),
-                post.getFeaturedUntil(),
-                post.getPublishedAt(),
-                post.getLastPublishedAt(),
-                post.getCreatedAt(),
-                post.getUpdatedAt(),
-                post.getVersion()
+                post.getCanonicalUrl()
+        );
+    }
+
+    public AdminBlogPostCardResponse toAdminCard(BlogPost post) {
+        return new AdminBlogPostCardResponse(
+                post.getId(), post.getTitle(), post.getSlug(), post.getExcerpt(), post.getCoverImageUrl(),
+                toAuthor(post), toCategoryResponses(post), toTagResponses(post),
+                post.getReadingTimeMinutes(), post.getViewCount(), post.getLikeCount(), post.getBookmarkCount(),
+                post.isFeatured(), post.getPublishedAt(), post.getLastPublishedAt(), post.getCreatedAt(), post.getUpdatedAt(),
+                post.getStatus(), post.getVisibility(), post.getAuthorType(), post.getFeaturedOrder(),
+                post.getFeaturedUntil(), post.getVersion(), post.getDeletedAt() != null, post.getDeletedAt()
+        );
+    }
+
+    public AdminBlogPostDetailResponse toAdminDetail(BlogPost post,
+                                                     MentorBlogAuthorSummary authorSummary) {
+        return new AdminBlogPostDetailResponse(
+                post.getId(), post.getTitle(), post.getSlug(), post.isSlugLocked(), post.getExcerpt(),
+                post.getContentMarkdown(), post.getContentHash(), post.getCoverImageUrl(), post.getCoverImageObjectKey(),
+                post.getOgImageUrl(), post.getOgImageObjectKey(), post.getAuthorType(), post.getVisibility(),
+                post.getStatus(), post.getSeoTitle(), post.getSeoDescription(), post.getCanonicalUrl(),
+                toAuthor(post), toAuthorConversion(authorSummary), toCategoryResponses(post),
+                toTagResponses(post), post.getReadingTimeMinutes(), post.getViewCount(), post.getLikeCount(),
+                post.getBookmarkCount(), post.isFeatured(), post.getFeaturedOrder(), post.getFeaturedUntil(),
+                post.getPublishedAt(), post.getLastPublishedAt(), post.getCreatedAt(), post.getUpdatedAt(), post.getVersion(),
+                post.getDeletedAt() != null, post.getDeletedAt()
         );
     }
 
     public BlogCategoryResponse toCategory(BlogCategory category) {
         return new BlogCategoryResponse(
-                category.getId(),
-                category.getCode(),
-                category.getName(),
-                category.getSlug(),
-                category.getDescription(),
-                category.isActive(),
-                category.getDisplayOrder()
+                category.getId(), category.getCode(), category.getName(), category.getSlug(),
+                category.getDescription(), category.isActive(), category.getDisplayOrder()
         );
     }
 
@@ -121,14 +111,22 @@ public class BlogMapper {
         return new BlogTagResponse(tag.getId(), tag.getName(), tag.getSlug(), tag.isActive());
     }
 
-    private BlogAuthorResponse toAuthor(User user) {
-        Set<RoleCode> roles = user.getRoles();
+    private String resolveImageUrl(String directUrl, String objectKey) {
+        if (hasText(directUrl)) {
+            return directUrl;
+        }
+        if (!hasText(objectKey)) {
+            return null;
+        }
+        StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+        return storageGateway == null ? null : storageGateway.resolvePublicUrl(objectKey);
+    }
+
+    private BlogAuthorResponse toAuthor(BlogPost post) {
+        User user = post.getAuthorUser();
         return new BlogAuthorResponse(
-                user.getId(),
-                user.getFullName(),
-                user.getAvatarUrl(),
-                roles,
-                roles != null && roles.contains(RoleCode.MENTOR)
+                user.getId(), user.getFullName(), user.getAvatarUrl(),
+                post.getAuthorType()
         );
     }
 
@@ -137,13 +135,8 @@ public class BlogMapper {
             return null;
         }
         return new BlogAuthorConversionResponse(
-                summary.mentorUserId(),
-                summary.headline(),
-                summary.verified(),
-                summary.averageRating(),
-                summary.completedSessions(),
-                summary.bookingCtaLabel(),
-                "/mentors/" + summary.mentorUserId()
+                summary.mentorUserId(), summary.headline(), summary.verified(), summary.averageRating(),
+                summary.completedSessions(), summary.bookingCtaLabel(), "/mentors/" + summary.mentorUserId()
         );
     }
 
@@ -159,5 +152,9 @@ public class BlogMapper {
                 .sorted(Comparator.comparing(BlogTag::getName))
                 .map(this::toTag)
                 .toList();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

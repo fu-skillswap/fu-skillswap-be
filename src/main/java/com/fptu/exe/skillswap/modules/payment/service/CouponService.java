@@ -43,6 +43,20 @@ public class CouponService {
         return coupon;
     }
 
+    /** Reads coupon state for previews without taking the checkout reservation lock. */
+    @Transactional(readOnly = true)
+    public Coupon resolveCouponForPreview(String couponCode) {
+        if (couponCode == null || couponCode.isBlank()) {
+            return null;
+        }
+        Coupon coupon = couponRepository.findByCode(couponCode.trim().toUpperCase(Locale.ROOT))
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy coupon"));
+        if (coupon.getStatus() != CouponStatus.ACTIVE) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon hiện không khả dụng");
+        }
+        return coupon;
+    }
+
     @Transactional(readOnly = true)
     public void validateApplicable(Coupon coupon, Booking booking, UUID userId, int grossScoin) {
         if (coupon == null) {

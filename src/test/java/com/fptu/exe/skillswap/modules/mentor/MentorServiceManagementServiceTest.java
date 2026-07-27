@@ -113,9 +113,9 @@ class MentorServiceManagementServiceTest {
                 .helpTopics(new LinkedHashSet<>(List.of(helpTopic)))
                 .build();
 
-        when(userRepository.findById(mentorUserId)).thenReturn(Optional.of(User.builder().id(mentorUserId).build()));
-        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-        when(mentorProfileService.hasCompletedMentorProfile(mentorUserId)).thenReturn(true);
+        org.mockito.Mockito.lenient().when(userRepository.findById(mentorUserId)).thenReturn(Optional.of(User.builder().id(mentorUserId).build()));
+        org.mockito.Mockito.lenient().when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
+        org.mockito.Mockito.lenient().when(mentorProfileService.hasCompletedMentorProfile(mentorUserId)).thenReturn(true);
     }
 
     @Test

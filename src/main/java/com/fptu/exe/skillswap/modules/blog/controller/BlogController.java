@@ -1,11 +1,12 @@
 package com.fptu.exe.skillswap.modules.blog.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType;
+import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogCategoryResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogFollowResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostCardResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostDetailResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogEngagementMutationResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogAuthorCtaClickRequest;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogViewRequest;
@@ -18,6 +19,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +45,7 @@ public class BlogController {
 
     private final BlogService blogService;
     private final InMemoryRateLimitService rateLimitService;
+    private final TrustedClientIpResolver trustedClientIpResolver;
 
     @GetMapping("/posts")
     @Operation(
@@ -48,26 +53,24 @@ public class BlogController {
             description = """
                     Cursor-based public blog list.
                     `cursor` is an opaque string: Frontend must not decode or create it, only pass back `nextCursor`.
-                    Visibility is resolved by requester: anonymous sees PUBLIC, authenticated sees PUBLIC + MEMBERS_ONLY,
-                    active mentors also see MENTOR_ONLY.
+                    Visibility is resolved by requester: anonymous sees PUBLIC; authenticated users also see AUTHENTICATED.
                     """
     )
-    public ApiResponse<CursorPageResponse<BlogPostCardResponse>> listPosts(
+    public ApiResponse<CursorPageResponse<BlogPostReaderCardResponse>> listPosts(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "Opaque cursor from previous response nextCursor. Do not decode or modify.")
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") Integer limit,
             @RequestParam(required = false) UUID categoryId,
             @RequestParam(required = false) UUID tagId,
-            @RequestParam(required = false) BlogAudienceType audienceType,
             @RequestParam(required = false) String keyword
     ) {
-        return ApiResponse.success(blogService.listPosts(principal, cursor, limit, categoryId, tagId, audienceType, keyword));
+        return ApiResponse.success(blogService.listPosts(principal, cursor, limit, categoryId, tagId, keyword));
     }
 
     @GetMapping("/featured")
     @Operation(summary = "List featured blog posts")
-    public ApiResponse<List<BlogPostCardResponse>> featured(
+    public ApiResponse<List<BlogPostReaderCardResponse>> featured(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "6") Integer limit
     ) {
@@ -76,7 +79,7 @@ public class BlogController {
 
     @GetMapping("/trending")
     @Operation(summary = "List trending blog posts with lightweight cached ranking")
-    public ApiResponse<List<BlogPostCardResponse>> trending(
+    public ApiResponse<List<BlogPostReaderCardResponse>> trending(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(defaultValue = "10") Integer limit
     ) {
@@ -85,7 +88,7 @@ public class BlogController {
 
     @GetMapping("/posts/{slug}/related")
     @Operation(summary = "List related blog posts by category, tag and audience")
-    public ApiResponse<List<BlogPostCardResponse>> related(
+    public ApiResponse<List<BlogPostReaderCardResponse>> related(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String slug,
             @RequestParam(defaultValue = "6") Integer limit
@@ -94,18 +97,23 @@ public class BlogController {
     }
 
     @GetMapping("/posts/{slug}/recommendations")
-    @Operation(summary = "List rule-based blog recommendations")
-    public ApiResponse<List<BlogPostCardResponse>> recommendations(
+    @Operation(summary = "Deprecated alias for related blog posts", deprecated = true)
+    @Deprecated
+    public ResponseEntity<ApiResponse<List<BlogPostReaderCardResponse>>> recommendations(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String slug,
             @RequestParam(defaultValue = "6") Integer limit
     ) {
-        return ApiResponse.success(blogService.recommendations(principal, slug, limit == null ? 6 : limit));
+        String successor = "/api/blog/posts/" + slug + "/related";
+        return ResponseEntity.ok()
+                .header("Deprecation", "true")
+                .header(HttpHeaders.LINK, "<" + successor + ">; rel=\"successor-version\"")
+                .body(ApiResponse.success(blogService.recommendations(principal, slug, limit == null ? 6 : limit)));
     }
 
     @GetMapping("/posts/{slug}")
     @Operation(summary = "Get blog post detail by slug")
-    public ApiResponse<BlogPostDetailResponse> getBySlug(
+    public ApiResponse<BlogPostReaderDetailResponse> getBySlug(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String slug
     ) {
@@ -117,11 +125,11 @@ public class BlogController {
     public ApiResponse<Void> recordView(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
-            @RequestBody(required = false) BlogViewRequest request,
+            @Valid @RequestBody BlogViewRequest request,
             HttpServletRequest httpRequest
     ) {
         String fingerprint = anonymousFingerprint(httpRequest);
-        rateLimitService.check("blog:view:" + fingerprint, 120, Duration.ofMinutes(1), "Bạn đang gửi quá nhiều lượt xem blog");
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BEST_EFFORT, "blog:view:" + fingerprint, 120, Duration.ofMinutes(1), "Bạn đang gửi quá nhiều lượt xem blog");
         blogService.recordView(principal, postId, request, fingerprint);
         return ApiResponse.success(null);
     }
@@ -172,7 +180,7 @@ public class BlogController {
 
     @PutMapping("/posts/{postId}/like")
     @Operation(summary = "Like a blog post. Idempotent.")
-    public ApiResponse<BlogPostDetailResponse> like(
+    public ApiResponse<BlogEngagementMutationResponse> like(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId
     ) {
@@ -181,7 +189,7 @@ public class BlogController {
 
     @DeleteMapping("/posts/{postId}/like")
     @Operation(summary = "Remove my like from a blog post. Idempotent.")
-    public ApiResponse<BlogPostDetailResponse> unlike(
+    public ApiResponse<BlogEngagementMutationResponse> unlike(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId
     ) {
@@ -190,7 +198,7 @@ public class BlogController {
 
     @PutMapping("/posts/{postId}/bookmark")
     @Operation(summary = "Bookmark a blog post. Idempotent.")
-    public ApiResponse<BlogPostDetailResponse> bookmark(
+    public ApiResponse<BlogEngagementMutationResponse> bookmark(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId
     ) {
@@ -199,7 +207,7 @@ public class BlogController {
 
     @DeleteMapping("/posts/{postId}/bookmark")
     @Operation(summary = "Remove my bookmark from a blog post. Idempotent.")
-    public ApiResponse<BlogPostDetailResponse> unbookmark(
+    public ApiResponse<BlogEngagementMutationResponse> unbookmark(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId
     ) {
@@ -224,22 +232,22 @@ public class BlogController {
         return ApiResponse.success(blogService.unfollowCategory(principal, categoryId));
     }
 
-    @PutMapping("/tags/{tagId}/follow")
-    @Operation(summary = "Follow a blog tag. Idempotent.")
-    public ApiResponse<BlogFollowResponse> followTag(
+    @PutMapping("/mentors/{mentorId}/follow")
+    @Operation(summary = "Follow a mentor's articles. Idempotent.")
+    public ApiResponse<BlogFollowResponse> followMentor(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID tagId
+            @PathVariable UUID mentorId
     ) {
-        return ApiResponse.success(blogService.followTag(principal, tagId));
+        return ApiResponse.success(blogService.followMentor(principal, mentorId));
     }
 
-    @DeleteMapping("/tags/{tagId}/follow")
-    @Operation(summary = "Unfollow a blog tag. Idempotent.")
-    public ApiResponse<BlogFollowResponse> unfollowTag(
+    @DeleteMapping("/mentors/{mentorId}/follow")
+    @Operation(summary = "Unfollow a mentor's articles. Idempotent.")
+    public ApiResponse<BlogFollowResponse> unfollowMentor(
             @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID tagId
+            @PathVariable UUID mentorId
     ) {
-        return ApiResponse.success(blogService.unfollowTag(principal, tagId));
+        return ApiResponse.success(blogService.unfollowMentor(principal, mentorId));
     }
 
     @GetMapping("/categories")
@@ -255,10 +263,7 @@ public class BlogController {
     }
 
     private String anonymousFingerprint(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        String ip = forwardedFor == null || forwardedFor.isBlank()
-                ? request.getRemoteAddr()
-                : forwardedFor.split(",")[0].trim();
+        String ip = trustedClientIpResolver.resolve(request);
         String userAgent = request.getHeader("User-Agent");
         return (ip == null ? "unknown-ip" : ip) + "|" + (userAgent == null ? "unknown-ua" : userAgent);
     }

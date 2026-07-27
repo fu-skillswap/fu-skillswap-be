@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.blog.repository;
 
-import com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
@@ -26,7 +25,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
             Collection<BlogVisibility> allowedVisibilities,
             UUID categoryId,
             UUID tagId,
-            BlogAudienceType audienceType,
             String keywordPattern,
             LocalDateTime cursorPublishedAt,
             UUID cursorPostId,
@@ -47,9 +45,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         if (tagId != null) {
             filters.add("exists (select 1 from p.tags t where t.id = :tagId)");
         }
-        if (audienceType != null) {
-            filters.add("(p.audienceType = :audienceType or p.audienceType = :bothAudience)");
-        }
         if (keywordPattern != null) {
             filters.add("""
                     (lower(p.title) like :keywordPattern
@@ -65,7 +60,7 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         TypedQuery<BlogPost> query = entityManager.createQuery(jpql.toString(), BlogPost.class);
         query.setParameter("status", BlogPostStatus.PUBLISHED);
         query.setParameter("allowedVisibilities", allowedVisibilities);
-        bindCommon(query, categoryId, tagId, audienceType, keywordPattern);
+        bindCommon(query, categoryId, tagId, keywordPattern);
         if (cursorPublishedAt != null && cursorPostId != null) {
             query.setParameter("cursorPublishedAt", cursorPublishedAt);
             query.setParameter("cursorPostId", cursorPostId);
@@ -123,7 +118,7 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         if (authorUserId != null) {
             query.setParameter("authorUserId", authorUserId);
         }
-        bindCommon(query, categoryId, tagId, null, keywordPattern);
+        bindCommon(query, categoryId, tagId, keywordPattern);
         if (cursorUpdatedAt != null && cursorPostId != null) {
             query.setParameter("cursorUpdatedAt", cursorUpdatedAt);
             query.setParameter("cursorPostId", cursorPostId);
@@ -135,13 +130,13 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
     public List<BlogPost> findPersonalizedFeedWindow(
             Collection<BlogVisibility> allowedVisibilities,
             Collection<UUID> followedCategoryIds,
-            Collection<UUID> followedTagIds,
+            Collection<UUID> followedMentorIds,
             LocalDateTime cursorPublishedAt,
             UUID cursorPostId,
             int fetchLimit
     ) {
         boolean hasCategories = followedCategoryIds != null && !followedCategoryIds.isEmpty();
-        boolean hasTags = followedTagIds != null && !followedTagIds.isEmpty();
+        boolean hasMentors = followedMentorIds != null && !followedMentorIds.isEmpty();
         StringBuilder jpql = new StringBuilder("""
                 select p
                 from BlogPost p
@@ -154,10 +149,10 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         if (cursorPublishedAt != null && cursorPostId != null) {
             filters.add("(p.publishedAt < :cursorPublishedAt or (p.publishedAt = :cursorPublishedAt and p.id < :cursorPostId))");
         }
-        if (hasCategories || hasTags) {
+        if (hasCategories || hasMentors) {
             filters.add("""
                     ((:hasCategories = true and exists (select 1 from p.categories fc where fc.id in :followedCategoryIds))
-                     or (:hasTags = true and exists (select 1 from p.tags ft where ft.id in :followedTagIds)))
+                     or (:hasMentors = true and author.id in :followedMentorIds))
                     """);
         }
         appendFilters(jpql, filters);
@@ -166,9 +161,9 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         query.setParameter("status", BlogPostStatus.PUBLISHED);
         query.setParameter("allowedVisibilities", allowedVisibilities);
         query.setParameter("hasCategories", hasCategories);
-        query.setParameter("hasTags", hasTags);
+        query.setParameter("hasMentors", hasMentors);
         query.setParameter("followedCategoryIds", hasCategories ? followedCategoryIds : List.of(new UUID(0L, 0L)));
-        query.setParameter("followedTagIds", hasTags ? followedTagIds : List.of(new UUID(0L, 0L)));
+        query.setParameter("followedMentorIds", hasMentors ? followedMentorIds : List.of(new UUID(0L, 0L)));
         if (cursorPublishedAt != null && cursorPostId != null) {
             query.setParameter("cursorPublishedAt", cursorPublishedAt);
             query.setParameter("cursorPostId", cursorPostId);
@@ -185,17 +180,12 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
     private void bindCommon(TypedQuery<BlogPost> query,
                             UUID categoryId,
                             UUID tagId,
-                            BlogAudienceType audienceType,
                             String keywordPattern) {
         if (categoryId != null) {
             query.setParameter("categoryId", categoryId);
         }
         if (tagId != null) {
             query.setParameter("tagId", tagId);
-        }
-        if (audienceType != null) {
-            query.setParameter("audienceType", audienceType);
-            query.setParameter("bothAudience", BlogAudienceType.BOTH);
         }
         if (keywordPattern != null) {
             query.setParameter("keywordPattern", keywordPattern);

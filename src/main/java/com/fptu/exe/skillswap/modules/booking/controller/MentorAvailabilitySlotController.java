@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.DeactivateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
@@ -18,7 +19,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,7 +27,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
@@ -48,7 +48,6 @@ public class MentorAvailabilitySlotController {
             description = "Mentor tạo slot rảnh cụ thể theo ngày giờ. Hệ thống tự động tạo liên kết ngầm với availability-rule ẩn."
     )
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
     public ApiResponse<MentorManagedAvailabilitySlotResponse> createSlot(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateAvailabilitySlotRequest request
@@ -64,11 +63,12 @@ public class MentorAvailabilitySlotController {
     @GetMapping
     public ApiResponse<List<MentorManagedAvailabilitySlotResponse>> getMySlots(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorAvailabilityService.getMySlots(principal.getPublicId(), fromDate, toDate));
+        return ApiResponse.success(mentorAvailabilityService.getMySlots(principal.getPublicId(), isActive, fromDate, toDate));
     }
 
     @Operation(
@@ -85,19 +85,16 @@ public class MentorAvailabilitySlotController {
         return ApiResponse.success(mentorAvailabilityService.updateSlotDirectly(principal.getPublicId(), slotId, request));
     }
 
-    @Operation(
-            summary = "Xóa/hủy slot rảnh của mentor",
-            description = "Xóa slot rảnh. Nếu slot có các booking đang chờ duyệt (PENDING), các booking đó sẽ tự động bị từ chối."
-    )
-    @DeleteMapping("/{slotId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ApiResponse<Void> deleteSlot(
+    @Operation(summary = "Deactivate slot rảnh", description = "Deactivate là terminal. Pending booking bị ảnh hưởng cần confirmation token.")
+    @PostMapping("/{slotId}/deactivate")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
+    public ResponseEntity<ApiResponse<MentorManagedAvailabilitySlotResponse>> deactivateSlot(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID slotId
+            , @Valid @RequestBody DeactivateAvailabilitySlotRequest request
     ) {
         ensureAuthenticated(principal);
-        mentorAvailabilityService.deleteSlotDirectly(principal.getPublicId(), slotId);
-        return ApiResponse.success(null);
+        return ResponseEntity.ok(ApiResponse.success(mentorAvailabilityService.deactivateSlot(principal.getPublicId(), slotId, request)));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

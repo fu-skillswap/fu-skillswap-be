@@ -57,9 +57,19 @@ public class MentorService {
     @Builder.Default
     private boolean isActive = true;
 
+    /** Commercial promise captured by a booking so later service edits are non-retroactive. */
+    @Column(name = "maintain_post_session_chat", nullable = false)
+    @Builder.Default
+    private boolean maintainPostSessionChat = false;
+
     @Column(name = "is_legacy", nullable = false)
     @Builder.Default
     private boolean isLegacy = false;
+
+    @Version
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer version = 0;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

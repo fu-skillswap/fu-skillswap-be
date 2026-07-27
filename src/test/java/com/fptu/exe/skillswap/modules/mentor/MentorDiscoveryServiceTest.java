@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryReque
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -93,6 +94,8 @@ class MentorDiscoveryServiceTest {
     @Mock
     private SessionFeedbackRepository sessionFeedbackRepository;
     @Mock
+    private BlogPostRepository blogPostRepository;
+    @Mock
     private MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
     @Mock
     private PaymentProperties paymentProperties;
@@ -125,6 +128,7 @@ class MentorDiscoveryServiceTest {
                 mentorServiceRepository,
                 mentorAvailabilityService,
                 sessionFeedbackRepository,
+                blogPostRepository,
                 menteeMatchingFeatureProvider,
                 paymentProperties,
                 internalTelemetryService,

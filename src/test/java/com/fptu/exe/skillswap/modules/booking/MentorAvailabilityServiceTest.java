@@ -124,8 +124,6 @@ class MentorAvailabilityServiceTest {
                 .thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
                 .thenReturn(false);
-        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId))
-                .thenReturn(List.of());
 
         when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -269,8 +267,6 @@ class MentorAvailabilityServiceTest {
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, request.startTime(), request.endTime()))
                 .thenReturn(false);
-        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId))
-                .thenReturn(List.of());
 
         when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));

@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationC
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleOAuthStateService;
+import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -34,6 +35,7 @@ public class AuthController {
     private final IdentityService identityService;
     private final GoogleOAuthStateService googleOAuthStateService;
     private final InMemoryRateLimitService rateLimitService;
+    private final TrustedClientIpResolver trustedClientIpResolver;
 
     @Operation(summary = "Khởi tạo Google OAuth", description = "Phát hành state dùng một lần, ràng buộc với redirect URI và PKCE code challenge. FE phải gọi endpoint này trước khi chuyển user sang Google OAuth.")
     @GetMapping("/google/authorization-context")
@@ -42,7 +44,7 @@ public class AuthController {
             @RequestParam String codeChallenge,
             HttpServletRequest request
     ) {
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "auth:google-context:" + resolveClientKey(request),
                 20,
                 java.time.Duration.ofMinutes(10),
@@ -63,7 +65,7 @@ public class AuthController {
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "auth:google:" + resolveClientKey(httpServletRequest),
                 20,
                 java.time.Duration.ofMinutes(10),
@@ -85,7 +87,7 @@ public class AuthController {
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "auth:refresh:" + resolveClientKey(httpServletRequest),
                 40,
                 java.time.Duration.ofMinutes(10),
@@ -152,6 +154,6 @@ public class AuthController {
         if (request == null) {
             return "unknown";
         }
-        return StringUtils.hasText(request.getRemoteAddr()) ? request.getRemoteAddr() : "unknown";
+        return trustedClientIpResolver.resolve(request);
     }
 }

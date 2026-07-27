@@ -126,6 +126,17 @@ public class ForumPostController {
         return ApiResponse.success(forumPostService.getPosts(principal.getPublicId(), cursor, limit, keyword, helpTopicId, mine));
     }
 
+    @GetMapping("/feed")
+    @Operation(summary = "Lấy newsfeed Forum ưu tiên bài viết cùng ngành học")
+    public ApiResponse<CursorPageResponse<ForumPostResponse>> getFeed(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") Integer limit
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(forumPostService.getFeed(principal.getPublicId(), cursor, limit));
+    }
+
     @GetMapping("/posts/{postId}")
     @Operation(summary = "Lấy chi tiết bài viết forum")
     public ApiResponse<ForumPostResponse> getPostDetail(

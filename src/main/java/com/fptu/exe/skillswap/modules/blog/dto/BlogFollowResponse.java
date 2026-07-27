@@ -4,6 +4,6 @@ import java.util.List;
 
 public record BlogFollowResponse(
         List<BlogCategoryResponse> categories,
-        List<BlogTagResponse> tags
+        List<BlogAuthorResponse> mentors
 ) {
 }

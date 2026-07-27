@@ -1,10 +1,14 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
+import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -19,13 +23,32 @@ import java.util.Base64;
 @Service
 public class GoogleOAuthStateService {
 
-    private static final Duration STATE_TTL = Duration.ofMinutes(5);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    private final Cache<String, PendingAuthorization> pendingAuthorizations = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(STATE_TTL)
-            .build();
+    private final Duration stateTtl;
+    private final Cache<String, PendingAuthorization> pendingAuthorizations;
+
+    @Autowired
+    public GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry) {
+        this(cacheProperties, meterRegistry, true);
+    }
+
+    GoogleOAuthStateService(CacheProperties cacheProperties) {
+        this(cacheProperties, null, false);
+    }
+
+    private GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry, boolean monitorMetrics) {
+        CacheProperties.TimedCache settings = cacheProperties.getGoogleOauthState();
+        this.stateTtl = settings.getTtl();
+        this.pendingAuthorizations = Caffeine.newBuilder()
+                .maximumSize(settings.getMaximumSize())
+                .expireAfterWrite(stateTtl)
+                .recordStats()
+                .build();
+        if (monitorMetrics) {
+            CaffeineCacheMetrics.monitor(meterRegistry, pendingAuthorizations, "google-oauth-state");
+        }
+    }
 
     public GoogleAuthorizationContextResponse issue(String redirectUri, String codeChallenge) {
         requireText(redirectUri, "redirectUri");
@@ -33,7 +56,7 @@ public class GoogleOAuthStateService {
         byte[] stateBytes = new byte[32];
         SECURE_RANDOM.nextBytes(stateBytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(stateBytes);
-        Instant expiresAt = Instant.now().plus(STATE_TTL);
+        Instant expiresAt = Instant.now().plus(stateTtl);
         pendingAuthorizations.put(state, new PendingAuthorization(redirectUri.trim(), codeChallenge.trim()));
         return new GoogleAuthorizationContextResponse(state, expiresAt);
     }

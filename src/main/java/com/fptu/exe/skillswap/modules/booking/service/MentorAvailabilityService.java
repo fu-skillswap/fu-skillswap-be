@@ -12,10 +12,13 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.DeactivateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilityResponse;
+import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
@@ -38,6 +41,7 @@ import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +57,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -79,6 +85,7 @@ public class MentorAvailabilityService {
     private static final String BLOCKED_BY_ACCEPTED_REASON = "Đã có booking được mentor chấp nhận trùng với khoảng thời gian này";
     private static final String BLOCKED_BY_PENDING_QUOTA_REASON = "Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận";
     private static final String BLOCKED_BY_PAST_TIME_REASON = "Segment này đã bắt đầu hoặc đã trôi qua";
+    private static final int MAXIMUM_PARENT_SLOT_DURATION_MINUTES = 720;
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.ACCEPTED,
@@ -153,8 +160,8 @@ public class MentorAvailabilityService {
         requireUserId(mentorUserId);
         MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
 
-        LocalDateTime start = request.startTime();
-        LocalDateTime end = request.endTime();
+        LocalDateTime start = toUtcLocal(request.legacyJavaBridge() ? request.startAt() : requireWholeMinute(request.startAt()));
+        LocalDateTime end = toUtcLocal(request.legacyJavaBridge() ? request.endAt() : requireWholeMinute(request.endAt()));
 
         if (start == null || end == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu và kết thúc là bắt buộc");
@@ -162,6 +169,7 @@ public class MentorAvailabilityService {
         if (!end.isAfter(start)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc phải sau thời gian bắt đầu");
         }
+        validateParentSlotDuration(start, end);
         if (!start.isAfter(now())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể tạo slot rảnh ở quá khứ");
         }
@@ -198,12 +206,7 @@ public class MentorAvailabilityService {
                 .build();
         MentorAvailabilitySlot savedSlot = mentorAvailabilitySlotRepository.save(slot);
 
-        List<MentorService> services;
-        if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
-            services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
-        } else {
-            services = resolveManagedServices(mentorUserId, request.serviceIds());
-        }
+        List<MentorService> services = resolveManagedServices(mentorUserId, request.serviceIds());
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
@@ -223,16 +226,14 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
         }
 
-        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
+        MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
-
-        if (slot.isBooked()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa đổi slot rảnh đã được đặt lịch");
+        if (!java.util.Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
+            throw slotVersionConflict(slotId, request.expectedVersion(), normalizedVersion(slot));
         }
 
-        LocalDateTime start = request.startTime();
-        LocalDateTime end = request.endTime();
+        LocalDateTime start = toUtcLocal(request.legacyJavaBridge() ? request.startAt() : requireWholeMinute(request.startAt()));
+        LocalDateTime end = toUtcLocal(request.legacyJavaBridge() ? request.endAt() : requireWholeMinute(request.endAt()));
 
         if (start == null || end == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu và kết thúc là bắt buộc");
@@ -240,6 +241,7 @@ public class MentorAvailabilityService {
         if (!end.isAfter(start)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc phải sau thời gian bắt đầu");
         }
+        validateParentSlotDuration(start, end);
         if (!start.isAfter(now())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa slot rảnh thành thời gian quá khứ");
         }
@@ -248,6 +250,8 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
         }
 
+        LocalDateTime previousStart = slot.getStartTime();
+        LocalDateTime previousEnd = slot.getEndTime();
         MentorAvailabilityRule rule = slot.getRule();
         if (rule != null) {
             rule.setEffectiveFrom(start.toLocalDate());
@@ -258,6 +262,24 @@ public class MentorAvailabilityService {
             mentorAvailabilityRuleRepository.save(rule);
         }
 
+        Set<UUID> oldServiceIds = slot.getSlotServices().stream().map(item -> item.getService().getId()).collect(Collectors.toSet());
+        Set<UUID> newServiceIds = new LinkedHashSet<>(request.serviceIds());
+        boolean timeChanged = !start.equals(previousStart) || !end.equals(previousEnd);
+        List<Booking> affectedPending = bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING).stream()
+                .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
+                .filter(booking -> timeChanged || (booking.getService() != null && !newServiceIds.contains(booking.getService().getId())))
+                .toList();
+        if (!affectedPending.isEmpty() && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_HAS_PENDING_BOOKINGS");
+        }
+        if (slot.isBooked() && request.expectedVersion() == 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Slot đã có booking và không thể thay đổi theo legacy flow");
+        }
+        if (hasLockingBookings(slotId) && (timeChanged || !oldServiceIds.equals(newServiceIds))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_HAS_LOCKING_BOOKINGS");
+        }
+        rejectPendingBookings(affectedPending, RULE_UPDATED_PENDING_REJECTION_REASON);
+
         slot.setStartTime(start);
         slot.setEndTime(end);
         slot.setNote(trimToNull(request.note()));
@@ -265,12 +287,7 @@ public class MentorAvailabilityService {
         availabilitySlotServiceRepository.deleteBySlotId(slotId);
         slot.getSlotServices().clear();
 
-        List<MentorService> services;
-        if (request.serviceIds() == null || request.serviceIds().isEmpty()) {
-            services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
-        } else {
-            services = resolveManagedServices(mentorUserId, request.serviceIds());
-        }
+        List<MentorService> services = resolveManagedServices(mentorUserId, request.serviceIds());
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
@@ -285,42 +302,31 @@ public class MentorAvailabilityService {
     }
 
     @Transactional
-    public void deleteSlotDirectly(UUID mentorUserId, UUID slotId) {
+    public MentorManagedAvailabilitySlotResponse deactivateSlot(UUID mentorUserId, UUID slotId, DeactivateAvailabilitySlotRequest request) {
         requireUserId(mentorUserId);
         if (slotId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
         }
 
-        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
+        MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
-
-        if (slot.isBooked()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xóa slot rảnh đã được đặt lịch");
+        if (!slot.isActive()) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_ALREADY_INACTIVE");
+        }
+        if (request == null || !java.util.Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
+            throw slotVersionConflict(slotId, request == null ? null : request.expectedVersion(), normalizedVersion(slot));
         }
 
-        List<Booking> pendingBookings = bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING);
-        if (!pendingBookings.isEmpty()) {
-            for (Booking booking : pendingBookings) {
-                booking.setStatus(BookingStatus.REJECTED);
-                booking.setRejectedAt(now());
-                booking.setRejectReason(RULE_DELETED_PENDING_REJECTION_REASON);
-                bookingRepository.save(booking);
-
-                try {
-                    notificationService.createNotification(
-                            booking.getMentee().getId(),
-                            NotificationType.BOOKING_REJECTED,
-                            "Yêu cầu đặt lịch đã bị hủy",
-                            "Khung giờ rảnh của mentor đã được gỡ bỏ khỏi lịch biểu.",
-                            "booking",
-                            booking.getId()
-                    );
-                } catch (Exception ex) {
-                    log.error("Failed to send booking rejection notification for booking: {}", booking.getId(), ex);
-                }
-            }
+        List<Booking> pendingBookings = bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING).stream()
+                .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
+                .toList();
+        if (!pendingBookings.isEmpty() && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_HAS_PENDING_BOOKINGS");
         }
+        if (hasLockingBookings(slotId)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_HAS_LOCKING_BOOKINGS");
+        }
+        rejectPendingBookings(pendingBookings, RULE_DELETED_PENDING_REJECTION_REASON);
 
         slot.setActive(false);
         mentorAvailabilitySlotRepository.save(slot);
@@ -331,27 +337,59 @@ public class MentorAvailabilityService {
             mentorAvailabilityRuleRepository.save(rule);
         }
         touchMentorActivity(slot.getMentorProfile(), now());
+        return toManagedSlotResponse(slot);
     }
 
     @Transactional(readOnly = true)
-    public List<MentorManagedAvailabilitySlotResponse> getMySlots(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
+    public List<MentorManagedAvailabilitySlotResponse> getMySlots(UUID mentorUserId, Boolean isActive, LocalDate fromDate, LocalDate toDate) {
         requireUserId(mentorUserId);
-        LocalDateTime start;
-        LocalDateTime end;
-
-        if (fromDate == null) {
-            LocalDate today = LocalDate.now(APP_ZONE);
-            LocalDate mondayThisWeek = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-            start = mondayThisWeek.atStartOfDay();
-            end = mondayThisWeek.plusDays(15).atStartOfDay();
-        } else {
-            start = fromDate.atStartOfDay();
-            end = toDate != null ? toDate.plusDays(1).atStartOfDay() : start.toLocalDate().plusDays(15).atStartOfDay();
+        if (fromDate == null || toDate == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "fromDate và toDate là bắt buộc");
         }
+        if (toDate.isBefore(fromDate) || java.time.temporal.ChronoUnit.DAYS.between(fromDate, toDate) + 1 > 31) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng ngày availability không hợp lệ hoặc vượt quá giới hạn 31 ngày");
+        }
+        ZoneId policyZone = resolvePolicyZone(mentorUserId);
+        LocalDateTime start = fromDate.atStartOfDay(policyZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        LocalDateTime end = toDate.plusDays(1).atStartOfDay(policyZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
 
         return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, start, end).stream()
+                .filter(slot -> isActive == null || slot.isActive() == isActive)
                 .map(this::toManagedSlotResponse)
                 .toList();
+    }
+
+    @Deprecated(forRemoval = true)
+    @Transactional(readOnly = true)
+    public List<MentorManagedAvailabilitySlotResponse> getMySlots(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
+        return getMySlots(mentorUserId, null, fromDate, toDate);
+    }
+
+    @Deprecated(forRemoval = true)
+    @Transactional
+    public void deleteSlotDirectly(UUID mentorUserId, UUID slotId) {
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
+        validateMentorOwnsSlot(mentorUserId, slot);
+        if (slot.isBooked()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Slot đã được booking");
+        }
+        for (Booking booking : bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING)) {
+            booking.setStatus(BookingStatus.REJECTED);
+            booking.setRejectedAt(now());
+            booking.setRejectReason(RULE_DELETED_PENDING_REJECTION_REASON);
+            bookingRepository.save(booking);
+            if (booking.getMentee() != null) {
+                notificationService.createNotification(booking.getMentee().getId(), NotificationType.BOOKING_REJECTED,
+                        "Yêu cầu booking đã bị từ chối", RULE_DELETED_PENDING_REJECTION_REASON, "BOOKING", booking.getId());
+            }
+        }
+        slot.setActive(false);
+        mentorAvailabilitySlotRepository.save(slot);
+        if (slot.getRule() != null) {
+            slot.getRule().setActive(false);
+            mentorAvailabilityRuleRepository.save(slot.getRule());
+        }
     }
 
     @Transactional
@@ -370,18 +408,25 @@ public class MentorAvailabilityService {
                         ss.getService().getTitle(),
                         ss.getService().getDurationMinutes(),
                         ss.getService().isFree(),
-                        normalizedServicePrice(ss.getService())
+                        normalizedServicePrice(ss.getService()),
+                        bindingRemovalCapability(slot, ss.getService().getId())
                 ))
                 .collect(Collectors.toList());
         return new MentorManagedAvailabilitySlotResponse(
                 slot.getId(),
-                slot.getStartTime(),
-                slot.getEndTime(),
+                toInstant(slot.getStartTime()),
+                toInstant(slot.getEndTime()),
                 slot.getTimezone(),
                 slot.isActive(),
-                slot.isBooked(),
                 slot.getNote(),
-                services
+                services,
+                slot.getVersion(),
+                Math.toIntExact(bookingRepository.countBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING)),
+                Math.toIntExact(bookingRepository.countBySlotIdAndStatusIn(slot.getId(), SLOT_LOCKING_STATUSES)),
+                hasLockingBookings(slot.getId()),
+                timeMutationCapability(slot),
+                deactivationCapability(slot),
+                true
         );
     }
 
@@ -1033,6 +1078,100 @@ public class MentorAvailabilityService {
 
     private LocalDateTime selectedEndTime(Booking booking) {
         return booking.getSelectedEndTime();
+    }
+
+    private ZoneId resolvePolicyZone(UUID mentorUserId) {
+        if (mentorBookingPolicyService == null) {
+            return APP_ZONE;
+        }
+        return ZoneId.of(mentorBookingPolicyService.getEffectivePolicy(mentorUserId).timezone());
+    }
+
+    private MentorAvailabilitySlot findSlotForUpdateOrLegacyRead(UUID slotId) {
+        return mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
+                .or(() -> mentorAvailabilitySlotRepository.findById(slotId))
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot rảnh"));
+    }
+
+    private Integer normalizedVersion(MentorAvailabilitySlot slot) {
+        return slot.getVersion() == null ? 0 : slot.getVersion();
+    }
+
+    private void validateParentSlotDuration(LocalDateTime start, LocalDateTime end) {
+        if (Duration.between(start, end).toMinutes() > MAXIMUM_PARENT_SLOT_DURATION_MINUTES) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "AVAILABILITY_RANGE_TOO_LARGE");
+        }
+    }
+
+    private VersionConflictException slotVersionConflict(UUID slotId, Integer expectedVersion, Integer currentVersion) {
+        return new VersionConflictException(
+                ErrorCode.RESOURCE_CONFLICT,
+                "AVAILABILITY_SLOT_VERSION_CONFLICT",
+                slotId,
+                expectedVersion,
+                currentVersion
+        );
+    }
+
+    private Instant requireWholeMinute(Instant value) {
+        if (value == null || value.getEpochSecond() % 60 != 0 || value.getNano() != 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "SCHEDULING_TIME_PRECISION_INVALID");
+        }
+        return value;
+    }
+
+    private LocalDateTime toUtcLocal(Instant value) {
+        return LocalDateTime.ofInstant(value, ZoneOffset.UTC);
+    }
+
+    private Instant toInstant(LocalDateTime value) {
+        return value == null ? null : value.toInstant(ZoneOffset.UTC);
+    }
+
+    private boolean hasLockingBookings(UUID slotId) {
+        return bookingRepository.countBySlotIdAndStatusIn(slotId, SLOT_LOCKING_STATUSES) > 0;
+    }
+
+    private void rejectPendingBookings(Collection<Booking> bookings, String reason) {
+        LocalDateTime currentTime = now();
+        for (Booking booking : bookings) {
+            if (booking.getStatus() != BookingStatus.PENDING) {
+                continue;
+            }
+            booking.setStatus(BookingStatus.REJECTED);
+            booking.setRejectedAt(currentTime);
+            booking.setRejectReason(reason);
+        }
+        bookingRepository.saveAll(bookings);
+    }
+
+    private SlotMutationCapabilityResponse bindingRemovalCapability(MentorAvailabilitySlot slot, UUID serviceId) {
+        if (hasLockingBookings(slot.getId())) {
+            return new SlotMutationCapabilityResponse(SlotMutationMode.BLOCKED_BY_LOCKING_BOOKING, "SLOT_HAS_LOCKING_BOOKINGS", 0);
+        }
+        int affected = Math.toIntExact(bookingRepository.findBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING).stream()
+                .filter(booking -> booking.getService() != null && serviceId.equals(booking.getService().getId()))
+                .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
+                .count());
+        return affected == 0
+                ? new SlotMutationCapabilityResponse(SlotMutationMode.ALLOWED, null, 0)
+                : new SlotMutationCapabilityResponse(SlotMutationMode.REQUIRES_PENDING_REJECTION, "SLOT_HAS_PENDING_BOOKINGS", affected);
+    }
+
+    private SlotMutationCapabilityResponse timeMutationCapability(MentorAvailabilitySlot slot) {
+        if (hasLockingBookings(slot.getId())) {
+            return new SlotMutationCapabilityResponse(SlotMutationMode.BLOCKED_BY_LOCKING_BOOKING, "SLOT_HAS_LOCKING_BOOKINGS", 0);
+        }
+        int pending = Math.toIntExact(bookingRepository.findBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING).stream()
+                .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
+                .count());
+        return pending == 0
+                ? new SlotMutationCapabilityResponse(SlotMutationMode.ALLOWED, null, 0)
+                : new SlotMutationCapabilityResponse(SlotMutationMode.REQUIRES_PENDING_REJECTION, "SLOT_HAS_PENDING_BOOKINGS", pending);
+    }
+
+    private SlotMutationCapabilityResponse deactivationCapability(MentorAvailabilitySlot slot) {
+        return timeMutationCapability(slot);
     }
 
     private boolean overlaps(LocalDateTime start1, LocalDateTime end1, LocalDateTime start2, LocalDateTime end2) {

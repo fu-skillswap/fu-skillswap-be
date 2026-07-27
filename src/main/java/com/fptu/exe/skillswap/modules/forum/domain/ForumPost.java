@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.forum.domain;
 
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
+import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -31,6 +32,7 @@ import java.util.UUID;
 @Table(name = "forum_posts", indexes = {
         @Index(name = "idx_forum_posts_status_last_activity_id", columnList = "status, last_activity_at DESC, id"),
         @Index(name = "idx_forum_posts_status_created", columnList = "status, created_at"),
+        @Index(name = "idx_forum_posts_status_program_activity_id", columnList = "status, author_program_id, last_activity_at DESC, id"),
         @Index(name = "idx_forum_posts_help_topic_created", columnList = "help_topic_id, created_at"),
         @Index(name = "idx_forum_posts_author_created", columnList = "author_user_id, created_at")
 })
@@ -54,6 +56,11 @@ public class ForumPost {
     @ManyToOne(optional = false)
     @JoinColumn(name = "help_topic_id", nullable = false, foreignKey = @ForeignKey(name = "fk_forum_posts_help_topic"))
     private Tag helpTopic;
+
+    /** Academic program snapshot of the author when the post was created. */
+    @ManyToOne
+    @JoinColumn(name = "author_program_id", foreignKey = @ForeignKey(name = "fk_forum_posts_author_program"))
+    private AcademicProgram authorProgram;
 
     @Column(nullable = false, length = 200)
     private String title;

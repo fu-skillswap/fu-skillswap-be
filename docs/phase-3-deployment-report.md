@@ -18,10 +18,10 @@ Tài liệu này tóm tắt kết quả cấu hình và trạng thái của Phas
 
 ## 3. Operational Drill Status
 - **Backup Result**: Tích hợp gọi tự động `ops/backup-postgres.sh` trước khi deploy. (Pipeline sẽ fail nếu script bị lỗi).
-- **Restore Test Result**: Hướng dẫn có sẵn tại `backup-restore-guide.md`. Yêu cầu diễn tập thực tế khi VPS sẵn sàng.
+- **Restore Test Result**: Hướng dẫn có sẵn tại `backup-restore.md`. Yêu cầu diễn tập thực tế khi VPS sẵn sàng.
 - **Readiness Result**: Được verify tự động bằng cờ `--wait` trong pipeline.
 - **Smoke Test Result**: Tự động thông qua `build-and-test` job. Cần chạy manual smoke-test từ ngoài sau khi VPS bật lên.
-- **Rollback Drill Result**: Hướng dẫn có sẵn tại `rollback-guide.md` (Rollback bằng Image GITHUB_SHA cũ).
+- **Rollback Drill Result**: Hướng dẫn có sẵn tại `rollback.md` (Rollback bằng Image GITHUB_SHA cũ).
 
 ## 4. Final Conclusion
 

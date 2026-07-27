@@ -60,14 +60,14 @@ public class BookingController {
      * ADMIN and SYSTEM_ADMIN are blocked here (defense-in-depth over service-layer check in
      * validateBookerEligibility). Fail fast at controller, return 403 before reaching service.
      */
-    @PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
+    @PreAuthorize("hasAnyRole('MENTEE', 'MENTOR')")
     @PostMapping
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ResponseEntity<ApiResponse<BookingResponse>> createBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateBookingRequest request) {
         ensureAuthenticated(principal);
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BUSINESS,
                 "booking:create:" + principal.getPublicId(),
                 12,
                 java.time.Duration.ofMinutes(10),

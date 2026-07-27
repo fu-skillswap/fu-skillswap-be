@@ -5,6 +5,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
@@ -72,6 +74,8 @@ public record BookingResponse(
         Boolean serviceIsFreeSnapshot,
         @Schema(description = "Snapshot giá dịch vụ theo SCoin", nullable = true)
         Integer servicePriceScoinSnapshot,
+        @Schema(description = "Booking-time snapshot of ongoing post-session chat entitlement")
+        Boolean maintainPostSessionChatSnapshot,
         @Schema(description = "Giá mentee nhìn thấy trước coupon/credit, đã cộng phụ phí nền tảng theo cấu hình PAYMENT_MENTEE_SURCHARGE_BPS", nullable = true, example = "110")
         Integer servicePriceWithSurchargeScoin,
         @Deprecated(forRemoval = false)
@@ -127,6 +131,8 @@ public record BookingResponse(
         LocalDateTime actualEndTime,
         @Schema(description = "Thời điểm mentor accept booking", nullable = true)
         LocalDateTime acceptedAt,
+        @Schema(description = "Deadline mentor phải phản hồi booking PENDING", nullable = true)
+        LocalDateTime pendingExpireAt,
         @Schema(description = "Thời điểm mentor reject booking", nullable = true)
         LocalDateTime rejectedAt,
         @Schema(description = "Thời điểm booking bị hủy", nullable = true)
@@ -174,6 +180,14 @@ public record BookingResponse(
         @Schema(description = "true nếu user hiện tại có thể đề xuất dời lịch")
         boolean canReschedule,
         @Schema(description = "true nếu user hiện tại có thể viết đánh giá feedback")
-        boolean canSubmitFeedback
+        boolean canSubmitFeedback,
+        @Schema(description = "Cancellation/refund policy platform currently applied to this booking")
+        BookingCancellationRefundPolicyResponse cancellationRefundPolicy,
+        @Schema(description = "Nhóm UI derived theo role/thời điểm; canonical state vẫn là source of truth")
+        BookingDisplayState displayState,
+        @Schema(description = "Action UI tiếp theo được backend gợi ý", nullable = true)
+        BookingNextAction nextAction,
+        @Schema(description = "Deadline action nếu backend có deadline thật", nullable = true)
+        LocalDateTime actionDeadlineAt
 ) {
 }

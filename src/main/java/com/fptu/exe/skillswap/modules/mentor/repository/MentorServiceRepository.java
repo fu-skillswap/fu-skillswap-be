@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -30,6 +32,16 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
 
     @EntityGraph(attributePaths = {"helpTopics"})
     Optional<MentorService> findByIdAndMentorProfileUserIdAndIsActiveTrue(UUID id, UUID mentorUserId);
+
+    @Query("""
+            select distinct service
+            from MentorService service
+            join fetch service.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch service.helpTopics
+            where service.id = :serviceId
+            """)
+    Optional<MentorService> findByIdForPricingPreview(@Param("serviceId") UUID serviceId);
 
     @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.title FROM MentorService s WHERE s.isActive = true")
     List<String> findAllActiveServiceTitles();

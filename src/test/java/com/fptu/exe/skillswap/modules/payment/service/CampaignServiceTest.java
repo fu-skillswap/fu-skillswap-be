@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -94,5 +95,47 @@ class CampaignServiceTest {
         assertEquals(FundingSource.APP_FUNDED, result.fundingSource());
         assertEquals(250, result.appliedScoin());
         verify(campaignRepository).findByIdForUpdate(campaignId);
+    }
+
+    @Test
+    void estimateCampaignCredit_shouldNotAcquireCheckoutLock() {
+        UUID userId = UUID.randomUUID();
+        UUID campaignId = UUID.randomUUID();
+
+        User user = new User();
+        user.setId(userId);
+        user.setRoles(Set.<RoleCode>of());
+
+        Campaign campaign = Campaign.builder()
+                .id(campaignId)
+                .name("Preview Campaign")
+                .status(CampaignStatus.ACTIVE)
+                .fundingSource(FundingSource.APP_FUNDED)
+                .budgetScoin(500)
+                .build();
+        CampaignBenefit benefit = CampaignBenefit.builder()
+                .id(UUID.randomUUID())
+                .campaign(campaign)
+                .benefitType(CampaignBenefitType.CREDIT_ISSUANCE)
+                .creditScoin(200)
+                .active(true)
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.empty());
+        when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
+        when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
+        when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));
+        when(paymentOrderRepository.sumCampaignCreditByCampaignIdAndStatusNotIn(eq(campaignId), anyCollection())).thenReturn(0);
+
+        CampaignService.CampaignCreditApplication result = campaignService.estimateCampaignCredit(
+                userId,
+                Booking.builder().build(),
+                300
+        );
+
+        assertEquals(200, result.appliedScoin());
+        verify(campaignRepository).findById(campaignId);
+        verify(campaignRepository, never()).findByIdForUpdate(campaignId);
     }
 }

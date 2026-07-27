@@ -7,12 +7,15 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogTag;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogBookmarkRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogTagFollowRepository;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
@@ -25,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -45,7 +49,7 @@ class BlogGrowthServiceTest {
     @Mock private BlogPostLikeRepository blogPostLikeRepository;
     @Mock private BlogBookmarkRepository blogBookmarkRepository;
     @Mock private BlogCategoryFollowRepository blogCategoryFollowRepository;
-    @Mock private BlogTagFollowRepository blogTagFollowRepository;
+    @Mock private BlogMentorFollowRepository blogMentorFollowRepository;
     @Mock private BlogCategoryRepository blogCategoryRepository;
     @Mock private BlogTagRepository blogTagRepository;
     @Mock private BlogMapper blogMapper;
@@ -53,6 +57,10 @@ class BlogGrowthServiceTest {
     @Mock private MentorContentAccessService mentorContentAccessService;
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private EntityManager entityManager;
+    @Mock private BlogTrendingCache trendingCache;
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private BookingEligibilityPolicy bookingEligibilityPolicy;
+    @Mock private MentorProfileRepository mentorProfileRepository;
 
     private BlogService service;
     private UUID userId;
@@ -65,7 +73,7 @@ class BlogGrowthServiceTest {
                 blogPostLikeRepository,
                 blogBookmarkRepository,
                 blogCategoryFollowRepository,
-                blogTagFollowRepository,
+                blogMentorFollowRepository,
                 blogCategoryRepository,
                 blogTagRepository,
                 blogMapper,
@@ -73,7 +81,11 @@ class BlogGrowthServiceTest {
                 new BlogContentPolicy(),
                 mentorContentAccessService,
                 internalTelemetryService,
-                entityManager
+                entityManager,
+                trendingCache,
+                eventPublisher,
+                bookingEligibilityPolicy,
+                mentorProfileRepository
         );
         userId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         principal = UserPrincipal.create(userId, "user@example.com", List.of(RoleCode.MENTEE));
@@ -92,10 +104,11 @@ class BlogGrowthServiceTest {
                 .build();
         when(blogCategoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
         when(blogCategoryFollowRepository.existsByUserIdAndCategoryId(userId, categoryId)).thenReturn(false);
+        when(blogCategoryFollowRepository.countByUserId(userId)).thenReturn(0L);
         when(entityManager.getReference(User.class, userId)).thenReturn(new User());
         when(blogCategoryFollowRepository.findByUserIdOrderByCreatedAtDesc(userId))
                 .thenReturn(List.of(BlogCategoryFollow.builder().category(category).build()));
-        when(blogTagFollowRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
+        when(blogMentorFollowRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());
         when(blogMapper.toCategory(category)).thenCallRealMethod();
 
         var response = service.followCategory(principal, categoryId);
@@ -120,13 +133,18 @@ class BlogGrowthServiceTest {
                 .publishedAt(LocalDateTime.now())
                 .build();
         when(blogCategoryFollowRepository.findCategoryIdsByUserId(userId)).thenReturn(Set.of());
-        when(blogTagFollowRepository.findTagIdsByUserId(userId)).thenReturn(Set.of());
-        when(blogPostRepository.findPublicWindow(any(), any(), any(), any(), any(), any(), any(), any(Integer.class)))
+        when(blogMentorFollowRepository.findMentorIdsByUserId(userId)).thenReturn(Set.of());
+        when(blogPostRepository.findPublicWindow(any(), any(), any(), any(), any(), any(), any(Integer.class)))
                 .thenReturn(List.of(post));
+        when(blogPostRepository.findReaderPostsWithAuthorByIdIn(List.of(postId))).thenReturn(List.of(post));
         when(blogPostLikeRepository.findLikedPostIds(userId, List.of(postId))).thenReturn(Set.of());
         when(blogBookmarkRepository.findBookmarkedPostIds(userId, List.of(postId))).thenReturn(Set.of());
         when(mentorContentAccessService.getBlogAuthorSummaries(any())).thenReturn(Map.of());
-        when(blogMapper.toCard(any(), any(), any())).thenCallRealMethod();
+        when(blogMapper.toReaderCard(any(), any(), any())).thenReturn(new BlogPostReaderCardResponse(
+                postId, "Post", "post", null, null, null, null, List.of(), List.of(), 0,
+                0L, 0L, 0L, false, false, false, post.getPublishedAt(), post.getPublishedAt(),
+                post.getPublishedAt(), post.getPublishedAt()
+        ));
 
         var response = service.personalizedFeed(principal, null, 20);
 

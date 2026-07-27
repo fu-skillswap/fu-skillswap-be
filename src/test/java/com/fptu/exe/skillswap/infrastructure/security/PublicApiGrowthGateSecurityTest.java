@@ -47,7 +47,7 @@ class PublicApiGrowthGateSecurityTest {
         mockMvc.perform(put("/api/blog/posts/018f3abf-0a22-7112-9748-6cf000c47b6e/like"))
                 .andExpect(status().isUnauthorized());
 
-        mockMvc.perform(delete("/api/blog/tags/018f3abf-0a22-7112-9748-6cf000c47b6e/follow"))
+        mockMvc.perform(delete("/api/blog/mentors/018f3abf-0a22-7112-9748-6cf000c47b6e/follow"))
                 .andExpect(status().isUnauthorized());
 
         mockMvc.perform(get("/api/me/blog/feed"))
@@ -71,7 +71,7 @@ class PublicApiGrowthGateSecurityTest {
         mockMvc.perform(post("/api/blog/posts/018f3abf-0a22-7112-9748-6cf000c47b6e/view")
                         .header("User-Agent", "test-agent")
                         .contentType("application/json")
-                        .content("{}"))
+                        .content("{\"sessionId\":\"anonymous-security-test\"}"))
                 .andExpect(status().isNotFound());
     }
 

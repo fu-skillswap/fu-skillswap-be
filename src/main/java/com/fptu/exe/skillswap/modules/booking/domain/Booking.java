@@ -95,6 +95,10 @@ public class Booking {
     @Column(name = "service_price_scoin_snapshot")
     private Integer servicePriceScoinSnapshot;
 
+    @Column(name = "maintain_post_session_chat_snapshot", nullable = false)
+    @Builder.Default
+    private boolean maintainPostSessionChatSnapshot = false;
+
     @Column(name = "mentor_response_note", columnDefinition = "TEXT")
     private String mentorResponseNote;
 
@@ -106,6 +110,9 @@ public class Booking {
 
     @Column(name = "accepted_at")
     private LocalDateTime acceptedAt;
+
+    @Column(name = "pending_expire_at")
+    private LocalDateTime pendingExpireAt;
 
     @Column(name = "rejected_at")
     private LocalDateTime rejectedAt;

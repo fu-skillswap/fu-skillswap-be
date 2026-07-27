@@ -23,11 +23,15 @@ public record MentorServiceResponse(
         @Schema(description = "Service duration in minutes", example = "60")
         Integer durationMinutes,
         @Schema(description = "Whether the service is free", example = "true")
-        boolean free,
+        boolean isFree,
         @Schema(description = "Service price in SCoin. 0 means the service is free.", nullable = true, example = "120")
         Integer priceScoin,
         @Schema(description = "Whether the service is currently active for future use", example = "true")
-        boolean active,
+        boolean isActive,
+        @Schema(description = "Whether a completed booking keeps direct chat open after the post-session window", example = "false")
+        boolean maintainPostSessionChat,
+        @Schema(description = "Optimistic-lock version for management mutations", example = "4")
+        Integer version,
         @Schema(description = "Help topics covered by this service")
         List<MentorTagResponse> helpTopics,
         @Schema(description = "Service creation time", example = "2026-06-20T09:00:00")
@@ -35,4 +39,24 @@ public record MentorServiceResponse(
         @Schema(description = "Latest service update time", example = "2026-06-24T10:00:00")
         LocalDateTime updatedAt
 ) {
+    @Deprecated(forRemoval = true)
+    public boolean free() {
+        return isFree;
+    }
+
+    @Deprecated(forRemoval = true)
+    public boolean active() {
+        return isActive;
+    }
+
+    /** Keeps Java test fixtures compiling while JSON exposes only isFree/isActive. */
+    public static class MentorServiceResponseBuilder {
+        public MentorServiceResponseBuilder free(boolean value) {
+            return isFree(value);
+        }
+
+        public MentorServiceResponseBuilder active(boolean value) {
+            return isActive(value);
+        }
+    }
 }

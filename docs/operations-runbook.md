@@ -54,7 +54,21 @@ Kiểm tra PostgreSQL (Health):
 docker exec skillswap-postgres pg_isready -U skillswap
 ```
 
-## 3. Khắc phục sự cố thường gặp (Troubleshooting)
+## 3. Release evidence and rollback decision
+
+Every successful production deployment writes `/opt/skillswap/releases/<git-sha>.env`. Preserve this file with the deploy logs; it identifies the candidate image, previous image, backup manifest/checksum, smoke result, and Flyway history.
+
+Use application-only rollback only when the migration is `EXPAND` and the previous image remains schema-compatible. If data/schema corruption or a `CONTRACT` migration is involved:
+
+1. Drain traffic at the reverse proxy.
+2. Stop `skillswap-backend` and preserve logs.
+3. Set `PRODUCTION_TRAFFIC_DRAINED=true` and `SKILLSWAP_RESTORE_CONFIRM=RESTORE_PRODUCTION`.
+4. Run `ops/restore-postgres.sh <backup.dump.gz>`.
+5. Start the previous immutable image, wait for readiness, then run `ops/smoke-test.sh`.
+
+Never run a restore against a running backend or use `docker compose down -v` in production.
+
+## 4. Khắc phục sự cố thường gặp (Troubleshooting)
 
 ### Sự cố: Container Backend bị thoát liên tục (Restarting)
 - **Nguyên nhân 1**: Sai thông tin cấu hình trong `.env` (ví dụ sai mật khẩu DB).
@@ -70,4 +84,4 @@ docker exec skillswap-postgres pg_isready -U skillswap
   3. Kiểm tra log Nginx để xem nguyên nhân từ chối proxy: `sudo tail -f /var/log/nginx/error.log`.
 
 ### Sự cố: Triển khai bản mới gây lỗi (Migration fail, logic lỗi)
-- *Cách xử lý*: Kích hoạt quy trình Rollback theo tài liệu [Rollback Guide](rollback-guide.md). Xác định GITHUB_SHA cũ, sửa `APP_IMAGE` và chạy `docker compose up -d --wait`.
+- *Cách xử lý*: Kích hoạt quy trình Rollback theo tài liệu [Rollback Guide](rollback.md). Xác định GITHUB_SHA cũ, sửa `APP_IMAGE` và chạy `docker compose up -d --wait`.

@@ -39,6 +39,11 @@ public class MentorBookingPolicy {
     @Builder.Default
     private String timezone = DateTimeUtil.ZONE_HCM;
 
+    @jakarta.persistence.Version
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer version = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

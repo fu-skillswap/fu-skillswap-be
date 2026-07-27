@@ -16,6 +16,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationUploadIntentRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +33,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -47,7 +47,6 @@ public class MentorVerificationService {
     private static final long MAX_AFFILIATION_PROOF_FILES = 1;
     private static final long MAX_EXPERTISE_PROOF_FILES = 3;
     private static final long MAX_DOCUMENT_SIZE_BYTES = 15L * 1024L * 1024L;
-    private static final Pattern OBJECT_KEY_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]+$");
 
     @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
     private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
@@ -70,6 +69,7 @@ public class MentorVerificationService {
     private final UserRepository userRepository;
     private final StoredFileRepository storedFileRepository;
     private final ObjectProvider<StorageGateway> r2StorageProvider;
+    private final MentorVerificationUploadIntentRepository uploadIntentRepository;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -130,6 +130,32 @@ public class MentorVerificationService {
     }
 
     @Transactional
+    public MentorVerificationDocumentUploadIntentResponse createDocumentUploadIntent(
+            UUID userId,
+            MentorVerificationDocumentUploadIntentRequest request
+    ) {
+        requireUserId(userId);
+        findEditableRequestForUpdate(userId);
+        validateUploadIntentRequest(request);
+
+        User user = getRequiredUser(userId);
+        String contentType = canonicalizeContentType(request.contentType());
+        LocalDateTime expiresAt = DateTimeUtil.now().plusMinutes(15);
+        MentorVerificationUploadIntent intent = uploadIntentRepository.save(MentorVerificationUploadIntent.builder()
+                .owner(user)
+                .storageKey(verificationObjectPrefix(userId) + UUID.randomUUID() + extensionOf(request.filename()))
+                .originalFilename(sanitizeFilename(request.filename()))
+                .expectedContentType(contentType)
+                .expectedSizeBytes(request.sizeBytes())
+                .expiresAt(expiresAt)
+                .build());
+        StorageGateway.PrivatePresignedUpload upload = getRequiredStorageGateway()
+                .generatePrivateUploadUrl(intent.getStorageKey(), contentType, java.time.Duration.ofMinutes(15));
+        return new MentorVerificationDocumentUploadIntentResponse(
+                intent.getId(), upload.uploadUrl(), upload.expiresAt(), java.util.Map.of("Content-Type", contentType));
+    }
+
+    @Transactional
     public MentorVerificationRequestResponse uploadDocument(
             UUID userId,
             MentorVerificationDocumentUploadRequest uploadRequest
@@ -153,7 +179,7 @@ public class MentorVerificationService {
                 .request(verificationRequest)
                 .documentType(uploadRequest.documentType())
                 .status(VerificationDocumentStatus.UPLOADED)
-                .storageKind(resolveStorageKind(uploadRequest))
+                .storageKind(resolveStorageKind(storedFile.getMimeType()))
                 .storedFile(storedFile)
                 .isActive(true)
                 .version(nextVersion)
@@ -343,16 +369,21 @@ public class MentorVerificationService {
         if (user == null || user.getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể xác định người dùng tải tài liệu");
         }
-        String objectKey = trimToNull(request.objectKey());
-        String expectedPrefix = verificationObjectPrefix(user.getId());
-        if (objectKey == null || !objectKey.startsWith(expectedPrefix)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi minh chứng của người dùng");
+        MentorVerificationUploadIntent intent = uploadIntentRepository.findByIdForUpdate(request.uploadIntentId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
+        if (!intent.getOwner().getId().equals(user.getId())) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
         }
-        // Strip path separators from the client-supplied filename to prevent path separator
-        // injection into the stored record (the file is never written to disk here, but we
-        // keep the persisted name clean for admin display and future use).
-        String originalFilename = sanitizeFilename(trimToNull(request.originalFilename()));
-        String contentType = canonicalizeContentType(request.contentType());
+        if (intent.getStatus() == MentorVerificationUploadIntentStatus.CONFIRMED || intent.getConfirmedStoredFile() != null) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Upload intent đã được xác nhận");
+        }
+        if (intent.getStatus() != MentorVerificationUploadIntentStatus.PENDING_UPLOAD || intent.getExpiresAt().isBefore(DateTimeUtil.now())) {
+            intent.setStatus(MentorVerificationUploadIntentStatus.EXPIRED);
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Upload intent không còn hợp lệ");
+        }
+        String objectKey = intent.getStorageKey();
+        String originalFilename = intent.getOriginalFilename();
+        String contentType = intent.getExpectedContentType();
         StorageGateway storageGateway = getRequiredStorageGateway();
         StorageGateway.ObjectMetadata objectMetadata = storageGateway.headObject(objectKey);
         String uploadedContentType = canonicalizeContentType(objectMetadata.contentType());
@@ -364,12 +395,10 @@ public class MentorVerificationService {
         }
         // sizeBytes == 0 is the local-profile sentinel for "unknown size" (file not on disk).
         // Skip the size check in that case; production storage always returns the actual size.
-        if (objectMetadata.sizeBytes() > 0
-                && request.sizeBytes() != null && request.sizeBytes() > 0
-                && objectMetadata.sizeBytes() != request.sizeBytes()) {
+        if (objectMetadata.sizeBytes() > 0 && objectMetadata.sizeBytes() != intent.getExpectedSizeBytes()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "sizeBytes xác nhận không khớp file đã upload");
         }
-        return storedFileRepository.save(StoredFile.builder()
+        StoredFile storedFile = storedFileRepository.save(StoredFile.builder()
                 .owner(user)
                 .purpose(FilePurpose.VERIFICATION_DOCUMENT)
                 .originalName(originalFilename)
@@ -377,8 +406,13 @@ public class MentorVerificationService {
                 .storageKey(objectKey)
                 .publicUrl("private://" + objectKey)
                 .mimeType(contentType)
-                .sizeBytes(objectMetadata.sizeBytes() > 0 ? objectMetadata.sizeBytes() : request.sizeBytes())
+                .sizeBytes(objectMetadata.sizeBytes() > 0 ? objectMetadata.sizeBytes() : intent.getExpectedSizeBytes())
                 .build());
+        intent.setConfirmedStoredFile(storedFile);
+        intent.setConfirmedAt(DateTimeUtil.now());
+        intent.setStatus(MentorVerificationUploadIntentStatus.CONFIRMED);
+        uploadIntentRepository.save(intent);
+        return storedFile;
     }
 
     private void validateUploadInput(MentorVerificationDocumentUploadRequest request) {
@@ -388,20 +422,23 @@ public class MentorVerificationService {
         if (request.documentType() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Loại tài liệu xác thực là bắt buộc");
         }
-        if (!StringUtils.hasText(request.objectKey()) || !isValidObjectKey(request.objectKey())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "objectKey của tài liệu không hợp lệ");
+        if (request.uploadIntentId() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "uploadIntentId không được để trống");
         }
-        if (!StringUtils.hasText(request.originalFilename())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tên file gốc không được để trống");
+    }
+
+    private void validateUploadIntentRequest(MentorVerificationDocumentUploadIntentRequest request) {
+        if (request == null || !StringUtils.hasText(request.filename()) || !StringUtils.hasText(request.contentType())
+                || request.sizeBytes() == null || request.sizeBytes() <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu upload intent không hợp lệ");
         }
-        if (request.sizeBytes() == null || request.sizeBytes() <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Kích thước file không hợp lệ");
+        if (request.filename().contains("/") || request.filename().contains("\\") || sanitizeFilename(request.filename()).isBlank()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Tên file không hợp lệ");
         }
         if (request.sizeBytes() > MAX_DOCUMENT_SIZE_BYTES) {
             throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Kích thước file không được vượt quá 15MB");
         }
-        String contentType = canonicalizeContentType(request.contentType());
-        if (!SUPPORTED_CONTENT_TYPES.contains(contentType)) {
+        if (!SUPPORTED_CONTENT_TYPES.contains(canonicalizeContentType(request.contentType()))) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ file JPG, PNG hoặc PDF");
         }
     }
@@ -591,13 +628,6 @@ public class MentorVerificationService {
                 .build();
     }
 
-    private VerificationStorageKind resolveStorageKind(MentorVerificationDocumentUploadRequest request) {
-        if (request == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu tài liệu không được để trống");
-        }
-        return resolveStorageKind(request.contentType());
-    }
-
     private VerificationStorageKind resolveStorageKind(String rawContentType) {
         String contentType = canonicalizeContentType(rawContentType);
         if ("application/pdf".equals(contentType)) {
@@ -621,23 +651,10 @@ public class MentorVerificationService {
         return normalized;
     }
 
-    private boolean isValidObjectKey(String objectKey) {
-        if (objectKey == null) {
-            return false;
-        }
-        String trimmed = objectKey.trim();
-        if (!OBJECT_KEY_PATTERN.matcher(trimmed).matches()) {
-            return false;
-        }
-        for (String segment : trimmed.split("/", -1)) {
-            if (segment.isBlank() || "..".equals(segment)) {
-                return false;
-            }
-        }
-        if (trimmed.startsWith("/")) {
-            return false;
-        }
-        return true;
+    private String extensionOf(String filename) {
+        String sanitized = sanitizeFilename(filename);
+        int extensionIndex = sanitized.lastIndexOf('.');
+        return extensionIndex >= 0 ? sanitized.substring(extensionIndex).toLowerCase(java.util.Locale.ROOT) : "";
     }
 
     /**

@@ -36,6 +36,28 @@ public enum ErrorCode {
     PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang có sự cố, vui lòng thử lại sau"),
     INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
 
+    // Blog
+    BLOG_POST_VERSION_CONFLICT(409, "BLOG_4001", "error.blog.post_version_conflict", "Bài viết đã được quản trị viên khác cập nhật"),
+    BLOG_FOLLOW_LIMIT_REACHED(409, "BLOG_4002", "error.blog.follow_limit_reached", "Đã đạt giới hạn theo dõi Blog"),
+
+    // Forum moderation
+    FORUM_CONTENT_PROHIBITED(400, "FORUM_4201", "error.forum.content_prohibited", "Nội dung chứa cụm từ không được phép"),
+    FORUM_PROHIBITED_PHRASE_DUPLICATE(409, "FORUM_4202", "error.forum.prohibited_phrase_duplicate", "Cụm từ cấm đã tồn tại"),
+
+    // Chat
+    CHAT_CLIENT_MESSAGE_CONFLICT(409, "CHAT_4101", "error.chat.client_message_conflict", "Client message ID đã được dùng cho nội dung khác"),
+    CHAT_MESSAGE_CURSOR_INVALID(400, "CHAT_4102", "error.chat.cursor_invalid", "Cursor tin nhắn không hợp lệ"),
+    CHAT_CONVERSATION_READ_ONLY(403, "CHAT_4103", "error.chat.read_only", "Cuộc hội thoại hiện chỉ cho phép xem"),
+    CHAT_MESSAGE_NOT_EDITABLE(403, "CHAT_4104", "error.chat.message_not_editable", "Tin nhắn không thể chỉnh sửa"),
+    CHAT_MESSAGE_EDIT_WINDOW_EXPIRED(403, "CHAT_4105", "error.chat.edit_window_expired", "Đã hết thời gian chỉnh sửa tin nhắn"),
+    CHAT_MESSAGE_VERSION_CONFLICT(409, "CHAT_4106", "error.chat.message_version_conflict", "Tin nhắn đã được cập nhật"),
+    CHAT_REPLY_TARGET_INVALID(400, "CHAT_4107", "error.chat.reply_target_invalid", "Tin nhắn được trả lời không hợp lệ"),
+    CHAT_ATTACHMENT_INVALID(400, "CHAT_4108", "error.chat.attachment_invalid", "Tệp đính kèm không hợp lệ"),
+    CHAT_ATTACHMENT_QUOTA_EXCEEDED(409, "CHAT_4109", "error.chat.attachment_quota", "Đã đạt giới hạn tệp đính kèm"),
+    CHAT_ATTACHMENT_EXPIRED(404, "CHAT_4110", "error.chat.attachment_expired", "Tệp đính kèm đã hết hạn"),
+    CHAT_ATTACHMENT_REVOKED(404, "CHAT_4111", "error.chat.attachment_revoked", "Tệp đính kèm không còn khả dụng"),
+    CHAT_UPLOAD_INTENT_INVALID(400, "CHAT_4112", "error.chat.upload_intent_invalid", "Upload intent không hợp lệ"),
+
     // Validation
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
 

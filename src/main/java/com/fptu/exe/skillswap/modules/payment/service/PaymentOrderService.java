@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
@@ -15,8 +16,10 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentProvider;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutPreviewRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutPreviewResponse;
 import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -31,6 +34,7 @@ import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -76,6 +80,39 @@ public class PaymentOrderService {
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    private BookingPricingPreviewService bookingPricingPreviewService;
+
+    @Autowired
+    void setBookingPricingPreviewService(BookingPricingPreviewService bookingPricingPreviewService) {
+        this.bookingPricingPreviewService = bookingPricingPreviewService;
+    }
+
+    @Transactional(readOnly = true)
+    public PaymentCheckoutPreviewResponse previewCheckout(
+            UUID currentUserId,
+            UUID bookingId,
+            PaymentCheckoutPreviewRequest request
+    ) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+        validateCheckoutOwnership(currentUserId, booking);
+        if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
+                || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
+        }
+        if (bookingPricingPreviewService == null) {
+            throw new IllegalStateException("BookingPricingPreviewService is required for checkout preview");
+        }
+        return bookingPricingPreviewService.previewCheckout(
+                currentUserId,
+                booking,
+                request == null ? null : request.couponCode(),
+                paymentDeadline(booking)
+        );
+    }
 
     public PaymentCheckoutResponse checkout(UUID currentUserId, PaymentCheckoutRequest request) {
         if (currentUserId == null) {
@@ -221,6 +258,15 @@ public class PaymentOrderService {
                 Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(orderToUpdate.getBookingId()).orElseThrow();
                 finalizeInternalPayment(orderToUpdate, attempt, null, null, "PAID", lockedBooking);
                 orderToUpdate = paymentOrderRepository.save(orderToUpdate);
+            }
+            if (attempt.getStatus() == PaymentAttemptStatus.REDIRECTED) {
+                internalTelemetryService.record(
+                        "PAYMENT_STARTED",
+                        currentUserId,
+                        "BOOKING",
+                        orderToUpdate.getBookingId(),
+                        java.util.Map.of("paymentOrderId", String.valueOf(orderToUpdate.getId()))
+                );
             }
             return toResponse(orderToUpdate, attempt);
         });
@@ -408,6 +454,16 @@ public class PaymentOrderService {
                 && booking.getStatus() != BookingStatus.ACCEPTED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.getStatus() + ")");
         }
+        LocalDateTime deadline = paymentDeadline(booking);
+        if (deadline != null && !deadline.isAfter(DateTimeUtil.now())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã quá hạn thanh toán");
+        }
+    }
+
+    private LocalDateTime paymentDeadline(Booking booking) {
+        LocalDateTime start = booking.getSelectedStartTime() == null && booking.getSlot() != null
+                ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
+        return BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), start);
     }
 
     private int resolveBasePriceScoin(Booking booking) {

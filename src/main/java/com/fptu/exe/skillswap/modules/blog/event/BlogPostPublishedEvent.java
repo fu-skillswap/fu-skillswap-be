@@ -15,7 +15,7 @@ public record BlogPostPublishedEvent(
         String authorName,
         BlogVisibility visibility,
         Set<UUID> categoryIds,
-        Set<UUID> tagIds,
+        Set<UUID> entitledServiceIds,
         LocalDateTime occurredAt
 ) {
 }

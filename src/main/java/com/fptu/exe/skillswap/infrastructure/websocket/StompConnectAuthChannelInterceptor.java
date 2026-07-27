@@ -51,6 +51,11 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
             if (destination == null || !destination.startsWith("/user/")) {
                 throw new AccessDeniedException("Chỉ cho phép subscribe các destination bắt đầu bằng /user/");
             }
+        } else if (StompCommand.SEND.equals(accessor.getCommand())) {
+            Principal user = accessor.getUser();
+            if (user == null || !"/app/chat/typing".equals(accessor.getDestination())) {
+                throw new AccessDeniedException("STOMP SEND destination không được hỗ trợ");
+            }
         }
         return message;
     }

@@ -11,6 +11,7 @@ public record ForumPostResponse(
         UUID authorUserId,
         String authorFullName,
         String authorAvatarUrl,
+        ForumProgramResponse authorProgram,
         ForumHelpTopicResponse helpTopic,
         String title,
         String content,

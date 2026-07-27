@@ -4,18 +4,44 @@ import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-@RequiredArgsConstructor
 public class BookingEligibilityPolicy {
 
     private final AcademicService academicService;
+    private final BookingRepository bookingRepository;
+
+    @Autowired
+    public BookingEligibilityPolicy(AcademicService academicService, BookingRepository bookingRepository) {
+        this.academicService = academicService;
+        this.bookingRepository = bookingRepository;
+    }
+
+    /** Compatibility constructor for existing pure unit tests. */
+    @Deprecated(forRemoval = true)
+    public BookingEligibilityPolicy(AcademicService academicService) {
+        this(academicService, null);
+    }
+
+    /** Resource modules depend on this policy, never on raw booking-status values. */
+    public boolean canAccessServiceResources(java.util.UUID viewerId, java.util.UUID serviceId) {
+        if (viewerId == null || serviceId == null || bookingRepository == null) return false;
+        return bookingRepository.existsByMenteeIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceResourceAccessStatuses());
+    }
+
+    /** Notification and content modules ask the policy for recipients rather than duplicating lifecycle status rules. */
+    public java.util.Set<java.util.UUID> findUsersWithServiceResourceAccess(java.util.Collection<java.util.UUID> serviceIds) {
+        if (serviceIds == null || serviceIds.isEmpty() || bookingRepository == null) return java.util.Set.of();
+        return new java.util.LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceResourceAccessStatuses()));
+    }
 
     public void validateBookerEligibility(User mentee) {
         if (mentee.getStatus() != UserStatus.ACTIVE) {
@@ -59,5 +85,11 @@ public class BookingEligibilityPolicy {
         }
         String trimmed = value.trim();
         return trimmed.isBlank() ? null : trimmed;
+    }
+
+    private java.util.Set<BookingStatus> serviceResourceAccessStatuses() {
+        return java.util.Set.of(BookingStatus.PAID, BookingStatus.ACCEPTED,
+                BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION,
+                BookingStatus.COMPLETED, BookingStatus.AUTO_CLOSED);
     }
 }

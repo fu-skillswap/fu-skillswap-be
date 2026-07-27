@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -13,6 +14,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.time.LocalDateTime;
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface AvailabilitySlotServiceRepository extends JpaRepository<AvailabilitySlotService, AvailabilitySlotServiceId> {
@@ -50,6 +52,21 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
     boolean existsBySlotIdAndServiceId(
             @Param("slotId") UUID slotId,
             @Param("serviceId") UUID serviceId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select slotService
+            from AvailabilitySlotService slotService
+            join fetch slotService.slot slot
+            where slotService.service.id = :serviceId
+              and slot.isActive = true
+              and slot.endTime > :now
+            order by slot.id asc
+            """)
+    List<AvailabilitySlotService> findFutureActiveBindingsByServiceIdForUpdate(
+            @Param("serviceId") UUID serviceId,
+            @Param("now") LocalDateTime now
     );
 
     @Query("""

@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.fptu.exe.skillswap.infrastructure.filter.LegacyRawWebSocketGoneFilter;
+import com.fptu.exe.skillswap.infrastructure.security.CookieAuthOriginProtectionFilter;
 import com.fptu.exe.skillswap.infrastructure.security.JwtAuthenticationFilter;
 import com.fptu.exe.skillswap.infrastructure.security.SecurityErrorResponseHandler;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -30,6 +31,7 @@ import org.springframework.web.filter.CorsFilter;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final CookieAuthOriginProtectionFilter cookieAuthOriginProtectionFilter;
     private final SecurityErrorResponseHandler securityErrorResponseHandler;
     private final LegacyRawWebSocketGoneFilter legacyRawWebSocketGoneFilter;
 
@@ -61,6 +63,7 @@ public class SecurityConfig {
                                     "/api/auth/google/authorization-context",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",
+                                    "/api/private-download/*",
                                     "/api/payments/webhook/**",
                                     "/uploads/storage/**",
                                     "/health",
@@ -111,6 +114,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
 
         http.addFilterAfter(legacyRawWebSocketGoneFilter, CorsFilter.class);
+        http.addFilterBefore(cookieAuthOriginProtectionFilter, JwtAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

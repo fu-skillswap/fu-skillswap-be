@@ -11,6 +11,8 @@ import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAuthorityContentResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatureProvider;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
@@ -75,6 +77,7 @@ public class MentorDiscoveryService {
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityService mentorAvailabilityService;
     private final SessionFeedbackRepository sessionFeedbackRepository;
+    private final BlogPostRepository blogPostRepository;
     private final MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
@@ -287,7 +290,7 @@ public class MentorDiscoveryService {
     @Transactional(readOnly = true)
     public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
-        internalTelemetryService.record("MENTOR_DETAIL_OPENED", null, "MENTOR", mentorUserId, Map.of());
+        internalTelemetryService.record("MENTOR_VIEWED", null, "MENTOR", mentorUserId, Map.of());
         StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
         MentorEnrichedData enrichedData = discoveryEnrichmentService.loadMentorEnrichedData(List.of(mentorUserId), null, currentTime())
                 .getOrDefault(mentorUserId, MentorEnrichedData.empty());
@@ -310,10 +313,11 @@ public class MentorDiscoveryService {
         BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
 
         boolean hasCompletedProfile = hasCompletedPeerMentorProfile(mentorProfile, mentorTags, subjectResults);
-        boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::active);
+        boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::isActive);
         boolean canRequestBooking = mentorProfile.isAvailable() && mentorProfile.getVerifiedAt() != null
                 && !isBookingSuspended(mentorProfile)
                 && hasActiveServices;
+        BlogPostRepository.MentorPublicAuthorityProjection authority = blogPostRepository.getMentorPublicAuthority(mentorUserId);
 
         return MentorDiscoveryDetailResponse.builder()
                 .mentorUserId(mentorProfile.getUserId())
@@ -346,6 +350,9 @@ public class MentorDiscoveryService {
                 .githubUrl(mentorProfile.getGithubUrl())
                 .helpTopicTags(discoveryMapper.filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
                 .services(services)
+                .authorityContent(new MentorAuthorityContentResponse(
+                        authority == null ? 0L : authority.getPublishedArticleCount(),
+                        authority == null ? null : authority.getLatestPublishedAt()))
                 .canRequestBooking(canRequestBooking)
                 .hasCompletedProfile(hasCompletedProfile)
                 .hasActiveServices(hasActiveServices)
@@ -354,6 +361,7 @@ public class MentorDiscoveryService {
 
     @Transactional
     public List<MentorAvailabilitySlotResponse> getMentorAvailability(UUID mentorUserId, AvailabilityQueryRequest request) {
+        internalTelemetryService.record("AVAILABILITY_OPENED", null, "MENTOR", mentorUserId, Map.of());
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         if (isBookingSuspended(mentorProfile)) {
             return List.of();

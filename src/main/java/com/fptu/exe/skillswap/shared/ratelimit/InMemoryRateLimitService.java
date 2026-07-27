@@ -3,52 +3,52 @@ package com.fptu.exe.skillswap.shared.ratelimit;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
+import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.EnumMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Caffeine-backed fixed-window rate limiter.
- * Replaces the previous manual ConcurrentHashMap implementation to prevent memory leaks,
- * automatically evicting expired window buckets and capping maximum size.
+ * Caffeine-backed fixed-window rate limiter for one application instance.
+ * Cache scopes prevent optional UI traffic from evicting authentication or booking buckets.
  */
 @Service
 @Slf4j
 public class InMemoryRateLimitService {
 
-    // Cap the cache to 10,000 active rate-limit windows to prevent memory exhaustion (DoS protection)
-    private final Cache<String, RateLimitBucket> cache = Caffeine.newBuilder()
-            .maximumSize(10000)
-            .expireAfter(new Expiry<String, RateLimitBucket>() {
-                @Override
-                public long expireAfterCreate(String key, RateLimitBucket bucket, long currentTime) {
-                    long remainingMillis = bucket.getExpireAtEpochMilli() - System.currentTimeMillis();
-                    return remainingMillis > 0 ? TimeUnit.MILLISECONDS.toNanos(remainingMillis) : 0;
-                }
+    private final Map<RateLimitScope, Cache<String, RateLimitBucket>> caches = new EnumMap<>(RateLimitScope.class);
+    private final Map<RateLimitScope, Long> maximumSizes = new EnumMap<>(RateLimitScope.class);
+    private final Cache<RateLimitScope, Boolean> blockLogWindows;
+    private final MeterRegistry meterRegistry;
 
-                @Override
-                public long expireAfterUpdate(String key, RateLimitBucket bucket, long currentTime, long currentDuration) {
-                    return currentDuration; // Keep original duration
-                }
+    public InMemoryRateLimitService(CacheProperties cacheProperties, MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+        register(RateLimitScope.SECURITY, cacheProperties.getRateLimit().getSecurity(), meterRegistry);
+        register(RateLimitScope.BUSINESS, cacheProperties.getRateLimit().getBusiness(), meterRegistry);
+        register(RateLimitScope.TRANSFER, cacheProperties.getRateLimit().getTransfer(), meterRegistry);
+        register(RateLimitScope.BEST_EFFORT, cacheProperties.getRateLimit().getBestEffort(), meterRegistry);
+        this.blockLogWindows = Caffeine.newBuilder()
+                .maximumSize(RateLimitScope.values().length)
+                .expireAfterWrite(Duration.ofMinutes(1))
+                .build();
+    }
 
-                @Override
-                public long expireAfterRead(String key, RateLimitBucket bucket, long currentTime, long currentDuration) {
-                    return currentDuration; // Keep original duration
-                }
-            })
-            .build();
-
-    public void check(String key, int limit, Duration window, String message) {
+    public void check(RateLimitScope scope, String key, int limit, Duration window, String message) {
         if (key == null || key.isBlank() || limit <= 0 || window == null || window.isZero() || window.isNegative()) {
             return;
         }
+        RateLimitScope resolvedScope = scope == null ? RateLimitScope.BUSINESS : scope;
 
         long now = System.currentTimeMillis();
         long windowMillis = window.toMillis();
@@ -58,16 +58,62 @@ public class InMemoryRateLimitService {
         // Unique key for the key + window window start time
         String cacheKey = key + ":" + currentWindowStart;
 
-        RateLimitBucket bucket = cache.get(cacheKey, k -> new RateLimitBucket(new AtomicInteger(0), expireAtEpochMilli));
+        Cache<String, RateLimitBucket> cache = caches.get(resolvedScope);
+        RateLimitBucket bucket = cache.getIfPresent(cacheKey);
+        if (bucket == null && resolvedScope == RateLimitScope.SECURITY
+                && cache.estimatedSize() >= maximumSizes.get(resolvedScope)) {
+            reject(resolvedScope, limit, message);
+        }
+        if (bucket == null) {
+            bucket = cache.get(cacheKey, k -> new RateLimitBucket(new AtomicInteger(0), expireAtEpochMilli));
+        }
         int currentCount = bucket.getCount().incrementAndGet();
 
         if (currentCount > limit) {
-            log.warn("Rate limit exceeded for key={}. limit={}, count={}", key, limit, currentCount);
-            throw new BaseException(
-                    ErrorCode.TOO_MANY_REQUESTS,
-                    message == null || message.isBlank() ? ErrorCode.TOO_MANY_REQUESTS.getMessage() : message
-            );
+            reject(resolvedScope, limit, message);
         }
+    }
+
+    private void register(RateLimitScope scope, CacheProperties.SizedCache settings, MeterRegistry meterRegistry) {
+        Cache<String, RateLimitBucket> cache = Caffeine.newBuilder()
+                .maximumSize(settings.getMaximumSize())
+                .recordStats()
+                .expireAfter(bucketExpiry())
+                .build();
+        caches.put(scope, cache);
+        maximumSizes.put(scope, settings.getMaximumSize());
+        CaffeineCacheMetrics.monitor(meterRegistry, cache, "rate-limit-" + scope.name().toLowerCase());
+    }
+
+    private Expiry<String, RateLimitBucket> bucketExpiry() {
+        return new Expiry<>() {
+            @Override
+            public long expireAfterCreate(String key, RateLimitBucket bucket, long currentTime) {
+                long remainingMillis = bucket.getExpireAtEpochMilli() - System.currentTimeMillis();
+                return remainingMillis > 0 ? TimeUnit.MILLISECONDS.toNanos(remainingMillis) : 0;
+            }
+
+            @Override
+            public long expireAfterUpdate(String key, RateLimitBucket bucket, long currentTime, long currentDuration) {
+                return currentDuration;
+            }
+
+            @Override
+            public long expireAfterRead(String key, RateLimitBucket bucket, long currentTime, long currentDuration) {
+                return currentDuration;
+            }
+        };
+    }
+
+    private void reject(RateLimitScope scope, int limit, String message) {
+        meterRegistry.counter("rate_limit_blocked_total", "scope", scope.name().toLowerCase()).increment();
+        if (blockLogWindows.asMap().putIfAbsent(scope, Boolean.TRUE) == null) {
+            log.warn("Rate limit is blocking requests in scope={}; limit={}", scope, limit);
+        }
+        throw new BaseException(
+                ErrorCode.TOO_MANY_REQUESTS,
+                message == null || message.isBlank() ? ErrorCode.TOO_MANY_REQUESTS.getMessage() : message
+        );
     }
 
     @Getter

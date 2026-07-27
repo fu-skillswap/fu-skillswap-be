@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.seo.controller;
 
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostDetailResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.service.BlogService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
@@ -55,7 +55,7 @@ public class SocialShareController {
         }
 
         try {
-            BlogPostDetailResponse post = blogService.getBySlug(null, slug);
+            BlogPostReaderDetailResponse post = blogService.getBySlug(null, slug);
             String html = generateOgHtml(
                     post.title() != null ? post.title() : "SkillSwap Blog",
                     post.excerpt() != null ? post.excerpt() : "Đọc bài viết trên SkillSwap",

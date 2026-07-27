@@ -39,5 +39,5 @@ Nếu lỗi chỉ xuất phát từ Code backend (không liên quan đến thay 
 
 Nếu bản deploy mới chứa Flyway Migration có tính phá hủy (Destructive) và gây lỗi, bạn bắt buộc phải:
 1. Dừng nhận traffic bằng cách Stop Backend container.
-2. Khôi phục DB từ file Dump đã tạo trước lúc deploy. (Xem [Backup & Restore Guide](backup-restore-guide.md)).
+2. Khôi phục DB từ file Dump đã tạo trước lúc deploy. (Xem [Backup & Restore Guide](backup-restore.md)).
 3. Thực hiện lại các bước Rollback Application ở mục 2.

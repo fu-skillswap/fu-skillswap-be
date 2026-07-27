@@ -10,6 +10,7 @@ Bạn đang ở nhánh `dev` hoặc nhánh làm việc local. Trước khi đẩ
 
 - [ ] **Commit Code Theo Nhóm (Logical Commits):** Không dùng `git commit -a -m "all"`. Hãy chia thành 5 nhóm commit như tôi đã gợi ý trong `walkthrough.md` (Data/Migration, Identity/Payment, Forum Phase 5, Ops/Docs, Test Stabilization).
 - [ ] **Kiểm tra File Rác:** Gõ `git status` lần cuối, đảm bảo không commit nhầm các file `.env`, `openapi.json` (nếu không chủ ý), hoặc các thư mục `target/`.
+- [ ] **Release preflight:** Chạy `sh ops/release-preflight.sh` và `sh scripts/verify-migration-policy.sh` trên worktree sạch.
 - [ ] **Khởi chạy Local Load Test (k6):** (Tùy chọn nhưng khuyến nghị) Mở terminal, chạy `docker compose up -d` và `mvn spring-boot:run` ở local. Sau đó chạy lệnh `k6 run scripts/k6-load-test.js` để kiểm chứng ngưỡng CPU/RAM local với 200 VUs không bị OOM.
 - [ ] **Push Lên Remote:** `git push origin <nhánh-của-bạn>`. Đảm bảo GitHub Actions chạy qua bước "Run Tests & Verify" và "Trivy Security Scan" thành công.
 
@@ -26,6 +27,7 @@ Khi tạo PR từ nhánh làm việc vào `main`, quá trình Deploy VPS tự đ
   - Kéo code về VPS Staging, chạy thử script `ops/backup-postgres.sh`.
   - Xác nhận file `.dump.gz` sinh ra, dung lượng khác 0.
   - Drop thử Database trên Staging và Restore từ file dump vừa tạo xem có thành công không.
+- [ ] **Migration rehearsal evidence:** Restore production-like/sanitized backup vào containers tạm trên staging, chạy candidate image/Flyway/read-only smoke, rồi lưu `manifest.env`, Flyway history và row-count evidence. Không chạy rehearsal cạnh production traffic.
 - [ ] **Drill Test - Diễn tập Rollback:** 
   - Thử đổi `APP_IMAGE` về một SHA cũ, khởi động lại container và kiểm tra xem hệ thống có chạy ổn không.
 - [ ] **Review OpenAPI Spec:** Chuyển giao file `openapi.json` vừa generate cho phía FE để họ đồng bộ contract mới nhất (đặc biệt là logic Presigned URL thay cho Multipart).
@@ -41,7 +43,7 @@ Sau khi Github Action chạy xong bước `Deploy to VPS via SSH`, mã nguồn v
   - Truy cập VPS, gõ `docker compose -f docker-compose.prod.yml ps`. Đảm bảo `spring-backend` đang có trạng thái `Up (healthy)`.
   - Kiểm tra log để tìm lỗi khởi động (nếu có): `docker logs skillswap-backend -n 100`.
 - [ ] **Verify Flyway Migration:**
-  - Check log khởi động để đảm bảo Flyway đã chạy xong `V52` và `V53` mà không gặp lỗi lock hay crash.
+  - Check release manifest và log khởi động để đảm bảo Flyway đã chạy đầy đủ migration hiện hành, không gặp lock hay crash.
 - [ ] **Critical Business Smoke Test (Manual Testing trên Prod):**
   - **Auth:** Đăng nhập thử bằng Google.
   - **Forum:** Tạo 1 Post, thử Like (Reaction) vào 1 comment, và Reply 1 comment để kiểm tra luồng Phase 5.

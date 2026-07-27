@@ -181,28 +181,8 @@ class MentorVerificationFlowIntegrationTest {
         assertEquals("0912345678", savedProfile.phoneNumber());
         assertTrue(savedProfile.requiredFieldsCompleted());
 
-        String objectKey1 = verificationObjectKey(mentorId, "fptu-proof.png");
-        mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        objectKey1,
-                        "fptu-proof.png",
-                        "image/png",
-                        1024L
-                )
-        );
-        String objectKey2 = verificationObjectKey(mentorId, "expertise-proof.png");
-        mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.EXPERTISE_PROOF,
-                        objectKey2,
-                        "expertise-proof.png",
-                        "image/png",
-                        2048L
-                )
-        );
+        uploadVerificationDocument(mentorId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, "fptu-proof.png", 1024L);
+        uploadVerificationDocument(mentorId, VerificationDocumentType.EXPERTISE_PROOF, "expertise-proof.png", 2048L);
 
         // 4. Submit verification
         MentorVerificationRequestResponse pending = mentorVerificationService.submit(
@@ -551,28 +531,8 @@ class MentorVerificationFlowIntegrationTest {
 
     private MentorVerificationRequestResponse createDraftRequest(UUID mentorId) {
         mentorVerificationService.requestToBecomeMentor(mentorId);
-        String objectKey1 = verificationObjectKey(mentorId, "fptu-proof.png");
-        mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        objectKey1,
-                        "fptu-proof.png",
-                        "image/png",
-                        1024L
-                )
-        );
-        String objectKey2 = verificationObjectKey(mentorId, "expertise-proof.png");
-        return mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.EXPERTISE_PROOF,
-                        objectKey2,
-                        "expertise-proof.png",
-                        "image/png",
-                        2048L
-                )
-        );
+        uploadVerificationDocument(mentorId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, "fptu-proof.png", 1024L);
+        return uploadVerificationDocument(mentorId, VerificationDocumentType.EXPERTISE_PROOF, "expertise-proof.png", 2048L);
     }
 
     private MentorVerificationRequestResponse createSubmittedRequest(UUID mentorId) {
@@ -614,28 +574,8 @@ class MentorVerificationFlowIntegrationTest {
                 "0912345678"
         ));
 
-        String objectKey1 = verificationObjectKey(mentorId, "fptu-proof.png");
-        mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                        objectKey1,
-                        "fptu-proof.png",
-                        "image/png",
-                        1024L
-                )
-        );
-        String objectKey2 = verificationObjectKey(mentorId, "expertise-proof.png");
-        mentorVerificationService.uploadDocument(
-                mentorId,
-                new MentorVerificationDocumentUploadRequest(
-                        VerificationDocumentType.EXPERTISE_PROOF,
-                        objectKey2,
-                        "expertise-proof.png",
-                        "image/png",
-                        2048L
-                )
-        );
+        uploadVerificationDocument(mentorId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, "fptu-proof.png", 1024L);
+        uploadVerificationDocument(mentorId, VerificationDocumentType.EXPERTISE_PROOF, "expertise-proof.png", 2048L);
 
         return mentorVerificationService.submit(
                 mentorId,
@@ -643,7 +583,13 @@ class MentorVerificationFlowIntegrationTest {
         );
     }
 
-    private String verificationObjectKey(UUID mentorId, String filename) {
-        return "skillswap/verification-documents/users/" + mentorId + "/" + filename;
+    private MentorVerificationRequestResponse uploadVerificationDocument(
+            UUID mentorId, VerificationDocumentType type, String filename, long sizeBytes
+    ) {
+        var intent = mentorVerificationService.createDocumentUploadIntent(mentorId,
+                new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest(
+                        filename, "image/png", sizeBytes));
+        return mentorVerificationService.uploadDocument(mentorId,
+                new MentorVerificationDocumentUploadRequest(type, intent.uploadIntentId()));
     }
 }

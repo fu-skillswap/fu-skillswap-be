@@ -70,6 +70,25 @@ public class CreditLedgerService {
     @Transactional(readOnly = true)
     public Map<CreditOriginType, Integer> getAvailableBalanceByOrigin(UUID userId) {
         CreditLedgerAccount account = ensureUserAccount(userId);
+        return balancesByOrigin(account);
+    }
+
+    /** Preview-safe balance lookup that never creates a ledger account. */
+    @Transactional(readOnly = true)
+    public Map<CreditOriginType, Integer> getAvailableBalanceByOriginForPreview(UUID userId) {
+        Map<CreditOriginType, Integer> empty = new EnumMap<>(CreditOriginType.class);
+        for (CreditOriginType originType : CreditOriginType.values()) {
+            empty.put(originType, 0);
+        }
+        if (userId == null) {
+            return empty;
+        }
+        return accountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.USER_CREDIT, userId)
+                .map(this::balancesByOrigin)
+                .orElse(empty);
+    }
+
+    private Map<CreditOriginType, Integer> balancesByOrigin(CreditLedgerAccount account) {
         Map<CreditOriginType, Integer> balances = new EnumMap<>(CreditOriginType.class);
         for (CreditOriginType originType : CreditOriginType.values()) {
             balances.put(originType, entryRepository.sumBalanceEffectByAccountIdAndOriginType(account.getId(), originType).intValue());

@@ -31,6 +31,25 @@ public class IdempotencyKey {
     @Column(name = "path", nullable = false, length = 255)
     private String path;
 
+    @Column(name = "request_fingerprint", nullable = false, length = 64)
+    private String requestFingerprint;
+
+    @Column(name = "response_status")
+    private Integer responseStatus;
+
+    @Column(name = "response_body", columnDefinition = "TEXT")
+    private String responseBody;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
+
+    @Column(name = "expires_at", nullable = false)
+    private LocalDateTime expiresAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    public boolean isCompleted() {
+        return responseStatus != null && responseBody != null && completedAt != null;
+    }
 }

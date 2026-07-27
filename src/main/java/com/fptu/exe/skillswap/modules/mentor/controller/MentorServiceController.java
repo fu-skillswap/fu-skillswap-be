@@ -3,7 +3,9 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceUpsertRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorServiceManagementService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -16,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -43,16 +44,28 @@ public class MentorServiceController {
     private final MentorServiceManagementService mentorServiceManagementService;
 
     @Operation(
+            summary = "Lấy giới hạn tạo mentor service",
+            description = "Trả về các duration và price-range do platform kiểm soát. Các giá trị chỉ đọc; FE không được hard-code."
+    )
+    @GetMapping("/constraints")
+    public ApiResponse<MentorServiceConstraintsResponse> getServiceConstraints(
+            @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorServiceManagementService.getServiceConstraints());
+    }
+
+    @Operation(
             summary = "Lấy danh sách mentor services của tôi",
             description = "Trả về danh sách dịch vụ mentoring thuộc về mentor hiện tại. Có thể lọc theo query param `active=true|false|all`, mặc định là `all` để FE quản lý cả service đang bật và đã xóa mềm."
     )
     @GetMapping
     public ApiResponse<List<MentorServiceResponse>> getMyServices(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam(defaultValue = "all") String active
+            @RequestParam(required = false) Boolean isActive
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorServiceManagementService.getMyServices(principal.getPublicId(), active));
+        return ApiResponse.success(mentorServiceManagementService.getMyServices(principal.getPublicId(), isActive));
     }
 
     @Operation(
@@ -75,7 +88,7 @@ public class MentorServiceController {
     @PostMapping
     public ApiResponse<MentorServiceResponse> createService(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody MentorServiceUpsertRequest request
+            @Valid @RequestBody CreateMentorServiceRequest request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorServiceManagementService.createService(principal.getPublicId(), request));
@@ -89,7 +102,7 @@ public class MentorServiceController {
     public ApiResponse<MentorServiceResponse> updateService(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID serviceId,
-            @Valid @RequestBody MentorServiceUpsertRequest request
+            @Valid @RequestBody UpdateMentorServiceRequest request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorServiceManagementService.updateService(principal.getPublicId(), serviceId, request));
@@ -106,20 +119,7 @@ public class MentorServiceController {
             @Valid @RequestBody MentorServiceActiveRequest request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorServiceManagementService.changeActiveStatus(principal.getPublicId(), serviceId, request.active()));
-    }
-
-    @Operation(
-            summary = "Lưu trữ mentor service",
-            description = "Xóa mềm một dịch vụ mentoring của mentor hiện tại. FE dùng khi mentor không muốn cung cấp dịch vụ đó nữa nhưng backend vẫn cần giữ dữ liệu lịch sử liên quan."
-    )
-    @DeleteMapping("/{serviceId}")
-    public ApiResponse<MentorServiceResponse> deleteService(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID serviceId
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorServiceManagementService.deleteService(principal.getPublicId(), serviceId));
+        return ApiResponse.success(mentorServiceManagementService.changeActiveStatus(principal.getPublicId(), serviceId, request));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

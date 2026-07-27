@@ -69,8 +69,21 @@ jobs:
         format: 'table'
         severity: 'CRITICAL,HIGH'
 
+  release-preflight:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Validate release scripts and compose topology
+      run: |
+        chmod +x ops/*.sh scripts/verify-migration-policy.sh
+        REQUIRE_CLEAN_WORKTREE=true sh ops/release-preflight.sh
+        sh scripts/verify-migration-policy.sh
+
   docker-publish:
-    needs: security-scan
+    needs: [security-scan, release-preflight]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -94,7 +107,6 @@ jobs:
         images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
           type=raw,value=${{ github.sha }}
-          type=raw,value=latest
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -104,10 +116,64 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
 
-  deploy-vps:
+  rehearse-staging:
     needs: docker-publish
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+    steps:
+    - name: Validate staging rehearsal secrets
+      shell: bash
+      env:
+        STAGING_VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
+        STAGING_VPS_USER: ${{ secrets.STAGING_VPS_USER }}
+        STAGING_VPS_SSH_KEY: ${{ secrets.STAGING_VPS_SSH_KEY }}
+        STAGING_REHEARSAL_BACKUP_FILE: ${{ secrets.STAGING_REHEARSAL_BACKUP_FILE }}
+      run: |
+        set -euo pipefail
+        for name in STAGING_VPS_HOST STAGING_VPS_USER STAGING_VPS_SSH_KEY STAGING_REHEARSAL_BACKUP_FILE; do
+          test -n "${!name:-}" || { echo "::error::Missing ${name}"; exit 1; }
+        done
+
+    - name: Rehearse migration on isolated staging containers
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.STAGING_VPS_HOST }}
+        username: ${{ secrets.STAGING_VPS_USER }}
+        key: ${{ secrets.STAGING_VPS_SSH_KEY }}
+        command_timeout: 30m
+        script_stop: true
+        script: |
+          set -euo pipefail
+          DEPLOY_DIR="/opt/fu-skillswap/staging-rehearsal"
+          mkdir -p "$DEPLOY_DIR/ops"
+          cd "$DEPLOY_DIR"
+          test -r .env
+          set -a
+          . ./.env
+          set +a
+          export CANDIDATE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          export CANDIDATE_IMAGE="$(echo "$CANDIDATE_IMAGE" | tr '[:upper:]' '[:lower:]')"
+          export REHEARSAL_BACKUP_FILE="${{ secrets.STAGING_REHEARSAL_BACKUP_FILE }}"
+          # The secret must point to an ephemeral decrypted copy, never the durable encrypted source.
+          export REHEARSAL_DELETE_INPUT_BACKUP=true
+          test -r "$REHEARSAL_BACKUP_FILE"
+          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+          docker pull "$CANDIDATE_IMAGE"
+          for script in rehearse-migration.sh smoke-test.sh; do
+            curl --fail --silent --show-error --location -o "ops/$script" "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/$script"
+            chmod 700 "ops/$script"
+          done
+          sh ops/rehearse-migration.sh
+
+  deploy-vps:
+    needs: rehearse-staging
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
     permissions:
       contents: read
       packages: read
@@ -141,7 +207,7 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         command_timeout: 30m
-        script_stop: false
+        script_stop: true
         debug: true
         script: |
           set -euxo pipefail
@@ -198,7 +264,7 @@ jobs:
             if [ "$exit_code" -ne 0 ]; then
               append_failure "$step_name" "$exit_code" "Command failed: ${safe_command}"
             fi
-            return 0
+            return "$exit_code"
           }
 
           run_diagnostic_step() {
@@ -253,7 +319,7 @@ jobs:
             if [ "$exit_code" -ne 0 ]; then
               append_failure "$step_name" "$exit_code" "Command failed: ${safe_command}"
             fi
-            return 0
+            return "$exit_code"
           }
 
           echo "::group::deploy context"
@@ -266,9 +332,7 @@ jobs:
 
           run_step "preflight ssh identity" "whoami && id && hostname && pwd && date -Is"
           run_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
-          if ! cd "$DEPLOY_DIR"; then
-            append_failure "enter deploy directory" 1 "Cannot cd into ${DEPLOY_DIR}. Verify VPS_USER permissions and deploy directory ownership."
-          fi
+          cd "$DEPLOY_DIR"
 
           run_step "preflight required tools" "command -v curl && command -v docker && docker --version && docker compose version"
           run_step "preflight docker daemon" "docker info"
@@ -276,7 +340,7 @@ jobs:
 
           run_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
           run_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
-          run_step "download ops scripts" "mkdir -p ops && curl --fail --silent --show-error --location -o ops/backup-postgres.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/backup-postgres.sh && curl --fail --silent --show-error --location -o ops/smoke-test.sh https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/smoke-test.sh && test -s ops/backup-postgres.sh && test -s ops/smoke-test.sh && chmod +x ops/backup-postgres.sh ops/smoke-test.sh"
+          run_step "download ops scripts" "mkdir -p ops && for script in backup-postgres.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
 
           run_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
           if [ -f ".env" ]; then
@@ -298,6 +362,9 @@ jobs:
 
           export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           export APP_IMAGE="$(echo "$APP_IMAGE" | tr '[:upper:]' '[:lower:]')"
+          export RELEASE_PREVIOUS_IMAGE="$(docker inspect --format '{{.Config.Image}}' skillswap-backend 2>/dev/null || printf '%s' 'none')"
+          export RELEASE_CANDIDATE_IMAGE="$APP_IMAGE"
+          export RELEASE_DIR="/opt/skillswap/releases"
 
           run_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
           run_step "docker compose config" "docker compose -f docker-compose.prod.yml config --quiet"
@@ -306,10 +373,13 @@ jobs:
           run_step "docker pull image" "docker pull '${APP_IMAGE}'"
           run_step "docker compose pull spring-backend" "docker compose -f docker-compose.prod.yml pull spring-backend"
           run_step "backup postgres" "bash ops/backup-postgres.sh"
+          export RELEASE_BACKUP_MANIFEST="$(ls -t "${BACKUP_DIR:-/opt/skillswap/backups}"/skillswap-*.manifest 2>/dev/null | head -1 || true)"
           run_diagnostic_step "flyway schema history before deploy" "docker exec skillswap-postgres psql --username \"${POSTGRES_USER:-}\" --dbname \"${POSTGRES_DB:-}\" --tuples-only --command \"select installed_rank, version, description, success from flyway_schema_history order by installed_rank;\""
           run_step "docker compose up wait" "docker compose -f docker-compose.prod.yml up -d --wait"
           run_step "backend readiness healthcheck" "curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness"
           run_step "smoke test" "bash ops/smoke-test.sh"
+          export RELEASE_MANIFEST_PATH="${RELEASE_DIR}/${{ github.sha }}.env"
+          run_step "write release manifest" "bash ops/write-release-manifest.sh"
 
           echo "::group::failure diagnostics"
           run_diagnostic_step "diagnostic docker ps" "docker ps"

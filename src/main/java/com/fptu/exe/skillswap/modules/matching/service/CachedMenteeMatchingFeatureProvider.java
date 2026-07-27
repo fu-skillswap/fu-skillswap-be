@@ -33,14 +33,8 @@ public class CachedMenteeMatchingFeatureProvider implements MenteeMatchingFeatur
     @Transactional(readOnly = true)
     public MenteeMatchingFeatures getLatestFeatures(UUID userId) {
         requireUserId(userId);
-        MenteeMatchingFeatures cached = menteeMatchingFeaturesCache.getIfPresent(userId);
-        if (cached != null) {
-            return cached;
-        }
-
-        MenteeMatchingFeatures features = loadLatestFeatures(userId);
-        menteeMatchingFeaturesCache.put(userId, features);
-        return features;
+        // Caffeine coalesces concurrent loads for the same mentee and prevents a cache stampede.
+        return menteeMatchingFeaturesCache.get(userId, this::loadLatestFeatures);
     }
 
     MenteeMatchingFeatures loadLatestFeatures(UUID userId) {

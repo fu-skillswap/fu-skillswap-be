@@ -11,14 +11,18 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.UUID;
 
@@ -129,6 +133,32 @@ public class S3StorageGatewayImpl implements StorageGateway {
             log.error("Lỗi khi head object trên S3/R2. bucket={}, key={}", properties.getBucket(), objectKey, ex);
             throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể xác minh file đã upload");
         }
+    }
+
+    @Override
+    public PrivatePresignedUpload generatePrivateUploadUrl(String objectKey, String contentType, Duration ttl) {
+        PutObjectPresignRequest request = PutObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .putObjectRequest(PutObjectRequest.builder().bucket(properties.getBucket()).key(objectKey).contentType(contentType).build())
+                .build();
+        PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(request);
+        return new PrivatePresignedUpload(presigned.url().toString(), objectKey, java.time.Instant.now().plus(ttl));
+    }
+
+    @Override
+    public PrivatePresignedDownload generatePrivateDownloadUrl(String objectKey, Duration ttl, String contentDisposition) {
+        GetObjectPresignRequest request = GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(GetObjectRequest.builder().bucket(properties.getBucket()).key(objectKey)
+                        .responseContentDisposition(contentDisposition).build())
+                .build();
+        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(request);
+        return new PrivatePresignedDownload(presigned.url().toString(), java.time.Instant.now().plus(ttl));
+    }
+
+    @Override
+    public InputStream openObject(String objectKey) {
+        return s3Client.getObject(GetObjectRequest.builder().bucket(properties.getBucket()).key(objectKey).build());
     }
 
     private String buildObjectKey(String originalFilename, String subFolder) {

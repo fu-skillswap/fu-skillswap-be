@@ -71,6 +71,22 @@ public class NotificationService {
         enqueueNotificationOutbox(notification, unreadCount, "CREATED");
     }
 
+    @Transactional
+    public void upsertChatUnread(UUID recipientUserId, UUID conversationId) {
+        Notification notification = notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
+                recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId).orElse(null);
+        if (notification == null) {
+            createNotification(recipientUserId, NotificationType.CHAT_UNREAD, "Tin nhắn mới", "Bạn có tin nhắn mới từ mentor/mentee.", "CONVERSATION", conversationId, "/chat/" + conversationId);
+        }
+    }
+
+    @Transactional
+    public void clearChatUnread(UUID recipientUserId, UUID conversationId) {
+        notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
+                recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId)
+                .ifPresent(notification -> markAsRead(recipientUserId, notification.getId()));
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<NotificationResponse> getMyNotifications(UUID currentUserId, boolean unreadOnly, Pageable pageable) {
         // Enforce page size cap to 50 to protect weak VPS
@@ -244,12 +260,15 @@ public class NotificationService {
             case MEETING_LINK_UPDATED -> "Link buổi học đã cập nhật";
             case GOOGLE_CALENDAR_SYNC_NOTICE -> "Google Calendar cần chú ý";
             case SESSION_COMPLETED -> "Phiên mentoring đã hoàn thành";
+            case BOOKING_REMINDER -> "Nhắc lịch mentoring";
+            case FEEDBACK_PROMPT -> "Đánh giá buổi mentoring";
             case FEEDBACK_RECEIVED -> "Bạn vừa nhận đánh giá mới";
             case FORUM_POST_COMMENTED -> "Bài viết có bình luận mới";
             case FORUM_COMMENT_REPLY -> "Bình luận của bạn có người trả lời";
             case FORUM_POST_HIDDEN -> "Bài viết đã bị ẩn";
             case FORUM_COMMENT_HIDDEN -> "Bình luận đã bị ẩn";
             case BLOG_POST_PUBLISHED -> "Bài blog mới từ SkillSwap";
+            case CHAT_UNREAD -> "Tin nhắn mới";
             case ACCOUNT_UNLOCKED -> "Tài khoản đã được mở khóa";
         };
     }

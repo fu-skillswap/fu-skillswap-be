@@ -43,7 +43,9 @@ public class SessionFeedbackService {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
-        if (booking.getStatus() != BookingStatus.COMPLETED) {
+        if (booking.getStatus() != BookingStatus.COMPLETED
+                || com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper.toCanonicalCompletionOutcome(booking)
+                != com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể gửi đánh giá cho buổi học đã hoàn thành");
         }
 

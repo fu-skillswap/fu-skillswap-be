@@ -358,8 +358,8 @@ class BookingServiceTest {
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
         when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
                 eq(slot.getId()),
-                eq(request.selectedStartTime()),
-                eq(request.selectedEndTime()),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 eq(BookingStatus.PENDING)
         )).thenReturn(2L);
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -378,8 +378,8 @@ class BookingServiceTest {
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
         when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
                 eq(slot.getId()),
-                eq(request.selectedStartTime()),
-                eq(request.selectedEndTime()),
+                any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 eq(BookingStatus.PENDING)
         )).thenReturn(3L);
 
@@ -397,8 +397,8 @@ class BookingServiceTest {
         when(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 eq(slot.getId()),
                 org.mockito.ArgumentMatchers.anyCollection(),
-                eq(request.selectedStartTime()),
-                eq(request.selectedEndTime())
+                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
+                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
         )).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
@@ -457,6 +457,21 @@ class BookingServiceTest {
         assertEquals("Accepted", booking.getMentorResponseNote());
         assertNotNull(booking.getAcceptedAt());
         assertTrue(slot.isBooked());
+    }
+
+    @Test
+    void acceptBooking_afterPendingDeadline_shouldRejectInsteadOfBypassingScheduler() {
+        Booking booking = bookingForDecision(BookingStatus.PENDING);
+        booking.setPendingExpireAt(testNow().minusMinutes(1));
+        when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
+        when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted")));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(BookingStatus.PENDING, booking.getStatus());
+        verify(bookingRepository, never()).save(booking);
     }
 
     @Test
@@ -1095,7 +1110,8 @@ class BookingServiceTest {
     @Test
     void expireStalePendingBookings_shouldUpdateBookingsAndNotifyMentees() {
         Booking staleBooking = bookingForDecision(BookingStatus.PENDING);
-        when(bookingRepository.findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(
+        staleBooking.setPendingExpireAt(DateTimeUtil.now().minusMinutes(1));
+        when(bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
                 eq(BookingStatus.PENDING),
                 any(LocalDateTime.class)
         )).thenReturn(List.of(staleBooking));
@@ -1103,9 +1119,10 @@ class BookingServiceTest {
         int expiredCount = bookingService.expireStalePendingBookings();
 
         assertEquals(1, expiredCount);
-        assertEquals(BookingStatus.REJECTED, staleBooking.getStatus());
+        assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
         verify(bookingRepository).saveAll(any());
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher, org.mockito.Mockito.times(2))
+                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
@@ -1129,9 +1146,10 @@ class BookingServiceTest {
 
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
-        assertTrue(staleBooking.getRejectReason().contains("6 giờ hoặc trước giờ bắt đầu"));
+        assertTrue(staleBooking.getRejectReason().contains("6 giờ hoặc ít nhất 1 giờ trước giờ bắt đầu"));
         verify(paymentOrderService).expireAwaitingPayment(staleBooking);
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher, org.mockito.Mockito.times(2))
+                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
     }
 
     @Test

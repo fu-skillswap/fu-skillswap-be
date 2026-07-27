@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ValidationErrorResponse;
+import com.fptu.exe.skillswap.shared.dto.response.VersionConflictData;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.TraceContext;
 
@@ -38,6 +39,15 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(VersionConflictException.class)
+    public ResponseEntity<ApiResponse<Object>> handleVersionConflict(VersionConflictException ex) {
+        return buildResponse(
+                ex.getErrorCode(),
+                ex.getMessage(),
+                new VersionConflictData(ex.getResourceId(), ex.getExpectedVersion(), ex.getCurrentVersion())
+        );
+    }
 
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ApiResponse<Object>> handleBaseException(BaseException ex) {

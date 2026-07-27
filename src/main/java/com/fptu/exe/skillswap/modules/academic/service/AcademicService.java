@@ -83,11 +83,6 @@ public class AcademicService {
                 .toList();
     }
 
-    @org.springframework.cache.annotation.CacheEvict(cacheNames = "catalog", allEntries = true)
-    public void evictCatalogCache() {
-        log.info("Catalog cache evicted manually");
-    }
-
     private CampusResponse mapToCampusResponse(Campus campus) {
         return CampusResponse.builder()
                 .id(campus.getId())

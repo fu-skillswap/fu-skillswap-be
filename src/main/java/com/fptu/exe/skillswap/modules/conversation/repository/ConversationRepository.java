@@ -13,9 +13,16 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 
 public interface ConversationRepository extends JpaRepository<Conversation, UUID>, ConversationRepositoryCustom {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Conversation c where c.id = :conversationId")
+    Optional<Conversation> findByIdForUpdate(@Param("conversationId") UUID conversationId);
+
+    Optional<Conversation> findByMentorUserIdAndMenteeUserId(UUID mentorUserId, UUID menteeUserId);
     Optional<Conversation> findBySourceTypeAndSourceId(ConversationSourceType sourceType, UUID sourceId);
 
     java.util.List<Conversation> findBySourceTypeAndSourceIdIn(ConversationSourceType sourceType, java.util.List<UUID> sourceIds);

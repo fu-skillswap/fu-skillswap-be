@@ -42,6 +42,24 @@ public class CampaignService {
 
     @Transactional
     public CampaignCreditApplication resolveCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
+        return resolveCampaignCredit(userId, booking, amountAfterCouponScoin, true);
+    }
+
+    /**
+     * Calculates a non-binding campaign estimate. Preview callers must never reserve
+     * campaign budget or acquire the checkout row lock.
+     */
+    @Transactional(readOnly = true)
+    public CampaignCreditApplication estimateCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
+        return resolveCampaignCredit(userId, booking, amountAfterCouponScoin, false);
+    }
+
+    private CampaignCreditApplication resolveCampaignCredit(
+            UUID userId,
+            Booking booking,
+            int amountAfterCouponScoin,
+            boolean lockCampaign
+    ) {
         if (userId == null || booking == null || amountAfterCouponScoin <= 0) {
             return CampaignCreditApplication.none();
         }
@@ -52,7 +70,9 @@ public class CampaignService {
 
         CampaignCreditApplication bestMatch = CampaignCreditApplication.none();
         for (UUID campaignId : campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)) {
-            Campaign campaign = campaignRepository.findByIdForUpdate(campaignId).orElse(null);
+            Campaign campaign = (lockCampaign
+                    ? campaignRepository.findByIdForUpdate(campaignId)
+                    : campaignRepository.findById(campaignId)).orElse(null);
             if (campaign == null) {
                 continue;
             }

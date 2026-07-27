@@ -20,13 +20,16 @@ public class WebConfig {
                 .map(String::trim)
                 .filter(pattern -> !pattern.isEmpty())
                 .toList();
+        if (this.allowedOriginPatterns.stream().anyMatch(origin -> origin.contains("*"))) {
+            throw new IllegalStateException("CORS_ALLOWED_ORIGIN_PATTERNS must contain explicit frontend origins when credentials are enabled");
+        }
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOriginPatterns(allowedOriginPatterns);
+        configuration.setAllowedOrigins(allowedOriginPatterns);
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 

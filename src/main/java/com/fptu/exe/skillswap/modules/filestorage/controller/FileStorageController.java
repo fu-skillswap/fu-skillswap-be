@@ -58,6 +58,9 @@ public class FileStorageController {
             @RequestParam(required = false) String filename,
             @RequestParam(required = false, defaultValue = "application/octet-stream") String contentType
     ) {
+        // Generic uploads are intentionally unavailable outside local development.
+        // Production flows must use a purpose-scoped upload intent.
+        ensureLocalProfile();
         validatePresignedUploadRequest(filename, contentType);
         if (principal == null || principal.getPublicId() == null) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Cần đăng nhập để upload file");
@@ -66,7 +69,7 @@ public class FileStorageController {
         var presigned = storageGateway.generatePresignedUploadUrl(filename, contentType, verificationPrefix(principal));
         return ApiResponse.success(PresignedUploadResponse.builder()
                 .uploadUrl(presigned.uploadUrl())
-                .publicUrl(presigned.publicUrl())
+                .publicUrl(null)
                 .objectKey(presigned.objectKey())
                 .build());
     }
@@ -89,7 +92,7 @@ public class FileStorageController {
         writeLocalObject(objectKey, file);
         return ApiResponse.created(PresignedUploadResponse.builder()
                 .uploadUrl(null)
-                .publicUrl(storageGateway.resolvePublicUrl(objectKey))
+                .publicUrl(null)
                 .objectKey(objectKey)
                 .build());
     }
@@ -112,7 +115,7 @@ public class FileStorageController {
         writeLocalObject(objectKey, body);
         return ApiResponse.created(PresignedUploadResponse.builder()
                 .uploadUrl(null)
-                .publicUrl(storageGateway.resolvePublicUrl(objectKey))
+                .publicUrl(null)
                 .objectKey(objectKey)
                 .build());
     }
@@ -179,7 +182,13 @@ public class FileStorageController {
     }
 
     private void validateOwnedObjectKey(UserPrincipal principal, String objectKey) {
-        if (principal == null || principal.getPublicId() == null || !requireSafeObjectKey(objectKey).startsWith(verificationPrefix(principal) + "/")) {
+        String key = requireSafeObjectKey(objectKey);
+        boolean verificationObject = principal != null && principal.getPublicId() != null && key.startsWith(verificationPrefix(principal) + "/");
+        boolean mentorResourceObject = principal != null && principal.getPublicId() != null
+                && key.startsWith("mentor-service-resources/" + principal.getPublicId() + "/");
+        boolean blogPublicObject = principal != null && principal.getPublicId() != null
+                && key.startsWith("public-assets/blog/" + principal.getPublicId() + "/");
+        if (!verificationObject && !mentorResourceObject && !blogPublicObject) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi upload của người dùng");
         }
     }

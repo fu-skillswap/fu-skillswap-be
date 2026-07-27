@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Optional;
+import java.util.List;
 
 public interface MessageRepository extends JpaRepository<Message, UUID>, MessageRepositoryCustom {
     @EntityGraph(attributePaths = {"sender"})
@@ -75,4 +77,12 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
             @org.springframework.data.repository.query.Param("content") String content,
             @org.springframework.data.repository.query.Param("createdAfter") LocalDateTime createdAfter
     );
+
+    Optional<Message> findByConversationIdAndSenderIdAndClientMessageId(UUID conversationId, UUID senderId, UUID clientMessageId);
+
+    Optional<Message> findByBookingIdAndSystemEventType(UUID bookingId, String systemEventType);
+
+    @EntityGraph(attributePaths = {"sender"})
+    @org.springframework.data.jpa.repository.Query("select m from Message m where m.conversation.id=:conversationId and (:before is null or m.sequence < :before) and (:after is null or m.sequence > :after) order by m.sequence desc")
+    List<Message> findByConversationSequenceWindow(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId, @org.springframework.data.repository.query.Param("before") Long before, @org.springframework.data.repository.query.Param("after") Long after, org.springframework.data.domain.Pageable pageable);
 }

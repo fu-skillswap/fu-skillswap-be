@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.blog.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogFollowResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostCardResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
 import com.fptu.exe.skillswap.modules.blog.service.BlogService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/me/blog")
 @RequiredArgsConstructor
@@ -28,7 +30,7 @@ public class MeBlogController {
 
     @GetMapping("/bookmarks")
     @Operation(summary = "List my bookmarked blog posts with cursor pagination")
-    public ApiResponse<CursorPageResponse<BlogPostCardResponse>> myBookmarks(
+    public ApiResponse<CursorPageResponse<BlogPostReaderCardResponse>> myBookmarks(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "Opaque cursor from previous response nextCursor. Do not decode or modify.")
             @RequestParam(required = false) String cursor,
@@ -38,7 +40,7 @@ public class MeBlogController {
     }
 
     @GetMapping("/follows")
-    @Operation(summary = "List categories and tags I follow")
+    @Operation(summary = "List categories and mentors I follow")
     public ApiResponse<BlogFollowResponse> myFollows(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
@@ -48,14 +50,24 @@ public class MeBlogController {
     @GetMapping("/feed")
     @Operation(
             summary = "Personalized blog feed",
-            description = "`cursor` is an opaque string. The feed uses followed category/tag first and falls back to latest accessible posts if the user has no follows."
+            description = "`cursor` is an opaque string. The feed uses followed category/mentor first and falls back to latest accessible posts if the user has no follows."
     )
-    public ApiResponse<CursorPageResponse<BlogPostCardResponse>> feed(
+    public ApiResponse<CursorPageResponse<BlogPostReaderCardResponse>> feed(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "Opaque cursor from previous response nextCursor. Do not decode or modify.")
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") Integer limit
     ) {
         return ApiResponse.success(blogService.personalizedFeed(principal, cursor, limit));
+    }
+
+    @GetMapping("/library")
+    @Operation(summary = "List premium articles unlocked for a booked mentor service")
+    public ApiResponse<CursorPageResponse<BlogPostReaderCardResponse>> library(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam UUID serviceId,
+            @RequestParam(defaultValue = "20") Integer limit
+    ) {
+        return ApiResponse.success(blogService.premiumLibrary(principal, serviceId, limit));
     }
 }

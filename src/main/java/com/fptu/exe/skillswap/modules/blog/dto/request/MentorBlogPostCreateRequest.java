@@ -1,0 +1,21 @@
+package com.fptu.exe.skillswap.modules.blog.dto.request;
+
+import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
+
+import java.util.List;
+import java.util.UUID;
+
+public record MentorBlogPostCreateRequest(
+        @NotBlank @Size(max = 220) String title,
+        String excerpt,
+        String contentMarkdown,
+        UUID coverAssetId,
+        UUID ogAssetId,
+        BlogVisibility visibility,
+        List<UUID> categoryIds,
+        List<UUID> tagIds,
+        List<UUID> entitledServiceIds
+) {}

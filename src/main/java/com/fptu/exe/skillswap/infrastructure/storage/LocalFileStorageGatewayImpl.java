@@ -8,6 +8,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -135,6 +136,26 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
                     "Không thể xác minh file đã upload"
             );
         }
+    }
+
+    @Override
+    public PrivatePresignedUpload generatePrivateUploadUrl(String objectKey, String contentType, Duration ttl) {
+        return new PrivatePresignedUpload(apiBaseUrl + "/api/files/local-upload?objectKey=" + objectKey,
+                objectKey, java.time.Instant.now().plus(ttl));
+    }
+
+    @Override
+    public PrivatePresignedDownload generatePrivateDownloadUrl(String objectKey, Duration ttl, String contentDisposition) {
+        // Local resources are served by the authorized resource controller, not by this URL.
+        return new PrivatePresignedDownload(apiBaseUrl + "/api/files/private/" + objectKey,
+                java.time.Instant.now().plus(ttl));
+    }
+
+    @Override
+    public InputStream openObject(String objectKey) throws IOException {
+        Path target = rootDir.resolve(objectKey).normalize();
+        if (!target.startsWith(rootDir)) throw new IOException("Invalid object key");
+        return Files.newInputStream(target);
     }
 
     /**

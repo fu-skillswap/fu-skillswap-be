@@ -4,6 +4,9 @@ import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
@@ -14,6 +17,7 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumReactionType;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumCommentUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
+import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
@@ -48,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -66,11 +71,15 @@ class ForumPostServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private StudentProfileRepository studentProfileRepository;
+    @Mock
     private TagRepository tagRepository;
     @Mock
     private NotificationService notificationService;
     @Mock
     private ForumTextPolicy forumTextPolicy;
+    @Mock
+    private ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
     @Mock
     private ForumAbuseGuardService forumAbuseGuardService;
     @Mock
@@ -90,9 +99,11 @@ class ForumPostServiceTest {
                 forumPostReactionRepository,
                 forumCommentReactionRepository,
                 userRepository,
+                studentProfileRepository,
                 tagRepository,
                 notificationService,
                 forumTextPolicy,
+                forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
                 cursorCodec
         );
@@ -137,6 +148,83 @@ class ForumPostServiceTest {
         assertEquals("PUBLISHED", response.status());
         verify(forumAbuseGuardService).checkAndLog(mentee, ForumActionType.CREATE_POST);
         verify(forumPostRepository).save(any(ForumPost.class));
+    }
+
+    @Test
+    void createPost_snapshotsAuthorsCurrentProgram() {
+        AcademicProgram program = AcademicProgram.builder()
+                .id(UUID.randomUUID())
+                .code("CNTT")
+                .nameVi("Công nghệ thông tin")
+                .isActive(true)
+                .build();
+        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
+        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        when(studentProfileRepository.findWithDetailsByUserId(mentee.getId()))
+                .thenReturn(Optional.of(StudentProfile.builder().program(program).build()));
+        when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(invocation -> {
+            ForumPost post = invocation.getArgument(0);
+            post.setId(UUID.randomUUID());
+            return post;
+        });
+
+        ForumPostResponse response = forumPostService.createPost(mentee.getId(), new ForumPostUpsertRequest(
+                "Hỏi về Java", "Nội dung", helpTopic.getId(), List.of()
+        ));
+
+        assertEquals(program.getId(), response.authorProgram().id());
+    }
+
+    @Test
+    void feed_prioritizesTheViewersProgramThroughRepositoryQuery() {
+        AcademicProgram program = AcademicProgram.builder()
+                .id(UUID.randomUUID())
+                .code("CNTT")
+                .nameVi("Công nghệ thông tin")
+                .isActive(true)
+                .build();
+        ForumPost sameProgramPost = ForumPost.builder()
+                .id(UUID.randomUUID())
+                .authorUser(mentee)
+                .authorProgram(program)
+                .helpTopic(helpTopic)
+                .title("Cùng ngành")
+                .content("Nội dung")
+                .status(ForumPostStatus.PUBLISHED)
+                .lastActivityAt(LocalDateTime.of(2026, 7, 24, 10, 0))
+                .build();
+        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
+        when(studentProfileRepository.findWithDetailsByUserId(mentee.getId()))
+                .thenReturn(Optional.of(StudentProfile.builder().program(program).build()));
+        when(forumPostRepository.findProgramPrioritizedWindow(eq(program.getId()), isNull(), isNull(), isNull(), eq(21)))
+                .thenReturn(List.of(sameProgramPost));
+        when(forumPostReactionRepository.findReactedPostIdsByUserIdAndPostIdIn(eq(mentee.getId()), any()))
+                .thenReturn(List.of());
+
+        CursorPageResponse<ForumPostResponse> page = forumPostService.getFeed(mentee.getId(), null, 20);
+
+        assertEquals(1, page.items().size());
+        assertEquals(program.getId(), page.items().get(0).authorProgram().id());
+        verify(forumPostRepository).findProgramPrioritizedWindow(eq(program.getId()), isNull(), isNull(), isNull(), eq(21));
+    }
+
+    @Test
+    void createPost_prohibitedPhrase_shouldNotPersist() {
+        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
+        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        doThrow(new BaseException(ErrorCode.FORUM_CONTENT_PROHIBITED))
+                .when(forumProhibitedPhrasePolicy)
+                .rejectPost("forbidden title", "content");
+
+        BaseException exception = assertThrows(
+                BaseException.class,
+                () -> forumPostService.createPost(mentee.getId(), new ForumPostUpsertRequest(
+                        "forbidden title", "content", helpTopic.getId(), List.of()
+                ))
+        );
+
+        assertEquals(ErrorCode.FORUM_CONTENT_PROHIBITED, exception.getErrorCode());
+        verify(forumPostRepository, never()).save(any(ForumPost.class));
     }
 
     @Test

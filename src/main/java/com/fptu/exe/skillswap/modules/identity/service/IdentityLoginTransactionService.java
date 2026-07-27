@@ -17,7 +17,6 @@ import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,6 @@ import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class IdentityLoginTransactionService {
 
     private final UserRepository userRepository;
@@ -42,7 +40,6 @@ public class IdentityLoginTransactionService {
     public TokenResponse loginWithVerifiedGoogleUser(GoogleAuthService.GoogleUserInfo googleUser) {
         User user = userRepository
                 .findByOauthProviderAndProviderUserIdIncludingDeleted("google", googleUser.getSub())
-                .map(this::reactivateIfDeleted)
                 .orElseGet(() -> findByEmailOrRegister(googleUser));
 
         checkUserStatus(user);
@@ -57,20 +54,15 @@ public class IdentityLoginTransactionService {
     private User findByEmailOrRegister(GoogleAuthService.GoogleUserInfo googleUser) {
         return userRepository.findByEmailIncludingDeleted(googleUser.getEmail())
                 .map(existingUser -> {
-                    reactivateIfDeleted(existingUser);
+                    // A soft-deleted account is terminal until an explicit recovery flow exists.
+                    // Do not attach a new provider identity before the status check rejects it.
+                    if (existingUser.getDeletedAt() != null || existingUser.getStatus() == UserStatus.DELETED) {
+                        return existingUser;
+                    }
                     createOauthAccount(existingUser, googleUser.getSub(), googleUser.getEmail());
                     return existingUser;
                 })
                 .orElseGet(() -> registerNewOauthUser(googleUser));
-    }
-
-    private User reactivateIfDeleted(User user) {
-        if (user.getDeletedAt() != null) {
-            log.info("Reactivating soft-deleted user from Google OAuth login: {}", user.getEmail());
-            user.setDeletedAt(null);
-            user.setStatus(UserStatus.ACTIVE);
-        }
-        return user;
     }
 
     private User registerNewOauthUser(GoogleAuthService.GoogleUserInfo googleUser) {
@@ -124,14 +116,14 @@ public class IdentityLoginTransactionService {
     }
 
     private void checkUserStatus(User user) {
+        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.DELETED) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản đã bị xóa khỏi hệ thống");
+        }
         if (user.getStatus() == UserStatus.BANNED) {
             throw new BaseException(ErrorCode.USER_BANNED, "Tài khoản của bạn đã bị khóa");
         }
         if (user.getStatus() == UserStatus.INACTIVE) {
             throw new BaseException(ErrorCode.USER_INACTIVE, "Tài khoản của bạn chưa hoạt động");
-        }
-        if (user.getStatus() == UserStatus.DELETED) {
-            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản đã bị xóa khỏi hệ thống");
         }
     }
 

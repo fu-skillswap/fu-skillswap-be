@@ -2,8 +2,8 @@ package com.fptu.exe.skillswap.modules.blog.event;
 
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogTagFollowRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
@@ -24,24 +24,23 @@ import static org.mockito.Mockito.when;
 class BlogPostPublishedNotificationListenerTest {
 
     @Mock private BlogCategoryFollowRepository categoryFollowRepository;
-    @Mock private BlogTagFollowRepository tagFollowRepository;
+    @Mock private BlogMentorFollowRepository mentorFollowRepository;
     @Mock private NotificationService notificationService;
-    @Mock private MentorContentAccessService mentorContentAccessService;
+    @Mock private BookingEligibilityPolicy bookingEligibilityPolicy;
 
     @Test
-    void onBlogPostPublished_shouldDedupeFollowerAcrossCategoryAndTag() {
+    void onBlogPostPublished_shouldDedupeFollowerAcrossCategoryAndMentor() {
         UUID recipientId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         UUID authorId = UUID.fromString("018f3abf-0a22-7113-9748-6cf000c47b6e");
         UUID postId = UUID.fromString("018f3abf-0a22-7114-9748-6cf000c47b6e");
         UUID categoryId = UUID.fromString("018f3abf-0a22-7115-9748-6cf000c47b6e");
-        UUID tagId = UUID.fromString("018f3abf-0a22-7116-9748-6cf000c47b6e");
         when(categoryFollowRepository.findFollowerUserIdsByCategoryIds(Set.of(categoryId))).thenReturn(Set.of(recipientId));
-        when(tagFollowRepository.findFollowerUserIdsByTagIds(Set.of(tagId))).thenReturn(Set.of(recipientId));
+        when(mentorFollowRepository.findFollowerUserIdsByMentorIds(Set.of(authorId))).thenReturn(Set.of(recipientId));
         BlogPostPublishedNotificationListener listener = new BlogPostPublishedNotificationListener(
                 categoryFollowRepository,
-                tagFollowRepository,
+                mentorFollowRepository,
                 notificationService,
-                mentorContentAccessService
+                bookingEligibilityPolicy
         );
 
         listener.onBlogPostPublished(new BlogPostPublishedEvent(
@@ -53,7 +52,7 @@ class BlogPostPublishedNotificationListenerTest {
                 "Nguyen A",
                 BlogVisibility.PUBLIC,
                 Set.of(categoryId),
-                Set.of(tagId),
+                Set.of(),
                 LocalDateTime.now()
         ));
 

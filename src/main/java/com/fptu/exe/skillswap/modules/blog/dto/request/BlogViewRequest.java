@@ -1,6 +1,9 @@
 package com.fptu.exe.skillswap.modules.blog.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public record BlogViewRequest(
-        String sessionId
+        @NotBlank @Size(max = 128) String sessionId
 ) {
 }

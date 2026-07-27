@@ -33,7 +33,7 @@ public class ForumAbuseGuardService {
         
         String message = buildMessage(actionType);
         
-        rateLimitService.check(key, limit, window, message);
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BUSINESS, key, limit, window, message);
     }
 
     private String buildMessage(ForumActionType actionType) {

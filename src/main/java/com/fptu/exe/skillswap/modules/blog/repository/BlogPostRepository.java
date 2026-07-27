@@ -20,6 +20,22 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 
 public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogPostRepositoryCustom {
 
+    interface MentorPublicAuthorityProjection {
+        long getPublishedArticleCount();
+        LocalDateTime getLatestPublishedAt();
+    }
+
+    @Query("""
+            select count(p) as publishedArticleCount, max(p.publishedAt) as latestPublishedAt
+            from BlogPost p
+            where p.authorType = com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR
+              and p.authorUser.id = :mentorUserId
+              and p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
+              and p.visibility = com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility.PUBLIC
+              and p.publishedAt is not null
+            """)
+    MentorPublicAuthorityProjection getMentorPublicAuthority(@Param("mentorUserId") UUID mentorUserId);
+
     boolean existsBySlug(String slug);
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
@@ -33,6 +49,16 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
 
     @EntityGraph(attributePaths = {"authorUser", "categories", "tags"})
     Optional<BlogPost> findBySlug(String slug);
+
+    @EntityGraph(attributePaths = "authorUser")
+    @Query("select p from BlogPost p where p.id in :postIds")
+    List<BlogPost> findReaderPostsWithAuthorByIdIn(@Param("postIds") Collection<UUID> postIds);
+
+    @Query("select distinct p from BlogPost p left join fetch p.categories where p.id in :postIds")
+    List<BlogPost> loadCategoriesByPostIdIn(@Param("postIds") Collection<UUID> postIds);
+
+    @Query("select distinct p from BlogPost p left join fetch p.tags where p.id in :postIds")
+    List<BlogPost> loadTagsByPostIdIn(@Param("postIds") Collection<UUID> postIds);
 
     @Query("""
             select p
@@ -85,7 +111,6 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
               and (
                     (:categoryIdsEmpty = false and c.id in :categoryIds)
                     or (:tagIdsEmpty = false and t.id in :tagIds)
-                    or p.audienceType = :audienceType
               )
             order by p.publishedAt desc, p.likeCount desc, p.bookmarkCount desc, p.id desc
             """)
@@ -98,16 +123,12 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
             @Param("categoryIdsEmpty") boolean categoryIdsEmpty,
             @Param("tagIds") Collection<UUID> tagIds,
             @Param("tagIdsEmpty") boolean tagIdsEmpty,
-            @Param("audienceType") com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType audienceType,
             Pageable pageable
     );
 
     @Query("""
-            select p
+            select p.id
             from BlogPost p
-            join fetch p.authorUser
-            left join fetch p.categories
-            left join fetch p.tags
             where p.status = :status
               and p.visibility in :allowedVisibilities
               and p.publishedAt is not null
@@ -115,9 +136,48 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
                      p.publishedAt desc,
                      p.id desc
             """)
-    List<BlogPost> findTrendingCandidates(
+    List<UUID> findTrendingCandidateIds(
             @Param("status") BlogPostStatus status,
             @Param("allowedVisibilities") Collection<BlogVisibility> allowedVisibilities,
             Pageable pageable
     );
+
+    @EntityGraph(attributePaths = {"authorUser", "categories", "tags", "entitledServices"})
+    @Query("""
+            select distinct p from BlogPost p join p.entitledServices s
+            where p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
+              and p.visibility = com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility.BOOKED_MEMBERS
+              and s.id = :serviceId
+              and p.publishedAt is not null
+            order by p.publishedAt desc, p.id desc
+            """)
+    List<BlogPost> findPremiumLibraryByServiceId(@Param("serviceId") UUID serviceId, Pageable pageable);
+
+    // Native queries intentionally bypass the reader-facing soft-delete restriction for CMS recovery.
+    @Query(value = "select * from blog_posts where deleted_at is not null and id = :postId", nativeQuery = true)
+    Optional<BlogPost> findDeletedByIdForAdmin(@Param("postId") UUID postId);
+
+    @Query(value = "select * from blog_posts where deleted_at is not null order by updated_at desc, id desc", nativeQuery = true)
+    List<BlogPost> findDeletedForAdmin(Pageable pageable);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "update blog_posts set deleted_at = now(), updated_at = now(), version = version + 1 where id = :postId and deleted_at is null and version = :expectedVersion", nativeQuery = true)
+    int softDeleteByIdAndVersion(@Param("postId") UUID postId, @Param("expectedVersion") int expectedVersion);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "update blog_posts set deleted_at = null, status = 'ARCHIVED', updated_at = now(), version = version + 1 where id = :postId and deleted_at is not null and version = :expectedVersion", nativeQuery = true)
+    int restoreByIdAndVersion(@Param("postId") UUID postId, @Param("expectedVersion") int expectedVersion);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update BlogPost p
+            set p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.ARCHIVED,
+                p.featured = false,
+                p.featuredOrder = null,
+                p.featuredUntil = null
+            where p.authorType = com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR
+              and p.authorUser.id = :authorUserId
+              and p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
+            """)
+    int archivePublishedMentorPostsByAuthor(@Param("authorUserId") UUID authorUserId);
 }

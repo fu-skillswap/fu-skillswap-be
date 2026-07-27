@@ -16,4 +16,6 @@ public interface BlogTagRepository extends JpaRepository<BlogTag, UUID> {
     Optional<BlogTag> findBySlug(String slug);
 
     boolean existsBySlug(String slug);
+
+    boolean existsBySlugAndIdNot(String slug, UUID id);
 }

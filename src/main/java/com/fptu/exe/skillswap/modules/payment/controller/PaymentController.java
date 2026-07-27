@@ -2,8 +2,10 @@ package com.fptu.exe.skillswap.modules.payment.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutPreviewRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutPreviewResponse;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -44,6 +46,17 @@ public class PaymentController {
         ensureAuthenticated(principal);
         PaymentCheckoutResponse response = paymentOrderService.checkout(principal.getPublicId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
+    }
+
+    @Operation(summary = "Preview checkout payment", description = "Read-only estimate. It never reserves credit, coupon, campaign budget or creates a PayOS link.")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/me/bookings/{bookingId}/checkout-preview")
+    public ResponseEntity<ApiResponse<PaymentCheckoutPreviewResponse>> checkoutPreview(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @RequestBody(required = false) PaymentCheckoutPreviewRequest request) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.ok(ApiResponse.success(paymentOrderService.previewCheckout(principal.getPublicId(), bookingId, request)));
     }
 
     @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS vẫn là nguồn chốt chính; nếu webhook bị trễ hoặc miss, backend sẽ fallback đồng bộ từ PayOS và tự finalize khi provider đã xác nhận PAID/SUCCESS.")

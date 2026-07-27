@@ -144,21 +144,17 @@ public class ChatController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
     })
-    public ApiResponse<CursorPageResponse<MessageResponse>> getMessages(
+    public ApiResponse<java.util.List<MessageResponse>> getMessages(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,
-            @Parameter(
-                    description = "Opaque cursor string. Frontend không được cố gắng decode hay tự tạo chuỗi này; chỉ được lấy từ nextCursor của response trước đó để truyền lên.",
-                    example = "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I"
-            )
-            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Long beforeSequence,
+            @RequestParam(required = false) Long afterSequence,
             @Parameter(description = "Số lượng tin nhắn mong muốn cho một lần lấy dữ liệu. Mặc định 30, tối đa 50.", example = "30")
             @RequestParam(defaultValue = "30") Integer limit) {
-        return ApiResponse.success(conversationService.getMessages(conversationId, userPrincipal.getId(), cursor, limit));
+        return ApiResponse.success(conversationService.getMessagesBySequence(conversationId, userPrincipal.getId(), beforeSequence, afterSequence, limit));
     }
 
     @PostMapping("/{conversationId}/messages")
-    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     @Operation(
             summary = "Gửi tin nhắn trong conversation",
             description = "Gửi một tin nhắn text vào conversation hiện có mà user hiện tại đang tham gia. FE chỉ dùng API này sau khi booking liên quan đã tạo conversation thông qua flow accept booking."
@@ -173,7 +169,7 @@ public class ChatController {
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,
             @Valid @RequestBody SendMessageRequest request) {
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BUSINESS,
                 "chat:send:" + userPrincipal.getId(),
                 30,
                 java.time.Duration.ofMinutes(1),
@@ -181,6 +177,21 @@ public class ChatController {
         );
         MessageResponse response = conversationService.sendMessage(conversationId, userPrincipal.getId(), request, messageRepository, userRepository);
         return ApiResponse.created(response);
+    }
+
+    @PatchMapping("/{conversationId}/messages/{messageId}")
+    public ApiResponse<MessageResponse> editMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.UpdateMessageRequest request) {
+        return ApiResponse.success(conversationService.editMessage(conversationId, messageId, userPrincipal.getId(), request));
+    }
+
+    @DeleteMapping("/{conversationId}/messages/{messageId}")
+    public ApiResponse<MessageResponse> deleteMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.DeleteMessageRequest request) {
+        return ApiResponse.success(conversationService.deleteMessage(conversationId, messageId, userPrincipal.getId(), request));
+    }
+
+    @PostMapping("/{conversationId}/attachment-upload-intents")
+    public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ChatAttachmentUploadIntentResponse> createAttachmentUploadIntent(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.ChatAttachmentUploadIntentRequest request) {
+        return ApiResponse.created(conversationService.createAttachmentUploadIntent(conversationId, userPrincipal.getId(), request));
     }
 
     @GetMapping("/{conversationId}")
@@ -228,11 +239,11 @@ public class ChatController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation")
     })
-    public ApiResponse<String> markConversationAsRead(
+    public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationReadResponse> markConversationAsRead(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
-            @PathVariable UUID conversationId) {
+            @PathVariable UUID conversationId,
+            @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.ConversationReadRequest request) {
         
-        conversationService.markConversationAsRead(conversationId, userPrincipal.getId());
-        return ApiResponse.success("Đánh dấu đã đọc thành công");
+        return ApiResponse.success(conversationService.markConversationAsRead(conversationId, userPrincipal.getId(), request.lastReadSequence()));
     }
 }

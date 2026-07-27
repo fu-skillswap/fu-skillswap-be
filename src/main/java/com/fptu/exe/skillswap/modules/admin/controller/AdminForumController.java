@@ -4,11 +4,16 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumCommentListRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumPostListRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumReportListRequest;
+import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseActiveRequest;
+import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseCreateRequest;
+import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseUpdateRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReportResolveRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
+import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProhibitedPhraseResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
 import com.fptu.exe.skillswap.modules.admin.service.AdminForumModerationService;
+import com.fptu.exe.skillswap.modules.admin.service.AdminForumProhibitedPhraseService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -25,9 +30,11 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
@@ -41,6 +48,55 @@ import java.util.UUID;
 public class AdminForumController {
 
     private final AdminForumModerationService adminForumModerationService;
+    private final AdminForumProhibitedPhraseService prohibitedPhraseService;
+
+    @GetMapping("/prohibited-phrases")
+    @Operation(summary = "Lấy danh sách cụm từ cấm của forum")
+    public ApiResponse<CursorPageResponse<ForumProhibitedPhraseResponse>> getProhibitedPhrases(
+            @RequestParam(required = false) Boolean isActive,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit
+    ) {
+        return ApiResponse.success(prohibitedPhraseService.list(isActive, cursor, limit));
+    }
+
+    @GetMapping("/prohibited-phrases/{ruleId}")
+    @Operation(summary = "Lấy chi tiết cụm từ cấm của forum")
+    public ApiResponse<ForumProhibitedPhraseResponse> getProhibitedPhrase(@PathVariable UUID ruleId) {
+        return ApiResponse.success(prohibitedPhraseService.get(ruleId));
+    }
+
+    @PostMapping("/prohibited-phrases")
+    @Operation(summary = "Thêm cụm từ cấm cho forum")
+    public ApiResponse<ForumProhibitedPhraseResponse> createProhibitedPhrase(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody ForumProhibitedPhraseCreateRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.created(prohibitedPhraseService.create(principal.getPublicId(), request));
+    }
+
+    @org.springframework.web.bind.annotation.PutMapping("/prohibited-phrases/{ruleId}")
+    @Operation(summary = "Cập nhật cụm từ cấm của forum")
+    public ApiResponse<ForumProhibitedPhraseResponse> updateProhibitedPhrase(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID ruleId,
+            @Valid @RequestBody ForumProhibitedPhraseUpdateRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(prohibitedPhraseService.update(principal.getPublicId(), ruleId, request));
+    }
+
+    @PatchMapping("/prohibited-phrases/{ruleId}/active")
+    @Operation(summary = "Bật hoặc tắt cụm từ cấm của forum")
+    public ApiResponse<ForumProhibitedPhraseResponse> changeProhibitedPhraseActive(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID ruleId,
+            @Valid @RequestBody ForumProhibitedPhraseActiveRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(prohibitedPhraseService.changeActive(principal.getPublicId(), ruleId, request));
+    }
 
     @GetMapping("/reports")
     @Operation(summary = "Lấy queue forum reports")

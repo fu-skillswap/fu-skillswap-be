@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.blog.domain;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.Column;
@@ -82,9 +83,9 @@ public class BlogPost {
     private String ogImageObjectKey;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "audience_type", nullable = false, length = 30)
+    @Column(name = "author_type", nullable = false, length = 30)
     @Builder.Default
-    private BlogAudienceType audienceType = BlogAudienceType.BOTH;
+    private BlogAuthorType authorType = BlogAuthorType.PLATFORM;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
@@ -154,6 +155,13 @@ public class BlogPost {
     )
     @Builder.Default
     private Set<BlogTag> tags = new LinkedHashSet<>();
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "blog_post_entitled_services",
+            joinColumns = @JoinColumn(name = "post_id"),
+            inverseJoinColumns = @JoinColumn(name = "service_id"))
+    @Builder.Default
+    private Set<MentorService> entitledServices = new LinkedHashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

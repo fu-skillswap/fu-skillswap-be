@@ -6,10 +6,10 @@ Copy every backup to encrypted off-VPS storage. A file left only on the VPS is n
 
 Restore procedure:
 
-1. Stop the backend and RabbitMQ consumers.
-2. Create a final backup of the current database.
+1. Drain new traffic at the reverse proxy, then stop the backend and RabbitMQ consumers.
+2. Create a final backup of the current database and verify its checksum manifest.
 3. Run `ops/restore-postgres.sh <backup.dump.gz>` against an isolated restore rehearsal first.
 4. Verify Flyway history, row counts, foreign keys, and critical booking/payment records.
 5. Start the matching application image and run `ops/smoke-test.sh`.
 
-Restore is a destructive operation and must never run while application traffic is active.
+Restore is a destructive operation and must never run while application traffic is active. The script rejects a restore unless `PRODUCTION_TRAFFIC_DRAINED=true` and `SKILLSWAP_RESTORE_CONFIRM=RESTORE_PRODUCTION` are set, and it refuses while `skillswap-backend` is running.

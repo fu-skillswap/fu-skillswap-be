@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
@@ -55,6 +56,8 @@ class ForumReportServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private StudentProfileRepository studentProfileRepository;
+    @Mock
     private TagRepository tagRepository;
     @Mock
     private NotificationService notificationService;
@@ -62,6 +65,8 @@ class ForumReportServiceTest {
     private ForumReportRepository forumReportRepository;
     @Mock
     private ForumTextPolicy forumTextPolicy;
+    @Mock
+    private ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
     @Mock
     private ForumAbuseGuardService forumAbuseGuardService;
     @Mock
@@ -82,9 +87,11 @@ class ForumReportServiceTest {
                 forumPostReactionRepository,
                 forumCommentReactionRepository,
                 userRepository,
+                studentProfileRepository,
                 tagRepository,
                 notificationService,
                 forumTextPolicy,
+                forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
                 cursorCodec
         );

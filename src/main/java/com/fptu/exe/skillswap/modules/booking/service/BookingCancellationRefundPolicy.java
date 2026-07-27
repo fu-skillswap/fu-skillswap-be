@@ -1,0 +1,14 @@
+package com.fptu.exe.skillswap.modules.booking.service;
+
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingCancellationRefundPolicyResponse;
+
+/** Read model for the platform-wide settlement rules already enforced by BookingService. */
+public final class BookingCancellationRefundPolicy {
+
+    private BookingCancellationRefundPolicy() {
+    }
+
+    public static BookingCancellationRefundPolicyResponse current() {
+        return new BookingCancellationRefundPolicyResponse(6 * 60, 100, 50, 100, 100);
+    }
+}

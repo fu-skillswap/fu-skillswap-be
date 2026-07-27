@@ -8,14 +8,18 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationUploadIntent;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationUploadIntentStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationMethod;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationUploadIntentRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,6 +65,8 @@ class MentorVerificationServiceUploadTest {
     @Mock
     private StoredFileRepository storedFileRepository;
     @Mock
+    private MentorVerificationUploadIntentRepository uploadIntentRepository;
+    @Mock
     private ObjectProvider<StorageGateway> r2StorageProvider;
     @Mock
     private StorageGateway storageGateway;
@@ -101,11 +107,19 @@ class MentorVerificationServiceUploadTest {
         lenient().when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(any()))
                 .thenReturn(Collections.emptyList());
         lenient().when(storedFileRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(uploadIntentRepository.save(any())).thenAnswer(invocation -> {
+            MentorVerificationUploadIntent intent = invocation.getArgument(0);
+            if (intent.getId() == null) intent.setId(UUID.randomUUID());
+            return intent;
+        });
         lenient().when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
         lenient().when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
         lenient().when(r2StorageProvider.getIfAvailable()).thenReturn(storageGateway);
         lenient().when(storageGateway.resolvePublicUrl(any())).thenAnswer(invocation -> "https://cdn.skillswap.com/" + invocation.getArgument(0));
         lenient().when(storageGateway.storageProviderName()).thenReturn("R2");
+        lenient().when(storageGateway.generatePrivateUploadUrl(any(), any(), any())).thenAnswer(invocation ->
+                new StorageGateway.PrivatePresignedUpload("https://private-upload.example/test", invocation.getArgument(0),
+                        java.time.Instant.now().plusSeconds(900)));
         lenient().when(storageGateway.headObject(any())).thenAnswer(invocation -> {
             String key = invocation.getArgument(0);
             String ct = key != null && key.toLowerCase().endsWith(".jpg") ? "image/jpeg" : "image/jpeg";
@@ -121,7 +135,8 @@ class MentorVerificationServiceUploadTest {
                 mentorProfileService,
                 userRepository,
                 storedFileRepository,
-                r2StorageProvider
+                r2StorageProvider,
+                uploadIntentRepository
         );
         ReflectionTestUtils.setField(service, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(service, "requireCompletedStudentProfile", false);
@@ -129,13 +144,12 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadProof_shouldAcceptPresignedObjectKeyAfterStorageVerification() {
+    void uploadProof_shouldConfirmOwnedPrivateUploadIntentAfterStorageVerification() {
+        MentorVerificationUploadIntent intent = validIntent();
+        when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                verificationObjectKey("proof.jpg"),
-                "proof.jpg",
-                "image/jpeg",
-                123L
+                intent.getId()
         );
 
         service.uploadDocument(userId, uploadRequest);
@@ -143,52 +157,41 @@ class MentorVerificationServiceUploadTest {
         ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
         verify(storedFileRepository).save(fileCaptor.capture());
         assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("R2");
-        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(uploadRequest.objectKey());
-        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo("private://" + uploadRequest.objectKey());
+        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(intent.getStorageKey());
+        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo("private://" + intent.getStorageKey());
+        assertThat(intent.getStatus()).isEqualTo(MentorVerificationUploadIntentStatus.CONFIRMED);
     }
 
     @Test
-    void uploadProof_shouldRejectInvalidObjectKey() {
+    void uploadProof_shouldRejectUploadIntentOwnedByAnotherUser() {
+        User otherUser = User.builder().id(UUID.randomUUID()).build();
+        MentorVerificationUploadIntent intent = validIntent();
+        intent.setOwner(otherUser);
+        when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                "../proof.jpg",
-                "proof.jpg",
-                "image/jpeg",
-                123L
+                intent.getId()
         );
 
         assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
                 .isInstanceOf(BaseException.class)
                 .extracting("errorCode")
-                .isEqualTo(ErrorCode.BAD_REQUEST);
+                .isEqualTo(ErrorCode.NOT_FOUND);
 
         verify(storedFileRepository, never()).save(any());
     }
 
     @Test
-    void uploadProof_shouldPreserveTypeAndSizeValidation() {
-        MentorVerificationDocumentUploadRequest oversized = new MentorVerificationDocumentUploadRequest(
+    void uploadProof_shouldRejectExpiredUploadIntent() {
+        MentorVerificationUploadIntent intent = validIntent();
+        intent.setStatus(MentorVerificationUploadIntentStatus.EXPIRED);
+        when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
+        MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                verificationObjectKey("proof.jpg"),
-                "proof.jpg",
-                "image/jpeg",
-                15L * 1024L * 1024L + 1L
+                intent.getId()
         );
 
-        assertThatThrownBy(() -> service.uploadDocument(userId, oversized))
-                .isInstanceOf(BaseException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.PAYLOAD_TOO_LARGE);
-
-        MentorVerificationDocumentUploadRequest badType = new MentorVerificationDocumentUploadRequest(
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                verificationObjectKey("proof.gif"),
-                "proof.gif",
-                "image/gif",
-                123L
-        );
-
-        assertThatThrownBy(() -> service.uploadDocument(userId, badType))
+        assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
                 .isInstanceOf(BaseException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.BAD_REQUEST);
@@ -201,12 +204,10 @@ class MentorVerificationServiceUploadTest {
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF
         )).thenReturn(1L);
 
+        MentorVerificationUploadIntent intent = validIntent();
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                verificationObjectKey("proof.jpg"),
-                "proof.jpg",
-                "image/jpeg",
-                123L
+                intent.getId()
         );
 
         assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
@@ -215,7 +216,27 @@ class MentorVerificationServiceUploadTest {
                 .isEqualTo(ErrorCode.BAD_REQUEST);
     }
 
-    private String verificationObjectKey(String filename) {
-        return "skillswap/verification-documents/users/" + userId + "/" + filename;
+    @Test
+    void createUploadIntent_shouldKeepStorageKeyServerOwned() {
+        var response = service.createDocumentUploadIntent(userId,
+                new MentorVerificationDocumentUploadIntentRequest("proof.jpg", "image/jpeg", 123L));
+
+        assertThat(response.uploadIntentId()).isNotNull();
+        assertThat(response.uploadUrl()).isEqualTo("https://private-upload.example/test");
+        assertThat(response.requiredHeaders()).containsEntry("Content-Type", "image/jpeg");
+        verify(storageGateway).generatePrivateUploadUrl(any(), eq("image/jpeg"), any());
+    }
+
+    private MentorVerificationUploadIntent validIntent() {
+        return MentorVerificationUploadIntent.builder()
+                .id(UUID.randomUUID())
+                .owner(user)
+                .storageKey("skillswap/verification-documents/users/" + userId + "/proof.jpg")
+                .originalFilename("proof.jpg")
+                .expectedContentType("image/jpeg")
+                .expectedSizeBytes(123L)
+                .expiresAt(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now().plusMinutes(10))
+                .status(MentorVerificationUploadIntentStatus.PENDING_UPLOAD)
+                .build();
     }
 }

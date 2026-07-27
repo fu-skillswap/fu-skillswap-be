@@ -24,6 +24,16 @@ public class Conversation {
     @GeneratedUuidV7
     private UUID id;
 
+    @Column(name = "mentor_user_id")
+    private UUID mentorUserId;
+
+    @Column(name = "mentee_user_id")
+    private UUID menteeUserId;
+
+    @Column(name = "next_sequence", nullable = false)
+    @Builder.Default
+    private long nextSequence = 0L;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", nullable = false, length = 50)
     private ConversationSourceType sourceType;

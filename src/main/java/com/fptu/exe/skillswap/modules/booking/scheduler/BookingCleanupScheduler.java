@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.scheduler;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -11,19 +11,20 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class BookingCleanupScheduler {
 
-    private final BookingService bookingService;
+    private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
 
-    @Scheduled(cron = "0 */30 * * * *") // Runs every 30 minutes
+    // Indexed deadline scans only; five minutes bounds stale UI without burdening the single VPS.
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void expirePendingBookings() {
         log.info("Starting scheduled job to expire stale pending bookings...");
         try {
-            int expiredCount = bookingService.expireStalePendingBookings();
+            int expiredCount = bookingLifecycleMaintenanceService.expireStalePendingBookings();
             if (expiredCount > 0) {
                 log.info("Expired {} stale pending bookings.", expiredCount);
             } else {
                 log.debug("No stale pending bookings to expire.");
             }
-            int paymentExpiredCount = bookingService.expireAwaitingPaymentBookings();
+            int paymentExpiredCount = bookingLifecycleMaintenanceService.expireAwaitingPaymentBookings();
             if (paymentExpiredCount > 0) {
                 log.info("Expired {} stale awaiting-payment bookings.", paymentExpiredCount);
             } else {
@@ -37,7 +38,7 @@ public class BookingCleanupScheduler {
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void processPostSessionLifecycle() {
         try {
-            int changed = bookingService.processPostSessionLifecycle();
+            int changed = bookingLifecycleMaintenanceService.processPostSessionLifecycle();
             if (changed > 0) {
                 log.info("Processed {} post-session booking lifecycle transitions/reminders.", changed);
             }

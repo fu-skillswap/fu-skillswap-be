@@ -21,6 +21,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
 
     Optional<Notification> findByIdAndRecipientUserId(UUID id, UUID recipientUserId);
 
+    Optional<Notification> findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(UUID recipientUserId, NotificationType type, String relatedEntityType, UUID relatedEntityId);
+
     @Modifying
     @Query("UPDATE Notification n SET n.readAt = :now WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL")
     int markAllAsRead(@Param("recipientUserId") UUID recipientUserId, @Param("now") LocalDateTime now);

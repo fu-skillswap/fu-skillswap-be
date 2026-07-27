@@ -36,12 +36,12 @@ Source of truth: controller/security code as of this phase.
 | GET | `/api/blog/posts` | PUBLIC | Only readable posts according to visibility. Anonymous sees `PUBLIC` only. |
 | GET | `/api/blog/posts/{slug}` | PUBLIC | `MEMBERS_ONLY` and `MENTOR_ONLY` remain hidden from anonymous. |
 | GET | `/api/blog/posts/{slug}/related` | PUBLIC | Same visibility rules as source post. |
-| GET | `/api/blog/posts/{slug}/recommendations` | PUBLIC | Rule-based, not AI. |
+| GET | `/api/blog/posts/{slug}/recommendations` | PUBLIC_DEPRECATED | Compatibility alias of `/related`; new clients must use `/related`. |
 | GET | `/api/blog/featured` | PUBLIC | Uses published + featured window. |
 | GET | `/api/blog/trending` | PUBLIC | Lightweight cached ranking. |
 | GET | `/api/blog/categories` | PUBLIC | Catalog-style read. |
 | GET | `/api/blog/tags` | PUBLIC | Catalog-style read. |
-| POST | `/api/blog/posts/{postId}/view` | PUBLIC_WRITE_LIMITED | Rate limited and deduped by backend user/IP/User-Agent fingerprint. FE `sessionId` is not trusted as the only dedupe key. |
+| POST | `/api/blog/posts/{postId}/view` | PUBLIC_WRITE_LIMITED | Requires a nonblank opaque `sessionId` (max 128), rate limited and deduped by backend session/fingerprint context. The browser must not send or control forwarded-address headers. |
 
 Auth required:
 
@@ -51,6 +51,8 @@ Auth required:
 - `PUT/DELETE /api/blog/tags/{tagId}/follow`
 - `POST /api/blog/posts/{postId}/notification-click`
 - `POST /api/blog/posts/{postId}/recommendation-click`
+- `POST /api/blog/posts/{postId}/author-cta-click`
+- `POST /api/blog/posts/{postId}/booking-started`
 - `/api/me/blog/**`
 
 ### Mentor Discovery
@@ -95,4 +97,3 @@ Public responses must not contain:
 - `internalStatus`
 - payment/ledger/balance fields
 - chat/notification private payloads
-

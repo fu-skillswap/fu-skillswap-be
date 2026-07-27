@@ -9,8 +9,8 @@ Dưới đây là template cho file `.env` chuẩn trên VPS Production:
 # ==== HỆ THỐNG ====
 # Bắt buộc để sử dụng cấu hình application-prod.yaml (nếu có)
 SPRING_PROFILES_ACTIVE=prod
-# Biến APP_IMAGE sẽ được CI/CD ghi đè khi chạy lệnh deploy, nhưng có thể điền default:
-APP_IMAGE=ghcr.io/owner/skillswap-backend:latest
+# Biến APP_IMAGE luôn được CI/CD ghi đè bằng image SHA bất biến. Không dùng tag latest.
+APP_IMAGE=ghcr.io/owner/skillswap-backend:<git-sha>
 
 # ==== POSTGRESQL ====
 # Mật khẩu mạnh, không dùng chung với staging

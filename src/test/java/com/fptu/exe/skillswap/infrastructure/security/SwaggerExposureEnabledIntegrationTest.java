@@ -27,6 +27,8 @@ class SwaggerExposureEnabledIntegrationTest {
         String json = mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        java.nio.file.Files.writeString(java.nio.file.Path.of("openapi.json"), json);
+        java.nio.file.Path targetDir = java.nio.file.Path.of("target");
+        java.nio.file.Files.createDirectories(targetDir);
+        java.nio.file.Files.writeString(targetDir.resolve("openapi.json"), json);
     }
 }

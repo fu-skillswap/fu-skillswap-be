@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
+import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GoogleOAuthStateServiceTest {
 
-    private final GoogleOAuthStateService service = new GoogleOAuthStateService();
+    private final GoogleOAuthStateService service = new GoogleOAuthStateService(new CacheProperties());
 
     @Test
     void consume_shouldValidateStateRedirectAndPkceExactlyOnce() throws Exception {

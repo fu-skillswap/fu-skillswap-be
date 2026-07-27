@@ -7,5 +7,6 @@ public enum FilePurpose {
     PORTFOLIO,
     SESSION_ATTACHMENT,
     FORUM_ATTACHMENT,
+    BLOG_IMAGE,
     OTHER
 }

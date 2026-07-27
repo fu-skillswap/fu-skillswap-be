@@ -2,10 +2,6 @@ spring:
   application:
     name: skillswap
 
-  cache:
-    caffeine:
-      spec: maximumSize=10000,expireAfterWrite=60m
-
   datasource:
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:16}
@@ -75,7 +71,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics
   endpoint:
     health:
       probes:
@@ -89,6 +85,8 @@ management:
           include: readinessState,db,rabbit
 
 application:
+  scheduling:
+    enabled: ${APPLICATION_SCHEDULING_ENABLED:true}
   google:
     client-id: ${GOOGLE_CLIENT_ID}
     client-secret: ${GOOGLE_CLIENT_SECRET:}
@@ -101,9 +99,52 @@ application:
       version: ${CURSOR_CRYPTO_VERSION:v1}
       aes-key: ${CURSOR_AES_KEY}
       hmac-key: ${CURSOR_HMAC_KEY}
+  cache:
+    catalog:
+      maximum-size: ${CACHE_CATALOG_MAX_SIZE:1000}
+      ttl: ${CACHE_CATALOG_TTL:24h}
+    user-ban-status:
+      maximum-size: ${CACHE_USER_BAN_STATUS_MAX_SIZE:10000}
+      ttl: ${CACHE_USER_BAN_STATUS_TTL:10m}
+    google-oauth-state:
+      maximum-size: ${CACHE_GOOGLE_OAUTH_STATE_MAX_SIZE:10000}
+      ttl: ${CACHE_GOOGLE_OAUTH_STATE_TTL:5m}
+    matching-features:
+      maximum-size: ${CACHE_MATCHING_FEATURES_MAX_SIZE:20000}
+      ttl: ${CACHE_MATCHING_FEATURES_TTL:10m}
+    mentor-funnel-dedupe:
+      maximum-size: ${CACHE_MENTOR_FUNNEL_DEDUPE_MAX_SIZE:20000}
+      ttl: ${CACHE_MENTOR_FUNNEL_DEDUPE_TTL:10m}
+    local-private-download-credential:
+      maximum-size: ${CACHE_LOCAL_PRIVATE_DOWNLOAD_CREDENTIAL_MAX_SIZE:10000}
+      ttl: ${CACHE_LOCAL_PRIVATE_DOWNLOAD_CREDENTIAL_TTL:10m}
+    rate-limit:
+      security:
+        maximum-size: ${CACHE_RATE_LIMIT_SECURITY_MAX_SIZE:10000}
+      business:
+        maximum-size: ${CACHE_RATE_LIMIT_BUSINESS_MAX_SIZE:10000}
+      transfer:
+        maximum-size: ${CACHE_RATE_LIMIT_TRANSFER_MAX_SIZE:5000}
+      best-effort:
+        maximum-size: ${CACHE_RATE_LIMIT_BEST_EFFORT_MAX_SIZE:2000}
+    blog:
+      trending:
+        maximum-size: ${CACHE_BLOG_TRENDING_MAX_SIZE:3}
+        ttl: ${CACHE_BLOG_TRENDING_TTL:10m}
+      trending-invalidation-debounce-maximum-size: ${CACHE_BLOG_TRENDING_INVALIDATION_DEBOUNCE_MAX_SIZE:1}
+      trending-invalidation-debounce: ${CACHE_BLOG_TRENDING_INVALIDATION_DEBOUNCE:45s}
+      view-dedupe:
+        maximum-size: ${CACHE_BLOG_VIEW_DEDUPE_MAX_SIZE:100000}
+        ttl: ${CACHE_BLOG_VIEW_DEDUPE_TTL:30m}
+    forum-prohibited-phrase:
+      maximum-size: ${CACHE_FORUM_PROHIBITED_PHRASE_MAX_SIZE:1}
+      ttl: ${CACHE_FORUM_PROHIBITED_PHRASE_TTL:30m}
   upload:
     dir: ${APP_UPLOAD_DIR:${java.io.tmpdir}/skillswap-storage}
   security:
+    # Comma-separated Nginx/load-balancer CIDRs allowed to supply the original client address.
+    # Leave empty for direct backend access; never trust forwarded headers from arbitrary peers.
+    trusted-proxy-cidrs: ${TRUSTED_PROXY_CIDRS:}
     jwt:
       secret-key: ${JWT_SECRET_KEY}
       expiration: ${JWT_EXPIRATION:3600000} # 1 hour
@@ -111,7 +152,7 @@ application:
         expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days
         cookie:
           name: skillswap_refresh_token
-          path: /
+          path: /api/auth
           secure: true
           same-site: Lax
   cors:

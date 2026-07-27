@@ -42,6 +42,10 @@ public class ConversationParticipant {
     @Column(name = "last_read_at")
     private LocalDateTime lastReadAt;
 
+    @Column(name = "last_read_sequence", nullable = false)
+    @Builder.Default
+    private long lastReadSequence = 0L;
+
     @PrePersist
     protected void onCreate() {
         if (joinedAt == null) {

@@ -188,26 +188,12 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.clear();
 
         // Upload document
-        String smokeObjectKey1 = "skillswap/verification-documents/users/" + mentorApplicant.getId() + "/sample.jpg";
-        mentorVerificationService.uploadDocument(mentorApplicant.getId(),
-            new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
+        uploadVerificationDocument(mentorApplicant.getId(),
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.FPTU_AFFILIATION_PROOF,
-                smokeObjectKey1,
-                "sample.jpg",
-                "image/jpeg",
-                1024L
-            )
-        );
-        String smokeObjectKey2 = "skillswap/verification-documents/users/" + mentorApplicant.getId() + "/expert.jpg";
-        mentorVerificationService.uploadDocument(mentorApplicant.getId(),
-            new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(
+                "sample.jpg");
+        uploadVerificationDocument(mentorApplicant.getId(),
                 com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType.EXPERTISE_PROOF,
-                smokeObjectKey2,
-                "expert.jpg",
-                "image/jpeg",
-                1024L
-            )
-        );
+                "expert.jpg");
 
         // Submit verification
         MentorVerificationSubmitRequest req = new MentorVerificationSubmitRequest("Here is my proof", true);
@@ -270,7 +256,7 @@ class CoreMentorshipFlowSmokeTest {
         slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0));
         slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
-        slotRepository.saveAndFlush(slot);
+        slot = slotRepository.saveAndFlush(slot);
         var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
                 .mentorProfile(mp)
                 .title("Spring Boot Mentoring")
@@ -371,7 +357,8 @@ class CoreMentorshipFlowSmokeTest {
         slot.setStartTime(DateTimeUtil.now().plusDays(1).withHour(10).withMinute(0));
         slot.setEndTime(DateTimeUtil.now().plusDays(1).withHour(12).withMinute(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
-        slotRepository.saveAndFlush(slot);
+        slot = slotRepository.saveAndFlush(slot);
+        slot = slotRepository.findById(slot.getId()).orElseThrow();
         var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
                 .mentorProfile(mp)
                 .title("Spring Boot Mentoring")
@@ -404,7 +391,7 @@ class CoreMentorshipFlowSmokeTest {
         // Fast-forward time so we can complete it
         slot.setStartTime(DateTimeUtil.now().minusHours(2));
         slot.setEndTime(DateTimeUtil.now().minusHours(1));
-        slotRepository.saveAndFlush(slot);
+        slot = slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
         booking.setStatus(BookingStatus.PAID);
@@ -434,6 +421,16 @@ class CoreMentorshipFlowSmokeTest {
         assertEquals(1, updatedProfile.getTotalReviews());
         assertEquals(new java.math.BigDecimal("5.00"), updatedProfile.getAverageRating());
         assertEquals(1, updatedProfile.getTotalCompletedSessions());
+    }
+
+    private void uploadVerificationDocument(UUID mentorId,
+                                            com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType type,
+                                            String filename) {
+        var intent = mentorVerificationService.createDocumentUploadIntent(mentorId,
+                new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest(
+                        filename, "image/jpeg", 1024L));
+        mentorVerificationService.uploadDocument(mentorId,
+                new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(type, intent.uploadIntentId()));
     }
 
     private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {

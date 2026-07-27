@@ -9,7 +9,9 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowReposito
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogTagFollowRepository;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
@@ -22,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,7 +45,7 @@ class BlogEngagementServiceTest {
     @Mock private BlogPostLikeRepository blogPostLikeRepository;
     @Mock private BlogBookmarkRepository blogBookmarkRepository;
     @Mock private BlogCategoryFollowRepository blogCategoryFollowRepository;
-    @Mock private BlogTagFollowRepository blogTagFollowRepository;
+    @Mock private BlogMentorFollowRepository blogMentorFollowRepository;
     @Mock private BlogCategoryRepository blogCategoryRepository;
     @Mock private BlogTagRepository blogTagRepository;
     @Mock private BlogMapper blogMapper;
@@ -50,6 +53,10 @@ class BlogEngagementServiceTest {
     @Mock private MentorContentAccessService mentorContentAccessService;
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private EntityManager entityManager;
+    @Mock private BlogTrendingCache trendingCache;
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private BookingEligibilityPolicy bookingEligibilityPolicy;
+    @Mock private MentorProfileRepository mentorProfileRepository;
 
     private BlogService service;
     private UUID userId;
@@ -65,7 +72,7 @@ class BlogEngagementServiceTest {
                 blogPostLikeRepository,
                 blogBookmarkRepository,
                 blogCategoryFollowRepository,
-                blogTagFollowRepository,
+                blogMentorFollowRepository,
                 blogCategoryRepository,
                 blogTagRepository,
                 blogMapper,
@@ -73,7 +80,11 @@ class BlogEngagementServiceTest {
                 new BlogContentPolicy(),
                 mentorContentAccessService,
                 internalTelemetryService,
-                entityManager
+                entityManager,
+                trendingCache,
+                eventPublisher,
+                bookingEligibilityPolicy,
+                mentorProfileRepository
         );
         userId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         postId = UUID.fromString("018f3abf-0a22-7132-9748-6cf000c47b6e");
@@ -99,7 +110,6 @@ class BlogEngagementServiceTest {
         when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post));
         when(blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(true);
         when(blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
-        when(mentorContentAccessService.getBlogAuthorSummaries(any())).thenReturn(java.util.Map.of());
 
         service.like(principal, postId);
 
@@ -115,7 +125,6 @@ class BlogEngagementServiceTest {
         when(blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
         when(entityManager.getReference(BlogPost.class, postId)).thenReturn(post);
         when(entityManager.getReference(User.class, userId)).thenReturn(new User());
-        when(mentorContentAccessService.getBlogAuthorSummaries(any())).thenReturn(java.util.Map.of());
 
         service.bookmark(principal, postId);
 

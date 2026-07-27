@@ -17,6 +17,8 @@ public record AvailabilitySlotServiceBasicResponse(
         @Schema(description = "Service miễn phí hay trả phí")
         boolean isFree,
         @Schema(description = "Đơn giá service theo Scoin nếu không miễn phí")
-        Integer priceScoin
+        Integer priceScoin,
+        @Schema(description = "Khả năng gỡ binding service này khỏi slot")
+        SlotMutationCapabilityResponse bindingRemoval
 ) {
 }

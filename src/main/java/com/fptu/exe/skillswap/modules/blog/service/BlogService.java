@@ -1,17 +1,15 @@
 package com.fptu.exe.skillswap.modules.blog.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogCategoryResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogEngagementState;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogFollowResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostCardResponse;
-import com.fptu.exe.skillswap.modules.blog.dto.BlogPostDetailResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogEngagementMutationResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
+import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogAuthorCtaClickRequest;
 import com.fptu.exe.skillswap.modules.blog.dto.request.BlogViewRequest;
@@ -20,19 +18,23 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogCategory;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogCategoryFollow;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostLike;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogTag;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogTagFollow;
+import com.fptu.exe.skillswap.modules.blog.event.BlogTrendingRankingChangedEvent;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogBookmarkRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogTagFollowRepository;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogMentorFollow;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBlogAuthorSummary;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -42,6 +44,8 @@ import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityManager;
@@ -58,7 +62,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -69,12 +72,15 @@ public class BlogService {
     private static final int DEFAULT_LIMIT = 20;
     private static final int MAX_LIMIT = 50;
     private static final String DIRECTION_NEXT = "NEXT";
+    private static final int TRENDING_CANDIDATE_LIMIT = 60;
+    private static final int MAX_FOLLOWED_CATEGORIES = 20;
+    private static final int MAX_FOLLOWED_MENTORS = 20;
 
     private final BlogPostRepository blogPostRepository;
     private final BlogPostLikeRepository blogPostLikeRepository;
     private final BlogBookmarkRepository blogBookmarkRepository;
     private final BlogCategoryFollowRepository blogCategoryFollowRepository;
-    private final BlogTagFollowRepository blogTagFollowRepository;
+    private final BlogMentorFollowRepository blogMentorFollowRepository;
     private final BlogCategoryRepository blogCategoryRepository;
     private final BlogTagRepository blogTagRepository;
     private final BlogMapper blogMapper;
@@ -83,24 +89,17 @@ public class BlogService {
     private final MentorContentAccessService mentorContentAccessService;
     private final InternalTelemetryService internalTelemetryService;
     private final EntityManager entityManager;
-
-    private final Cache<String, Boolean> viewDedupeCache = Caffeine.newBuilder()
-            .expireAfterWrite(30, TimeUnit.MINUTES)
-            .maximumSize(100_000)
-            .build();
-
-    private final Cache<String, List<BlogPostCardResponse>> trendingCache = Caffeine.newBuilder()
-            .expireAfterWrite(10, TimeUnit.MINUTES)
-            .maximumSize(200)
-            .build();
+    private final BlogTrendingCache trendingCache;
+    private final ApplicationEventPublisher eventPublisher;
+    private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final MentorProfileRepository mentorProfileRepository;
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<BlogPostCardResponse> listPosts(UserPrincipal principal,
+    public CursorPageResponse<BlogPostReaderCardResponse> listPosts(UserPrincipal principal,
                                                               String cursor,
                                                               Integer limit,
                                                               UUID categoryId,
                                                               UUID tagId,
-                                                              BlogAudienceType audienceType,
                                                               String keyword) {
         int resolvedLimit = resolveLimit(limit);
         String keywordPattern = likePattern(keyword);
@@ -108,7 +107,6 @@ public class BlogService {
         String filterHash = filterHash("blog-posts:public|visibility=" + allowedVisibilities
                 + "|categoryId=" + normalize(categoryId)
                 + "|tagId=" + normalize(tagId)
-                + "|audienceType=" + normalize(audienceType)
                 + "|keyword=" + normalizeKeyword(keyword));
 
         DecodedCursor decodedCursor = decodeCursor(cursor, filterHash);
@@ -116,7 +114,6 @@ public class BlogService {
                 allowedVisibilities,
                 categoryId,
                 tagId,
-                audienceType,
                 keywordPattern,
                 decodedCursor.sortTime(),
                 decodedCursor.postId(),
@@ -127,8 +124,8 @@ public class BlogService {
         String nextCursor = hasNext && !items.isEmpty()
                 ? encodeCursor(items.get(items.size() - 1).getPublishedAt(), items.get(items.size() - 1).getId(), filterHash)
                 : null;
-        return CursorPageResponse.<BlogPostCardResponse>builder()
-                .items(mapCards(principal, items))
+        return CursorPageResponse.<BlogPostReaderCardResponse>builder()
+                .items(mapReaderCards(principal, items))
                 .nextCursor(nextCursor)
                 .prevCursor(null)
                 .hasNext(hasNext)
@@ -138,34 +135,31 @@ public class BlogService {
     }
 
     @Transactional(readOnly = true)
-    public List<BlogPostCardResponse> featured(UserPrincipal principal, int limit) {
+    public List<BlogPostReaderCardResponse> featured(UserPrincipal principal, int limit) {
         List<BlogVisibility> allowed = allowedVisibilities(principal);
         return blogPostRepository.findFeatured(BlogPostStatus.PUBLISHED, DateTimeUtil.now())
                 .stream()
                 .filter(post -> allowed.contains(post.getVisibility()))
                 .limit(Math.min(Math.max(limit, 1), 20))
-                .collect(Collectors.collectingAndThen(Collectors.toList(), posts -> mapCards(principal, posts)));
+                .collect(Collectors.collectingAndThen(Collectors.toList(), posts -> mapReaderCards(principal, posts)));
     }
 
     @Transactional(readOnly = true)
-    public List<BlogPostCardResponse> trending(UserPrincipal principal, int limit) {
+    public List<BlogPostReaderCardResponse> trending(UserPrincipal principal, int limit) {
         int resolvedLimit = Math.min(Math.max(limit, 1), 20);
-        List<BlogVisibility> allowed = allowedVisibilities(principal);
-        String key = "trending:" + allowed + ":" + resolvedLimit + ":" + userId(principal);
-        return trendingCache.get(key, ignored -> {
-            List<BlogPost> posts = blogPostRepository.findTrendingCandidates(
-                            BlogPostStatus.PUBLISHED,
-                            allowed,
-                            PageRequest.of(0, Math.max(resolvedLimit * 3, 20)))
-                    .stream()
-                    .limit(resolvedLimit)
-                    .toList();
-            return mapCards(principal, posts);
-        });
+        BlogTrendingSegment segment = resolveTrendingSegment(principal);
+        List<UUID> rankedIds = trendingCache.get(segment, ignored -> blogPostRepository.findTrendingCandidateIds(
+                BlogPostStatus.PUBLISHED,
+                allowedVisibilitiesForSegment(segment),
+                PageRequest.of(0, TRENDING_CANDIDATE_LIMIT)
+        ));
+        return mapHydratedReaderCards(principal, hydrateReaderPostsByIds(rankedIds).stream()
+                .limit(resolvedLimit)
+                .toList());
     }
 
     @Transactional(readOnly = true)
-    public List<BlogPostCardResponse> related(UserPrincipal principal, String slug, int limit) {
+    public List<BlogPostReaderCardResponse> related(UserPrincipal principal, String slug, int limit) {
         BlogPost source = blogPostRepository.findBySlug(slug)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
         ensureReadable(principal, source);
@@ -180,22 +174,21 @@ public class BlogService {
                 categoryIds.isEmpty(),
                 tagIds.isEmpty() ? Set.of(new UUID(0L, 0L)) : tagIds,
                 tagIds.isEmpty(),
-                source.getAudienceType(),
                 PageRequest.of(0, Math.min(Math.max(limit, 1), 12))
         );
-        return mapCards(principal, posts);
+        return mapReaderCards(principal, posts);
     }
 
     @Transactional(readOnly = true)
-    public BlogPostDetailResponse getBySlug(UserPrincipal principal, String slug) {
+    public BlogPostReaderDetailResponse getBySlug(UserPrincipal principal, String slug) {
         BlogPost post = blogPostRepository.findBySlug(slug)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
         ensureReadable(principal, post);
-        return blogMapper.toDetail(post, engagementState(principal, post.getId()), authorSummary(post));
+        return blogMapper.toReaderDetail(post, engagementState(principal, post.getId()), authorSummary(post));
     }
 
     @Transactional
-    public BlogPostDetailResponse like(UserPrincipal principal, UUID postId) {
+    public BlogEngagementMutationResponse like(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
         BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (!blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)) {
@@ -206,26 +199,28 @@ public class BlogService {
                         .build());
                 blogPostRepository.incrementLikeCount(postId);
                 internalTelemetryService.record("BLOG_LIKE", userId, "BLOG_POST", postId, Map.of("slug", post.getSlug()));
+                signalTrendingChange(postId);
             } catch (DataIntegrityViolationException ignored) {
                 // Idempotent behavior for concurrent like requests.
             }
         }
-        return blogMapper.toDetail(loadPost(postId), engagementState(principal, postId), authorSummary(post));
+        return engagementMutationResponse(principal, postId);
     }
 
     @Transactional
-    public BlogPostDetailResponse unlike(UserPrincipal principal, UUID postId) {
+    public BlogEngagementMutationResponse unlike(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
         BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)) {
             blogPostLikeRepository.deleteByPostIdAndUserId(postId, userId);
             blogPostRepository.decrementLikeCount(postId);
+            signalTrendingChange(postId);
         }
-        return blogMapper.toDetail(loadPost(postId), engagementState(principal, postId), authorSummary(post));
+        return engagementMutationResponse(principal, postId);
     }
 
     @Transactional
-    public BlogPostDetailResponse bookmark(UserPrincipal principal, UUID postId) {
+    public BlogEngagementMutationResponse bookmark(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
         BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (!blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)) {
@@ -236,26 +231,28 @@ public class BlogService {
                         .build());
                 blogPostRepository.incrementBookmarkCount(postId);
                 internalTelemetryService.record("BLOG_BOOKMARK", userId, "BLOG_POST", postId, Map.of("slug", post.getSlug()));
+                signalTrendingChange(postId);
             } catch (DataIntegrityViolationException ignored) {
                 // Idempotent behavior for concurrent bookmark requests.
             }
         }
-        return blogMapper.toDetail(loadPost(postId), engagementState(principal, postId), authorSummary(post));
+        return engagementMutationResponse(principal, postId);
     }
 
     @Transactional
-    public BlogPostDetailResponse unbookmark(UserPrincipal principal, UUID postId) {
+    public BlogEngagementMutationResponse unbookmark(UserPrincipal principal, UUID postId) {
         UUID userId = requireAuthenticated(principal);
         BlogPost post = loadReadablePostForEngagement(principal, postId);
         if (blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)) {
             blogBookmarkRepository.deleteByPostIdAndUserId(postId, userId);
             blogPostRepository.decrementBookmarkCount(postId);
+            signalTrendingChange(postId);
         }
-        return blogMapper.toDetail(loadPost(postId), engagementState(principal, postId), authorSummary(post));
+        return engagementMutationResponse(principal, postId);
     }
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<BlogPostCardResponse> myBookmarks(UserPrincipal principal, String cursor, Integer limit) {
+    public CursorPageResponse<BlogPostReaderCardResponse> myBookmarks(UserPrincipal principal, String cursor, Integer limit) {
         UUID userId = requireAuthenticated(principal);
         int resolvedLimit = resolveLimit(limit);
         String filterHash = filterHash("blog-bookmarks|userId=" + userId);
@@ -272,8 +269,8 @@ public class BlogService {
         String nextCursor = hasNext && !items.isEmpty()
                 ? encodeCursor(items.get(items.size() - 1).getCreatedAt(), items.get(items.size() - 1).getPost().getId(), filterHash)
                 : null;
-        return CursorPageResponse.<BlogPostCardResponse>builder()
-                .items(mapCards(principal, posts))
+        return CursorPageResponse.<BlogPostReaderCardResponse>builder()
+                .items(mapReaderCards(principal, posts))
                 .nextCursor(nextCursor)
                 .prevCursor(null)
                 .hasNext(hasNext)
@@ -282,11 +279,27 @@ public class BlogService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public CursorPageResponse<BlogPostReaderCardResponse> premiumLibrary(UserPrincipal principal, UUID serviceId, Integer limit) {
+        UUID userId = requireAuthenticated(principal);
+        if (serviceId == null || !bookingEligibilityPolicy.canAccessServiceResources(userId, serviceId)) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thư viện premium");
+        }
+        int resolvedLimit = resolveLimit(limit);
+        List<BlogPost> posts = blogPostRepository.findPremiumLibraryByServiceId(serviceId, PageRequest.of(0, resolvedLimit));
+        return CursorPageResponse.<BlogPostReaderCardResponse>builder()
+                .items(mapReaderCards(principal, posts.stream().filter(this::isAuthorPubliclyReadable).toList()))
+                .nextCursor(null).prevCursor(null).hasNext(false).hasPrev(false).limit(resolvedLimit).build();
+    }
+
     @Transactional
     public BlogFollowResponse followCategory(UserPrincipal principal, UUID categoryId) {
         UUID userId = requireAuthenticated(principal);
         BlogCategory category = loadActiveCategory(categoryId);
         if (!blogCategoryFollowRepository.existsByUserIdAndCategoryId(userId, categoryId)) {
+            if (blogCategoryFollowRepository.countByUserId(userId) >= MAX_FOLLOWED_CATEGORIES) {
+                throw new BaseException(ErrorCode.BLOG_FOLLOW_LIMIT_REACHED, "Đã đạt giới hạn follow category");
+            }
             try {
                 blogCategoryFollowRepository.save(BlogCategoryFollow.builder()
                         .user(entityManager.getReference(User.class, userId))
@@ -308,16 +321,21 @@ public class BlogService {
     }
 
     @Transactional
-    public BlogFollowResponse followTag(UserPrincipal principal, UUID tagId) {
+    public BlogFollowResponse followMentor(UserPrincipal principal, UUID mentorUserId) {
         UUID userId = requireAuthenticated(principal);
-        BlogTag tag = loadActiveTag(tagId);
-        if (!blogTagFollowRepository.existsByUserIdAndTagId(userId, tagId)) {
+        var mentor = mentorProfileRepository.findWithUserByUserId(mentorUserId)
+                .filter(profile -> profile.getStatus() == MentorStatus.ACTIVE && profile.getVerifiedAt() != null)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor đang hoạt động"));
+        if (!blogMentorFollowRepository.existsByUserIdAndMentorUserId(userId, mentorUserId)) {
+            if (blogMentorFollowRepository.countByUserId(userId) >= MAX_FOLLOWED_MENTORS) {
+                throw new BaseException(ErrorCode.BLOG_FOLLOW_LIMIT_REACHED, "Đã đạt giới hạn follow mentor");
+            }
             try {
-                blogTagFollowRepository.save(BlogTagFollow.builder()
+                blogMentorFollowRepository.save(BlogMentorFollow.builder()
                         .user(entityManager.getReference(User.class, userId))
-                        .tag(tag)
+                        .mentor(mentor)
                         .build());
-                internalTelemetryService.record("BLOG_TAG_FOLLOW", userId, "BLOG_TAG", tagId, Map.of("slug", tag.getSlug()));
+                internalTelemetryService.record("BLOG_MENTOR_FOLLOW", userId, "MENTOR", mentorUserId, Map.of());
             } catch (DataIntegrityViolationException ignored) {
                 // Idempotent behavior for concurrent follow requests.
             }
@@ -326,9 +344,9 @@ public class BlogService {
     }
 
     @Transactional
-    public BlogFollowResponse unfollowTag(UserPrincipal principal, UUID tagId) {
+    public BlogFollowResponse unfollowMentor(UserPrincipal principal, UUID mentorUserId) {
         UUID userId = requireAuthenticated(principal);
-        blogTagFollowRepository.deleteByUserIdAndTagId(userId, tagId);
+        blogMentorFollowRepository.deleteByUserIdAndMentorUserId(userId, mentorUserId);
         return myFollows(principal);
     }
 
@@ -338,27 +356,28 @@ public class BlogService {
         List<BlogCategoryResponse> categories = blogCategoryFollowRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(follow -> blogMapper.toCategory(follow.getCategory()))
                 .toList();
-        List<BlogTagResponse> tags = blogTagFollowRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(follow -> blogMapper.toTag(follow.getTag()))
+        List<com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse> mentors = blogMentorFollowRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(follow -> new com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse(
+                        follow.getMentor().getUserId(), follow.getMentor().getUser().getFullName(),
+                        follow.getMentor().getUser().getAvatarUrl(), com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR))
                 .toList();
-        return new BlogFollowResponse(categories, tags);
+        return new BlogFollowResponse(categories, mentors);
     }
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<BlogPostCardResponse> personalizedFeed(UserPrincipal principal, String cursor, Integer limit) {
+    public CursorPageResponse<BlogPostReaderCardResponse> personalizedFeed(UserPrincipal principal, String cursor, Integer limit) {
         UUID userId = requireAuthenticated(principal);
         int resolvedLimit = resolveLimit(limit);
         Set<UUID> categoryIds = blogCategoryFollowRepository.findCategoryIdsByUserId(userId);
-        Set<UUID> tagIds = blogTagFollowRepository.findTagIdsByUserId(userId);
+        Set<UUID> mentorIds = blogMentorFollowRepository.findMentorIdsByUserId(userId);
         String filterHash = filterHash("blog-feed|userId=" + userId
                 + "|categories=" + canonicalIds(categoryIds)
-                + "|tags=" + canonicalIds(tagIds));
+                + "|mentors=" + canonicalIds(mentorIds));
         DecodedCursor decodedCursor = decodeCursor(cursor, filterHash);
         List<BlogPost> window;
-        if (categoryIds.isEmpty() && tagIds.isEmpty()) {
+        if (categoryIds.isEmpty() && mentorIds.isEmpty()) {
             window = blogPostRepository.findPublicWindow(
                     allowedVisibilities(principal),
-                    null,
                     null,
                     null,
                     null,
@@ -370,7 +389,7 @@ public class BlogService {
             window = blogPostRepository.findPersonalizedFeedWindow(
                     allowedVisibilities(principal),
                     categoryIds,
-                    tagIds,
+                    mentorIds,
                     decodedCursor.sortTime(),
                     decodedCursor.postId(),
                     resolvedLimit + 1
@@ -383,11 +402,11 @@ public class BlogService {
                 : null;
         internalTelemetryService.record("BLOG_FEED_VIEW", userId, "USER", userId, Map.of(
                 "categoryFollowCount", categoryIds.size(),
-                "tagFollowCount", tagIds.size(),
+                "mentorFollowCount", mentorIds.size(),
                 "resultCount", items.size()
         ));
-        return CursorPageResponse.<BlogPostCardResponse>builder()
-                .items(mapCards(principal, items))
+        return CursorPageResponse.<BlogPostReaderCardResponse>builder()
+                .items(mapReaderCards(principal, items))
                 .nextCursor(nextCursor)
                 .prevCursor(null)
                 .hasNext(hasNext)
@@ -397,7 +416,7 @@ public class BlogService {
     }
 
     @Transactional(readOnly = true)
-    public List<BlogPostCardResponse> recommendations(UserPrincipal principal, String slug, int limit) {
+    public List<BlogPostReaderCardResponse> recommendations(UserPrincipal principal, String slug, int limit) {
         return related(principal, slug, limit);
     }
 
@@ -411,9 +430,11 @@ public class BlogService {
         BlogPost post = blogPostRepository.findById(postId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
         ensureReadable(principal, post);
-        String dedupeKey = "BLOG_VIEW:" + postId + ":" + viewerKey(principal, request == null ? null : request.sessionId(), serverFingerprint);
-        if (viewDedupeCache.asMap().putIfAbsent(dedupeKey, Boolean.TRUE) == null) {
+        String sessionId = request == null ? null : request.sessionId().trim();
+        String dedupeKey = "BLOG_VIEW:" + postId + ":" + viewerKey(principal, sessionId, serverFingerprint);
+        if (trendingCache.registerUniqueView(dedupeKey)) {
             blogPostRepository.incrementViewCount(postId);
+            signalTrendingChange(postId);
             internalTelemetryService.record("BLOG_VIEW", userId(principal), "BLOG_POST", postId, Map.of(
                     "slug", post.getSlug(),
                     "sessionIdPresent", request != null && contentPolicy.hasText(request.sessionId())
@@ -466,6 +487,7 @@ public class BlogService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "catalog", key = "'blogCategories'")
     public List<BlogCategoryResponse> categories() {
         return blogCategoryRepository.findByActiveTrueOrderByDisplayOrderAscNameAsc()
                 .stream()
@@ -474,6 +496,7 @@ public class BlogService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "catalog", key = "'blogTags'")
     public List<BlogTagResponse> tags() {
         return blogTagRepository.findByActiveTrueOrderByNameAsc()
                 .stream()
@@ -485,7 +508,9 @@ public class BlogService {
         if (post.getStatus() != BlogPostStatus.PUBLISHED || post.getPublishedAt() == null) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog");
         }
-        if (!allowedVisibilities(principal).contains(post.getVisibility())) {
+        if (!isAuthorPubliclyReadable(post)
+                || (post.getVisibility() == BlogVisibility.BOOKED_MEMBERS && !hasPremiumEntitlement(principal, post))
+                || (post.getVisibility() != BlogVisibility.BOOKED_MEMBERS && !allowedVisibilities(principal).contains(post.getVisibility()))) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog");
         }
     }
@@ -527,20 +552,63 @@ public class BlogService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy blog tag đang active"));
     }
 
-    private List<BlogPostCardResponse> mapCards(UserPrincipal principal, List<BlogPost> posts) {
+    private List<BlogPostReaderCardResponse> mapReaderCards(UserPrincipal principal, List<BlogPost> posts) {
         if (posts == null || posts.isEmpty()) {
             return List.of();
         }
-        Map<UUID, BlogEngagementState> engagement = engagementStates(principal, posts.stream().map(BlogPost::getId).toList());
+        return mapHydratedReaderCards(principal, hydrateReaderPosts(posts)).stream()
+                .filter(card -> {
+                    BlogPost post = posts.stream().filter(candidate -> candidate.getId().equals(card.id())).findFirst().orElse(null);
+                    return post != null && isAuthorPubliclyReadable(post);
+                })
+                .toList();
+    }
+
+    private List<BlogPostReaderCardResponse> mapHydratedReaderCards(UserPrincipal principal, List<BlogPost> hydratedPosts) {
+        if (hydratedPosts == null || hydratedPosts.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, BlogEngagementState> engagement = engagementStates(principal, hydratedPosts.stream().map(BlogPost::getId).toList());
         Map<UUID, MentorBlogAuthorSummary> authorSummaries = mentorContentAccessService.getBlogAuthorSummaries(
-                posts.stream().map(post -> post.getAuthorUser().getId()).collect(Collectors.toSet())
+                hydratedPosts.stream().map(post -> post.getAuthorUser().getId()).collect(Collectors.toSet())
         );
-        return posts.stream()
-                .map(post -> blogMapper.toCard(
+        return hydratedPosts.stream()
+                .map(post -> blogMapper.toReaderCard(
                         post,
                         engagement.getOrDefault(post.getId(), BlogEngagementState.empty()),
                         authorSummaries.get(post.getAuthorUser().getId())))
                 .toList();
+    }
+
+    private List<BlogPost> hydrateReaderPostsByIds(List<UUID> rankedIds) {
+        if (rankedIds == null || rankedIds.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> uniqueIds = rankedIds.stream().filter(Objects::nonNull).distinct().toList();
+        Map<UUID, BlogPost> byId = blogPostRepository.findReaderPostsWithAuthorByIdIn(uniqueIds).stream()
+                .collect(Collectors.toMap(BlogPost::getId, Function.identity()));
+        blogPostRepository.loadCategoriesByPostIdIn(uniqueIds);
+        blogPostRepository.loadTagsByPostIdIn(uniqueIds);
+        return uniqueIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+    }
+
+    private List<BlogPost> hydrateReaderPosts(List<BlogPost> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return List.of();
+        }
+        return hydrateReaderPostsByIds(posts.stream().map(BlogPost::getId).toList());
+    }
+
+    private BlogEngagementMutationResponse engagementMutationResponse(UserPrincipal principal, UUID postId) {
+        BlogPost post = loadPost(postId);
+        BlogEngagementState engagement = engagementState(principal, postId);
+        return new BlogEngagementMutationResponse(
+                postId,
+                engagement.likedByCurrentUser(),
+                engagement.bookmarkedByCurrentUser(),
+                post.getLikeCount() == null ? 0L : post.getLikeCount(),
+                post.getBookmarkCount() == null ? 0L : post.getBookmarkCount()
+        );
     }
 
     private BlogEngagementState engagementState(UserPrincipal principal, UUID postId) {
@@ -575,20 +643,45 @@ public class BlogService {
     }
 
     private List<BlogVisibility> allowedVisibilities(UserPrincipal principal) {
-        List<BlogVisibility> allowed = new ArrayList<>();
-        allowed.add(BlogVisibility.PUBLIC);
-        if (principal != null) {
-            allowed.add(BlogVisibility.MEMBERS_ONLY);
-            if (isMentorPrincipal(principal)
-                    && mentorContentAccessService.canAccessMentorOnlyContent(principal.getPublicId())) {
-                allowed.add(BlogVisibility.MENTOR_ONLY);
-            }
-        }
-        return allowed;
+        return principal == null
+                ? List.of(BlogVisibility.PUBLIC)
+                : List.of(BlogVisibility.PUBLIC, BlogVisibility.AUTHENTICATED);
     }
 
-    private boolean isMentorPrincipal(UserPrincipal principal) {
-        return principal.getRoles() != null && principal.getRoles().contains(RoleCode.MENTOR);
+    private BlogTrendingSegment resolveTrendingSegment(UserPrincipal principal) {
+        if (principal == null) {
+            return BlogTrendingSegment.ANONYMOUS;
+        }
+        return BlogTrendingSegment.AUTHENTICATED_MEMBER;
+    }
+
+    private List<BlogVisibility> allowedVisibilitiesForSegment(BlogTrendingSegment segment) {
+        return switch (segment) {
+            case ANONYMOUS -> List.of(BlogVisibility.PUBLIC);
+            case AUTHENTICATED_MEMBER -> List.of(BlogVisibility.PUBLIC, BlogVisibility.AUTHENTICATED);
+            case ACTIVE_MENTOR -> List.of(BlogVisibility.PUBLIC, BlogVisibility.AUTHENTICATED);
+        };
+    }
+
+    private boolean hasPremiumEntitlement(UserPrincipal principal, BlogPost post) {
+        if (principal == null || post.getEntitledServices() == null || post.getEntitledServices().isEmpty()) {
+            return false;
+        }
+        return post.getEntitledServices().stream()
+                .anyMatch(service -> bookingEligibilityPolicy.canAccessServiceResources(principal.getPublicId(), service.getId()));
+    }
+
+    private boolean isAuthorPubliclyReadable(BlogPost post) {
+        if (post.getAuthorType() != com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR) {
+            return true;
+        }
+        User author = post.getAuthorUser();
+        if (author == null || author.getStatus() == UserStatus.BANNED || author.getStatus() == UserStatus.DELETED) {
+            return false;
+        }
+        return mentorProfileRepository.findById(author.getId())
+                .map(profile -> profile.getStatus() != MentorStatus.SUSPENDED)
+                .orElse(false);
     }
 
     private UUID userId(UserPrincipal principal) {
@@ -600,6 +693,10 @@ public class BlogService {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
         return principal.getPublicId();
+    }
+
+    private void signalTrendingChange(UUID postId) {
+        eventPublisher.publishEvent(new BlogTrendingRankingChangedEvent(postId));
     }
 
     private String viewerKey(UserPrincipal principal, String sessionId, String serverFingerprint) {

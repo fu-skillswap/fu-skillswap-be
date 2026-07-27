@@ -38,13 +38,9 @@ public class GoogleCalendarConnectionService {
     private final GoogleOAuthStateService googleOAuthStateService;
     private final GoogleApiProperties googleApiProperties;
 
-    @Transactional
     public GoogleCalendarStatusResponse connect(UUID userId, GoogleCalendarConnectRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
-        if (!user.getRoles().contains(RoleCode.MENTOR)) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor mới có thể kết nối Google Calendar");
-        }
+        // Keep database transactions short: Google OAuth calls can take seconds or time out.
+        requireMentorUser(userId);
         validateConfiguredRedirectUri(request.redirectUri());
 
         GoogleCalendarApiClient.GoogleTokenResponse tokenResponse =
@@ -58,21 +54,24 @@ public class GoogleCalendarConnectionService {
             throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Tài khoản Google Calendar chưa có email xác thực");
         }
 
-        GoogleCalendarConnection connection = connectionRepository.findByUserIdForUpdate(userId)
-                .orElseGet(() -> GoogleCalendarConnection.builder().user(user).build());
-        connection.setGoogleSubject(userInfo.subject());
-        connection.setGoogleEmail(userInfo.email());
-        connection.setCalendarId("primary");
-        connection.setAccessTokenCiphertext(googleTokenCryptoService.encrypt(tokenResponse.accessToken()));
-        connection.setRefreshTokenCiphertext(googleTokenCryptoService.encrypt(tokenResponse.refreshToken()));
-        connection.setTokenExpiresAt(resolveTokenExpiry(tokenResponse.expiresInSeconds()));
-        connection.setGrantedScopes(tokenResponse.scope());
-        connection.setKeyVersion(googleTokenCryptoService.currentKeyVersion());
-        connection.setConnectionStatus(GoogleCalendarConnectionStatus.ACTIVE);
-        connection.setLastSyncErrorCode(null);
-        connection.setLastSyncErrorMessage(null);
-        connectionRepository.save(connection);
-        return toStatusResponse(connection, true);
+        return transactionTemplate.execute(status -> {
+            User user = requireMentorUser(userId);
+            GoogleCalendarConnection connection = connectionRepository.findByUserIdForUpdate(userId)
+                    .orElseGet(() -> GoogleCalendarConnection.builder().user(user).build());
+            connection.setGoogleSubject(userInfo.subject());
+            connection.setGoogleEmail(userInfo.email());
+            connection.setCalendarId("primary");
+            connection.setAccessTokenCiphertext(googleTokenCryptoService.encrypt(tokenResponse.accessToken()));
+            connection.setRefreshTokenCiphertext(googleTokenCryptoService.encrypt(tokenResponse.refreshToken()));
+            connection.setTokenExpiresAt(resolveTokenExpiry(tokenResponse.expiresInSeconds()));
+            connection.setGrantedScopes(tokenResponse.scope());
+            connection.setKeyVersion(googleTokenCryptoService.currentKeyVersion());
+            connection.setConnectionStatus(GoogleCalendarConnectionStatus.ACTIVE);
+            connection.setLastSyncErrorCode(null);
+            connection.setLastSyncErrorMessage(null);
+            connectionRepository.save(connection);
+            return toStatusResponse(connection, true);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -92,26 +91,54 @@ public class GoogleCalendarConnectionService {
                 ));
     }
 
-    @Transactional
     public GoogleCalendarStatusResponse disconnect(UUID userId) {
-        GoogleCalendarConnection connection = connectionRepository.findByUserIdForUpdate(userId).orElse(null);
-        if (connection == null) {
+        ConnectionRevocationSnapshot snapshot = transactionTemplate.execute(status -> connectionRepository.findByUserId(userId)
+                .map(connection -> new ConnectionRevocationSnapshot(
+                        connection.getId(),
+                        connection.getAccessTokenCiphertext(),
+                        connection.getRefreshTokenCiphertext()
+                ))
+                .orElse(null));
+        if (snapshot == null) {
             return new GoogleCalendarStatusResponse(false, false, null, Collections.emptyList(), false, null, null, null, null);
         }
-        String accessToken = decryptQuietly(connection.getAccessTokenCiphertext());
-        String refreshToken = decryptQuietly(connection.getRefreshTokenCiphertext());
+        String accessToken = decryptQuietly(snapshot.accessTokenCiphertext());
+        String refreshToken = decryptQuietly(snapshot.refreshTokenCiphertext());
         googleCalendarApiClient.revokeToken(StringUtils.hasText(refreshToken) ? refreshToken : accessToken);
 
-        connection.setConnectionStatus(GoogleCalendarConnectionStatus.REVOKED);
-        connection.setAccessTokenCiphertext(googleTokenCryptoService.encrypt("revoked"));
-        connection.setRefreshTokenCiphertext(null);
-        connection.setTokenExpiresAt(null);
-        connection.setLastSyncStatus(GoogleCalendarSyncStatus.REVOKED);
-        connection.setLastSyncAt(DateTimeUtil.now());
-        connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REVOKED");
-        connection.setLastSyncErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
-        connectionRepository.save(connection);
-        return toStatusResponse(connection, false);
+        return transactionTemplate.execute(status -> {
+            GoogleCalendarConnection connection = connectionRepository.findByIdForUpdate(snapshot.id()).orElse(null);
+            if (connection == null) {
+                return new GoogleCalendarStatusResponse(false, false, null, Collections.emptyList(), false, null, null, null, null);
+            }
+            // Do not revoke a new connection that replaced the one whose token was sent to Google.
+            if (!java.util.Objects.equals(connection.getAccessTokenCiphertext(), snapshot.accessTokenCiphertext())
+                    || !java.util.Objects.equals(connection.getRefreshTokenCiphertext(), snapshot.refreshTokenCiphertext())) {
+                return toStatusResponse(connection, true);
+            }
+            connection.setConnectionStatus(GoogleCalendarConnectionStatus.REVOKED);
+            connection.setAccessTokenCiphertext(googleTokenCryptoService.encrypt("revoked"));
+            connection.setRefreshTokenCiphertext(null);
+            connection.setTokenExpiresAt(null);
+            connection.setLastSyncStatus(GoogleCalendarSyncStatus.REVOKED);
+            connection.setLastSyncAt(DateTimeUtil.now());
+            connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REVOKED");
+            connection.setLastSyncErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
+            connectionRepository.save(connection);
+            return toStatusResponse(connection, false);
+        });
+    }
+
+    private User requireMentorUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
+        if (!user.getRoles().contains(RoleCode.MENTOR)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor mới có thể kết nối Google Calendar");
+        }
+        return user;
+    }
+
+    private record ConnectionRevocationSnapshot(UUID id, String accessTokenCiphertext, String refreshTokenCiphertext) {
     }
 
     @Transactional(readOnly = true)

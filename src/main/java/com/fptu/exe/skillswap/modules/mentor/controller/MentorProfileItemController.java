@@ -29,7 +29,7 @@ import java.util.UUID;
 @RestController
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
+@PreAuthorize("hasAnyRole('MENTEE', 'MENTOR')")
 public class MentorProfileItemController {
 
     private final MentorProfileItemService mentorProfileItemService;

@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.infrastructure.storage;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.time.Duration;
 
 public interface StorageGateway {
 
@@ -22,9 +24,19 @@ public interface StorageGateway {
 
     ObjectMetadata headObject(String objectKey);
 
+    PrivatePresignedUpload generatePrivateUploadUrl(String objectKey, String contentType, Duration ttl);
+
+    PrivatePresignedDownload generatePrivateDownloadUrl(String objectKey, Duration ttl, String contentDisposition);
+
+    InputStream openObject(String objectKey) throws IOException;
+
     record StorageUploadResult(String objectKey, String publicUrl) {}
 
     record PresignedUpload(String uploadUrl, String publicUrl, String objectKey) {}
 
     record ObjectMetadata(String objectKey, String contentType, long sizeBytes) {}
+
+    record PrivatePresignedUpload(String uploadUrl, String objectKey, java.time.Instant expiresAt) {}
+
+    record PrivatePresignedDownload(String downloadUrl, java.time.Instant expiresAt) {}
 }

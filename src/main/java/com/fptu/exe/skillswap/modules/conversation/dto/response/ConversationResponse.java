@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.conversation.dto.response;
 
-import com.fptu.exe.skillswap.modules.conversation.domain.ConversationSourceType;
 import com.fptu.exe.skillswap.modules.conversation.domain.ConversationStatus;
 import com.fptu.exe.skillswap.modules.conversation.domain.ConversationType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -8,16 +7,14 @@ import lombok.Builder;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import com.fptu.exe.skillswap.modules.conversation.domain.ChatMessagingAccess;
+import com.fptu.exe.skillswap.modules.conversation.domain.ChatReadOnlyReason;
 
 @Builder
 @Schema(description = "Conversation summary shown in the current user's inbox. Conversations are typically created automatically after a booking is accepted.")
 public record ConversationResponse(
         @Schema(description = "Conversation ID", example = "019f5234-aaaa-bbbb-cccc-1234567890ab")
         UUID id,
-        @Schema(description = "Business source that created the conversation", example = "BOOKING")
-        ConversationSourceType sourceType,
-        @Schema(description = "ID of the source entity, such as the booking that created this conversation", example = "019f4234-aaaa-bbbb-cccc-1234567890ab")
-        UUID sourceId,
         @Schema(description = "Conversation type", example = "DIRECT")
         ConversationType type,
         @Schema(description = "Conversation status", example = "ACTIVE")
@@ -35,6 +32,13 @@ public record ConversationResponse(
         @Schema(description = "Conversation creation time", example = "2026-06-24T10:30:00")
         LocalDateTime createdAt,
         @Schema(description = "Số lượng tin nhắn chưa đọc đối với user hiện tại", example = "3")
-        long unreadCount
+        long unreadCount,
+        ChatMessagingAccess messagingAccess,
+        boolean canSendMessages,
+        boolean canUploadAttachments,
+        boolean canDownloadAttachments,
+        ChatReadOnlyReason readOnlyReason,
+        LocalDateTime messagingWindowEndsAt,
+        boolean postSessionChatPermanent
 ) {
 }

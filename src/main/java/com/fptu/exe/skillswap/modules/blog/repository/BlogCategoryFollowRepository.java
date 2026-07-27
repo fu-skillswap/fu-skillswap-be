@@ -15,6 +15,8 @@ public interface BlogCategoryFollowRepository extends JpaRepository<BlogCategory
 
     boolean existsByUserIdAndCategoryId(UUID userId, UUID categoryId);
 
+    long countByUserId(UUID userId);
+
     void deleteByUserIdAndCategoryId(UUID userId, UUID categoryId);
 
     @EntityGraph(attributePaths = "category")

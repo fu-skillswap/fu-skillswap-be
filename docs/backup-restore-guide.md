@@ -16,30 +16,28 @@ Pipeline CI/CD đã được cấu hình để tự động gọi script `ops/ba
 
 Trong trường hợp cần phục hồi dữ liệu từ file backup (ví dụ: `skillswap-20231015T120000Z.dump.gz`), thực hiện các bước sau:
 
-1. **Giải nén file backup**:
-   ```bash
-   gunzip /opt/skillswap/backups/skillswap-20231015T120000Z.dump.gz
-   ```
-
-2. **Dừng Backend Container (để tránh thay đổi dữ liệu trong lúc restore)**:
+1. **Drain traffic và dừng Backend Container** (để tránh thay đổi dữ liệu trong lúc restore):
    ```bash
    docker compose -f docker-compose.prod.yml stop spring-backend
    ```
 
-3. **Chạy Script Restore**:
+2. **Chạy Script Restore**:
    Dự án cung cấp sẵn script `ops/restore-postgres.sh` để đẩy file dump vào DB.
    ```bash
    # Nạp biến môi trường
    set -a; source .env; set +a
    
-   # Chạy script với đường dẫn tới file dump (đã giải nén)
-   bash ops/restore-postgres.sh /opt/skillswap/backups/skillswap-20231015T120000Z.dump
+   # Chỉ chạy sau khi reverse proxy đã drain traffic.
+   PRODUCTION_TRAFFIC_DRAINED=true \
+   SKILLSWAP_RESTORE_CONFIRM=RESTORE_PRODUCTION \
+   bash ops/restore-postgres.sh /opt/skillswap/backups/skillswap-20231015T120000Z.dump.gz
    ```
+   Script tự kiểm tra checksum cạnh file `.sha256` (nếu có), giải nén tạm và chạy `pg_restore --list` trước khi restore.
 
-4. **Khởi động lại Backend**:
+3. **Khởi động lại Backend**:
    ```bash
    docker compose -f docker-compose.prod.yml start spring-backend
    ```
 
-5. **Xác minh**:
+4. **Xác minh**:
    Chạy các bài Smoke Test để đảm bảo dữ liệu đã về đúng trạng thái và App kết nối DB bình thường.

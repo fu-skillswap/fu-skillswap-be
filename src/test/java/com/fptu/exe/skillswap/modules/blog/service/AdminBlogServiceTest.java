@@ -2,12 +2,15 @@ package com.fptu.exe.skillswap.modules.blog.service;
 
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
-import com.fptu.exe.skillswap.modules.blog.dto.request.BlogPostUpsertRequest;
+import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
+import com.fptu.exe.skillswap.modules.blog.dto.request.AdminBlogPostCreateRequest;
+import com.fptu.exe.skillswap.modules.blog.dto.request.AdminBlogPostUpdateRequest;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +29,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class AdminBlogServiceTest {
@@ -44,6 +49,8 @@ class AdminBlogServiceTest {
     private EntityManager entityManager;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private AdminAuditWriterService adminAuditWriterService;
 
     private AdminBlogService service;
 
@@ -57,7 +64,8 @@ class AdminBlogServiceTest {
                 new BlogContentPolicy(),
                 cursorCodec,
                 entityManager,
-                eventPublisher
+                eventPublisher,
+                adminAuditWriterService
         );
     }
 
@@ -69,22 +77,9 @@ class AdminBlogServiceTest {
         when(entityManager.getReference(User.class, authorId)).thenReturn(author);
         when(blogPostRepository.save(any(BlogPost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        service.createPost(authorId, new BlogPostUpsertRequest(
-                "Lập trình Java",
-                null,
-                "Intro",
-                "Hello Java",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                List.of(),
-                List.of()
+        service.createPost(authorId, new AdminBlogPostCreateRequest(
+                "Lập trình Java", null, "Intro", "Hello Java", null, null, null, null,
+                null, null, null, null, List.of(), List.of()
         ));
 
         // Assertion is performed through the saved entity returned by mock mapper setup absence:
@@ -124,10 +119,12 @@ class AdminBlogServiceTest {
                 .slugLocked(true)
                 .contentMarkdown("Content")
                 .status(BlogPostStatus.PUBLISHED)
+                .version(0)
                 .build();
         when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post));
 
-        assertThrows(BaseException.class, () -> service.updatePost(postId, new BlogPostUpsertRequest(
+        assertThrows(BaseException.class, () -> service.updatePost(postId, new AdminBlogPostUpdateRequest(
+                0,
                 "Title",
                 "new-slug",
                 null,
@@ -140,9 +137,32 @@ class AdminBlogServiceTest {
                 null,
                 null,
                 null,
-                null,
                 List.of(),
                 List.of()
         )));
+    }
+
+    @Test
+    void updatePost_shouldRejectStaleVersionWithoutWriting() {
+        UUID postId = UUID.fromString("018f3abf-0a22-7162-9748-6cf000c47b6e");
+        BlogPost post = BlogPost.builder()
+                .id(postId)
+                .title("Title")
+                .slug("title")
+                .contentMarkdown("Content")
+                .status(BlogPostStatus.DRAFT)
+                .version(3)
+                .build();
+        when(blogPostRepository.findById(postId)).thenReturn(Optional.of(post));
+
+        VersionConflictException exception = assertThrows(VersionConflictException.class,
+                () -> service.updatePost(postId, new AdminBlogPostUpdateRequest(
+                        2, "Changed title", "title", null, "Content", null, null,
+                        null, null, null, null, null, null, List.of(), List.of())));
+
+        assertEquals(postId, exception.getResourceId());
+        assertEquals(2, exception.getExpectedVersion());
+        assertEquals(3, exception.getCurrentVersion());
+        verify(blogPostRepository, never()).save(any(BlogPost.class));
     }
 }

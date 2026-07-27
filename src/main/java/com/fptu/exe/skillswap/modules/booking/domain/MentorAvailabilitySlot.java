@@ -53,6 +53,11 @@ public class MentorAvailabilitySlot {
     @Builder.Default
     private boolean isBooked = false;
 
+    @Version
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer version = 0;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;

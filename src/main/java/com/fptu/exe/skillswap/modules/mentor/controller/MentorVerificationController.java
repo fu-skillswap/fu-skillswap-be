@@ -3,7 +3,9 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentUploadIntentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
@@ -54,7 +56,7 @@ import java.util.UUID;
  * <p>Users who already have the MENTOR role are not blocked — they may need to re-submit
  * verification if their status changes (e.g., after deactivation + reactivation cycle).
  */
-@PreAuthorize("!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
+@PreAuthorize("hasAnyRole('MENTEE', 'MENTOR')")
 public class MentorVerificationController {
 
     private final MentorVerificationService mentorVerificationService;
@@ -119,7 +121,7 @@ public class MentorVerificationController {
 
     @Operation(
             summary = "Xác nhận verification document đã upload bằng presigned URL",
-            description = "FE gửi objectKey do BE đã cấp. Backend HEAD object trên private storage và đối chiếu content type/size trước khi gắn file vào request."
+            description = "FE gửi uploadIntentId. Backend HEAD object trên private storage và đối chiếu content type/size trước khi gắn file vào request."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Lưu tài liệu thành công"),
@@ -132,7 +134,7 @@ public class MentorVerificationController {
             @Valid @RequestBody MentorVerificationDocumentUploadRequest request
     ) {
         ensureAuthenticated(principal);
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER,
                 "mentor-verification:upload:" + principal.getPublicId(),
                 12,
                 java.time.Duration.ofMinutes(15),
@@ -143,6 +145,19 @@ public class MentorVerificationController {
                 request
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
+    }
+
+    @Operation(summary = "Tạo private upload intent cho verification document")
+    @PostMapping("/documents/upload-intents")
+    public ResponseEntity<ApiResponse<MentorVerificationDocumentUploadIntentResponse>> createDocumentUploadIntent(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody MentorVerificationDocumentUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER, "mentor-verification:upload-intent:" + principal.getPublicId(), 12,
+                java.time.Duration.ofMinutes(15), "Bạn đang tạo upload intent quá nhanh, vui lòng thử lại sau");
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(
+                mentorVerificationService.createDocumentUploadIntent(principal.getPublicId(), request)));
     }
 
     @Operation(
@@ -160,7 +175,7 @@ public class MentorVerificationController {
             @Valid @RequestBody MentorVerificationSubmitRequest request
     ) {
         ensureAuthenticated(principal);
-        rateLimitService.check(
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "mentor-verification:submit:" + principal.getPublicId(),
                 5,
                 java.time.Duration.ofHours(1),

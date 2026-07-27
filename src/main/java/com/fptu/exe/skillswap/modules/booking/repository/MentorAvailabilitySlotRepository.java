@@ -84,7 +84,6 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             left join fetch slot.slotServices ss
             left join fetch ss.service
             where slot.mentorProfile.userId = :mentorUserId
-              and slot.isActive = true
               and slot.startTime < :endTime
               and slot.endTime > :startTime
             order by slot.startTime asc
@@ -133,4 +132,14 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             @Param("mentorUserIds") java.util.Collection<UUID> mentorUserIds,
             @Param("now") LocalDateTime now
     );
+
+    @Modifying
+    @Query("""
+            update MentorAvailabilitySlot slot
+            set slot.version = slot.version + 1,
+                slot.updatedAt = :updatedAt
+            where slot.id in :slotIds
+            """)
+    int bumpVersions(@Param("slotIds") java.util.Collection<UUID> slotIds,
+                     @Param("updatedAt") LocalDateTime updatedAt);
 }

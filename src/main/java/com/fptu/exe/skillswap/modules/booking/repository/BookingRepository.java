@@ -210,6 +210,14 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMenteeId(UUID menteeId);
 
+    boolean existsByMenteeIdAndServiceIdAndStatusIn(UUID menteeId, UUID serviceId, Collection<BookingStatus> statuses);
+
+    @Query("select distinct booking.mentee.id from Booking booking where booking.service.id in :serviceIds and booking.status in :statuses")
+    List<UUID> findDistinctMenteeIdsByServiceIdsAndStatusIn(
+            @Param("serviceIds") Collection<UUID> serviceIds,
+            @Param("statuses") Collection<BookingStatus> statuses
+    );
+
     long countByMentorProfileUserId(UUID mentorUserId);
 
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
@@ -227,12 +235,20 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
+    List<Booking> findByServiceIdAndStatus(UUID serviceId, BookingStatus status);
+
     long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
     List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(BookingStatus status, LocalDateTime selectedStartTimeBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
+            BookingStatus status,
+            LocalDateTime pendingExpireAt
+    );
 
     @Query("""
             select booking

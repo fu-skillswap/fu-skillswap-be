@@ -9,6 +9,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
@@ -64,6 +66,8 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.ArrayList;
 import java.util.List;
@@ -83,8 +87,8 @@ public class BookingService {
     private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
     private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
     private static final long POST_SESSION_REVIEW_WINDOW_HOURS = 4;
-    private static final long PAYMENT_WINDOW_MINUTES = 360;
-    private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    private static final long PAYMENT_WINDOW_MINUTES = BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES;
+    private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
     private static final int MAX_SERVICE_PRICE_SCOIN_PER_MINUTE = 500_000;
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
@@ -120,6 +124,7 @@ public class BookingService {
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
+    private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
 
     public BookingService(
             BookingRepository bookingRepository,
@@ -155,9 +160,16 @@ public class BookingService {
                 paymentOrderService,
                 bookingSlotValidator,
                 bookingEligibilityPolicy,
-                null,
-                paymentProperties,
-                internalTelemetryService);
+                 null,
+                 paymentProperties,
+                internalTelemetryService,
+                new BookingLifecycleMaintenanceService(
+                        bookingRepository,
+                        mentorProfileRepository,
+                        paymentOrderService,
+                        settlementService,
+                        eventPublisher,
+                        null));
     }
 
     @Transactional
@@ -179,7 +191,7 @@ public class BookingService {
                     "Bạn đang có tối đa 5 yêu cầu đặt lịch đang chờ phản hồi. Vui lòng chờ mentor phản hồi hoặc hủy bớt yêu cầu đang chờ để đặt lịch mới.");
         }
 
-        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(request.availabilitySlotId())
+        MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(request.slotId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
 
         MentorProfile mentorProfile = slot.getMentorProfile();
@@ -216,8 +228,13 @@ public class BookingService {
         }
 
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
-        LocalDateTime selectedStartTime = request.selectedStartTime();
-        LocalDateTime selectedEndTime = request.selectedEndTime();
+        Instant requestedStartAt = request.startAt();
+        if (requestedStartAt == null || (request.legacySelectedEndTime() == null
+                && (requestedStartAt.getEpochSecond() % 60 != 0 || requestedStartAt.getNano() != 0))) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "SCHEDULING_TIME_PRECISION_INVALID");
+        }
+        LocalDateTime selectedStartTime = LocalDateTime.ofInstant(requestedStartAt, ZoneOffset.UTC);
+        LocalDateTime selectedEndTime = selectedStartTime.plusMinutes(mentorService.getDurationMinutes());
         bookingSlotValidator.validateSelectedRange(slot, mentorService, selectedStartTime, selectedEndTime, now);
         bookingSlotValidator.validateServiceAttachedToSlot(slot.getId(), mentorService.getId());
         bookingSlotValidator.validateCandidateSelection(slot, mentorService, menteeUserId, selectedStartTime, selectedEndTime);
@@ -236,6 +253,12 @@ public class BookingService {
                     "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho đúng segment này.");
         }
 
+        LocalDateTime pendingExpireAt = BookingDeadlinePolicy.resolvePendingExpiry(now, selectedStartTime);
+        if (pendingExpireAt == null || !pendingExpireAt.isAfter(now)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Khung giờ không còn đủ thời gian để mentor phản hồi yêu cầu booking.");
+        }
+
         Booking savedBooking = bookingRepository.save(Booking.builder()
                 .mentee(mentee)
                 .mentorProfile(mentorProfile)
@@ -245,12 +268,14 @@ public class BookingService {
                 .learningGoalDescription(trimToNull(request.learningGoalDescription()))
                 .selectedStartTime(selectedStartTime)
                 .selectedEndTime(selectedEndTime)
+                .pendingExpireAt(pendingExpireAt)
                 .serviceTitleSnapshot(mentorService.getTitle())
                 .serviceDescriptionSnapshot(mentorService.getDescription())
                 .serviceDurationSnapshot(mentorService.getDurationMinutes())
                 .serviceExpectedOutcomeSnapshot(mentorService.getExpectedOutcome())
                 .serviceIsFreeSnapshot(mentorService.isFree())
                 .servicePriceScoinSnapshot(normalizedServicePrice(mentorService))
+                .maintainPostSessionChatSnapshot(mentorService.isMaintainPostSessionChat())
                 .build());
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
@@ -271,7 +296,7 @@ public class BookingService {
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
         ));
         internalTelemetryService.record(
-                "BOOKING_STARTED",
+                "BOOKING_CREATED",
                 menteeUserId,
                 "BOOKING",
                 savedBooking.getId(),
@@ -414,6 +439,11 @@ public class BookingService {
         }
 
         LocalDateTime now = DateTimeUtil.now();
+        if (booking.getPendingExpireAt() != null && !booking.getPendingExpireAt().isAfter(now)) {
+            // The scheduler owns terminal cleanup, but an interactive accept must never bypass the SLA.
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Yêu cầu đặt lịch đã quá hạn phản hồi và không thể được chấp nhận.");
+        }
         LocalDateTime selectedStartTime = selectedStartTime(booking);
         LocalDateTime selectedEndTime = selectedEndTime(booking);
         if (selectedStartTime == null || selectedEndTime == null || !selectedEndTime.isAfter(selectedStartTime)) {
@@ -450,6 +480,12 @@ public class BookingService {
                 selectedStartTime,
                 selectedEndTime
         );
+        List<Booking> menteePendingBookings = bookingRepository.findMenteeOverlappingBookingsForUpdate(
+                booking.getMentee().getId(),
+                List.of(BookingStatus.PENDING),
+                selectedStartTime,
+                selectedEndTime
+        );
 
         boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
                 || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0);
@@ -482,7 +518,20 @@ public class BookingService {
             pendingBooking.setRejectReason(BookingQueueConstants.AUTO_REJECT_SLOT_ACCEPTED_REASON);
         }
 
-        bookingRepository.saveAll(pendingBookings);
+        // A newly accepted booking reserves both participants. Pending requests for this
+        // mentee at other mentors are no longer actionable and must not remain queued.
+        for (Booking pendingBooking : menteePendingBookings) {
+            if (pendingBooking.getId().equals(booking.getId())) {
+                continue;
+            }
+            pendingBooking.setStatus(BookingStatus.REJECTED);
+            pendingBooking.setRejectedAt(now);
+            pendingBooking.setRejectReason("MENTEE_TIME_LOCKED_BY_OTHER_BOOKING");
+        }
+
+        bookingRepository.saveAll(new java.util.ArrayList<>(java.util.stream.Stream.concat(pendingBookings.stream(), menteePendingBookings.stream())
+                .collect(java.util.stream.Collectors.toMap(Booking::getId, value -> value, (left, right) -> left))
+                .values()));
         Booking savedBooking = bookingRepository.save(booking);
 
         if (isFree) {
@@ -1222,6 +1271,9 @@ public class BookingService {
         if (completionOutcome == null) {
             completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
         }
+        BookingDisplayGuidance displayGuidance = deriveDisplayGuidance(
+                booking, isMenteeUser, isMentorUser, now, startTime, endTime, completionOutcome, canSubmitFeedback
+        );
 
         return BookingResponse.builder()
                 .bookingId(booking.getId())
@@ -1243,6 +1295,7 @@ public class BookingService {
                 .serviceDurationSnapshot(booking.getServiceDurationSnapshot())
                 .serviceIsFreeSnapshot(booking.getServiceIsFreeSnapshot())
                 .servicePriceScoinSnapshot(booking.getServicePriceScoinSnapshot())
+                .maintainPostSessionChatSnapshot(booking.isMaintainPostSessionChatSnapshot())
                 .servicePriceWithSurchargeScoin(calculateMenteeVisiblePrice(booking.getServiceIsFreeSnapshot(), booking.getServicePriceScoinSnapshot()))
                 .status(booking.getStatus())
                 .bookingStatus(bookingLifecycleStatus)
@@ -1265,6 +1318,7 @@ public class BookingService {
                 .actualStartTime(actualStart)
                 .actualEndTime(actualEnd)
                 .acceptedAt(booking.getAcceptedAt())
+                .pendingExpireAt(booking.getPendingExpireAt())
                 .rejectedAt(booking.getRejectedAt())
                 .cancelledAt(booking.getCancelledAt())
                 .completedAt(booking.getCompletedAt())
@@ -1289,8 +1343,65 @@ public class BookingService {
                 .canComplete(canComplete)
                 .canReschedule(canReschedule)
                 .canSubmitFeedback(canSubmitFeedback)
+                .cancellationRefundPolicy(BookingCancellationRefundPolicy.current())
+                .displayState(displayGuidance.state())
+                .nextAction(displayGuidance.action())
+                .actionDeadlineAt(displayGuidance.deadlineAt())
                 .build();
     }
+
+    private BookingDisplayGuidance deriveDisplayGuidance(
+            Booking booking,
+            boolean isMentee,
+            boolean isMentor,
+            LocalDateTime now,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
+            BookingCompletionOutcome outcome,
+            boolean canSubmitFeedback
+    ) {
+        if (booking.getStatus() == BookingStatus.UNDER_REVIEW || outcome == BookingCompletionOutcome.UNDER_REVIEW) {
+            return new BookingDisplayGuidance(BookingDisplayState.UNDER_REVIEW, BookingNextAction.VIEW_ISSUE, null);
+        }
+        if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR
+                || booking.getStatus() == BookingStatus.REJECTED || booking.getStatus() == BookingStatus.EXPIRED || booking.getStatus() == BookingStatus.NO_SHOW) {
+            return new BookingDisplayGuidance(BookingDisplayState.CANCELED_OR_EXPIRED, BookingNextAction.NONE, null);
+        }
+        if (booking.getStatus() == BookingStatus.PENDING) {
+            return isMentor
+                    ? new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED, BookingNextAction.ACCEPT_OR_REJECT, booking.getPendingExpireAt())
+                    : new BookingDisplayGuidance(BookingDisplayState.PENDING_MENTOR_RESPONSE, BookingNextAction.NONE, booking.getPendingExpireAt());
+        }
+        if (booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
+            return isMentee
+                    ? new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.PAY_NOW, resolvePaymentDeadline(booking))
+                    : new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.NONE, resolvePaymentDeadline(booking));
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+            return new BookingDisplayGuidance(BookingDisplayState.WAITING_CONFIRMATION,
+                    isMentee ? BookingNextAction.CONFIRM_SESSION : BookingNextAction.NONE,
+                    booking.getCompletedAt() == null ? null : booking.getCompletedAt().plusHours(POST_SESSION_REVIEW_WINDOW_HOURS));
+        }
+        if (booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION) {
+            return new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED,
+                    isMentor ? BookingNextAction.COMPLETE_SESSION : BookingNextAction.NONE, null);
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getStatus() == BookingStatus.AUTO_CLOSED) {
+            return canSubmitFeedback
+                    ? new BookingDisplayGuidance(BookingDisplayState.FEEDBACK_REQUIRED, BookingNextAction.LEAVE_FEEDBACK, null)
+                    : new BookingDisplayGuidance(BookingDisplayState.COMPLETED, BookingNextAction.NONE, null);
+        }
+        if (endTime != null && !now.isBefore(endTime)) {
+            return new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED,
+                    isMentor ? BookingNextAction.COMPLETE_SESSION : BookingNextAction.NONE, null);
+        }
+        if (startTime != null && !now.isBefore(startTime) && (endTime == null || now.isBefore(endTime))) {
+            return new BookingDisplayGuidance(BookingDisplayState.IN_SESSION, BookingNextAction.NONE, null);
+        }
+        return new BookingDisplayGuidance(BookingDisplayState.UPCOMING, BookingNextAction.NONE, null);
+    }
+
+    private record BookingDisplayGuidance(BookingDisplayState state, BookingNextAction action, LocalDateTime deadlineAt) {}
 
     private com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder resolvePaymentOrder(
             Booking booking,
@@ -1601,20 +1712,11 @@ public class BookingService {
         if (booking == null) {
             return null;
         }
-        LocalDateTime acceptedDeadline = booking.getAcceptedAt() == null
-                ? null
-                : booking.getAcceptedAt().plusMinutes(PAYMENT_WINDOW_MINUTES);
         LocalDateTime startDeadline = booking.getSelectedStartTime();
         if (startDeadline == null && booking.getSlot() != null) {
             startDeadline = booking.getSlot().getStartTime();
         }
-        if (acceptedDeadline == null) {
-            return startDeadline;
-        }
-        if (startDeadline == null) {
-            return acceptedDeadline;
-        }
-        return acceptedDeadline.isBefore(startDeadline) ? acceptedDeadline : startDeadline;
+        return BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), startDeadline);
     }
 
     private boolean isPaymentDeadlineReached(Booking booking, LocalDateTime now) {
@@ -1650,40 +1752,7 @@ public class BookingService {
 
     @Transactional
     public void rejectAllPendingBookingsForMentor(UUID mentorUserId, String reason) {
-        if (mentorUserId == null) {
-            return;
-        }
-        List<Booking> pendingBookings = bookingRepository.findByMentorProfileUserIdAndStatus(mentorUserId, BookingStatus.PENDING);
-        if (pendingBookings.isEmpty()) {
-            return;
-        }
-        for (Booking booking : pendingBookings) {
-            booking.setStatus(BookingStatus.REJECTED);
-            booking.setRejectedAt(DateTimeUtil.now());
-            booking.setRejectReason(reason);
-            if (booking.getSlot() != null) {
-                booking.getSlot().setBooked(false);
-            }
-        }
-        bookingRepository.saveAll(pendingBookings);
-        for (Booking booking : pendingBookings) {
-            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
-                    booking.getMentee().getId(),
-                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_AUTO_REJECTED,
-                    "Yêu cầu đặt lịch không còn hiệu lực",
-                    buildAutoRejectedMessage(reason),
-                    "BOOKING",
-                    booking.getId()
-            ));
-            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
-                    booking.getId(),
-                    booking.getMentee().getId(),
-                    booking.getMentorProfile().getUserId(),
-                    booking.getStatus(),
-                    "Yêu cầu đặt lịch không còn hiệu lực.",
-                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
-            ));
-        }
+        bookingLifecycleMaintenanceService.rejectAllPendingBookingsForMentor(mentorUserId, reason);
     }
 
     @Transactional
@@ -1860,8 +1929,8 @@ public class BookingService {
     @Transactional
     public int expireStalePendingBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        String reason = "Yêu cầu đặt lịch đã tự động hết hạn do vượt quá thời gian bắt đầu.";
-        List<Booking> staleBookings = bookingRepository.findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(
+        String reason = "Yêu cầu đặt lịch đã tự động hết hạn vì mentor chưa phản hồi đúng hạn.";
+        List<Booking> staleBookings = bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
                 BookingStatus.PENDING,
                 now
         );
@@ -1869,7 +1938,7 @@ public class BookingService {
             return 0;
         }
         for (Booking booking : staleBookings) {
-            booking.setStatus(BookingStatus.REJECTED);
+            booking.setStatus(BookingStatus.EXPIRED);
             booking.setRejectedAt(now);
             booking.setRejectReason(reason);
             if (booking.getSlot() != null) {
@@ -1882,7 +1951,15 @@ public class BookingService {
                     booking.getMentee().getId(),
                     com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn",
-                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi trước giờ bắt đầu. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
+                    "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi đúng hạn. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
+                    "BOOKING",
+                    booking.getId()
+            ));
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+                    booking.getMentorProfile().getUserId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_REQUEST_EXPIRED,
+                    "Yêu cầu đặt lịch đã được giải phóng",
+                    "Một yêu cầu booking chưa được phản hồi đã hết hạn. Khung giờ hiện có thể nhận yêu cầu khác.",
                     "BOOKING",
                     booking.getId()
             ));
@@ -1905,7 +1982,7 @@ public class BookingService {
         List<UUID> staleBookingIds = bookingRepository.findAwaitingPaymentExpiryCandidates(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                 acceptedAtCutoff,
-                now
+                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES)
         ).stream().map(Booking::getId).toList();
         if (staleBookingIds.isEmpty()) {
             return 0;
@@ -1941,6 +2018,14 @@ public class BookingService {
                     "Yêu cầu đặt lịch đã hết hạn thanh toán",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng "
                             + PAYMENT_DEADLINE_TEXT + ".",
+                    "BOOKING",
+                    booking.getId()
+            ));
+            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+                    booking.getMentorProfile().getUserId(),
+                    com.fptu.exe.skillswap.modules.notification.domain.NotificationType.BOOKING_PAYMENT_EXPIRED,
+                    "Khung giờ đã được giải phóng",
+                    "Mentee chưa hoàn tất thanh toán đúng hạn. Khung giờ mentoring hiện có thể nhận yêu cầu khác.",
                     "BOOKING",
                     booking.getId()
             ));

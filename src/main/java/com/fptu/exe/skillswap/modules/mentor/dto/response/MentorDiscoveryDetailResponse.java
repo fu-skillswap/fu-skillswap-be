@@ -72,6 +72,7 @@ public record MentorDiscoveryDetailResponse(
         List<MentorTagResponse> helpTopicTags,
         @Schema(description = "Danh sách dịch vụ do mentor cung cấp")
         List<MentorServiceResponse> services,
+        MentorAuthorityContentResponse authorityContent,
         @Schema(description = "true nếu mentee có thể gửi yêu cầu book lịch cho mentor này")
         boolean canRequestBooking,
         @Schema(description = "true nếu mentor đã hoàn thành đầy đủ profile của mình")

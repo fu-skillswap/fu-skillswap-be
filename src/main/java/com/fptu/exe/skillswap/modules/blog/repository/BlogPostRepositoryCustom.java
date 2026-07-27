@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.blog.repository;
 
-import com.fptu.exe.skillswap.modules.blog.domain.BlogAudienceType;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
@@ -15,7 +14,6 @@ public interface BlogPostRepositoryCustom {
             Collection<BlogVisibility> allowedVisibilities,
             UUID categoryId,
             UUID tagId,
-            BlogAudienceType audienceType,
             String keywordPattern,
             LocalDateTime cursorPublishedAt,
             UUID cursorPostId,
@@ -36,7 +34,7 @@ public interface BlogPostRepositoryCustom {
     List<BlogPost> findPersonalizedFeedWindow(
             Collection<BlogVisibility> allowedVisibilities,
             Collection<UUID> followedCategoryIds,
-            Collection<UUID> followedTagIds,
+            Collection<UUID> followedMentorIds,
             LocalDateTime cursorPublishedAt,
             UUID cursorPostId,
             int fetchLimit

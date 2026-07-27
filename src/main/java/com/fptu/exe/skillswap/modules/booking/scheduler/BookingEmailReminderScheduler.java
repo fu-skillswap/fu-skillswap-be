@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.scheduler;
 
 import com.fptu.exe.skillswap.modules.booking.service.BookingReminderEmailService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEngagementService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,14 +13,17 @@ import org.springframework.stereotype.Component;
 public class BookingEmailReminderScheduler {
 
     private final BookingReminderEmailService bookingReminderEmailService;
+    private final BookingEngagementService bookingEngagementService;
 
     @Scheduled(cron = "0 * * * * *", zone = "Asia/Ho_Chi_Minh")
     public void sendUpcomingSessionReminders() {
         try {
             int sent = bookingReminderEmailService.sendUpcomingSessionReminders();
+            int inAppSent = bookingEngagementService.sendScheduledReminders();
             if (sent > 0) {
                 log.info("Sent {} upcoming booking reminder emails.", sent);
             }
+            if (inAppSent > 0) log.info("Sent {} in-app booking engagement reminders.", inAppSent);
             int warningSent = bookingReminderEmailService.sendAutoCloseWarningEmails();
             if (warningSent > 0) {
                 log.info("Sent {} auto-close warning emails.", warningSent);
