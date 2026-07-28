@@ -140,9 +140,17 @@ jobs:
         STAGING_REHEARSAL_BACKUP_FILE: ${{ secrets.STAGING_REHEARSAL_BACKUP_FILE }}
       run: |
         set -euo pipefail
+        missing=0
         for name in STAGING_VPS_HOST STAGING_VPS_USER STAGING_VPS_SSH_KEY STAGING_REHEARSAL_BACKUP_FILE; do
-          test -n "${!name:-}" || { echo "::error::Missing ${name}"; exit 1; }
+          if [ -z "${!name:-}" ]; then
+            echo "::error::Missing staging environment secret ${name}"
+            missing=1
+          fi
         done
+        if [ "$missing" -ne 0 ]; then
+          echo "Configure these in Settings > Environments > staging > Environment secrets."
+          exit 1
+        fi
 
     - name: Rehearse migration on isolated staging containers
       uses: appleboy/ssh-action@v1.0.3
