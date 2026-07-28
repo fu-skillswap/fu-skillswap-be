@@ -27,7 +27,7 @@ done
 if ! APP_IMAGE=skillswap/preflight:local \
   CURSOR_AES_KEY=preflight-placeholder \
   CURSOR_HMAC_KEY=preflight-placeholder \
-  docker compose --env-file .env.example -f docker-compose.prod.yml config --quiet; then
+  docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config --quiet; then
   fail "Release gate failed: production Compose topology is invalid."
 fi
 

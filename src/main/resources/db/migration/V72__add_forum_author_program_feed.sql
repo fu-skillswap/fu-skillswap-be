@@ -1,4 +1,5 @@
--- EXPAND: snapshot the author's academic program for program-prioritized Forum feeds.
+-- rollout: EXPAND
+-- Snapshot the author's academic program for program-prioritized Forum feeds.
 ALTER TABLE forum_posts
     ADD COLUMN author_program_id UUID;
 

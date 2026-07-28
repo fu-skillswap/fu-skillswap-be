@@ -40,7 +40,7 @@ Khi tạo PR từ nhánh làm việc vào `main`, quá trình Deploy VPS tự đ
 Sau khi Github Action chạy xong bước `Deploy to VPS via SSH`, mã nguồn và image mới đã nằm trên VPS thực. 
 
 - [ ] **Verify Readiness (Health Check):** 
-  - Truy cập VPS, gõ `docker compose -f docker-compose.prod.yml ps`. Đảm bảo `spring-backend` đang có trạng thái `Up (healthy)`.
+  - Truy cập VPS, gõ `docker compose -f docker-compose.yml -f docker-compose.prod.yml ps`. Đảm bảo `spring-backend` đang có trạng thái `Up (healthy)`.
   - Kiểm tra log để tìm lỗi khởi động (nếu có): `docker logs skillswap-backend -n 100`.
 - [ ] **Verify Flyway Migration:**
   - Check release manifest và log khởi động để đảm bảo Flyway đã chạy đầy đủ migration hiện hành, không gặp lock hay crash.

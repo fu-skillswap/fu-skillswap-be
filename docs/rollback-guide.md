@@ -25,12 +25,12 @@ Nếu lỗi chỉ xuất phát từ Code backend (không liên quan đến thay 
 
 4. Kéo Image cũ về (nếu chưa có sẵn trên VPS):
    ```bash
-   docker compose -f docker-compose.prod.yml pull spring-backend
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull spring-backend
    ```
 
 5. Khởi động lại container Backend với image cũ:
    ```bash
-   docker compose -f docker-compose.prod.yml up -d --wait spring-backend
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait spring-backend
    ```
 
 6. Chạy [Smoke Test](operations-runbook.md) để xác minh ứng dụng đã sống lại.

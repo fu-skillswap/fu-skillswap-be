@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 ALTER TABLE conversation_participants
     ADD COLUMN IF NOT EXISTS last_read_sequence bigint NOT NULL DEFAULT 0;
 

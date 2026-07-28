@@ -129,5 +129,5 @@ Từ giờ trở đi, mỗi khi bạn push code mới lên branch `main`:
 Để xem logs trực tiếp trên VPS:
 ```bash
 cd ~/skillswap-deployment
-docker compose -f docker-compose.prod.yml logs -f spring-backend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f spring-backend
 ```

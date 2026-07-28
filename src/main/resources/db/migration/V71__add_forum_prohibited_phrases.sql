@@ -1,4 +1,5 @@
--- EXPAND: admin-managed phrase rules for Forum write-time moderation.
+-- rollout: EXPAND
+-- Admin-managed phrase rules for Forum write-time moderation.
 CREATE TABLE forum_prohibited_phrases (
     id UUID NOT NULL,
     phrase VARCHAR(200) NOT NULL,

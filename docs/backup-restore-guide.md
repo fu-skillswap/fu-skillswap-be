@@ -18,7 +18,7 @@ Trong trường hợp cần phục hồi dữ liệu từ file backup (ví dụ:
 
 1. **Drain traffic và dừng Backend Container** (để tránh thay đổi dữ liệu trong lúc restore):
    ```bash
-   docker compose -f docker-compose.prod.yml stop spring-backend
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml stop spring-backend
    ```
 
 2. **Chạy Script Restore**:
@@ -36,7 +36,7 @@ Trong trường hợp cần phục hồi dữ liệu từ file backup (ví dụ:
 
 3. **Khởi động lại Backend**:
    ```bash
-   docker compose -f docker-compose.prod.yml start spring-backend
+   docker compose -f docker-compose.yml -f docker-compose.prod.yml start spring-backend
    ```
 
 4. **Xác minh**:

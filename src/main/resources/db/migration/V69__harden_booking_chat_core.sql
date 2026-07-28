@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Booking chat is a durable mentor/mentee relationship. Booking links and access are derived separately.
 ALTER TABLE mentor_services
     ADD COLUMN IF NOT EXISTS maintain_post_session_chat boolean NOT NULL DEFAULT false;

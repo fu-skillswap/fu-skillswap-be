@@ -1,8 +1,5 @@
-include:
-  - path: docker-compose.yml
-
-# Production uses the hardened base topology. The backend and PostgreSQL are
-# bound to loopback only; the reverse proxy is the sole public entry point.
+# Production override for docker-compose.yml. Always load this file after the
+# base compose file; Compose includes cannot override imported services.
 x-logging: &default-logging
   driver: "json-file"
   options:

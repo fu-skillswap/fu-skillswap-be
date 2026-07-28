@@ -7,19 +7,19 @@ Tài liệu này cung cấp các lệnh (commands) và quy trình chuẩn để 
 ### 1.1 Xem trạng thái các container
 ```bash
 cd ~/skillswap-deployment
-docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 ```
 *Bạn sẽ thấy `spring-backend`, `skillswap-postgres`, và `skillswap-rabbitmq`. Trạng thái cần phải là `Up (healthy)`.*
 
 ### 1.2 Xem log của ứng dụng
 Để xem log realtime của Backend (đặc biệt khi có lỗi 500 hoặc Crash):
 ```bash
-docker compose -f docker-compose.prod.yml logs -f --tail=200 spring-backend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=200 spring-backend
 ```
 
 Để xem log của Database (ví dụ kiểm tra lỗi kết nối hoặc slow queries):
 ```bash
-docker compose -f docker-compose.prod.yml logs -f --tail=100 postgres-db
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=100 postgres-db
 ```
 
 ### 1.3 Kiểm tra tình trạng Server (RAM, CPU, Disk)
@@ -72,7 +72,7 @@ Never run a restore against a running backend or use `docker compose down -v` in
 
 ### Sự cố: Container Backend bị thoát liên tục (Restarting)
 - **Nguyên nhân 1**: Sai thông tin cấu hình trong `.env` (ví dụ sai mật khẩu DB).
-  - *Cách xử lý*: Xem log backend bằng `docker logs skillswap-backend --tail=50`. Sửa `.env` và chạy lại `docker compose -f docker-compose.prod.yml up -d`.
+  - *Cách xử lý*: Xem log backend bằng `docker logs skillswap-backend --tail=50`. Sửa `.env` và chạy lại `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`.
 - **Nguyên nhân 2**: Lỗi OOM (Tràn RAM).
   - *Cách xử lý*: Dùng `free -m` kiểm tra. Nếu hết RAM, hãy thử dừng một số dịch vụ không cần thiết hoặc tính đến việc nâng cấp VPS. Cấu hình JVM `-Xmx512m` đã được thiết lập để giữ Backend không chiếm quá nhiều RAM.
 

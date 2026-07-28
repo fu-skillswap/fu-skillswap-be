@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 ALTER TABLE bookings
     ADD COLUMN IF NOT EXISTS pending_expire_at TIMESTAMP;
 

@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 CREATE TABLE mentor_verification_upload_intents (
     id UUID PRIMARY KEY,
     owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
