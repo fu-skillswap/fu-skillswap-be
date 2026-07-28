@@ -79,8 +79,14 @@ jobs:
     - name: Validate release scripts and compose topology
       run: |
         chmod +x ops/*.sh scripts/verify-migration-policy.sh
+        set +e
         REQUIRE_CLEAN_WORKTREE=true sh ops/release-preflight.sh
+        preflight_status=$?
         sh scripts/verify-migration-policy.sh
+        migration_policy_status=$?
+        if [ "$preflight_status" -ne 0 ] || [ "$migration_policy_status" -ne 0 ]; then
+          exit 1
+        fi
 
   docker-publish:
     needs: [security-scan, release-preflight]
