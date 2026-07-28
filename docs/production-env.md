@@ -66,6 +66,8 @@ SPRING_MAIL_PASSWORD=your_app_password
 APPLICATION_SWAGGER_ENABLED=false
 ```
 
+`STORAGE_ENABLED=false` keeps the application available but deliberately disables every file upload, object inspection and private-download operation with `STORAGE_ERROR`. Configure the full `STORAGE_*` set and enable it before exposing chat attachments, mentor resources, verification uploads or Blog assets.
+
 **Quy định cập nhật:**
 - Khi thêm biến môi trường mới vào Code, bắt buộc phải cập nhật `.env.example` và thông báo cho người quản trị VPS để thêm vào `.env`.
 - Chỉ người có quyền Root/Deploy trên VPS mới được đọc/sửa file `.env`.

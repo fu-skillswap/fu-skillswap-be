@@ -27,6 +27,7 @@ import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,7 +54,7 @@ public class ConversationService {
     private final ConversationBookingLinkRepository conversationBookingLinkRepository;
     private final ChatUploadIntentRepository chatUploadIntentRepository;
     private final ChatAttachmentRepository chatAttachmentRepository;
-    private final StorageGateway storageGateway;
+    private final ObjectProvider<StorageGateway> storageGatewayProvider;
     private final com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService rateLimitService;
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
 
@@ -462,7 +463,7 @@ public class ConversationService {
                 .conversation(conversation).ownerUserId(userId).storageKey(key).originalFilename(request.filename().trim())
                 .contentType(contentType).expectedSizeBytes(request.sizeBytes()).expiresAt(DateTimeUtil.now().plusMinutes(15)).build();
         chatUploadIntentRepository.save(intent);
-        var upload = storageGateway.generatePrivateUploadUrl(key, contentType, java.time.Duration.ofMinutes(15));
+        var upload = storageGateway().generatePrivateUploadUrl(key, contentType, java.time.Duration.ofMinutes(15));
         return new com.fptu.exe.skillswap.modules.conversation.dto.response.ChatAttachmentUploadIntentResponse(intent.getId(), upload.uploadUrl(), upload.expiresAt(), contentType);
     }
 
@@ -478,7 +479,7 @@ public class ConversationService {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tệp đính kèm");
         }
         String disposition = inlineCapable(attachment.getContentType()) ? "inline" : "attachment";
-        var download = storageGateway.generatePrivateDownloadUrl(attachment.getStorageKey(), java.time.Duration.ofMinutes(10), disposition);
+        var download = storageGateway().generatePrivateDownloadUrl(attachment.getStorageKey(), java.time.Duration.ofMinutes(10), disposition);
         return new com.fptu.exe.skillswap.modules.conversation.dto.response.ChatAttachmentDownloadResponse(download.downloadUrl(), download.expiresAt());
     }
 
@@ -742,7 +743,7 @@ public class ConversationService {
         for (UUID intentId : new java.util.LinkedHashSet<>(intentIds)) {
             var intent = chatUploadIntentRepository.findByIdForUpdate(intentId).orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "CHAT_UPLOAD_INTENT_INVALID"));
             if (!intent.getConversation().getId().equals(conversation.getId()) || !intent.getOwnerUserId().equals(userId) || intent.getStatus() != com.fptu.exe.skillswap.modules.conversation.domain.ChatUploadIntentStatus.PENDING_UPLOAD || intent.getExpiresAt().isBefore(DateTimeUtil.now())) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_UPLOAD_INTENT_INVALID");
-            var metadata = storageGateway.headObject(intent.getStorageKey());
+            var metadata = storageGateway().headObject(intent.getStorageKey());
             if (metadata.sizeBytes() != intent.getExpectedSizeBytes() || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_ATTACHMENT_INVALID");
             validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
             chatAttachmentRepository.save(com.fptu.exe.skillswap.modules.conversation.domain.ChatAttachment.builder().message(message).uploadIntent(intent).storageKey(intent.getStorageKey()).originalFilename(intent.getOriginalFilename()).contentType(intent.getContentType()).sizeBytes(metadata.sizeBytes()).expiresAt(message.getCreatedAt().plusDays(90)).build());
@@ -759,7 +760,15 @@ public class ConversationService {
     private void validateAttachmentFilename(String name, String type) { String lower = name == null ? "" : name.toLowerCase(java.util.Locale.ROOT); if (lower.isBlank() || !(type.equals("image/png") && lower.endsWith(".png") || type.equals("image/jpeg") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) || type.equals("application/pdf") && lower.endsWith(".pdf") || type.contains("wordprocessingml") && lower.endsWith(".docx"))) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_ATTACHMENT_INVALID"); }
     private String extensionFor(String type) { return type.equals("image/png")?".png":type.equals("image/jpeg")?".jpg":type.equals("application/pdf")?".pdf":".docx"; }
     private boolean inlineCapable(String type) { return "image/png".equals(type) || "image/jpeg".equals(type); }
-    private void validateAttachmentSignature(String key, String type) { try (var in = storageGateway.openObject(key)) { byte[] b=in.readNBytes(8); boolean ok=(type.equals("image/png")&&b.length>=4&&b[0]==(byte)0x89&&b[1]==0x50&&b[2]==0x4e&&b[3]==0x47)||(type.equals("image/jpeg")&&b.length>=3&&b[0]==(byte)0xff&&b[1]==(byte)0xd8&&b[2]==(byte)0xff)||(type.equals("application/pdf")&&new String(b,java.nio.charset.StandardCharsets.US_ASCII).startsWith("%PDF-"))||(type.contains("wordprocessingml")&&b.length>=4&&b[0]==0x50&&b[1]==0x4b); if(!ok) throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE,"CHAT_ATTACHMENT_INVALID"); } catch(java.io.IOException e){throw new BaseException(ErrorCode.STORAGE_ERROR,"Không thể kiểm tra tệp đính kèm");} }
+    private void validateAttachmentSignature(String key, String type) { try (var in = storageGateway().openObject(key)) { byte[] b=in.readNBytes(8); boolean ok=(type.equals("image/png")&&b.length>=4&&b[0]==(byte)0x89&&b[1]==0x50&&b[2]==(byte)0x4e&&b[3]==0x47)||(type.equals("image/jpeg")&&b.length>=3&&b[0]==(byte)0xff&&b[1]==(byte)0xd8&&b[2]==(byte)0xff)||(type.equals("application/pdf")&&new String(b,java.nio.charset.StandardCharsets.US_ASCII).startsWith("%PDF-"))||(type.contains("wordprocessingml")&&b.length>=4&&b[0]==0x50&&b[1]==0x4b); if(!ok) throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE,"CHAT_ATTACHMENT_INVALID"); } catch(java.io.IOException e){throw new BaseException(ErrorCode.STORAGE_ERROR,"Không thể kiểm tra tệp đính kèm");} }
+
+    private StorageGateway storageGateway() {
+        StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+        if (storageGateway == null) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình storage cho tệp đính kèm chat");
+        }
+        return storageGateway;
+    }
 
     /** Booking callbacks may retry; the database uniqueness guard makes this message exactly-once per booking. */
     private void createBookingConfirmedSystemMessage(UUID conversationId, Booking booking) {

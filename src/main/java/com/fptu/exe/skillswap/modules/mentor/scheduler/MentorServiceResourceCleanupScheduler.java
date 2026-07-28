@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceResourceUpl
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -18,11 +19,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class MentorServiceResourceCleanupScheduler {
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
     private final MentorServiceResourceUploadIntentRepository repository;
-    private final StorageGateway storageGateway;
+    private final ObjectProvider<StorageGateway> storageGatewayProvider;
     private final TransactionTemplate transactionTemplate;
 
     @Scheduled(fixedDelayString = "${application.mentor-resources.cleanup-delay-ms:900000}")
     public void cleanup() {
+        if (storageGatewayProvider.getIfAvailable() == null) return;
         if (!RUNNING.compareAndSet(false, true)) return;
         try {
             List<Claim> claims = transactionTemplate.execute(status -> claim());
@@ -44,6 +46,8 @@ public class MentorServiceResourceCleanupScheduler {
     }
     private void delete(Claim claim) {
         try {
+            StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+            if (storageGateway == null) return;
             storageGateway.deleteFile(claim.objectKey());
             transactionTemplate.executeWithoutResult(status -> repository.findByIdForUpdate(claim.id()).ifPresent(intent -> {
                 intent.setStorageDeletedAt(DateTimeUtil.now()); intent.setCleanupLeaseUntil(null); intent.setLastCleanupError(null);
