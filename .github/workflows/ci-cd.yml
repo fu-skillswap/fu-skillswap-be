@@ -122,69 +122,8 @@ jobs:
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
 
-  rehearse-staging:
-    needs: docker-publish
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: staging
-    permissions:
-      contents: read
-      packages: read
-    steps:
-    - name: Validate staging rehearsal secrets
-      shell: bash
-      env:
-        STAGING_VPS_HOST: ${{ secrets.STAGING_VPS_HOST }}
-        STAGING_VPS_USER: ${{ secrets.STAGING_VPS_USER }}
-        STAGING_VPS_SSH_KEY: ${{ secrets.STAGING_VPS_SSH_KEY }}
-        STAGING_REHEARSAL_BACKUP_FILE: ${{ secrets.STAGING_REHEARSAL_BACKUP_FILE }}
-      run: |
-        set -euo pipefail
-        missing=0
-        for name in STAGING_VPS_HOST STAGING_VPS_USER STAGING_VPS_SSH_KEY STAGING_REHEARSAL_BACKUP_FILE; do
-          if [ -z "${!name:-}" ]; then
-            echo "::error::Missing staging environment secret ${name}"
-            missing=1
-          fi
-        done
-        if [ "$missing" -ne 0 ]; then
-          echo "Configure these in Settings > Environments > staging > Environment secrets."
-          exit 1
-        fi
-
-    - name: Rehearse migration on isolated staging containers
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.STAGING_VPS_HOST }}
-        username: ${{ secrets.STAGING_VPS_USER }}
-        key: ${{ secrets.STAGING_VPS_SSH_KEY }}
-        command_timeout: 30m
-        script_stop: true
-        script: |
-          set -euo pipefail
-          DEPLOY_DIR="/opt/fu-skillswap/staging-rehearsal"
-          mkdir -p "$DEPLOY_DIR/ops"
-          cd "$DEPLOY_DIR"
-          test -r .env
-          set -a
-          . ./.env
-          set +a
-          export CANDIDATE_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          export CANDIDATE_IMAGE="$(echo "$CANDIDATE_IMAGE" | tr '[:upper:]' '[:lower:]')"
-          export REHEARSAL_BACKUP_FILE="${{ secrets.STAGING_REHEARSAL_BACKUP_FILE }}"
-          # The secret must point to an ephemeral decrypted copy, never the durable encrypted source.
-          export REHEARSAL_DELETE_INPUT_BACKUP=true
-          test -r "$REHEARSAL_BACKUP_FILE"
-          echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-          docker pull "$CANDIDATE_IMAGE"
-          for script in rehearse-migration.sh smoke-test.sh; do
-            curl --fail --silent --show-error --location -o "ops/$script" "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/$script"
-            chmod 700 "ops/$script"
-          done
-          sh ops/rehearse-migration.sh
-
   deploy-vps:
-    needs: rehearse-staging
+    needs: docker-publish
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production

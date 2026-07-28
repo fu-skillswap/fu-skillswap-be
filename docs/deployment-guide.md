@@ -33,8 +33,8 @@ sudo apt-get install docker-compose-plugin -y
 
 > **Lưu ý quan trọng**: Pipeline CI/CD sử dụng lệnh `docker compose up --wait`. Lệnh này yêu cầu **Docker Compose V2 mới**. Vui lòng đảm bảo VPS của bạn cài đặt phiên bản Docker Compose cập nhật nhất. Nếu version quá cũ, bước deploy có thể bị treo hoặc fail.
 
-### 2.1.1 Staging release gate
-Trước khi bật production deploy, provision một staging VPS riêng và cấu hình GitHub Actions environments `staging` và `production`; `production` phải có required reviewer. Xem [release-gate.md](release-gate.md) để cấu hình staging secrets, backup rehearsal và evidence.
+### 2.1.1 Beta release gate
+Beta chỉ dùng GitHub Actions environment `production`, có required reviewer. Pipeline chạy CI, security scan, release preflight, immutable image, backup, deploy, readiness và read-only smoke test. Không cần `STAGING_*` secrets; xem [release-gate.md](release-gate.md).
 
 ### 2.2 Đăng nhập GHCR (GitHub Container Registry)
 Vì file `docker-compose.prod.yml` cấu hình pull image từ GHCR, VPS của bạn cần có quyền tải image.

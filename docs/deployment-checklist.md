@@ -20,14 +20,8 @@ Bạn đang ở nhánh `dev` hoặc nhánh làm việc local. Trước khi đẩ
 
 Khi tạo PR từ nhánh làm việc vào `main`, quá trình Deploy VPS tự động có thể sẽ được kích hoạt (nếu CI/CD cấu hình trigger khi merge `main`).
 
-- [ ] **Tạo môi trường Staging/Prod-like (Bắt Buộc):** 
-  - Đảm bảo bạn đã có file `.env.staging` (Google OAuth staging, PayOS sandbox, R2 test bucket, test SMTP).
-  - Provision một VPS giả lập hoặc clone cấu hình VPS production hiện tại.
-- [ ] **Drill Test - Diễn tập Backup / Restore:** 
-  - Kéo code về VPS Staging, chạy thử script `ops/backup-postgres.sh`.
-  - Xác nhận file `.dump.gz` sinh ra, dung lượng khác 0.
-  - Drop thử Database trên Staging và Restore từ file dump vừa tạo xem có thành công không.
-- [ ] **Migration rehearsal evidence:** Restore production-like/sanitized backup vào containers tạm trên staging, chạy candidate image/Flyway/read-only smoke, rồi lưu `manifest.env`, Flyway history và row-count evidence. Không chạy rehearsal cạnh production traffic.
+- [ ] **Production backup:** Trước deploy, xác nhận pipeline tạo backup PostgreSQL, checksum manifest và kiểm tra `pg_restore --list` thành công.
+- [ ] **Manual restore drill (khuyến nghị định kỳ):** Thực hiện trên máy/VPS không phải production bằng `ops/rehearse-migration.sh`; không phải điều kiện bắt buộc của beta pipeline.
 - [ ] **Drill Test - Diễn tập Rollback:** 
   - Thử đổi `APP_IMAGE` về một SHA cũ, khởi động lại container và kiểm tra xem hệ thống có chạy ổn không.
 - [ ] **Review OpenAPI Spec:** Chuyển giao file `openapi.json` vừa generate cho phía FE để họ đồng bộ contract mới nhất (đặc biệt là logic Presigned URL thay cho Multipart).

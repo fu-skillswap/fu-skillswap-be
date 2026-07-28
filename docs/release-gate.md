@@ -1,29 +1,38 @@
-# Release gate and staging rehearsal
+# Release Gate
 
-## Required GitHub environments
+## Required GitHub environment
 
-Create protected `staging` and `production` environments in GitHub Actions. Configure required reviewers for `production`; `staging` may deploy automatically after CI succeeds.
+The beta pipeline uses only the protected `production` GitHub Actions environment. Configure a required reviewer before production deployment.
 
-Required staging secrets:
+The production environment requires:
 
-- `STAGING_VPS_HOST`
-- `STAGING_VPS_USER`
-- `STAGING_VPS_SSH_KEY`
-- `STAGING_REHEARSAL_BACKUP_FILE`: absolute path on the staging VPS to an ephemeral decrypted, production-like or sanitized `pg_dump` custom archive.
+- `VPS_HOST`;
+- `VPS_USER`;
+- `VPS_SSH_KEY`.
 
-The staging VPS stores its own `.env` at `/opt/fu-skillswap/staging-rehearsal/.env`. It must contain database, RabbitMQ, JWT and cursor keys only for staging. The rehearsal always overrides mail, storage, OAuth and PayOS/webhook configuration, and starts the candidate with `APPLICATION_SCHEDULING_ENABLED=false`, so it cannot call production providers or process durable jobs.
+There is no automatic staging restore rehearsal and no `STAGING_*` secret in the beta pipeline.
 
-## Rehearsal procedure
+## Release procedure
 
-The pipeline pulls the immutable image SHA, invokes `ops/rehearse-migration.sh`, then preserves evidence under `/opt/skillswap-staging/release-evidence/<run-id>/`:
+The release path is:
 
-- manifest with image SHA, backup checksum, restore duration, candidate Flyway/startup duration and timestamps;
-- Flyway history before and after candidate startup;
-- counts for users, bookings, payment orders, ledger and outbox;
-- read-only smoke output.
+```text
+CI verify
+-> security scan
+-> release preflight
+-> immutable image SHA
+-> production approval
+-> database backup
+-> deploy
+-> readiness and read-only smoke test
+```
 
-The rehearsal uses uniquely named containers, network and volume. It never uses `skillswap-postgres`, production compose files, production ports or production volumes. Containers and volume are removed on success or failure. Backup transport/storage encryption is an operator responsibility; the decrypted copy on staging must be `0600`. The workflow sets `REHEARSAL_DELETE_INPUT_BACKUP=true`, so it must never point to the durable encrypted source and is removed after the drill.
+The release preflight validates shell syntax, Docker Compose topology, clean worktree and Flyway rollout headers. Production deploy fails before container startup when any required environment variable, image pull or backup step fails.
 
-## Production deploy
+After a successful smoke test, deployment stores `/opt/skillswap/releases/<git-sha>.env` with the image SHA, backup reference and smoke outcome.
 
-Production starts only after the staging job and required environment approval pass. The deploy records `/opt/skillswap/releases/<git-sha>.env` after smoke succeeds. Use this manifest and deploy log to choose an application-only rollback or the guarded restore procedure in `operations-runbook.md`.
+## Recovery
+
+For compatible `EXPAND` migrations, prefer application-image rollback. Restore PostgreSQL only for a destructive migration or confirmed data corruption, using the guarded procedure in `operations-runbook.md`.
+
+`ops/rehearse-migration.sh` remains available for a manually initiated non-production restore drill. It must never run against the production VPS or a production volume.
