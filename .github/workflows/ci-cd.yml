@@ -160,7 +160,11 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         command_timeout: 30m
-        script_stop: true
+        # The script records the first required-step failure itself and exits
+        # after emitting backend/Compose diagnostics. ssh-action's wrapper
+        # would otherwise terminate on `docker compose up --wait` before the
+        # diagnostic section can run.
+        script_stop: false
         debug: true
         script: |
           set -euxo pipefail
