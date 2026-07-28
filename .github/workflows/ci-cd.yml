@@ -169,6 +169,7 @@ jobs:
           DEPLOY_LOG_DIR="/tmp/skillswap-deploy-${{ github.sha }}-$(date -u +%Y%m%dT%H%M%SZ)"
           FAILURE_REPORT="${DEPLOY_LOG_DIR}/failure-report.txt"
           FAILED_STEPS=""
+          DEPLOY_FAILED=0
           mkdir -p "$DEPLOY_LOG_DIR"
           : > "$FAILURE_REPORT"
 
@@ -275,6 +276,32 @@ jobs:
             return "$exit_code"
           }
 
+          # Required deployment steps must fail fast without preventing the
+          # diagnostics section below from printing the actual VPS failure.
+          run_required_step() {
+            if [ "$DEPLOY_FAILED" -ne 0 ]; then
+              echo "::notice::Skipping $1 because an earlier required deployment step failed."
+              return 0
+            fi
+
+            if ! run_step "$@"; then
+              DEPLOY_FAILED=1
+            fi
+            return 0
+          }
+
+          run_required_sensitive_step() {
+            if [ "$DEPLOY_FAILED" -ne 0 ]; then
+              echo "::notice::Skipping $1 because an earlier required deployment step failed."
+              return 0
+            fi
+
+            if ! run_sensitive_step "$@"; then
+              DEPLOY_FAILED=1
+            fi
+            return 0
+          }
+
           echo "::group::deploy context"
           echo "github_sha=${{ github.sha }}"
           echo "github_repository=${{ github.repository }}"
@@ -283,20 +310,20 @@ jobs:
           date -Is
           echo "::endgroup::"
 
-          run_step "preflight ssh identity" "whoami && id && hostname && pwd && date -Is"
-          run_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
+          run_required_step "preflight ssh identity" "whoami && id && hostname && pwd && date -Is"
+          run_required_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
           cd "$DEPLOY_DIR"
 
-          run_step "preflight required tools" "command -v curl && command -v docker && docker --version && docker compose version"
-          run_step "preflight docker daemon" "docker info"
-          run_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
+          run_required_step "preflight required tools" "command -v curl && command -v docker && docker --version && docker compose version"
+          run_required_step "preflight docker daemon" "docker info"
+          run_required_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
 
-          run_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
-          run_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
-          run_step "download ops scripts" "mkdir -p ops && for script in backup-postgres.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
+          run_required_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
+          run_required_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
+          run_required_step "download ops scripts" "mkdir -p ops && for script in backup-postgres.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
 
-          run_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
-          if [ -f ".env" ]; then
+          run_required_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
+          if [ "$DEPLOY_FAILED" -eq 0 ] && [ -f ".env" ]; then
             set +x
             set +e
             set +u
@@ -310,6 +337,7 @@ jobs:
             set -x
             if [ "$source_exit" -ne 0 ]; then
               append_failure "source .env" "$source_exit" "The .env file exists but cannot be sourced. Verify shell syntax and file encoding."
+              DEPLOY_FAILED=1
             fi
           fi
 
@@ -319,24 +347,25 @@ jobs:
           export RELEASE_CANDIDATE_IMAGE="$APP_IMAGE"
           export RELEASE_DIR="/opt/skillswap/releases"
 
-          run_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
-          run_step "docker compose config" "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet"
+          run_required_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
+          run_required_step "docker compose config" "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet"
 
-          run_sensitive_step "docker login ghcr" "echo *** | docker login ghcr.io -u ${{ github.actor }} --password-stdin" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
-          run_step "docker pull image" "docker pull '${APP_IMAGE}'"
-          run_step "docker compose pull spring-backend" "docker compose -f docker-compose.yml -f docker-compose.prod.yml pull spring-backend"
-          run_step "backup postgres" "bash ops/backup-postgres.sh"
+          run_required_sensitive_step "docker login ghcr" "echo *** | docker login ghcr.io -u ${{ github.actor }} --password-stdin" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin"
+          run_required_step "docker pull image" "docker pull '${APP_IMAGE}'"
+          run_required_step "docker compose pull spring-backend" "docker compose -f docker-compose.yml -f docker-compose.prod.yml pull spring-backend"
+          run_required_step "backup postgres" "bash ops/backup-postgres.sh"
           export RELEASE_BACKUP_MANIFEST="$(ls -t "${BACKUP_DIR:-/opt/skillswap/backups}"/skillswap-*.manifest 2>/dev/null | head -1 || true)"
           run_diagnostic_step "flyway schema history before deploy" "docker exec skillswap-postgres psql --username \"${POSTGRES_USER:-}\" --dbname \"${POSTGRES_DB:-}\" --tuples-only --command \"select installed_rank, version, description, success from flyway_schema_history order by installed_rank;\""
-          run_step "docker compose up wait" "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait"
-          run_step "backend readiness healthcheck" "curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness"
-          run_step "smoke test" "bash ops/smoke-test.sh"
+          run_required_step "docker compose up wait" "docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait"
+          run_required_step "backend readiness healthcheck" "curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness"
+          run_required_step "smoke test" "bash ops/smoke-test.sh"
           export RELEASE_MANIFEST_PATH="${RELEASE_DIR}/${{ github.sha }}.env"
-          run_step "write release manifest" "bash ops/write-release-manifest.sh"
+          run_required_step "write release manifest" "bash ops/write-release-manifest.sh"
 
           echo "::group::failure diagnostics"
           run_diagnostic_step "diagnostic docker ps" "docker ps"
           run_diagnostic_step "diagnostic docker ps all" "docker ps -a"
+          run_diagnostic_step "diagnostic backend inspect" "docker inspect skillswap-backend --format 'status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}} oom={{.State.OOMKilled}} health={{if .State.Health}}{{.State.Health.Status}}{{end}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' 2>&1 || true"
           run_diagnostic_step "diagnostic backend logs" "docker logs skillswap-backend --tail 200"
           run_diagnostic_step "diagnostic compose ps" "docker compose -f docker-compose.yml -f docker-compose.prod.yml ps"
           run_diagnostic_step "diagnostic compose logs" "docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail 200"
