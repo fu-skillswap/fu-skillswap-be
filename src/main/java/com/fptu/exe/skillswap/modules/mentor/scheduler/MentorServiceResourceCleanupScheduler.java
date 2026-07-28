@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component @RequiredArgsConstructor @Slf4j
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class MentorServiceResourceCleanupScheduler {
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
     private final MentorServiceResourceUploadIntentRepository repository;

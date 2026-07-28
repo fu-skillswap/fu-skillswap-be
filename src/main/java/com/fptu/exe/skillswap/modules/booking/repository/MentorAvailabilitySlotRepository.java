@@ -114,9 +114,6 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select slot
             from MentorAvailabilitySlot slot
-            join fetch slot.mentorProfile mp
-            join fetch mp.user u
-            join fetch slot.rule rule
             where slot.id = :slotId
             """)
     Optional<MentorAvailabilitySlot> findByIdForUpdate(@Param("slotId") UUID slotId);

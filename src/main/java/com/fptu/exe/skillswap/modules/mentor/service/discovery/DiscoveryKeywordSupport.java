@@ -7,7 +7,6 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
@@ -68,7 +67,6 @@ public class DiscoveryKeywordSupport {
         refreshKeywordsCache();
     }
 
-    @Scheduled(fixedRate = 300000)
     public void refreshKeywordsCache() {
         try {
             if (tagRepository == null || mentorServiceRepository == null) {

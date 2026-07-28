@@ -213,6 +213,16 @@ class BookingServiceTest {
                 .thenReturn(Optional.of(mentorProfile));
         org.mockito.Mockito.lenient().when(bookingRepository.findSlotIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(slot.getId()));
+        org.mockito.Mockito.lenient().when(bookingRepository.findMenteeIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(menteeId));
+        org.mockito.Mockito.lenient().when(userRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(mentee));
+        // Accept locks both participants in UUID order before locking the slot.
+        // Unit tests exercise booking state transitions, so provide the canonical
+        // pair unless a test explicitly models a missing participant.
+        org.mockito.Mockito.lenient().when(userRepository.findAllByIdInOrderByIdForUpdate(
+                        org.mockito.ArgumentMatchers.anyCollection()))
+                .thenReturn(List.of(mentorUser, mentee));
         org.mockito.Mockito.lenient().when(availabilitySlotServiceRepository.existsBySlotIdAndServiceId(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(true);
         org.mockito.Mockito.lenient().doNothing().when(settlementService).releaseForBooking(org.mockito.ArgumentMatchers.any());

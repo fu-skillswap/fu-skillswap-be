@@ -25,6 +25,14 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("select u from User u where u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") UUID userId);
 
+    /**
+     * Acquires participant locks in one deterministic query. Booking decisions
+     * must never lock mentor and mentee rows in caller-dependent order.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id in :userIds order by u.id asc")
+    List<User> findAllByIdInOrderByIdForUpdate(@Param("userIds") java.util.Collection<UUID> userIds);
+
     @Query("select u from User u where lower(u.email) = lower(:email)")
     Optional<User> findActiveByEmailIgnoreCase(@Param("email") String email);
 

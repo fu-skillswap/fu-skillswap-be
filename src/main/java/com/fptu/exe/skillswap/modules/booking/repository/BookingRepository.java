@@ -171,11 +171,6 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("""
             select booking
             from Booking booking
-            join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
-            left join fetch booking.slot slot
             where booking.id = :bookingId
             """)
     Optional<Booking> findByIdForMentorDecision(@Param("bookingId") UUID bookingId);
@@ -233,10 +228,12 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("select booking.slot.id from Booking booking where booking.id = :bookingId")
     Optional<UUID> findSlotIdByBookingId(@Param("bookingId") UUID bookingId);
 
+    @Query("select booking.mentee.id from Booking booking where booking.id = :bookingId")
+    Optional<UUID> findMenteeIdByBookingId(@Param("bookingId") UUID bookingId);
+
     List<Booking> findBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
     List<Booking> findByServiceIdAndStatus(UUID serviceId, BookingStatus status);
-
     long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
     List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);

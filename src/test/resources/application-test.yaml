@@ -18,6 +18,16 @@ management:
       enabled: false
 
 application:
+  scheduling:
+    # Integration tests invoke lifecycle services explicitly. Background jobs would
+    # mutate shared in-memory data between test contexts and make CI nondeterministic.
+    enabled: false
+  websocket:
+    stomp:
+      enabled: false
+  realtime:
+    outbox:
+      enabled: false
   cursor:
     crypto:
       version: v1

@@ -416,15 +416,30 @@ public class BookingService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
 
-        // 1. Load the slot ID without loading the whole booking entity to prevent session caching issues
+        // 1. Load the slot ID and mentee ID without loading the whole booking entity to prevent session caching issues
         UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với khung giờ mentoring"));
+        UUID menteeId = bookingRepository.findMenteeIdByBookingId(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với mentee"));
 
-        // 2. Lock MentorAvailabilitySlot first
+        // Lock both participants in UUID order before any mutable booking resource.
+        // This serializes same-mentor and same-mentee accepts without creating a
+        // cycle between a user lock held by one transaction and a slot lock held by another.
+        java.util.List<UUID> participantIds = java.util.stream.Stream.of(mentorUserId, menteeId)
+                .distinct()
+                .sorted()
+                .toList();
+        if (userRepository.findAllByIdInOrderByIdForUpdate(participantIds).size() != participantIds.size()) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng tham gia booking");
+        }
+        MentorProfile lockedMentorProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
+
+        // Lock the slot after participant resources and before the booking row.
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
 
-        // 3. Lock the target booking after slot lock
+        // Lock the target booking after users, profile and slot.
         Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
 
         // 4. Revalidate after locks are acquired
@@ -499,15 +514,10 @@ public class BookingService {
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
         slot.setBooked(true);
 
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        if (mentorProfile != null) {
-            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-            entityManager.refresh(lockedProfile);
-            lockedProfile.setTotalAcceptedBookings(defaultInteger(lockedProfile.getTotalAcceptedBookings()) + 1);
-            touchMentorActivity(lockedProfile, now);
-            mentorProfileRepository.save(lockedProfile);
-        }
+        entityManager.refresh(lockedMentorProfile);
+        lockedMentorProfile.setTotalAcceptedBookings(defaultInteger(lockedMentorProfile.getTotalAcceptedBookings()) + 1);
+        touchMentorActivity(lockedMentorProfile, now);
+        mentorProfileRepository.save(lockedMentorProfile);
 
         for (Booking pendingBooking : pendingBookings) {
             if (pendingBooking.getId().equals(booking.getId())) {

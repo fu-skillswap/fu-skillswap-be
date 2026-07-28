@@ -371,8 +371,8 @@ class BookingConcurrencyIntegrationTest {
         ExecutorService executorService = Executors.newFixedThreadPool(2);
 
         try {
-            Future<Boolean> accept1 = executorService.submit(acceptTaskWith200Status(setupData.mentor1Id(), booking1.bookingId(), readyLatch, startLatch));
-            Future<Boolean> accept2 = executorService.submit(acceptTaskWith200Status(setupData.mentor2Id(), booking2.bookingId(), readyLatch, startLatch));
+            Future<Boolean> accept1 = executorService.submit(acceptTask(setupData.mentor1Id(), booking1.bookingId(), readyLatch, startLatch));
+            Future<Boolean> accept2 = executorService.submit(acceptTask(setupData.mentor2Id(), booking2.bookingId(), readyLatch, startLatch));
 
             assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
             startLatch.countDown();
@@ -380,9 +380,9 @@ class BookingConcurrencyIntegrationTest {
             boolean accept1Success = getFuture(accept1);
             boolean accept2Success = getFuture(accept2);
 
-            // Cả 2 thread đều chạy code và return 200 (không throw Exception), nên success flag sẽ bằng true
-            assertTrue(accept1Success);
-            assertTrue(accept2Success);
+            // Exactly one accept reserves the mentee's time. The other concurrent
+            // command may be rejected by the service after revalidation.
+            assertEquals(1, (accept1Success ? 1 : 0) + (accept2Success ? 1 : 0));
 
             // Kiểm tra DB: Phải có ĐÚNG 1 booking ACCEPTED_AWAITING_PAYMENT, và 1 booking bị REJECTED do conflict
             BookingStatus status1 = bookingRepository.findById(booking1.bookingId()).orElseThrow().getStatus();
@@ -401,20 +401,6 @@ class BookingConcurrencyIntegrationTest {
         } finally {
             executorService.shutdownNow();
         }
-    }
-
-    private Callable<Boolean> acceptTaskWith200Status(UUID mentorId, UUID bookingId, CountDownLatch readyLatch, CountDownLatch startLatch) {
-        return () -> {
-            readyLatch.countDown();
-            assertTrue(startLatch.await(5, TimeUnit.SECONDS));
-            try {
-                // Sẽ không văng exception (do trả về BookingResponse status REJECTED thay vì throw)
-                bookingService.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("Confirmed"));
-                return true;
-            } catch (Exception exception) {
-                return false;
-            }
-        };
     }
 
     private void completeAcademicProfile(UUID userId, String studentCode) {
