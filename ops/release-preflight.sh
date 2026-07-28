@@ -10,5 +10,10 @@ git diff --check
 for script in ops/*.sh; do
   sh -n "$script"
 done
-APP_IMAGE=skillswap/preflight:local docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+# .env.example deliberately leaves production cursor keys blank. Supply placeholders
+# only for interpolation; this command never starts a container or validates secrets.
+APP_IMAGE=skillswap/preflight:local \
+CURSOR_AES_KEY=preflight-placeholder \
+CURSOR_HMAC_KEY=preflight-placeholder \
+docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config --quiet
 printf '%s\n' "Release preflight passed."
