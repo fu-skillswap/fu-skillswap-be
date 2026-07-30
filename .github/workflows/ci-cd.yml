@@ -32,6 +32,14 @@ jobs:
         chmod +x mvnw
         ./mvnw clean verify
 
+    - name: Upload generated OpenAPI contract
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: openapi-contract
+        path: target/openapi.json
+        if-no-files-found: error
+
     - name: Upload test reports on failure
       if: failure()
       uses: actions/upload-artifact@v4

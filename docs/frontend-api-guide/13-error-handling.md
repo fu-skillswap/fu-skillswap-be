@@ -47,6 +47,7 @@ Tất cả API business dùng `ApiResponse<T>`:
 | 409 | Xung đột nghiệp vụ / idempotency conflict | Show conflict message, refresh data |
 | 413 | Payload quá lớn | Bảo user giảm kích thước file/body |
 | 415 | Unsupported media type | Sửa content type |
+| 422 | Input đúng format nhưng không thể xử lý theo business rule tĩnh | Giữ form, sửa lựa chọn/giá trị theo message; không retry tự động |
 | 429 | Thao tác quá nhanh | Backoff và retry sau |
 | 500 | Lỗi hệ thống | Show fallback, retry có kiểm soát |
 
@@ -68,6 +69,7 @@ Tất cả API business dùng `ApiResponse<T>`:
 - `UNSUPPORTED_MEDIA_TYPE`
 - `TOO_MANY_REQUESTS`
 - `METHOD_NOT_ALLOWED`
+- `UNPROCESSABLE_ENTITY`
 
 ### Auth
 - `UNAUTHENTICATED`
@@ -118,6 +120,8 @@ Tất cả API business dùng `ApiResponse<T>`:
   - retry có kiểm soát nếu action idempotent hoặc user chủ động bấm retry
 - `400/403/404`
   - không retry tự động
+- `422`
+  - sửa input/business selection, không retry tự động
 
 ## Error matrix theo hành vi sản phẩm
 | Nhóm flow | Lỗi hay gặp | FE nên làm |
@@ -137,6 +141,7 @@ Tất cả API business dùng `ApiResponse<T>`:
 - Refresh token một lần duy nhất khi gặp `401`.
 - Nếu request mutate trả `409`, luôn reload detail trước khi cho user retry.
 - Nếu backend trả `400`, ưu tiên sửa form data thay vì retry.
+- Nếu backend trả `422`, giữ form data và yêu cầu user chọn lại dữ liệu/điều kiện hợp lệ; không coi đó là race condition.
 - Khi `500` xảy ra ở action idempotent, có thể cho user retry thủ công.
 - Với `POST /api/bookings`, giữ nguyên `Idempotency-Key` khi retry cùng một request. Với một booking mới, sinh key mới.
 
@@ -144,6 +149,7 @@ Tất cả API business dùng `ApiResponse<T>`:
 - Không hiển thị raw stacktrace hoặc exception kỹ thuật cho user.
 - Không dùng `code` để đoán domain ngoài phạm vi guide nếu message/field đã đủ.
 - Không retry liên tục khi request đang bị `400`, `403`, `404`, `409`.
+- Không dùng `422` thay cho `409`: slot, optimistic version, duplicate request và booking state conflict vẫn phải refetch theo luồng `409`.
 - Không coi `401` nào cũng là hết session; có thể là cookie/token issue, nhưng xử lý đầu tiên vẫn là refresh một lần.
 
 ## Response JSON example

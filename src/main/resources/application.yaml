@@ -85,6 +85,8 @@ management:
           include: readinessState,db,rabbit
 
 application:
+  openapi:
+    version: ${APPLICATION_OPENAPI_VERSION:0.1.0-beta}
   scheduling:
     enabled: ${APPLICATION_SCHEDULING_ENABLED:true}
   google:

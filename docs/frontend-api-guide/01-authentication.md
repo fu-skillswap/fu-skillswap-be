@@ -73,7 +73,8 @@ Google Calendar connect/disconnect không thuộc file này; phần đó nằm �
   - chỉ cần giữ trong memory/state quản lý auth của FE
 - `refreshToken`
   - không phải token nghiệp vụ ở FE
-  - backend giữ qua cookie HttpOnly
+  - backend rotate qua response header `Set-Cookie` trong cookie `HttpOnly`, `Path=/api/auth`
+  - `Secure` và `SameSite` được quyết định bởi environment/config; production không cho FE đọc cookie này
   - FE không nên đọc/ghi thủ công
 - `tokenType`
   - hiện là `Bearer`
@@ -83,6 +84,8 @@ Google Calendar connect/disconnect không thuộc file này; phần đó nằm �
 - `POST /api/auth/google` và `POST /api/auth/refresh` đều có thể trả token mới.
 - Nếu backend set cookie refresh token, FE chỉ cần làm việc với body access token.
 - `TokenResponse.refreshToken` là field nội bộ/hidden; FE không nên phụ thuộc vào nó.
+- `POST /api/auth/refresh` và `POST /api/auth/logout` không nhận `refreshToken` trong body, query hay Bearer input. Browser tự gửi cookie khi gọi cùng application origin hợp lệ.
+- Swagger UI chỉ thử được refresh/logout khi đang cùng origin và browser đã có cookie hợp lệ; không dán/copy refresh cookie vào Swagger UI.
 
 ## User session state
 `GET /api/auth/me` là nguồn sự thật để FE biết user đang ở đâu trong hệ thống.

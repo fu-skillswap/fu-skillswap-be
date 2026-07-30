@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.conversation.controller;
 import com.fptu.exe.skillswap.modules.conversation.dto.request.ChatTypingRequest;
 import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -14,6 +15,7 @@ import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
+@Hidden
 public class ChatTypingController {
     private final ConversationService conversationService;
     private final ObjectProvider<SimpMessagingTemplate> simpMessagingTemplateProvider;

@@ -22,6 +22,9 @@ Nguyên tắc chốt:
 | GET | `/api/me/conversations/{conversationId}` | Authenticated | participant | path `conversationId` | `ConversationResponse` | - | Chi tiết conversation |
 | GET | `/api/me/conversations/{conversationId}/messages` | Authenticated | participant | `BasePageRequest`/cursor request theo runtime | `PageResponse<MessageResponse>` | - | Danh sách message |
 | POST | `/api/me/conversations/{conversationId}/messages` | Authenticated | participant có `canSendMessages` | `{clientMessageId, content, replyToMessageId?, attachmentIntentIds?}` | `MessageResponse` | - | Gửi message, không dùng `Idempotency-Key` |
+| POST | `/api/me/conversations/{conversationId}/block` | Authenticated | participant | - | `ConversationBlockResponse` | - | Khóa chat/file hai chiều, vẫn đọc lịch sử |
+| DELETE | `/api/me/conversations/{conversationId}/block` | Authenticated | blocker | - | `ConversationBlockResponse` | - | Chỉ gỡ block do user hiện tại tạo |
+| POST | `/api/me/conversations/{conversationId}/reports` | Authenticated | participant | `{reasonType, description?}` | `ChatReportResponse` | - | Tạo report moderation cho participant còn lại |
 | GET | `/api/me/conversations/unread-count` | Authenticated | participant | - | `UnreadCountResponse` | - | Số hội thoại chưa đọc |
 | PATCH | `/api/me/conversations/{conversationId}/read` | Authenticated | participant | - | `Void` | - | Mark read |
 
@@ -67,8 +70,6 @@ Nguyên tắc chốt:
 
 ## Ý nghĩa field quan trọng
 ### `ConversationResponse`
-- `sourceType`, `sourceId`
-  - conversation phát sinh từ đâu
 - `status`
   - trạng thái conversation
 - `otherUserId`, `otherUserName`, `otherUserAvatarUrl`
@@ -82,7 +83,13 @@ Nguyên tắc chốt:
 - `messagingWindowEndsAt`
   - null khi quyền chat là dài hạn; khi có giá trị, FE hiển thị thời hạn chat temporary.
 - `readOnlyReason`
-  - enum machine-readable như `UNDER_REVIEW`, `CHAT_WINDOW_EXPIRED`, `NO_EFFECTIVE_BOOKING`, `ADMIN_LOCKED`.
+  - enum machine-readable như `UNDER_REVIEW`, `PARTICIPANT_BLOCKED`, `CHAT_WINDOW_EXPIRED`, `NO_EFFECTIVE_BOOKING`, `ADMIN_LOCKED`.
+
+### Safety controls
+- `POST /{conversationId}/block` giữ text history nhưng lập tức đặt conversation ở `READ_ONLY` cho cả hai participant: không gửi message, upload hoặc xin URL download attachment mới.
+- `DELETE /{conversationId}/block` chỉ xóa block do caller tạo; nếu participant còn lại hoặc admin vẫn khóa, quyền chat không tự mở.
+- `POST /{conversationId}/reports` cho phép tối đa một report `OPEN` trên mỗi reporter/conversation. Sau khi admin resolve, user có thể report sự cố mới. Report không tự thay đổi booking, payment hoặc account status.
+- Admin dùng `GET /api/admin/chat-reports?status=` và `PATCH /api/admin/chat-reports/{reportId}`. `RESOLVED_LOCKED` khóa conversation hai chiều; `RESOLVED_NO_ACTION` chỉ đóng report. `PATCH /api/admin/chat-reports/conversations/{conversationId}/lock` cho phép admin mở/khóa lại có audit; mở khóa vẫn tôn trọng participant block và booking access.
 
 ### `MessageResponse`
 - `messageType`
@@ -139,8 +146,6 @@ Nguyên tắc chốt:
     "items": [
       {
         "id": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
-        "sourceType": "BOOKING",
-        "sourceId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "type": "DIRECT",
         "status": "ACTIVE",
         "otherUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -258,4 +263,7 @@ Subscribe to `/user/queue/chat/messages`, `/user/queue/chat/inbox`, `/user/queue
 - Allowed types: `PNG`, `JPEG`, `PDF`, `DOCX`; tối đa 10 MiB/file, 5 file/message và 50 MiB/user/day.
 - Image có thể inline qua URL private ngắn hạn. PDF/DOCX luôn download attachment, không preview server-side.
 - Attachment hết quyền cấp URL sau 90 ngày. Object bị xóa vật lý sau thêm 7 ngày grace, trừ khi dispute/admin hold còn hiệu lực.
+
+## File storage capability
+FE gọi `GET /api/files/capabilities` sau khi có auth để biết runtime hiện có object storage hay không. Response chỉ gồm boolean `privateFileStorageAvailable`, `chatAttachmentsAvailable`, `mentorServiceResourcesAvailable`, `blogAssetUploadsAvailable`; không chứa bucket, endpoint hoặc object key. Khi một capability là `false`, ẩn thao tác file tương ứng thay vì thử upload rồi đoán lỗi.
 - Xóa message thu hồi access ngay, nhưng không được vượt qua hold/retention audit.

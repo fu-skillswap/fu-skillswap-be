@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResp
 import com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.conversation.service.ConversationSafetyService;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -35,11 +36,12 @@ public class ChatController {
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
     private final InMemoryRateLimitService rateLimitService;
+    private final ConversationSafetyService conversationSafetyService;
 
     @GetMapping
     @Operation(
             summary = "Lấy danh sách conversation của tôi",
-            description = "Trả về danh sách conversation của user hiện tại. Trong flow hiện tại, conversation được tạo tự động sau khi booking được accept, nên FE phải dùng API này để dựng inbox thay vì cố tạo conversation thủ công."
+        description = "Trả về danh sách direct conversation của user hiện tại. Conversation được tạo tự động khi booking trở thành effective; FE dùng inbox thay vì tạo conversation thủ công."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -59,8 +61,6 @@ public class ChatController {
                                                 "items": [
                                                   {
                                                     "id": "019f5234-aaaa-bbbb-cccc-1234567890ab",
-                                                    "sourceType": "BOOKING",
-                                                    "sourceId": "019f4234-aaaa-bbbb-cccc-1234567890ab",
                                                     "type": "DIRECT",
                                                     "status": "ACTIVE",
                                                     "otherUserId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
@@ -157,7 +157,7 @@ public class ChatController {
     @PostMapping("/{conversationId}/messages")
     @Operation(
             summary = "Gửi tin nhắn trong conversation",
-            description = "Gửi một tin nhắn text vào conversation hiện có mà user hiện tại đang tham gia. FE chỉ dùng API này sau khi booking liên quan đã tạo conversation thông qua flow accept booking."
+        description = "Gửi một tin nhắn text vào conversation hiện có mà user hiện tại đang tham gia. FE chỉ dùng API này sau khi booking effective đã tạo conversation."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Message sent successfully"),
@@ -180,16 +180,19 @@ public class ChatController {
     }
 
     @PatchMapping("/{conversationId}/messages/{messageId}")
+    @Operation(summary = "Edit my chat message", description = "Only the sender can edit an active text message within the configured edit window and with the expected version.")
     public ApiResponse<MessageResponse> editMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.UpdateMessageRequest request) {
         return ApiResponse.success(conversationService.editMessage(conversationId, messageId, userPrincipal.getId(), request));
     }
 
     @DeleteMapping("/{conversationId}/messages/{messageId}")
+    @Operation(summary = "Delete my chat message", description = "Creates a tombstone and immediately revokes its attachment access; retention holds still control physical deletion.")
     public ApiResponse<MessageResponse> deleteMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.DeleteMessageRequest request) {
         return ApiResponse.success(conversationService.deleteMessage(conversationId, messageId, userPrincipal.getId(), request));
     }
 
     @PostMapping("/{conversationId}/attachment-upload-intents")
+    @Operation(summary = "Create chat attachment upload intent", description = "Creates a private, short-lived upload intent. Attach the returned intent ID when sending a message; the client never provides an object key.")
     public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ChatAttachmentUploadIntentResponse> createAttachmentUploadIntent(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.ChatAttachmentUploadIntentRequest request) {
         return ApiResponse.created(conversationService.createAttachmentUploadIntent(conversationId, userPrincipal.getId(), request));
     }
@@ -245,5 +248,30 @@ public class ChatController {
             @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.ConversationReadRequest request) {
         
         return ApiResponse.success(conversationService.markConversationAsRead(conversationId, userPrincipal.getId(), request.lastReadSequence()));
+    }
+
+    @PostMapping("/{conversationId}/block")
+    @Operation(summary = "Chặn participant trong cuộc hội thoại", description = "Giữ lịch sử để đọc nhưng khóa gửi tin nhắn, upload và cấp URL tải file mới cho cả hai phía. Không thay đổi booking hoặc thanh toán.")
+    public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationBlockResponse> blockConversation(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable UUID conversationId) {
+        return ApiResponse.success(conversationSafetyService.block(conversationId, userPrincipal.getId()));
+    }
+
+    @DeleteMapping("/{conversationId}/block")
+    @Operation(summary = "Bỏ chặn participant trong cuộc hội thoại", description = "Chỉ gỡ block do chính user hiện tại tạo. Booking-derived access sẽ được tính lại ngay.")
+    public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationBlockResponse> unblockConversation(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable UUID conversationId) {
+        return ApiResponse.success(conversationSafetyService.unblock(conversationId, userPrincipal.getId()));
+    }
+
+    @PostMapping("/{conversationId}/reports")
+    @Operation(summary = "Report cuộc hội thoại", description = "Tạo một report moderation cho participant còn lại. Report không tự khóa booking hoặc tài khoản.")
+    public ApiResponse<com.fptu.exe.skillswap.modules.conversation.dto.response.ChatReportResponse> reportConversation(
+            @AuthenticationPrincipal UserPrincipal userPrincipal,
+            @PathVariable UUID conversationId,
+            @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.ChatReportCreateRequest request) {
+        return ApiResponse.created(conversationSafetyService.createReport(conversationId, userPrincipal.getId(), request));
     }
 }

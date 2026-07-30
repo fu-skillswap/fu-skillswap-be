@@ -98,10 +98,16 @@ Mỗi file domain phải có ít nhất một bảng:
 - Mỗi screen chỉ nên đọc 1-2 domain file liên quan trực tiếp.
 - Khi một action làm đổi state, FE phải refresh lại detail/status endpoint của chính domain đó.
 
+## API contract and OpenAPI
+- Java controller, request/response DTO và runtime exception handler là source of truth. Frontend guide giải thích cách dùng, không thay thế runtime contract.
+- OpenAPI được sinh code-first từ `/v3/api-docs`; CI xuất `target/openapi.json` làm artifact cho FE/QA. Không commit file này.
+- Beta giữ path `/api/...`; `info.version` là SemVer của contract (`0.1.0-beta` mặc định), không suy ra version từ URL.
+- Swagger production tắt mặc định. Khi được bật trong local/internal environment, Swagger UI chỉ dùng Bearer access token; refresh token vẫn chỉ là HttpOnly cookie do browser quản lý.
+
 ## API success/error behavior
 - `200/201`
   - render data mới ngay.
-- `400/409`
+- `400/409/422`
   - giữ form state nếu có, đồng thời hiển thị thông báo nghiệp vụ rõ nghĩa.
 - `401`
   - refresh token 1 lần rồi mới quyết định redirect login.

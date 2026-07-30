@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.conversation.repository.ConversationPartic
 import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.conversation.service.ConversationSafetyPolicy;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -69,6 +70,8 @@ class ConversationServiceUnitTest {
     private DomainEventOutboxService domainEventOutboxService;
     @Mock
     private RealtimeOutboxProperties realtimeOutboxProperties;
+    @Mock
+    private ConversationSafetyPolicy conversationSafetyPolicy;
 
     @InjectMocks
     private ConversationService conversationService;
@@ -81,6 +84,7 @@ class ConversationServiceUnitTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(conversationSafetyPolicy.apply(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
         bookingId = UUID.randomUUID();
         mentorUser = new User();
         mentorUser.setId(UUID.randomUUID());

@@ -57,6 +57,7 @@ public class ConversationService {
     private final ObjectProvider<StorageGateway> storageGatewayProvider;
     private final com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService rateLimitService;
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
+    private final ConversationSafetyPolicy conversationSafetyPolicy;
 
     @Transactional
     public Conversation createDirectForAcceptedBooking(Booking booking) {
@@ -900,12 +901,15 @@ public class ConversationService {
     }
 
     private com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access resolveMessagingAccess(Conversation conversation) {
+        com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access bookingAccess;
         if (bookingChatAccessPolicy == null) {
             // Keeps legacy unit fixtures usable; Spring always injects the booking-owned policy.
-            return new com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access(
+            bookingAccess = new com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access(
                     com.fptu.exe.skillswap.modules.conversation.domain.ChatMessagingAccess.OPEN,
                     true, true, true, null, null, false);
+        } else {
+            bookingAccess = bookingChatAccessPolicy.resolve(conversation.getId(), conversation.getStatus(), DateTimeUtil.now());
         }
-        return bookingChatAccessPolicy.resolve(conversation.getId(), conversation.getStatus(), DateTimeUtil.now());
+        return conversationSafetyPolicy.apply(conversation.getId(), bookingAccess);
     }
 }

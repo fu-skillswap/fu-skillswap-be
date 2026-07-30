@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -30,6 +31,7 @@ public class MentorBookingPolicyController {
     private final MentorBookingPolicyService mentorBookingPolicyService;
 
     @GetMapping
+    @Operation(summary = "Get my mentor booking policy")
     public ApiResponse<MentorBookingPolicyResponse> getPolicy(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
@@ -37,6 +39,7 @@ public class MentorBookingPolicyController {
     }
 
     @PatchMapping
+    @Operation(summary = "Update my mentor booking policy", description = "Updates future-booking policy using optimistic versioning; existing bookings keep their snapshots.")
     public ApiResponse<MentorBookingPolicyResponse> updatePolicy(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UpdateMentorBookingPolicyRequest request

@@ -13,6 +13,8 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -55,7 +57,15 @@ public class AuthController {
 
     @Operation(summary = "Đăng nhập bằng Google", description = "Đổi Google authorization code bằng PKCE sau khi xác minh state dùng một lần. Refresh token chỉ được trả qua HttpOnly cookie; response body chỉ chứa access token.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng nhập thành công, trả về token"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Đăng nhập thành công; access token ở body, refresh token được rotate trong HttpOnly cookie.",
+                    headers = @Header(
+                            name = HttpHeaders.SET_COOKIE,
+                            description = "Browser-managed refresh cookie. HttpOnly; Secure và SameSite phụ thuộc environment/config; Path=/api/auth. Swagger UI không thể dán cookie này thủ công.",
+                            schema = @Schema(type = "string", example = "refresh_token=<redacted>; Path=/api/auth; HttpOnly; SameSite=Lax")
+                    )
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Authorization code, PKCE hoặc OAuth state không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Tài khoản bị khóa hoặc chưa kích hoạt")
     })
@@ -79,7 +89,15 @@ public class AuthController {
 
     @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie. Endpoint không nhận refresh token trong body. Các request song song trong grace period nhận cùng một token pair.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Làm mới token thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Làm mới access token thành công và rotate refresh cookie. Endpoint đọc cookie, không nhận refresh token trong body hoặc Bearer input.",
+                    headers = @Header(
+                            name = HttpHeaders.SET_COOKIE,
+                            description = "Browser-managed refresh cookie được rotate. HttpOnly; Secure và SameSite phụ thuộc environment/config; Path=/api/auth.",
+                            schema = @Schema(type = "string", example = "refresh_token=<redacted>; Path=/api/auth; HttpOnly; SameSite=Lax")
+                    )
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Refresh Token đã hết hạn hoặc bị thu hồi")
     })
     @PostMapping("/refresh")
@@ -102,7 +120,15 @@ public class AuthController {
 
     @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. FE dùng khi user logout khỏi thiết bị hoặc browser hiện tại. Access token đang có vẫn hết hạn theo lifetime tự nhiên của nó.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đăng xuất thành công")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Đăng xuất thành công và trả Set-Cookie để browser xóa refresh cookie.",
+                    headers = @Header(
+                            name = HttpHeaders.SET_COOKIE,
+                            description = "Refresh cookie bị xóa tại Path=/api/auth.",
+                            schema = @Schema(type = "string", example = "refresh_token=; Max-Age=0; Path=/api/auth; HttpOnly; SameSite=Lax")
+                    )
+            )
     })
     @PostMapping("/logout")
     public ApiResponse<String> logout(

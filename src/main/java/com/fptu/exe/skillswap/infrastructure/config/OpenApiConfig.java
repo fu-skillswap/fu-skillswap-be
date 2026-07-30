@@ -2,6 +2,12 @@ package com.fptu.exe.skillswap.infrastructure.config;
 
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.IntegerSchema;
+import io.swagger.v3.oas.models.media.ObjectSchema;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
+import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
@@ -12,6 +18,7 @@ import io.swagger.v3.oas.models.tags.Tag;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,8 +28,13 @@ import java.util.Map;
 @Configuration
 public class OpenApiConfig {
 
+    private static final String API_RESPONSE_OBJECT_SCHEMA = "ApiResponseObject";
+    private static final String VALIDATION_ERROR_SCHEMA = "ValidationErrorResponse";
+
     @Bean
-    public OpenAPI customOpenAPI() {
+    public OpenAPI customOpenAPI(
+            @Value("${application.openapi.version:0.1.0-beta}") String apiVersion
+    ) {
         final String securitySchemeName = "bearerAuth";
 
         return new OpenAPI()
@@ -52,9 +64,8 @@ public class OpenApiConfig {
                               - Frontend **không được decode, chỉnh sửa hoặc tự tạo**
                               - FE chỉ được lấy `nextCursor` từ response trước đó để truyền lại nguyên giá trị
                             - Các trường thời gian trong response hiện dùng ISO-8601 theo schema `LocalDateTime`.
-                            - Một số endpoint upload hiện hỗ trợ cả:
-                              - `multipart/form-data`
-                              - JSON metadata fallback để tương thích FE cũ
+                            - Upload production luôn đi qua purpose-scoped upload intent. Client không được tự chọn object key,
+                              bucket hoặc private storage path. Các endpoint upload generic chỉ còn để mô phỏng local development.
                             
                             ### Realtime guide cho Frontend
                             - Dùng **REST API** để:
@@ -81,7 +92,7 @@ public class OpenApiConfig {
                               - push notification quan trọng
                               - push badge update cho notification unread count
                             - Realtime chat có thể tới lệch thứ tự trong tình huống mạng thực tế.
-                              FE phải sort defensive theo `createdAt`, tie-break bằng `messageId`.
+                              `sequence` là nguồn sự thật cho thứ tự và read cursor; FE phải REST-sync với `afterSequence` sau reconnect hoặc sequence gap.
                             - Conversation list là dữ liệu động theo `lastMessageAt`; khi merge các cursor page, FE phải dedup theo `conversationId` thay vì append mù.
                             
                             ### Google Calendar / Google Meet
@@ -95,7 +106,7 @@ public class OpenApiConfig {
                             3. Dán `accessToken` vào ô `bearerAuth` (không cần nhập tiền tố `Bearer `).
                             4. Bấm **Authorize** để gọi các API cần xác thực.
                             """)
-                        .version("v1.0.0")
+                        .version(apiVersion)
                         .contact(new Contact()
                                 .name("Quang Tam")
                                 .email("quangtam2005.lttg@gmail.com"))
@@ -109,7 +120,19 @@ public class OpenApiConfig {
                                         .scheme("bearer")
                                         .in(SecurityScheme.In.HEADER)
                                         .bearerFormat("JWT")
-                                        .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`")))
+                                        .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`"))
+                        .addSchemas(API_RESPONSE_OBJECT_SCHEMA, apiResponseObjectSchema())
+                        .addSchemas(VALIDATION_ERROR_SCHEMA, validationErrorSchema())
+                        .addResponses("BadRequest", errorResponse("Request body, parameter hoặc field không hợp lệ.", true))
+                        .addResponses("Unauthorized", errorResponse("Chưa xác thực hoặc access token không hợp lệ.", false))
+                        .addResponses("Forbidden", errorResponse("Không có quyền thực hiện thao tác này.", false))
+                        .addResponses("NotFound", errorResponse("Không tìm thấy resource hoặc resource không được phép enumerate.", false))
+                        .addResponses("Conflict", errorResponse("Resource hoặc state đã thay đổi; refetch canonical data trước khi retry.", false))
+                        .addResponses("PayloadTooLarge", errorResponse("Payload hoặc file vượt giới hạn cho phép.", false))
+                        .addResponses("UnsupportedMediaType", errorResponse("Content-Type hoặc cấu trúc file không được hỗ trợ.", false))
+                        .addResponses("UnprocessableEntity", errorResponse("Input đúng định dạng nhưng không thể xử lý theo business rule tĩnh.", false))
+                        .addResponses("TooManyRequests", errorResponse("Rate limit đã được áp dụng; retry sau thời gian backoff.", false))
+                        .addResponses("InternalServerError", errorResponse("Lỗi hệ thống không mong muốn.", false)))
                 .tags(List.of(
                         new Tag().name("Authentication").description("Nhóm API dùng cho đăng nhập Google, làm mới token, đăng xuất và lấy thông tin user hiện tại. FE dùng nhóm này ở đầu luồng onboarding và khi cần khôi phục phiên đăng nhập."),
                         new Tag().name("Google Calendar").description("Nhóm API kết nối, kiểm tra trạng thái và ngắt kết nối Google Calendar để backend tự tạo Google Meet và đồng bộ lịch cho booking."),
@@ -123,8 +146,9 @@ public class OpenApiConfig {
                         new Tag().name("Mentor Verification").description("Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review."),
                         new Tag().name("Mentor Discovery").description("Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking."),
                         new Tag().name("Mentor Availability Slot").description("Nhóm API để mentor quản lý trực tiếp các slot rảnh (CRUD) và gắn các service có thể nhận mentoring trên từng slot."),
+                        new Tag().name("Mentor Booking Policy").description("Nhóm API để mentor xem và cập nhật booking lead time, horizon và timezone cho các booking tương lai."),
                         new Tag().name("Mentor Booking").description("Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot."),
-                        new Tag().name("Conversation").description("Nhóm API lấy danh sách conversation và gửi/đọc tin nhắn gắn với booking đã được accept. FE dùng sau khi hệ thống đã tự tạo conversation cho booking hợp lệ."),
+                        new Tag().name("Conversation").description("Nhóm API lấy direct conversation và đồng bộ tin nhắn theo sequence. Conversation được tạo khi booking trở thành effective; REST/DB là source of truth, STOMP chỉ là delivery hint."),
                         new Tag().name("Notification").description("Nhóm API đọc danh sách thông báo, unread count và cập nhật trạng thái đã đọc của user hiện tại. FE dùng để dựng badge, dropdown và trang notification history."),
                         new Tag().name("Wallet").description("Nhóm API xem ví SCoin của mentee và ví settlement của mentor. FE dùng cho màn số dư, giao dịch gần nhất và trạng thái earnings."),
                         new Tag().name("Payment Orders").description("Nhóm API tạo checkout, poll trạng thái payment theo booking và nhận webhook PayOS. FE chỉ gọi các endpoint /api/me, webhook dành cho provider."),
@@ -132,6 +156,8 @@ public class OpenApiConfig {
                         new Tag().name("Mentor Payout Profiles").description("Nhóm API mentor quản lý tài khoản nhận tiền payout. FE dùng để tạo, cập nhật và chọn payout profile trước khi tạo payout request."),
                         new Tag().name("Forum").description("Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và report nội dung theo help topic. FE dùng để xây forum text-only MVP cho cộng đồng SkillSwap."),
                         new Tag().name("Blog").description("Nhóm API public blog cho bài viết SEO, kiến thức dev/non-tech, featured articles, view tracking nhẹ và author CTA tracking."),
+                        new Tag().name("File Storage").description("Khả năng storage và local-only upload simulator. Production upload phải dùng purpose-scoped upload intent của từng domain."),
+                        new Tag().name("SEO & Social Sharing").description("Public endpoints cho sitemap, robots và Open Graph share pages."),
                         new Tag().name("Review & Rating").description("Nhóm API để mentee gửi feedback sau buổi mentoring và để hệ thống hiển thị dữ liệu review của mentor. FE dùng sau khi booking đã hoàn thành."),
                         new Tag().name("Admin - Dashboard").description("Nhóm API snapshot, queue cards, queue drill-down và timeseries dành cho admin dashboard/workbench. FE admin dùng để hiển thị tổng quan vận hành, backlog cần xử lý và mở từng queue case cụ thể."),
                         new Tag().name("Admin - Audit Logs").description("Nhóm API read-only để admin duyệt audit logs nội bộ theo actor, entity và action mà không cần truy vấn trực tiếp database."),
@@ -145,6 +171,7 @@ public class OpenApiConfig {
                         new Tag().name("Admin - Bookings").description("Nhóm API vận hành nội bộ để theo dõi booking và session toàn hệ thống. FE admin dùng trong dashboard vận hành hoặc khi cần kiểm tra sự cố booking."),
                         new Tag().name("Admin - Forum").description("Nhóm API moderation forum dành cho admin để đọc queue report, ẩn hoặc khôi phục nội dung forum khi cần xử lý vi phạm."),
                         new Tag().name("Admin - Blog").description("Nhóm API admin quản trị blog: draft, update, publish, archive, feature, category và tag."),
+                        new Tag().name("Admin Chat Moderation").description("Nhóm API admin xử lý report và moderation lock cho direct booking chat."),
                         new Tag().name("System Admin - Roles").description("Nhóm API cấp hệ thống để cấp/thu hồi quyền ADMIN và xem danh sách tài khoản quản trị. Grant ADMIN sẽ gỡ MENTEE/MENTOR để tài khoản thành admin-only; revoke ADMIN sẽ trả user về MENTEE mặc định. Chỉ FE dành cho SYSTEM_ADMIN mới nên dùng nhóm API này."),
                         new Tag().name("System").description("Nhóm API kỹ thuật để kiểm tra sức khỏe dịch vụ và chẩn đoán cơ bản. FE hoặc đội vận hành dùng để smoke check theo đúng cấu hình security hiện tại.")
                 ));
@@ -153,6 +180,7 @@ public class OpenApiConfig {
     @Bean
     public OpenApiCustomizer deduplicateTags() {
         return openApi -> {
+            registerReusableErrorComponents(openApi);
             if (openApi.getTags() == null || openApi.getTags().isEmpty()) {
                 return;
             }
@@ -178,6 +206,7 @@ public class OpenApiConfig {
                     "Mentor Verification",
                     "Mentor Discovery",
                     "Mentor Availability Slot",
+                    "Mentor Booking Policy",
                     "Mentor Booking",
                     "Review & Rating",
                     "Conversation",
@@ -188,6 +217,8 @@ public class OpenApiConfig {
                     "Payout Requests",
                     "Forum",
                     "Blog",
+                    "File Storage",
+                    "SEO & Social Sharing",
                     "Admin - Dashboard",
                     "Admin - Audit Logs",
                     "Admin - Notes",
@@ -200,6 +231,7 @@ public class OpenApiConfig {
                     "Admin - Bookings",
                     "Admin - Forum",
                     "Admin - Blog",
+                    "Admin Chat Moderation",
                     "System Admin - Roles",
                     "System"
             );
@@ -214,5 +246,58 @@ public class OpenApiConfig {
             orderedTags.addAll(tagsByName.values());
             openApi.setTags(orderedTags);
         };
+    }
+
+    private void registerReusableErrorComponents(OpenAPI openApi) {
+        Components components = openApi.getComponents();
+        if (components == null) {
+            components = new Components();
+            openApi.setComponents(components);
+        }
+        components.addSchemas(API_RESPONSE_OBJECT_SCHEMA, apiResponseObjectSchema());
+        components.addSchemas(VALIDATION_ERROR_SCHEMA, validationErrorSchema());
+        components.addResponses("BadRequest", errorResponse("Request body, parameter hoặc field không hợp lệ.", true));
+        components.addResponses("Unauthorized", errorResponse("Chưa xác thực hoặc access token không hợp lệ.", false));
+        components.addResponses("Forbidden", errorResponse("Không có quyền thực hiện thao tác này.", false));
+        components.addResponses("NotFound", errorResponse("Không tìm thấy resource hoặc resource không được phép enumerate.", false));
+        components.addResponses("Conflict", errorResponse("Resource hoặc state đã thay đổi; refetch canonical data trước khi retry.", false));
+        components.addResponses("PayloadTooLarge", errorResponse("Payload hoặc file vượt giới hạn cho phép.", false));
+        components.addResponses("UnsupportedMediaType", errorResponse("Content-Type hoặc cấu trúc file không được hỗ trợ.", false));
+        components.addResponses("UnprocessableEntity", errorResponse("Input đúng định dạng nhưng không thể xử lý theo business rule tĩnh.", false));
+        components.addResponses("TooManyRequests", errorResponse("Rate limit đã được áp dụng; retry sau thời gian backoff.", false));
+        components.addResponses("InternalServerError", errorResponse("Lỗi hệ thống không mong muốn.", false));
+    }
+
+    private Schema<?> apiResponseObjectSchema() {
+        return new ObjectSchema()
+                .description("ApiResponse<Object> envelope returned by runtime exception handling.")
+                .addProperty("timestamp", new StringSchema().format("date-time"))
+                .addProperty("status", new IntegerSchema().description("HTTP status code"))
+                .addProperty("code", new StringSchema().description("Machine-readable business code"))
+                .addProperty("message", new StringSchema().description("Safe user-facing message"))
+                .addProperty("data", new ObjectSchema().nullable(true));
+    }
+
+    private Schema<?> validationErrorSchema() {
+        return new ObjectSchema()
+                .description("Validation detail returned in ApiResponse.data for invalid input.")
+                .addProperty("field", new StringSchema().example("startAt"))
+                .addProperty("message", new StringSchema().example("Thời điểm bắt đầu không hợp lệ"))
+                .addProperty("rejectedValue", new ObjectSchema().nullable(true));
+    }
+
+    private ApiResponse errorResponse(String description, boolean validationDetails) {
+        Schema<?> responseSchema = new Schema<>().$ref("#/components/schemas/" + API_RESPONSE_OBJECT_SCHEMA);
+        if (validationDetails) {
+            responseSchema = new ObjectSchema()
+                    .allOf(List.of(new Schema<>().$ref("#/components/schemas/" + API_RESPONSE_OBJECT_SCHEMA)))
+                    .addProperty("data", new ArraySchema().items(new Schema<>().$ref("#/components/schemas/" + VALIDATION_ERROR_SCHEMA)));
+        }
+        return new ApiResponse()
+                .description(description)
+                .content(new io.swagger.v3.oas.models.media.Content().addMediaType(
+                        org.springframework.http.MediaType.APPLICATION_JSON_VALUE,
+                        new io.swagger.v3.oas.models.media.MediaType().schema(responseSchema)
+                ));
     }
 }

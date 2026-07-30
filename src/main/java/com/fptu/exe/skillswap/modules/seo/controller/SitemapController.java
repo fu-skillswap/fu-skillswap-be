@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.seo.controller;
 
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequiredArgsConstructor
+@Tag(name = "SEO & Social Sharing")
 public class SitemapController {
 
     private final EntityManager entityManager;
@@ -24,6 +27,7 @@ public class SitemapController {
 
     @GetMapping(value = "/sitemap.xml", produces = MediaType.APPLICATION_XML_VALUE)
     @Transactional(readOnly = true)
+    @Operation(summary = "Get sitemap.xml", description = "Public XML sitemap for public mentor profiles and published public blog posts.")
     public ResponseEntity<String> getSitemap() {
         StringBuilder sb = new StringBuilder(SITEMAP_START);
 

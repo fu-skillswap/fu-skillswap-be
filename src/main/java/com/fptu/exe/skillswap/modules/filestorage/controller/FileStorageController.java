@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.filestorage.controller;
 
 import com.fptu.exe.skillswap.modules.filestorage.dto.response.PresignedUploadResponse;
+import com.fptu.exe.skillswap.modules.filestorage.dto.response.FileStorageCapabilityResponse;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
@@ -48,6 +49,15 @@ public class FileStorageController {
 
     @Value("${application.upload.dir:${java.io.tmpdir}/skillswap-storage}")
     private String uploadDir;
+
+    @Operation(summary = "Xem khả năng file storage hiện tại", description = "Dùng cho FE quyết định có hiển thị thao tác upload/download file hay không. Response không tiết lộ bucket, endpoint hoặc object key.")
+    @SecurityRequirement(name = "bearerAuth")
+    @PreAuthorize("isAuthenticated()")
+    @GetMapping("/capabilities")
+    public ApiResponse<FileStorageCapabilityResponse> getCapabilities() {
+        boolean available = storageGatewayProvider.getIfAvailable() != null;
+        return ApiResponse.success(new FileStorageCapabilityResponse(available, available, available, available));
+    }
 
     @Operation(summary = "Lấy Presigned URL để upload file", description = "Trả về một URL tạm thời (sống trong 15 phút) để client upload file trực tiếp lên Cloudflare R2 bằng HTTP PUT. Sau khi upload thành công, client sử dụng publicUrl để lưu vào database.")
     @SecurityRequirement(name = "bearerAuth")

@@ -145,11 +145,13 @@ public class AdminBlogController {
     }
 
     @GetMapping("/categories")
+    @Operation(summary = "List admin blog categories")
     public ApiResponse<List<BlogCategoryResponse>> categories() {
         return ApiResponse.success(adminBlogService.categories());
     }
 
     @PutMapping("/categories")
+    @Operation(summary = "Create or update blog category")
     public ResponseEntity<ApiResponse<BlogCategoryResponse>> upsertCategory(@Valid @RequestBody BlogCategoryUpsertRequest request) {
         AdminBlogService.CategoryUpsertResult result = adminBlogService.upsertCategory(request);
         return result.created()
@@ -158,6 +160,7 @@ public class AdminBlogController {
     }
 
     @GetMapping("/tags")
+    @Operation(summary = "List admin blog tags")
     public ApiResponse<List<BlogTagResponse>> tags() {
         return ApiResponse.success(adminBlogService.tags());
     }

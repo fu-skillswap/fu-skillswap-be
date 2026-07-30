@@ -15,6 +15,7 @@ Mục tiêu là:
 | POST | `/api/me/mentor-verification/documents` | Authenticated | mentee or mentor | `MentorVerificationDocumentUploadRequest` | `MentorVerificationRequestResponse` | - | Confirm private verification object |
 | GET | `/api/files/upload-url` | Local profile only | authenticated | query theo runtime | `PresignedUploadResponse` | production-disabled | Không dùng cho bất kỳ production flow nào |
 | POST/PUT | `/api/files/local-upload` | Local profile only | authenticated | multipart/raw bytes | `PresignedUploadResponse` | local only | Mô phỏng PUT URL cho dev/test |
+| GET | `/api/files/capabilities` | Authenticated | any logged-in user | - | `FileStorageCapabilityResponse` | - | Runtime booleans cho FE bật/tắt file controls |
 
 ## Call order chuẩn
 ### Verification production flow
@@ -49,6 +50,7 @@ Mục tiêu là:
 - verification object là private; client không nhận public URL, storage key hoặc bucket path
 
 ## FE phải làm
+- Gọi `GET /api/files/capabilities` sau auth trước khi hiển thị flow chat attachment, mentor-service resource hoặc Blog asset upload. Response không tiết lộ endpoint, bucket hay object key.
 - Luôn dùng endpoint upload intent theo đúng purpose.
 - Với verification, confirm bằng `uploadIntentId` sau khi PUT hoàn tất.
 - Nếu intent hết hạn hoặc confirm fail, tạo intent mới; không retry bằng object key cũ.

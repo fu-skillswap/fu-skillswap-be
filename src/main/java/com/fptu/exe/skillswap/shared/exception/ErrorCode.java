@@ -16,6 +16,7 @@ public enum ErrorCode {
     UNSUPPORTED_MEDIA_TYPE(415, "SYS_0009", "error.sys.unsupported_media_type", "Kiểu dữ liệu gửi lên không được hỗ trợ"),
     TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Bạn đang thao tác quá nhanh, vui lòng thử lại sau"),
     METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức HTTP không được hỗ trợ cho endpoint này"),
+    UNPROCESSABLE_ENTITY(422, "SYS_0012", "error.sys.unprocessable_entity", "Dữ liệu đúng định dạng nhưng không thể xử lý trong ngữ cảnh hiện tại"),
 
     // Auth
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),
