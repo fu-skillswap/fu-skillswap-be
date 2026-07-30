@@ -26,6 +26,13 @@ FE phải hiểu rõ:
 | PUT | `/api/me/student-profile` | Authenticated | user | `StudentProfileRequest` | `StudentProfileResponse` | - | Tạo/cập nhật profile học thuật |
 | GET | `/api/me/onboarding-status` | Authenticated | user | - | `OnboardingStatusResponse` | - | Trạng thái onboarding tổng hợp |
 
+### Matching profile
+| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/me/matching-profile` | Authenticated | user | - | `MentoringMatchProfileResponse` | Trang thai nhu cau mentoring cua caller. |
+| GET | `/api/me/matching-profile/questionnaire` | Authenticated | user | - | `MentoringQuestionnaireResponse` | Questionnaire dang active. |
+| PUT | `/api/me/matching-profile` | Authenticated | user | `MentoringMatchProfileSubmitRequest` | `MentoringMatchProfileResponse` | Luu cau tra loi matching. |
+
 ## Call order chuẩn
 ### Onboarding lần đầu
 1. Gọi `/api/auth/me`.

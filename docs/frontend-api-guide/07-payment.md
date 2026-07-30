@@ -7,10 +7,16 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
 - settlement state
 
 ## API inventory
+### Discovery pricing estimate
+| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/mentor-services/{serviceId}/pricing-preview` | Authenticated | any logged-in user | path `serviceId` | `ServicePricingPreviewResponse` | Personalized campaign estimate only; no coupon, wallet or reservation. |
+
 ### Checkout và payment order
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | POST | `/api/me/payment-orders/checkout` | Authenticated | mentee | `PaymentCheckoutRequest` | `PaymentCheckoutResponse` | - | Tạo payment order + trả checkout link |
+| POST | `/api/me/bookings/{bookingId}/checkout-preview` | Authenticated | booking mentee | optional `PaymentCheckoutPreviewRequest` | `PaymentCheckoutPreviewResponse` | - | Estimate read-only; không tạo PayOS link hay reserve coupon/credit/campaign |
 | GET | `/api/me/payment-orders/{bookingId}` | Authenticated | participant | path `bookingId` | `PaymentCheckoutResponse` | - | Poll trạng thái payment order |
 | POST | `/api/payments/webhook/payos` | Public backend-only | - | `PaymentWebhookRequest` | `PaymentCheckoutResponse` | - | Webhook từ PayOS, FE không gọi |
 
@@ -19,6 +25,13 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/me/credit-wallet` | Authenticated | mentee | - | `CreditWalletResponse` | - | Số dư Scoin của mentee |
 | GET | `/api/me/mentor-wallet` | Authenticated | mentor | - | `MentorWalletResponse` | - | Settlement earnings của mentor |
+
+### Mentor payout profiles
+| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/mentor/payout-profiles` | Authenticated | mentor | `MentorPayoutProfileUpsertRequest` | `MentorPayoutProfileResponse` | Tạo tài khoản nhận payout. |
+| PUT | `/api/mentor/payout-profiles/{payoutProfileId}` | Authenticated | mentor | `MentorPayoutProfileUpsertRequest` | `MentorPayoutProfileResponse` | Cập nhật tài khoản đã lưu. |
+| GET | `/api/mentor/payout-profiles` | Authenticated | mentor | - | `List<MentorPayoutProfileResponse>` | Danh sách tài khoản của mentor. |
 
 ### Payout
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
@@ -33,10 +46,12 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
 
 ## Call order chuẩn
 ### Checkout
-1. FE chỉ gọi checkout khi booking đã vào trạng thái cần thanh toán.
-2. FE gửi `bookingId` và `couponCode` nếu có.
-3. Backend tính giá, áp coupon/credit và trả `checkoutUrl`.
-4. FE redirect user sang provider checkout.
+1. Khi booking ở `ACCEPTED_AWAITING_PAYMENT`, FE có thể gọi `POST /api/me/bookings/{bookingId}/checkout-preview` với `couponCode` để hiện estimate và `paymentDeadlineAt`.
+2. Preview chỉ là thông tin: không tạo payment order, PayOS link, coupon redemption, credit reservation hoặc campaign reservation.
+3. FE chỉ gọi checkout khi booking vẫn cần thanh toán.
+4. FE gửi `bookingId` và `couponCode` nếu có.
+5. Backend tính lại giá trong transaction, áp coupon/credit và trả `checkoutUrl`.
+6. FE redirect user sang provider checkout.
 
 ### Sau checkout
 1. FE poll `/api/me/payment-orders/{bookingId}` nếu cần refresh trạng thái.
@@ -84,19 +99,35 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
 - `expiresAt`
   - thời điểm link hết hạn
 
+### `PaymentCheckoutPreviewResponse`
+- `basePriceScoin`, `menteeSurchargeScoin`, `priceBeforeDiscountScoin`
+  - giá service và surcharge đã tính cho mentee trước discount
+- `couponDiscountScoin`, `campaignCreditAppliedScoin`, `userCreditAppliedScoin`
+  - estimate các khoản giảm/credit tại thời điểm preview
+- `estimatedFinalPayableScoin`
+  - tổng estimate sau giảm giá; checkout tính lại và là nguồn sự thật
+- `paymentDeadlineAt`
+  - deadline server-enforced của booking; FE chỉ dùng để hiển thị countdown
+- `isEstimate`, `disclaimer`
+  - luôn nhắc rằng preview không phải reservation hay final price
+
 ### Payment lifecycle
 - `PENDING`
-  - chưa xong thanh toán
+  - payment order vừa tạo, chưa chốt cách thanh toán còn lại
+- `PARTIALLY_COVERED_BY_CREDIT`
+  - credit/campaign đã cover một phần; backend đang chuẩn bị phần provider payable còn lại
+- `AWAITING_PROVIDER_PAYMENT`
+  - có payment link/provider amount và đang chờ provider xác nhận
 - `PAID`
   - provider đã xác nhận thanh toán
 - `FAILED`
   - thanh toán thất bại
+- `CANCELLED`
+  - payment order bị hủy trước khi hoàn tất
 - `EXPIRED`
   - link/payment quá hạn
-- `NOT_REQUIRED`
-  - booking miễn phí hoặc không cần payment
-- `REFUNDED`
-  - đã hoàn tiền ở settlement
+
+Service miễn phí không nhất thiết tạo `PaymentOrder`; FE đọc `BookingResponse` để biết booking có còn yêu cầu thanh toán hay không. Hoàn tiền là payment/settlement outcome trên booking, không phải `PaymentOrderStatus` trong checkout response.
 
 ### Settlement
 - `settlementStatus`
@@ -115,6 +146,7 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
 - Không coi `PAID` là đã release tiền.
 - Không dùng checkout response để thay thế booking detail.
 - Không retry checkout vô hạn nếu backend đã báo conflict/expires.
+- Không dùng checkout preview như giá/credit được giữ chỗ.
 - Không trộn payout mentor với payment booking.
 
 ## Response JSON example
@@ -178,6 +210,9 @@ File này mô tả checkout, webhook semantics, wallet, payout và cách FE hi�
   - success: redirect provider
   - 400: booking không hợp lệ hoặc coupon sai
   - 409: booking đã được thanh toán / trạng thái không cho checkout
+- `checkout-preview`
+  - success: render estimate và deadline, nhưng vẫn phải tính lại ở checkout
+  - 400/409: refetch booking; không retry preview như một mutation
 - `getByBookingId`
   - success: dùng để poll và refresh UI
   - 404: booking không có payment order

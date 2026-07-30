@@ -33,6 +33,10 @@ public record ConversationResponse(
         LocalDateTime createdAt,
         @Schema(description = "Số lượng tin nhắn chưa đọc đối với user hiện tại", example = "3")
         long unreadCount,
+        @Schema(description = "Sequence lớn nhất mà user hiện tại đã đọc", example = "128")
+        long myLastReadSequence,
+        @Schema(description = "Sequence lớn nhất mà participant còn lại đã đọc", example = "130")
+        long otherLastReadSequence,
         ChatMessagingAccess messagingAccess,
         boolean canSendMessages,
         boolean canUploadAttachments,

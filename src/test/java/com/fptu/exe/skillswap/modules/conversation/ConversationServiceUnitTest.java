@@ -348,6 +348,7 @@ class ConversationServiceUnitTest {
                 .conversation(conversation)
                 .user(meUser)
                 .joinedAt(LocalDateTime.now().minusDays(1))
+                .lastReadSequence(42L)
                 .build();
 
         ConversationParticipant other = ConversationParticipant.builder()
@@ -358,7 +359,7 @@ class ConversationServiceUnitTest {
 
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(me, other));
-        when(messageRepository.countUnreadMessages(eq(conversationId), eq(userId), any())).thenReturn(5L);
+        when(messageRepository.countUnreadMessages(eq(conversationId), eq(userId), eq(42L))).thenReturn(5L);
 
         ConversationResponse response = conversationService.getConversationDetail(conversationId, userId);
 
@@ -366,6 +367,7 @@ class ConversationServiceUnitTest {
         assertEquals(conversationId, response.id());
         assertEquals(otherUserId, response.otherUserId());
         assertEquals(5L, response.unreadCount());
+        assertEquals(42L, response.myLastReadSequence());
     }
 
     @Test

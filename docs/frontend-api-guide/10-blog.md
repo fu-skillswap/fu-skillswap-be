@@ -27,7 +27,10 @@ Reader detail and mutation endpoints return a generic `404` for missing, deleted
 | GET | `/api/blog/featured` | optional | Editorial placement; `featured` is not ranking. |
 | GET | `/api/blog/trending` | optional | `PUBLIC` for anonymous; `PUBLIC + AUTHENTICATED` for logged-in users. |
 | GET | `/api/blog/posts/{slug}/related` | optional | Related reader content; never premium. |
+| GET | `/api/blog/posts/{slug}/recommendations` | optional | Deprecated alias of `/related`; do not add new client usage. |
 | GET | `/api/me/blog/library?serviceId=` | required | Premium articles unlocked for the selected booked service. |
+| GET | `/api/me/blog/bookmarks` | required | Cursor-paginated articles bookmarked by the current user. |
+| GET | `/api/me/blog/feed` | required | Cursor-paginated followed mentor/category posts, then eligible latest fallback. |
 | GET | `/api/me/blog/posts` | mentor | Mentor-owned authoring list. |
 | POST | `/api/me/blog/posts` | eligible mentor | Create mentor draft. |
 | GET/PUT | `/api/me/blog/posts/{postId}` | eligible mentor | Read/update own post. |
@@ -35,12 +38,28 @@ Reader detail and mutation endpoints return a generic `404` for missing, deleted
 | POST | `/api/me/blog/posts/{postId}/archive` | mentor owner | Archive with `expectedVersion`. |
 | POST | `/api/me/blog/assets/upload-intents` | eligible mentor | Get public Blog image upload credential. |
 | POST | `/api/me/blog/assets/{intentId}/confirm` | eligible mentor | Confirm uploaded image and receive `assetId` + public URL. |
+| POST | `/api/blog/posts/{postId}/view` | optional | Record a rate-limited, deduplicated reader view; no UI state depends on its result. |
+| POST | `/api/blog/posts/{postId}/author-cta-click` | optional | Best-effort author CTA telemetry. |
+| POST | `/api/blog/posts/{postId}/booking-started` | optional | Best-effort booking-started telemetry. |
+| POST | `/api/blog/posts/{postId}/notification-click` | optional | Best-effort notification-click telemetry. |
+| POST | `/api/blog/posts/{postId}/recommendation-click` | optional | Legacy telemetry only; do not build a recommendation UI around it. |
+| PUT/DELETE | `/api/blog/posts/{postId}/like` | required | Idempotently like/unlike an eligible post. |
+| PUT/DELETE | `/api/blog/posts/{postId}/bookmark` | required | Idempotently bookmark/unbookmark an eligible post. |
 | PUT/DELETE | `/api/blog/mentors/{mentorId}/follow` | required | Follow/unfollow mentor articles. |
 | PUT/DELETE | `/api/blog/categories/{categoryId}/follow` | required | Follow/unfollow categories. |
 | GET | `/api/me/blog/follows` | required | `{ categories, mentors }`. |
+| GET/POST | `/api/admin/blog/posts` | admin | List admin-visible posts or create a platform draft. |
+| GET/PUT | `/api/admin/blog/posts/{postId}` | admin | Load or update an admin-visible post. |
 | PATCH | `/api/admin/blog/posts/{postId}/moderation` | admin | Moderate mentor metadata only. |
+| POST | `/api/admin/blog/posts/{postId}/publish`, `/archive` | admin | Publish/archive an admin-managed post. |
+| POST | `/api/admin/blog/posts/{postId}/feature`, `/unfeature` | admin | Editorial placement only; never changes ranking formulas. |
 | DELETE | `/api/admin/blog/posts/{postId}` | admin | Soft delete with `expectedVersion`. |
 | POST | `/api/admin/blog/posts/{postId}/restore` | admin | Restore as `ARCHIVED`. |
+| GET/PUT | `/api/admin/blog/categories` | admin | List or upsert blog categories. |
+| GET/POST | `/api/admin/blog/tags` | admin | List or create blog tags. |
+| PUT | `/api/admin/blog/tags/{tagId}` | admin | Update or deactivate a blog tag. |
+| PUT | `/api/admin/blog/tags` | admin | Deprecated legacy tag upsert; new FE must use the ID path. |
+| POST | `/api/admin/blog/assets/upload-intents`, `/api/admin/blog/assets/{intentId}/confirm` | admin | Public Blog-asset flow for platform articles. |
 
 ## Mentor authoring flow
 1. Mentor must be `ACTIVE` and verified to create, edit, upload assets or publish.
@@ -77,6 +96,12 @@ Use `featured` only for a badge/editorial block. Do not derive it from feature o
 - `PUBLIC` and `AUTHENTICATED` publications notify eligible mentor/category followers.
 - `BOOKED_MEMBERS` publications notify only currently entitled users.
 - Notification dedupe is server-owned; never create client notifications from feed results.
+
+## Reader engagement and telemetry
+- Like, bookmark and follow mutations are idempotent. Render the canonical `BlogEngagementMutationResponse` or `BlogFollowResponse` returned by the server rather than incrementing counts locally.
+- `/api/me/blog/bookmarks`, `/api/me/blog/feed` and reader list use opaque cursors. Pass `nextCursor` back unchanged; do not derive page numbers or decode it.
+- Reader telemetry endpoints (`view`, CTA click, booking-started and notification click) are best effort. Do not block navigation, booking or a rendered article if one fails.
+- The deprecated `/recommendations` alias returns a `Deprecation: true` header and a `Link` header pointing to `/related`. New FE code must call `/related` directly.
 
 ## Admin boundary
 Admin can fully write only `PLATFORM` articles. Mentor article moderation may change visibility, taxonomy, SEO overrides, feature state or archive/delete/restore; it cannot change mentor title, Markdown, author or premium service entitlements.

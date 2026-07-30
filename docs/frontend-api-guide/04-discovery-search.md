@@ -25,6 +25,9 @@ FE phải hiểu:
 | GET | `/api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates` | Authenticated | any logged-in user | `serviceId` | `ServiceSlotCandidatesResponse` | - | Exact candidates của 1 service |
 
 ## Khi nào dùng API nào
+
+### Funnel telemetry
+`POST /api/mentor-discovery/funnel-events` la best-effort telemetry cho authenticated user. Body dung `MentorFunnelEventRequest`; event client hop le la `SERVICE_VIEWED`, `CANDIDATE_SELECTED`, `BOOKING_STARTED` va source la enum contract. FE khong duoc block navigation, discovery hay booking neu request nay fail.
 ### Search
 Use khi user:
 - nhập keyword

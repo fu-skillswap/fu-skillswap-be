@@ -17,7 +17,7 @@ FE user thường không được dùng file này để build UI sản phẩm.
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/api/admin/users` | Authenticated | admin/system admin | filter request | page DTO | - | Danh sách user |
-| GET | `/api/admin/users/summary` | Authenticated | admin/system admin | - | summary DTO | - | Summary user |
+| GET | `/api/admin/users/{userId}/summary` | Authenticated | admin/system admin | path `userId` | summary DTO | - | Summary cua mot user |
 | POST | `/api/admin/users/{userId}/ban` | Authenticated | admin/system admin | ban request | user DTO | - | Ban user |
 | POST | `/api/admin/users/{userId}/unban` | Authenticated | admin/system admin | unban request | user DTO | - | Unban user |
 | POST | `/api/system/users/admin-role/grant` | Authenticated | system admin | role request | user DTO | - | Grant admin role |
@@ -37,6 +37,13 @@ FE user thường không được dùng file này để build UI sản phẩm.
 | Case / note endpoints | `/api/admin/cases/...`, `/api/admin/notes/...` | Authenticated | admin/system admin | case/note DTO | case/note DTO | - | Support workflow |
 | Mentoring questionnaire admin endpoints | `/api/admin/mentoring-questionnaire/...` | Authenticated | admin/system admin | questionnaire DTO | questionnaire DTO | - | Manage matching questionnaire |
 | Payout admin endpoints | `/api/admin/payout-requests/...` | Authenticated | admin/system admin | payout DTO | payout DTO | - | Duyệt payout |
+
+### Chat moderation
+| Method | Endpoint | Auth | Role | Request | Response | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/admin/chat-reports?status=&page=&size=` | Authenticated | admin/system admin | optional status/page/size | `Page<ChatReportResponse>` | Queue report chat. |
+| PATCH | `/api/admin/chat-reports/{reportId}` | Authenticated | admin/system admin | `ChatReportResolveRequest` | `ChatReportResponse` | `RESOLVED_LOCKED` khoa conversation; `RESOLVED_NO_ACTION` chi dong report. |
+| PATCH | `/api/admin/chat-reports/conversations/{conversationId}/lock` | Authenticated | admin/system admin | `ConversationLockRequest` | `Void` | Override moderation lock; unblock van ton trong booking/participant policy. |
 
 ## Call order chuẩn
 ### Admin panel

@@ -26,6 +26,15 @@ FE phải phân biệt rõ:
 | GET | `/api/me/mentor-profile` | Authenticated | mentee or mentor | - | `MentorProfileResponse` | - | Hồ sơ mentor hiện tại |
 | PUT | `/api/me/mentor-profile` | Authenticated | mentee or mentor | `MentorProfileUpsertRequest` | `MentorProfileResponse` | - | Tạo/cập nhật profile mentor |
 
+### Mentor profile items
+| Method | Endpoint | Auth | Role | Request | Response | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| GET/POST | `/api/me/mentor-projects` | Authenticated | mentee or mentor | `MentorFeaturedProjectRequest` for POST | `List`/`MentorFeaturedProjectResponse` | List or create featured projects. |
+| PUT/DELETE | `/api/me/mentor-projects/{projectId}` | Authenticated | owner | `MentorFeaturedProjectRequest` for PUT | `MentorFeaturedProjectResponse`/`Void` | Update or remove a featured project. |
+| PUT | `/api/me/mentor-projects/{projectId}/picture` | Authenticated | owner | multipart part `file` | `MentorFeaturedProjectResponse` | Existing direct multipart project-picture endpoint; do not reuse it for verification, resources or Blog images. |
+| GET/POST | `/api/me/mentor-achievements` | Authenticated | mentee or mentor | `MentorAchievementRequest` for POST | `List`/`MentorAchievementResponse` | List or create education/achievement items. |
+| PUT/DELETE | `/api/me/mentor-achievements/{achievementId}` | Authenticated | owner | `MentorAchievementRequest` for PUT | `MentorAchievementResponse`/`Void` | Update or remove an achievement. |
+
 ### Mentor services
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -40,8 +49,17 @@ FE phải phân biệt rõ:
 | GET | `/api/me/mentor-scheduling-constraints` | Authenticated | mentor | - | `MentorSchedulingConstraintsResponse` | - | Giới hạn platform, read-only |
 
 ### Service learning resources
-Mentor quản lý tài liệu theo từng service qua `/api/me/mentor-services/{serviceId}/resources`.
-Upload là flow hai bước: gọi `POST .../upload-url` với `filename`, `resourceType`; PUT object tới `uploadUrl` với đúng `requiredContentType`; sau đó confirm bằng `POST .../resources` với `uploadIntentId`, không gửi object key.
+| Method | Endpoint | Auth | Role | Request | Response | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| POST | `/api/me/mentor-services/{serviceId}/resources/upload-url` | Authenticated | mentor | `MentorServiceResourceUploadUrlRequest` | `MentorServiceResourceUploadUrlResponse` | Creates one private upload intent. |
+| POST | `/api/me/mentor-services/{serviceId}/resources` | Authenticated | mentor | `MentorServiceResourceCreateRequest` | `MentorServiceResourceResponse` | Confirms the intent and creates metadata. |
+| GET | `/api/me/mentor-services/{serviceId}/resources` | Authenticated | mentor | - | `List<MentorServiceResourceResponse>` | Full management list, including inactive history. |
+| PUT | `/api/me/mentor-services/{serviceId}/resources/{resourceId}` | Authenticated | mentor | `MentorServiceResourceUpdateRequest` | `MentorServiceResourceResponse` | Metadata only; file content is immutable. |
+| DELETE | `/api/me/mentor-services/{serviceId}/resources/{resourceId}?expectedVersion=` | Authenticated | mentor | query `expectedVersion` | `Void` | Soft-deletes and immediately revokes downloads. |
+| GET | `/api/mentor-services/{serviceId}/resources` | Authenticated | any logged-in user | - | `List<MentorServiceResourceResponse>` | Reader metadata; never exposes a storage key or URL. |
+| POST | `/api/mentor-service-resources/{resourceId}/download-url` | Authenticated | entitled reader | - | `MentorServiceResourceDownloadResponse` | Re-authorizes and returns a short-lived private credential. |
+
+Upload is a two-step flow: call `POST .../upload-url` with `filename`, `resourceType`; PUT bytes to `uploadUrl` using the returned `requiredContentType`; then confirm through `POST .../resources` with `uploadIntentId`. The client never submits an object key.
 
 Chỉ hỗ trợ `PDF`, `DOCX`, `PPTX`, `TEXT`, `MARKDOWN`, `PNG`, `JPEG`. `.img` không được hỗ trợ. Tài liệu mặc định nên là `BOOKED_MEMBERS`; `AUTHENTICATED` cho mọi người dùng đã đăng nhập.
 
@@ -263,6 +281,7 @@ Mentor service response exposes `maintainPostSessionChat` so mentees know the co
       "isFree": false,
       "priceScoin": 100,
       "isActive": true,
+      "maintainPostSessionChat": false,
       "version": 4,
       "helpTopics": [],
       "createdAt": "2026-06-01T10:00:00",

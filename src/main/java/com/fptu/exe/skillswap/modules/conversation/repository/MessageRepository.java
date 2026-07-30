@@ -19,11 +19,11 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
         select count(m) from Message m
         where m.conversation.id = :conversationId
           and (m.sender is null or m.sender.id <> :userId)
-          and m.createdAt > :lastReadAt
+          and m.sequence > :lastReadSequence
     """)
     long countUnreadMessages(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
                              @org.springframework.data.repository.query.Param("userId") UUID userId,
-                             @org.springframework.data.repository.query.Param("lastReadAt") java.time.LocalDateTime lastReadAt);
+                             @org.springframework.data.repository.query.Param("lastReadSequence") long lastReadSequence);
 
     @org.springframework.data.jpa.repository.Query("""
         select m.conversation.id, count(m)
@@ -32,7 +32,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
         where cp.user.id = :userId
           and m.conversation.id in :conversationIds
           and (m.sender.id is null or m.sender.id <> :userId)
-          and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt)
+          and m.sequence > cp.lastReadSequence
         group by m.conversation.id
     """)
     java.util.List<Object[]> countUnreadMessagesBatch(@org.springframework.data.repository.query.Param("conversationIds") java.util.List<UUID> conversationIds,
@@ -42,7 +42,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
         select cp.user.id, count(m)
         from ConversationParticipant cp
         left join Message m on m.conversation.id = cp.conversation.id 
-                            and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt) 
+                            and m.sequence > cp.lastReadSequence
                             and (m.sender.id is null or m.sender.id <> cp.user.id)
         where cp.conversation.id = :conversationId
           and cp.user.id in :userIds
@@ -59,7 +59,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
         join ConversationParticipant cp on cp.conversation.id = m.conversation.id
         where cp.user.id = :userId
           and (m.sender is null or m.sender.id <> :userId)
-          and m.createdAt > coalesce(cp.lastReadAt, cp.joinedAt)
+          and m.sequence > cp.lastReadSequence
     """)
     long countTotalUnreadMessages(@org.springframework.data.repository.query.Param("userId") UUID userId);
 

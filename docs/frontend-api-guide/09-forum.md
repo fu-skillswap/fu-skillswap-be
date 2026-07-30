@@ -18,13 +18,12 @@ FE phải hiểu:
 | PUT | `/api/forum/posts/{postId}` | Authenticated | owner | update post request | `ForumPostResponse` | - | Sửa bài post |
 | DELETE | `/api/forum/posts/{postId}` | Authenticated | owner | - | `ForumPostResponse` | - | Xóa mềm bài post |
 | POST | `/api/forum/posts/{postId}/comments` | Authenticated | user | create comment request | `ForumCommentResponse` | - | Tạo comment |
-| GET | `/api/forum/posts/{postId}/comments` | Public or Authenticated | - | cursor request theo runtime | `CursorPageResponse<ForumCommentResponse>` | - | Comment list hiện dùng cursor |
+| GET | `/api/forum/posts/{postId}/comments` | Authenticated | mentee/mentor | `cursor`, `limit` | `CursorPageResponse<ForumCommentResponse>` | - | Comment list dung cursor; admin/system admin khong dung user endpoint nay. |
 | PUT | `/api/forum/comments/{commentId}` | Authenticated | owner | update comment request | `ForumCommentResponse` | - | Sửa comment |
 | DELETE | `/api/forum/comments/{commentId}` | Authenticated | owner | - | `Void` | - | Xóa comment |
 | PUT/DELETE | `/api/forum/posts/{postId}/reaction` | Authenticated | user | `ForumReactionRequest` for PUT | `ForumPostResponse` | - | Set/remove reaction |
 | PUT/DELETE | `/api/forum/comments/{commentId}/reaction` | Authenticated | user | `ForumReactionRequest` for PUT | `ForumCommentResponse` | - | Set/remove reaction comment |
-| POST | `/api/forum/posts/{postId}/reports` | Authenticated | user | report request | `ForumReportResponse` | - | Report post |
-| POST | `/api/forum/comments/{commentId}/reports` | Authenticated | user | report request | `ForumReportResponse` | - | Report comment |
+| POST | `/api/forum/reports` | Authenticated | mentee/mentor | `{ targetType, targetId, reasonType, description? }` | `ForumReportResponse` | - | Report post/comment. `targetType` is `POST` or `COMMENT`. |
 
 ### Admin moderation
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |

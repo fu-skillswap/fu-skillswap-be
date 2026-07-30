@@ -107,7 +107,7 @@ Mỗi file domain phải có ít nhất một bảng:
 ## API success/error behavior
 - `200/201`
   - render data mới ngay.
-- `400/409/422`
+- `400/409`
   - giữ form state nếu có, đồng thời hiển thị thông báo nghiệp vụ rõ nghĩa.
 - `401`
   - refresh token 1 lần rồi mới quyết định redirect login.

@@ -26,6 +26,8 @@ public record MessageResponse(
         @Schema(description = "Message content", example = "Chào em, anh đã cập nhật meeting link cho buổi mentoring.")
         String content,
         MessageState state,
+        @Schema(description = "Optimistic-lock version. Send this value as expectedVersion when editing or deleting a text message.", example = "1")
+        Integer version,
         LocalDateTime editedAt,
         LocalDateTime deletedAt,
         Boolean isReadByOther,

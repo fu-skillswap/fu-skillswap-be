@@ -33,6 +33,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -189,6 +192,12 @@ public class ConversationService {
                     .lastMessageAt(conv.getLastMessageAt())
                     .createdAt(conv.getCreatedAt())
                     .unreadCount(unread)
+                    .myLastReadSequence(participants.stream()
+                            .filter(participant -> participant.getUser().getId().equals(userId))
+                            .mapToLong(ConversationParticipant::getLastReadSequence)
+                            .findFirst()
+                            .orElse(0L))
+                    .otherLastReadSequence(other != null ? other.getLastReadSequence() : 0L)
                     .messagingAccess(access.messagingAccess())
                     .canSendMessages(access.canSendMessages())
                     .canUploadAttachments(access.canUploadAttachments())
@@ -258,6 +267,7 @@ public class ConversationService {
         }
         internalTelemetryService.record("CHAT_OPENED", userId, "CONVERSATION", conversationId, java.util.Map.of());
 
+        long otherLastReadSequence = resolveOtherLastReadSequence(conversationId, userId);
         return messageRepository.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable)
                 .map(msg -> com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
                         .id(msg.getId())
@@ -266,6 +276,10 @@ public class ConversationService {
                         .senderName(msg.getSender() != null ? msg.getSender().getFullName() : "Hệ thống")
                         .messageType(msg.getMessageType())
                         .content(msg.getContent())
+                        .version(msg.getVersion())
+                        .isReadByOther(msg.getSender() != null && msg.getSender().getId().equals(userId)
+                                ? otherLastReadSequence >= msg.getSequence()
+                                : null)
                         .createdAt(msg.getCreatedAt())
                         .isMine(msg.getSender() != null && msg.getSender().getId().equals(userId))
                         .build());
@@ -319,8 +333,7 @@ public class ConversationService {
 
         var access = resolveMessagingAccess(conversation);
         if (!access.canSendMessages()) {
-            throw new com.fptu.exe.skillswap.shared.exception.BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED,
-                    "Cuộc hội thoại hiện chỉ cho phép xem lịch sử: " + access.readOnlyReason());
+            throw new BaseException(resolveMessagingAccessError(access));
         }
 
         User sender = userRepository.findById(userId)
@@ -332,7 +345,7 @@ public class ConversationService {
                     com.fptu.exe.skillswap.shared.exception.ErrorCode.BAD_REQUEST, "Tin nhắn cần có nội dung hoặc tệp đính kèm"
             );
         }
-        String requestHash = Integer.toHexString(java.util.Objects.hash(content, request.replyToMessageId(), request.attachmentIntentIds()));
+        String requestHash = requestHash(content, request.replyToMessageId(), request.attachmentIntentIds());
         var replay = messageRepository.findByConversationIdAndSenderIdAndClientMessageId(conversationId, userId, request.clientMessageId());
         if (replay.isPresent()) {
             if (!java.util.Objects.equals(replay.get().getRequestHash(), requestHash)) {
@@ -340,6 +353,7 @@ public class ConversationService {
             }
             return toMessageResponse(replay.get(), userId);
         }
+        validateReplyTarget(conversationId, request.replyToMessageId());
 
         com.fptu.exe.skillswap.modules.conversation.domain.Message message = com.fptu.exe.skillswap.modules.conversation.domain.Message.builder()
                 .conversation(conversation)
@@ -428,6 +442,7 @@ public class ConversationService {
                 .messageType(message.getMessageType())
                 .content(message.getContent())
                 .state(message.getState())
+                .version(message.getVersion())
                 .createdAt(message.getCreatedAt())
                 .isMine(true)
                 .attachments(mapAttachments(message.getId()))
@@ -437,9 +452,12 @@ public class ConversationService {
     @Transactional(readOnly = true)
     public List<com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse> getMessagesBySequence(UUID conversationId, UUID userId, Long beforeSequence, Long afterSequence, Integer limit) {
         ensureParticipant(conversationId, userId);
-        if (beforeSequence != null && afterSequence != null) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_MESSAGE_CURSOR_INVALID");
+        if (beforeSequence != null && afterSequence != null) throw new BaseException(ErrorCode.CHAT_MESSAGE_CURSOR_INVALID);
         int resolved = defaultLimit(limit, 30);
-        return messageRepository.findByConversationSequenceWindow(conversationId, beforeSequence, afterSequence, org.springframework.data.domain.PageRequest.of(0, resolved)).stream().map(m -> toMessageResponse(m, userId)).toList();
+        long otherLastReadSequence = resolveOtherLastReadSequence(conversationId, userId);
+        return messageRepository.findByConversationSequenceWindow(conversationId, beforeSequence, afterSequence, org.springframework.data.domain.PageRequest.of(0, resolved)).stream()
+                .map(message -> toMessageResponse(message, userId, otherLastReadSequence))
+                .toList();
     }
 
     @Transactional
@@ -449,13 +467,13 @@ public class ConversationService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
         if (!resolveMessagingAccess(conversation).canUploadAttachments()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "CHAT_CONVERSATION_READ_ONLY");
+            throw new BaseException(resolveMessagingAccessError(resolveMessagingAccess(conversation)));
         }
         String contentType = normalizeAttachmentContentType(request.contentType());
         validateAttachmentFilename(request.filename(), contentType);
-        if (request.sizeBytes() > 10L * 1024 * 1024) throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "CHAT_ATTACHMENT_QUOTA_EXCEEDED");
+        if (request.sizeBytes() > 10L * 1024 * 1024) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
         if (chatAttachmentRepository.sumUploadedBytesByUserSince(userId, DateTimeUtil.now().toLocalDate().atStartOfDay()) + request.sizeBytes() > 50L * 1024 * 1024) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "CHAT_ATTACHMENT_QUOTA_EXCEEDED");
+            throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
         }
         rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER, "chat:attachment-intent:" + userId, 20, java.time.Duration.ofMinutes(15), "Bạn tạo upload intent quá nhanh");
         UUID intentId = UUID.randomUUID();
@@ -501,7 +519,6 @@ public class ConversationService {
                 .filter(p -> !p.getUser().getId().equals(userId))
                 .findFirst()
                 .orElse(null);
-
         ConversationParticipant me = participants.stream()
                 .filter(p -> p.getUser().getId().equals(userId))
                 .findFirst()
@@ -509,8 +526,7 @@ public class ConversationService {
 
         long unread = 0;
         if (me != null) {
-            java.time.LocalDateTime lastRead = me.getLastReadAt() != null ? me.getLastReadAt() : me.getJoinedAt();
-            unread = messageRepository.countUnreadMessages(conv.getId(), userId, lastRead);
+            unread = messageRepository.countUnreadMessages(conv.getId(), userId, me.getLastReadSequence());
         }
 
         return com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse.builder()
@@ -524,6 +540,8 @@ public class ConversationService {
                 .lastMessageAt(conv.getLastMessageAt())
                 .createdAt(conv.getCreatedAt())
                 .unreadCount(unread)
+                .myLastReadSequence(me != null ? me.getLastReadSequence() : 0L)
+                .otherLastReadSequence(other != null ? other.getLastReadSequence() : 0L)
                 .messagingAccess(resolveMessagingAccess(conv).messagingAccess())
                 .canSendMessages(resolveMessagingAccess(conv).canSendMessages())
                 .canUploadAttachments(resolveMessagingAccess(conv).canUploadAttachments())
@@ -649,6 +667,10 @@ public class ConversationService {
                 .filter(p -> !p.getUser().getId().equals(userId))
                 .findFirst()
                 .orElse(null);
+        ConversationParticipant me = participants.stream()
+                .filter(p -> p.getUser().getId().equals(userId))
+                .findFirst()
+                .orElse(null);
         long unread = unreadCountsMap.getOrDefault(conv.getId(), 0L);
         var access = resolveMessagingAccess(conv);
         return com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse.builder()
@@ -662,6 +684,8 @@ public class ConversationService {
                 .lastMessageAt(conv.getLastMessageAt())
                 .createdAt(conv.getCreatedAt())
                 .unreadCount(unread)
+                .myLastReadSequence(me != null ? me.getLastReadSequence() : 0L)
+                .otherLastReadSequence(other != null ? other.getLastReadSequence() : 0L)
                 .messagingAccess(access.messagingAccess())
                 .canSendMessages(access.canSendMessages())
                 .canUploadAttachments(access.canUploadAttachments())
@@ -675,6 +699,13 @@ public class ConversationService {
     private com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse toMessageResponse(
             com.fptu.exe.skillswap.modules.conversation.domain.Message msg,
             UUID userId) {
+        return toMessageResponse(msg, userId, resolveOtherLastReadSequence(msg.getConversation().getId(), userId));
+    }
+
+    private com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse toMessageResponse(
+            com.fptu.exe.skillswap.modules.conversation.domain.Message msg,
+            UUID userId,
+            long otherLastReadSequence) {
         boolean mine = msg.getSender() != null && msg.getSender().getId().equals(userId);
         return com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse.builder()
                 .id(msg.getId())
@@ -685,9 +716,10 @@ public class ConversationService {
                 .messageType(msg.getMessageType())
                 .content(msg.getState() == com.fptu.exe.skillswap.modules.conversation.domain.MessageState.DELETED ? null : msg.getContent())
                 .state(msg.getState())
+                .version(msg.getVersion())
                 .editedAt(msg.getEditedAt())
                 .deletedAt(msg.getDeletedAt())
-                .isReadByOther(mine ? Boolean.FALSE : null)
+                .isReadByOther(mine ? otherLastReadSequence >= msg.getSequence() : null)
                 .createdAt(msg.getCreatedAt())
                 .isMine(mine)
                 .attachments(mapAttachments(msg.getId()))
@@ -705,7 +737,7 @@ public class ConversationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tin nhắn"));
         assertEditable(message, userId, request.expectedVersion());
         message.setContent(request.content().trim()); message.setEditedAt(DateTimeUtil.now());
-        return toMessageResponse(messageRepository.save(message), userId);
+        return toMessageResponse(messageRepository.saveAndFlush(message), userId);
     }
 
     @Transactional
@@ -716,7 +748,7 @@ public class ConversationService {
         message.setState(com.fptu.exe.skillswap.modules.conversation.domain.MessageState.DELETED);
         message.setDeletedAt(DateTimeUtil.now()); message.setDeletedByUserId(userId);
         chatAttachmentRepository.findByMessageId(messageId).forEach(a -> { a.setState(com.fptu.exe.skillswap.modules.conversation.domain.ChatAttachmentState.REVOKED); a.setRevokedAt(DateTimeUtil.now()); });
-        return toMessageResponse(messageRepository.save(message), userId);
+        return toMessageResponse(messageRepository.saveAndFlush(message), userId);
     }
 
     @Transactional
@@ -733,19 +765,55 @@ public class ConversationService {
     }
 
     private void assertEditable(com.fptu.exe.skillswap.modules.conversation.domain.Message message, UUID userId, Integer expectedVersion) {
-        if (message.getMessageType() != com.fptu.exe.skillswap.modules.conversation.domain.MessageType.TEXT || message.getSender() == null || !message.getSender().getId().equals(userId) || message.getState() != com.fptu.exe.skillswap.modules.conversation.domain.MessageState.ACTIVE) throw new BaseException(ErrorCode.ACCESS_DENIED, "CHAT_MESSAGE_NOT_EDITABLE");
-        if (!java.util.Objects.equals(message.getVersion(), expectedVersion)) throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "CHAT_MESSAGE_VERSION_CONFLICT");
-        if (message.getCreatedAt().plusMinutes(15).isBefore(DateTimeUtil.now())) throw new BaseException(ErrorCode.ACCESS_DENIED, "CHAT_MESSAGE_EDIT_WINDOW_EXPIRED");
+        if (message.getMessageType() != com.fptu.exe.skillswap.modules.conversation.domain.MessageType.TEXT || message.getSender() == null || !message.getSender().getId().equals(userId) || message.getState() != com.fptu.exe.skillswap.modules.conversation.domain.MessageState.ACTIVE) throw new BaseException(ErrorCode.CHAT_MESSAGE_NOT_EDITABLE);
+        if (!java.util.Objects.equals(message.getVersion(), expectedVersion)) throw new BaseException(ErrorCode.CHAT_MESSAGE_VERSION_CONFLICT);
+        if (message.getCreatedAt().plusMinutes(15).isBefore(DateTimeUtil.now())) throw new BaseException(ErrorCode.CHAT_MESSAGE_EDIT_WINDOW_EXPIRED);
+    }
+
+    private void validateReplyTarget(UUID conversationId, UUID replyToMessageId) {
+        if (replyToMessageId == null) {
+            return;
+        }
+        boolean belongsToConversation = messageRepository.findById(replyToMessageId)
+                .map(message -> message.getConversation().getId().equals(conversationId))
+                .orElse(false);
+        if (!belongsToConversation) {
+            throw new BaseException(ErrorCode.CHAT_REPLY_TARGET_INVALID);
+        }
+    }
+
+    private String requestHash(String content, UUID replyToMessageId, List<UUID> attachmentIntentIds) {
+        String attachmentIds = (attachmentIntentIds == null ? List.<UUID>of() : attachmentIntentIds).stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(UUID::toString)
+                .sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String canonicalPayload = content + "\n" + (replyToMessageId == null ? "" : replyToMessageId) + "\n" + attachmentIds;
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(canonicalPayload.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "SHA-256 không khả dụng", exception);
+        }
+    }
+
+    private ErrorCode resolveMessagingAccessError(com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access access) {
+        if (access.readOnlyReason() == com.fptu.exe.skillswap.modules.conversation.domain.ChatReadOnlyReason.ADMIN_LOCKED
+                || access.readOnlyReason() == com.fptu.exe.skillswap.modules.conversation.domain.ChatReadOnlyReason.ACCOUNT_RESTRICTED) {
+            return ErrorCode.CHAT_CONVERSATION_LOCKED;
+        }
+        return ErrorCode.CHAT_CONVERSATION_READ_ONLY;
     }
 
     private void consumeAttachmentIntents(Conversation conversation, UUID userId, com.fptu.exe.skillswap.modules.conversation.domain.Message message, List<UUID> intentIds) {
         if (intentIds == null || intentIds.isEmpty()) return;
-        if (intentIds.size() > 5) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_ATTACHMENT_QUOTA_EXCEEDED");
+        if (intentIds.size() > 5) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
         for (UUID intentId : new java.util.LinkedHashSet<>(intentIds)) {
-            var intent = chatUploadIntentRepository.findByIdForUpdate(intentId).orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "CHAT_UPLOAD_INTENT_INVALID"));
-            if (!intent.getConversation().getId().equals(conversation.getId()) || !intent.getOwnerUserId().equals(userId) || intent.getStatus() != com.fptu.exe.skillswap.modules.conversation.domain.ChatUploadIntentStatus.PENDING_UPLOAD || intent.getExpiresAt().isBefore(DateTimeUtil.now())) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_UPLOAD_INTENT_INVALID");
+            var intent = chatUploadIntentRepository.findByIdForUpdate(intentId).orElseThrow(() -> new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID));
+            if (!intent.getConversation().getId().equals(conversation.getId()) || !intent.getOwnerUserId().equals(userId) || intent.getStatus() != com.fptu.exe.skillswap.modules.conversation.domain.ChatUploadIntentStatus.PENDING_UPLOAD || intent.getExpiresAt().isBefore(DateTimeUtil.now())) throw new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID);
             var metadata = storageGateway().headObject(intent.getStorageKey());
-            if (metadata.sizeBytes() != intent.getExpectedSizeBytes() || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_ATTACHMENT_INVALID");
+            if (metadata.sizeBytes() != intent.getExpectedSizeBytes() || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
             validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
             chatAttachmentRepository.save(com.fptu.exe.skillswap.modules.conversation.domain.ChatAttachment.builder().message(message).uploadIntent(intent).storageKey(intent.getStorageKey()).originalFilename(intent.getOriginalFilename()).contentType(intent.getContentType()).sizeBytes(metadata.sizeBytes()).expiresAt(message.getCreatedAt().plusDays(90)).build());
             intent.setStatus(com.fptu.exe.skillswap.modules.conversation.domain.ChatUploadIntentStatus.CONFIRMED);
@@ -757,11 +825,89 @@ public class ConversationService {
         return chatAttachmentRepository.findByMessageId(messageId).stream().map(a -> new com.fptu.exe.skillswap.modules.conversation.dto.response.ChatAttachmentResponse(a.getId(), a.getOriginalFilename(), a.getContentType(), a.getSizeBytes(), inlineCapable(a.getContentType()), a.getState() == com.fptu.exe.skillswap.modules.conversation.domain.ChatAttachmentState.ACTIVE && a.getExpiresAt().isAfter(DateTimeUtil.now()), a.getExpiresAt(), a.getState())).toList();
     }
 
-    private String normalizeAttachmentContentType(String value) { return switch(value == null ? "" : value.toLowerCase(java.util.Locale.ROOT)) { case "image/png" -> "image/png"; case "image/jpeg" -> "image/jpeg"; case "application/pdf" -> "application/pdf"; case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; default -> throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "CHAT_ATTACHMENT_INVALID"); }; }
-    private void validateAttachmentFilename(String name, String type) { String lower = name == null ? "" : name.toLowerCase(java.util.Locale.ROOT); if (lower.isBlank() || !(type.equals("image/png") && lower.endsWith(".png") || type.equals("image/jpeg") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) || type.equals("application/pdf") && lower.endsWith(".pdf") || type.contains("wordprocessingml") && lower.endsWith(".docx"))) throw new BaseException(ErrorCode.BAD_REQUEST, "CHAT_ATTACHMENT_INVALID"); }
-    private String extensionFor(String type) { return type.equals("image/png")?".png":type.equals("image/jpeg")?".jpg":type.equals("application/pdf")?".pdf":".docx"; }
-    private boolean inlineCapable(String type) { return "image/png".equals(type) || "image/jpeg".equals(type); }
-    private void validateAttachmentSignature(String key, String type) { try (var in = storageGateway().openObject(key)) { byte[] b=in.readNBytes(8); boolean ok=(type.equals("image/png")&&b.length>=4&&b[0]==(byte)0x89&&b[1]==0x50&&b[2]==(byte)0x4e&&b[3]==0x47)||(type.equals("image/jpeg")&&b.length>=3&&b[0]==(byte)0xff&&b[1]==(byte)0xd8&&b[2]==(byte)0xff)||(type.equals("application/pdf")&&new String(b,java.nio.charset.StandardCharsets.US_ASCII).startsWith("%PDF-"))||(type.contains("wordprocessingml")&&b.length>=4&&b[0]==0x50&&b[1]==0x4b); if(!ok) throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE,"CHAT_ATTACHMENT_INVALID"); } catch(java.io.IOException e){throw new BaseException(ErrorCode.STORAGE_ERROR,"Không thể kiểm tra tệp đính kèm");} }
+    private String normalizeAttachmentContentType(String value) {
+        return switch (value == null ? "" : value.toLowerCase(java.util.Locale.ROOT)) {
+            case "image/png" -> "image/png";
+            case "image/jpeg" -> "image/jpeg";
+            case "application/pdf" -> "application/pdf";
+            case "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            default -> throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
+        };
+    }
+
+    private void validateAttachmentFilename(String name, String type) {
+        String lower = name == null ? "" : name.toLowerCase(java.util.Locale.ROOT);
+        boolean valid = type.equals("image/png") && lower.endsWith(".png")
+                || type.equals("image/jpeg") && (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
+                || type.equals("application/pdf") && lower.endsWith(".pdf")
+                || type.contains("wordprocessingml") && lower.endsWith(".docx");
+        if (lower.isBlank() || !valid) {
+            throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+        }
+    }
+
+    private String extensionFor(String type) {
+        return type.equals("image/png") ? ".png" : type.equals("image/jpeg") ? ".jpg" : type.equals("application/pdf") ? ".pdf" : ".docx";
+    }
+
+    private boolean inlineCapable(String type) {
+        return "image/png".equals(type) || "image/jpeg".equals(type);
+    }
+
+    private void validateAttachmentSignature(String key, String type) {
+        try (var in = storageGateway().openObject(key)) {
+            byte[] header = in.readNBytes(8);
+            boolean valid = (type.equals("image/png") && header.length >= 4 && header[0] == (byte) 0x89 && header[1] == 0x50 && header[2] == (byte) 0x4e && header[3] == 0x47)
+                    || (type.equals("image/jpeg") && header.length >= 3 && header[0] == (byte) 0xff && header[1] == (byte) 0xd8 && header[2] == (byte) 0xff)
+                    || (type.equals("application/pdf") && new String(header, StandardCharsets.US_ASCII).startsWith("%PDF-"));
+            if (!valid && !type.contains("wordprocessingml")) {
+                throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+            }
+        } catch (java.io.IOException exception) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể kiểm tra tệp đính kèm");
+        }
+        if (type.contains("wordprocessingml")) {
+            validateDocxStructure(key);
+        }
+    }
+
+    private void validateDocxStructure(String key) {
+        final long maxUncompressedBytes = 100L * 1024 * 1024;
+        final int maxEntries = 200;
+        long uncompressedBytes = 0L;
+        int entryCount = 0;
+        boolean hasContentTypes = false;
+        boolean hasWordDocument = false;
+        try (var raw = storageGateway().openObject(key);
+             var zip = new java.util.zip.ZipInputStream(new java.io.BufferedInputStream(raw))) {
+            java.util.zip.ZipEntry entry;
+            byte[] buffer = new byte[8192];
+            while ((entry = zip.getNextEntry()) != null) {
+                if (++entryCount > maxEntries || entry.isDirectory()) {
+                    if (entryCount > maxEntries) {
+                        throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+                    }
+                    continue;
+                }
+                hasContentTypes |= "[Content_Types].xml".equals(entry.getName());
+                hasWordDocument |= "word/document.xml".equals(entry.getName());
+                int read;
+                while ((read = zip.read(buffer)) != -1) {
+                    uncompressedBytes += read;
+                    if (uncompressedBytes > maxUncompressedBytes) {
+                        throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+                    }
+                }
+            }
+        } catch (BaseException exception) {
+            throw exception;
+        } catch (java.io.IOException exception) {
+            throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+        }
+        if (!hasContentTypes || !hasWordDocument) {
+            throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+        }
+    }
 
     private StorageGateway storageGateway() {
         StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
@@ -887,8 +1033,15 @@ public class ConversationService {
     }
 
     private long resolveUnreadCountForParticipant(UUID conversationId, ConversationParticipant participant) {
-        LocalDateTime lastRead = participant.getLastReadAt() != null ? participant.getLastReadAt() : participant.getJoinedAt();
-        return messageRepository.countUnreadMessages(conversationId, participant.getUser().getId(), lastRead);
+        return messageRepository.countUnreadMessages(conversationId, participant.getUser().getId(), participant.getLastReadSequence());
+    }
+
+    private long resolveOtherLastReadSequence(UUID conversationId, UUID userId) {
+        return participantRepository.findByConversationId(conversationId).stream()
+                .filter(participant -> !participant.getUser().getId().equals(userId))
+                .mapToLong(ConversationParticipant::getLastReadSequence)
+                .max()
+                .orElse(0L);
     }
 
     public record ChatMessageCreatedPayload(UUID conversationId, UUID messageId, UUID senderId) {

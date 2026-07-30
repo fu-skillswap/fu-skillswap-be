@@ -109,7 +109,7 @@ Mục tiêu là:
 - Storage key chỉ được backend giữ và không được log ở FE telemetry.
 
 ## Private mentor-service resources
-Tài liệu service là private object: reader không nhận `objectKey`, `publicUrl` hoặc bucket URL. FE dùng `POST /api/mentor-service-resources/{resourceId}/download-url` sau khi load metadata; response trả signed URL sống tối đa 10 phút. Không dùng generic `/api/files/upload-url` cho resource này.
+Tài liệu service là private object: reader không nhận `objectKey`, `publicUrl` hoặc bucket URL. Upload response của resource dùng `{ uploadIntentId, uploadUrl, expiresAt, requiredContentType }` (không phải `requiredHeaders`); FE PUT bytes với `Content-Type` đúng giá trị đó, rồi confirm bằng `uploadIntentId`. FE dùng `POST /api/mentor-service-resources/{resourceId}/download-url` sau khi load metadata; response trả signed URL sống tối đa 10 phút. Không dùng generic `/api/files/upload-url` cho resource này.
 
 Download credential là bearer URL trong TTL 10 phút và response luôn `Cache-Control: no-store, private`. FE không cache URL. Local/test dùng `/api/private-download/{token}` tương đương presigned GET; token không chứa object key.
 

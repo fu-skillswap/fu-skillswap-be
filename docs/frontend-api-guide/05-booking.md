@@ -81,6 +81,9 @@ File này mô tả toàn bộ booking lifecycle, payment dependency, completion,
 3. Nếu có vấn đề, participant gọi `POST /api/me/bookings/{bookingId}/issue`.
 4. Counterparty phản hồi issue bằng `issue/respond`.
 
+### Feedback
+`POST /api/bookings/{bookingId}/feedback` chi danh cho mentee cua booking co `completionOutcome=USER_CONFIRMED`. Moi booking chi co mot feedback. Auto-close, no-show va admin-resolved outcome khong mo feedback.
+
 ## Booking chat snapshot
 `BookingResponse.maintainPostSessionChatSnapshot` là snapshot của service policy tại lúc tạo booking. FE không được đọc lại policy hiện tại của service để suy luận quyền chat cho booking cũ.
 

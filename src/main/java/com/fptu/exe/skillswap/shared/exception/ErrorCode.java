@@ -58,6 +58,7 @@ public enum ErrorCode {
     CHAT_ATTACHMENT_EXPIRED(404, "CHAT_4110", "error.chat.attachment_expired", "Tệp đính kèm đã hết hạn"),
     CHAT_ATTACHMENT_REVOKED(404, "CHAT_4111", "error.chat.attachment_revoked", "Tệp đính kèm không còn khả dụng"),
     CHAT_UPLOAD_INTENT_INVALID(400, "CHAT_4112", "error.chat.upload_intent_invalid", "Upload intent không hợp lệ"),
+    CHAT_CONVERSATION_LOCKED(403, "CHAT_4113", "error.chat.conversation_locked", "Cuộc hội thoại đang bị khóa"),
 
     // Validation
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");

@@ -28,7 +28,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/conversations")
 @RequiredArgsConstructor
-@Tag(name = "Conversation", description = "Nhóm API lấy danh sách conversation và gửi/đọc tin nhắn gắn với booking đã được accept. FE dùng sau khi hệ thống đã tự tạo conversation cho booking hợp lệ.")
+@Tag(name = "Conversation", description = "Nhóm API direct conversation gắn với booking effective. FE chỉ đọc/sync conversation do backend tự tạo.")
 @SecurityRequirement(name = "bearerAuth")
 public class ChatController {
 
@@ -100,7 +100,7 @@ public class ChatController {
     @GetMapping("/{conversationId}/messages")
     @Operation(
             summary = "Lấy danh sách tin nhắn của conversation",
-            description = "Trả về danh sách tin nhắn của một conversation khi user hiện tại là participant của conversation đó. FE dùng sau khi user mở một thread chat; thứ tự tin nhắn hiện tại là mới nhất trước."
+            description = "Trả về initial newest-first page hoặc sequence window. `beforeSequence` lấy cũ hơn; `afterSequence` dùng để repair reconnect. FE render oldest-to-newest sau khi sort nghiêm ngặt theo sequence."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -116,25 +116,21 @@ public class ChatController {
                                               "status": 200,
                                               "code": "SUCCESS_0200",
                                               "message": "Thành công",
-                                              "data": {
-                                                "items": [
+                                              "data": [
                                                   {
                                                     "id": "019f7234-aaaa-bbbb-cccc-1234567890ab",
+                                                    "sequence": 128,
                                                     "conversationId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
                                                     "senderId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
                                                     "senderName": "Nguyen Van B",
                                                     "messageType": "TEXT",
                                                     "content": "Anh da cap nhat meeting link.",
+                                                    "state": "ACTIVE",
+                                                    "version": 0,
                                                     "createdAt": "2026-07-08T15:55:00",
                                                     "isMine": false
                                                   }
-                                                ],
-                                                "nextCursor": "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I",
-                                                "prevCursor": null,
-                                                "hasNext": true,
-                                                "hasPrev": false,
-                                                "limit": 30
-                                              }
+                                                ]
                                             }
                                             """
                             )
@@ -235,7 +231,7 @@ public class ChatController {
     @PatchMapping("/{conversationId}/read")
     @Operation(
             summary = "Đánh dấu cuộc hội thoại đã đọc",
-            description = "Cập nhật thời điểm đọc tin nhắn cuối cùng của user hiện tại trong cuộc hội thoại thành thời gian hiện tại."
+            description = "Chỉ advance `lastReadSequence` của caller. Response tra ve canonical read cursor cua hai participant va unread count."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversation marked as read successfully"),
