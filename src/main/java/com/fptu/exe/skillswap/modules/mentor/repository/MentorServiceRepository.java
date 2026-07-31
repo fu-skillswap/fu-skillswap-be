@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
 
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +30,19 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
 
     @EntityGraph(attributePaths = {"helpTopics"})
     Optional<MentorService> findByIdAndMentorProfileUserId(UUID id, UUID mentorUserId);
+
+    @org.springframework.data.jpa.repository.Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select service
+            from MentorService service
+            join fetch service.mentorProfile
+            where service.id = :serviceId
+              and service.mentorProfile.userId = :mentorUserId
+            """)
+    Optional<MentorService> findByIdAndMentorProfileUserIdForUpdate(
+            @Param("serviceId") UUID serviceId,
+            @Param("mentorUserId") UUID mentorUserId
+    );
 
     @EntityGraph(attributePaths = {"helpTopics"})
     Optional<MentorService> findByIdAndMentorProfileUserIdAndIsActiveTrue(UUID id, UUID mentorUserId);

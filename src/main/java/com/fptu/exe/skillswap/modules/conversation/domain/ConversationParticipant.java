@@ -46,6 +46,16 @@ public class ConversationParticipant {
     @Builder.Default
     private long lastReadSequence = 0L;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "participant_role", nullable = false, length = 32)
+    @Builder.Default
+    private ConversationParticipantRole participantRole = ConversationParticipantRole.DIRECT_PARTICIPANT;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "access_state", nullable = false, length = 32)
+    @Builder.Default
+    private ConversationParticipantAccess accessState = ConversationParticipantAccess.ACTIVE;
+
     @PrePersist
     protected void onCreate() {
         if (joinedAt == null) {

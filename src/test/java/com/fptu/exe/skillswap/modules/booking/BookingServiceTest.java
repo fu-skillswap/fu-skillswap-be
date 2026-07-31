@@ -1149,6 +1149,7 @@ class BookingServiceTest {
         when(bookingRepository.findAwaitingPaymentExpiryCandidates(
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 any(LocalDateTime.class),
+                any(LocalDateTime.class),
                 any(LocalDateTime.class)
         )).thenReturn(List.of(staleBooking));
         when(bookingRepository.findByIdForSessionUpdate(staleBooking.getId())).thenReturn(Optional.of(staleBooking));

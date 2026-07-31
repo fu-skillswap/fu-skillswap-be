@@ -21,6 +21,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilit
 import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.GroupSessionRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.GroupSession;
+import com.fptu.exe.skillswap.modules.booking.domain.GroupSessionStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
@@ -28,6 +31,7 @@ import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindow
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
@@ -102,6 +106,7 @@ public class MentorAvailabilityService {
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
     private final PaymentProperties paymentProperties;
     private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final GroupSessionRepository groupSessionRepository;
 
     public MentorAvailabilityService(
             MentorProfileRepository mentorProfileRepository,
@@ -123,6 +128,7 @@ public class MentorAvailabilityService {
                 notificationService,
                 calendarWindowCalculator,
                 paymentProperties,
+                null,
                 null);
     }
 
@@ -470,7 +476,9 @@ public class MentorAvailabilityService {
                 .collect(Collectors.groupingBy(slotService -> slotService.getSlot().getId(), LinkedHashMap::new, Collectors.toList()));
 
         return slots.stream()
-                .filter(slot -> servicesBySlot.containsKey(slot.getId()) && !servicesBySlot.get(slot.getId()).isEmpty())
+                .filter(slot -> servicesBySlot.containsKey(slot.getId())
+                        && servicesBySlot.get(slot.getId()).stream().anyMatch(binding -> binding.getService().isActive()
+                        && binding.getService().getDeliveryMode() == MentorServiceDeliveryMode.ONE_TO_ONE))
                 .map(slot -> toPublicSlotResponse(slot, mentorProfile.getTeachingMode(), servicesBySlot.getOrDefault(slot.getId(), List.of())))
                 .toList();
     }
@@ -489,6 +497,9 @@ public class MentorAvailabilityService {
         MentorService service = slotService.getService();
         if (!service.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn hoạt động");
+        }
+        if (service.getDeliveryMode() != MentorServiceDeliveryMode.ONE_TO_ONE) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Group service chưa mở candidate booking trong Phase 1");
         }
 
         List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service).stream()
@@ -550,6 +561,11 @@ public class MentorAvailabilityService {
         List<Booking> acceptedBookings = SLOT_LOCKING_STATUSES.stream()
                 .flatMap(status -> bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(slot.getId(), status).stream())
                 .toList();
+        List<GroupSession> groupReservations = groupSessionRepository == null ? List.of()
+                : groupSessionRepository.findActiveOverlaps(
+                slot.getMentorProfile().getUserId(),
+                java.util.EnumSet.of(GroupSessionStatus.OPEN, GroupSessionStatus.IN_PROGRESS),
+                slot.getStartTime(), slot.getEndTime());
         Map<String, Integer> pendingCountBySegment = toPendingSegmentCountMap(
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
@@ -569,6 +585,9 @@ public class MentorAvailabilityService {
                     .findFirst()
                     .orElse(null);
             boolean blockedByAccepted = blockingAcceptedBooking != null;
+            boolean blockedByGroupSession = groupReservations.stream()
+                    .anyMatch(session -> overlaps(candidateStart, candidateEnd,
+                            session.getScheduledStartAt(), session.getScheduledEndAt()));
             UUID blockingServiceId = blockingAcceptedBooking != null && blockingAcceptedBooking.getService() != null
                     ? blockingAcceptedBooking.getService().getId()
                     : null;
@@ -587,9 +606,9 @@ public class MentorAvailabilityService {
             if (!candidateStart.isAfter(now)) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_PAST_TIME_REASON;
-            } else if (blockedByAccepted) {
+            } else if (blockedByAccepted || blockedByGroupSession) {
                 selectable = false;
-                reasonIfBlocked = BLOCKED_BY_ACCEPTED_REASON;
+                reasonIfBlocked = blockedByGroupSession ? "GROUP_SESSION_RESERVED" : BLOCKED_BY_ACCEPTED_REASON;
                 bookingConflictNote = blockedBySameService
                         ? "Segment này đã có booking ACCEPTED của cùng service"
                         : "Segment này đã có booking ACCEPTED của service khác trong cùng slot";
@@ -605,7 +624,7 @@ public class MentorAvailabilityService {
                     .remainingPendingQuota(Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount))
                     .isSelectable(selectable)
                     .reasonIfBlocked(reasonIfBlocked)
-                    .blockedByAcceptedBooking(blockedByAccepted)
+                    .blockedByAcceptedBooking(blockedByAccepted || blockedByGroupSession)
                     .blockingBookingId(blockingAcceptedBooking == null ? null : blockingAcceptedBooking.getId())
                     .blockingServiceId(blockingServiceId)
                     .blockingServiceTitle(blockingServiceTitle)
@@ -703,6 +722,7 @@ public class MentorAvailabilityService {
                 .services(slotServices.stream()
                         .map(AvailabilitySlotService::getService)
                         .filter(MentorService::isActive)
+                        .filter(service -> service.getDeliveryMode() == MentorServiceDeliveryMode.ONE_TO_ONE)
                         .map(this::toSlotServiceBasicResponse)
                         .toList())
                 .build();

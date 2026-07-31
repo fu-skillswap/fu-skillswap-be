@@ -5,6 +5,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.GroupSessionRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.GroupSessionStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -31,10 +33,11 @@ public class BookingSlotValidator {
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final BookingRepository bookingRepository;
     private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final GroupSessionRepository groupSessionRepository;
 
     public BookingSlotValidator(AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
                                 BookingRepository bookingRepository) {
-        this(availabilitySlotServiceRepository, bookingRepository, null);
+        this(availabilitySlotServiceRepository, bookingRepository, null, null);
     }
 
     public void validateSelectedRange(
@@ -99,6 +102,14 @@ public class BookingSlotValidator {
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Segment đã chọn đã có booking được mentor chấp nhận trùng thời gian.");
+        }
+
+        if (groupSessionRepository != null && !groupSessionRepository.findActiveOverlaps(
+                slot.getMentorProfile().getUserId(),
+                java.util.EnumSet.of(GroupSessionStatus.OPEN, GroupSessionStatus.IN_PROGRESS),
+                selectedStartTime, selectedEndTime).isEmpty()) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Segment đã chọn bị group session của mentor giữ lại.");
         }
 
         long pendingCount = bookingRepository.countBySlotIdAndExactSegmentAndStatus(

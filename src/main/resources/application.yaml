@@ -89,6 +89,9 @@ application:
     version: ${APPLICATION_OPENAPI_VERSION:0.1.0-beta}
   scheduling:
     enabled: ${APPLICATION_SCHEDULING_ENABLED:true}
+  group-sessions:
+    enabled: ${APPLICATION_GROUP_SESSIONS_ENABLED:true}
+    attendance-submission-window-hours: ${APPLICATION_GROUP_SESSION_ATTENDANCE_SUBMISSION_WINDOW_HOURS:48}
   google:
     client-id: ${GOOGLE_CLIENT_ID}
     client-secret: ${GOOGLE_CLIENT_SECRET:}

@@ -111,3 +111,10 @@ File này mô tả Google Calendar connect/disconnect/status để FE biết khi
 - `needsReconnect=true` phải được render rõ hơn `connected=true`.
 - `lastSyncErrorCode` và `lastSyncErrorMessage` chỉ để debug và hiển thị hỗ trợ.
 - Không dùng field auth me để thay thế `google-calendar/status`.
+
+## Group-session reservation intervals
+Group sessions are created from an active parent availability slot and a duration-aligned candidate. Publishing a group session does not split, deactivate or edit the parent slot. Its `[scheduledStartAt, scheduledEndAt)` interval is treated as reserved when the backend generates 1:1 candidates.
+
+Residual non-overlapping time in the same parent slot remains selectable. Adjacent intervals do not overlap. Group seats share that reserved interval, so individual seat bookings never create another mentor-calendar reservation. They still lock the learner calendar while their payment hold or confirmed booking is active. The group-session lifecycle is `DRAFT -> OPEN -> IN_PROGRESS -> COMPLETED`; registration is separately `OPEN` or `CLOSED`.
+
+Phase 3 creates one shared Session at group-session publish time. The mentor may prepare one meeting link before registration; confirmed attendees see the same meeting context. No attendee-specific Google Calendar event is provisioned.

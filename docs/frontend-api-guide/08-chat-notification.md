@@ -122,6 +122,11 @@ Durable chat events hien tai thong bao message/inbox/unread qua outbox sau DB co
 - Admin dung `GET /api/admin/chat-reports?status=&page=&size=`, `PATCH /api/admin/chat-reports/{reportId}`, va `PATCH /api/admin/chat-reports/conversations/{conversationId}/lock`.
 - Admin/account restriction overrides booking-derived access. `UNDER_REVIEW` la temporary two-way read-only.
 
+## Group-session boundary
+Each published group session owns one `GROUP` conversation. The mentor is active from publish; a learner becomes an `ATTENDEE` only in the same database transaction that confirms their free or paid seat. A pending-payment learner cannot see the thread or meeting details.
+
+At `scheduledEndAt + 24h`, participant access becomes text-only `READ_ONLY`: FE may display history but must disable send, upload and attachment download. A pre-session cancellation revokes all access. A refund resolved from dispute also leaves text-only history, never a new attachment download URL. Admin lock/account moderation and attachment takedown override these rules.
+
 ## FE recovery
 - `400 CHAT_MESSAGE_CURSOR_INVALID`: chi gui mot cursor direction.
 - `403 CHAT_CONVERSATION_READ_ONLY` hoac `CHAT_CONVERSATION_LOCKED`: disable send/upload va refetch conversation state.

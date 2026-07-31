@@ -62,6 +62,12 @@ public class MentorService {
     @Builder.Default
     private boolean maintainPostSessionChat = false;
 
+    /** Delivery format is fixed when the service is created so historical availability stays unambiguous. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "delivery_mode", nullable = false, length = 32)
+    @Builder.Default
+    private MentorServiceDeliveryMode deliveryMode = MentorServiceDeliveryMode.ONE_TO_ONE;
+
     @Column(name = "is_legacy", nullable = false)
     @Builder.Default
     private boolean isLegacy = false;

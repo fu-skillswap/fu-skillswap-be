@@ -281,6 +281,7 @@ Mentor service response exposes `maintainPostSessionChat` so mentees know the co
       "isFree": false,
       "priceScoin": 100,
       "isActive": true,
+      "deliveryMode": "ONE_TO_ONE",
       "maintainPostSessionChat": false,
       "version": 4,
       "helpTopics": [],
@@ -344,3 +345,34 @@ For client-only funnel interactions, authenticated FE may call `POST /api/mentor
 Authenticated users may call `GET /api/mentor-services/{serviceId}/pricing-preview` for an active service of a discoverable mentor. The response contains `basePriceScoin`, mentee surcharge, currently eligible campaign discount, `estimatedPayableScoin`, `campaignName`, `pricingVersion`, `calculatedAt`, `isEstimate=true`, and the disclaimer `Final price is calculated at checkout.`
 
 This is a browse-time estimate only. It never reserves campaign budget, coupon, wallet credit, candidate time, or a booking. Coupon and wallet credit are intentionally not included; FE must label the result as an estimate and refresh the transactional checkout preview after mentor acceptance.
+
+## Group-session supply and seat commerce (Phase 2)
+`MentorService.deliveryMode` is `ONE_TO_ONE` by default or `GROUP_SESSION`. The delivery mode is fixed after service creation; create a separate service when a mentor offers both formats.
+
+Group-session APIs are enabled only when `APPLICATION_GROUP_SESSIONS_ENABLED=true`. A group session freezes service title, description, expected outcome, duration, free flag and base SCoin price on publish. Later service edits never change a published session or its seat bookings.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/api/me/mentor-services/{serviceId}/group-sessions` | Create a `DRAFT` from a bound availability slot and UTC candidate start. |
+| GET | `/api/me/mentor-services/{serviceId}/group-sessions` | List mentor-owned group sessions for a service. |
+| GET/PUT | `/api/me/group-sessions/{groupSessionId}` | Read or edit a draft with `expectedVersion`. |
+| POST | `/api/me/group-sessions/{groupSessionId}/publish` | Atomically transition `DRAFT -> OPEN` and reserve the interval. |
+| POST | `/api/me/group-sessions/{groupSessionId}/close-registration` | Stop future enrolment for an open session. |
+| POST | `/api/me/group-sessions/{groupSessionId}/increase-capacity` | Increase capacity only while both session and registration are `OPEN`; it never reopens registration. |
+| POST | `/api/me/group-sessions/{groupSessionId}/cancel` | Cancel a draft or open session. |
+| GET | `/api/me/group-sessions/{groupSessionId}/attendees?limit=` | Mentor-only roster with attendee identity, joined time and derived `WAITING_PAYMENT`, `CONFIRMED` or `CANCELLED` state. |
+
+`startAt` and optional `registrationClosesAt` are whole-minute UTC Instants. `scheduledEndAt` is derived from the service duration. Capacity is 2-20. `reservedSeatCount` includes both paid seats and still-live payment holds. A published group session reserves only its exact interval inside the parent availability slot.
+
+Mentor cancellation closes registration, expires unpaid holds, cancels every attendee booking and starts the existing full-refund path for paid seats. Do not expose payment-provider IDs, wallet use, coupon values or checkout links in the roster.
+
+## Group experience and attendance (Phase 3)
+Publishing creates one shared group session and one group conversation immediately, so the mentor can prepare its meeting details before learners join. It never creates a direct session, direct chat or calendar event for an attendee seat.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/me/group-sessions/{groupSessionId}/experience` | Read shared session, meeting and group conversation IDs. |
+| PUT | `/api/me/group-sessions/{groupSessionId}/meeting` | Set the one shared meeting platform/link. |
+| POST | `/api/me/group-sessions/{groupSessionId}/attendance` | Submit the final complete attendee roster with `expectedVersion`. |
+
+Attendance is available after `scheduledEndAt` until the configured `APPLICATION_GROUP_SESSION_ATTENDANCE_SUBMISSION_WINDOW_HOURS` deadline (48 hours by default). The roster is immutable: mark each current attendee `PRESENT` or `MENTEE_NO_SHOW`; corrections use booking issue/admin resolution.

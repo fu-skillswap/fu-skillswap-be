@@ -50,6 +50,10 @@ public class Booking {
     @JoinColumn(name = "slot_id", foreignKey = @ForeignKey(name = "fk_bookings_slot"))
     private MentorAvailabilitySlot slot;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_session_id", foreignKey = @ForeignKey(name = "fk_bookings_group_session"))
+    private GroupSession groupSession;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
@@ -122,6 +126,16 @@ public class Booking {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "group_attendance_status", length = 32)
+    private GroupAttendanceStatus groupAttendanceStatus;
+
+    @Column(name = "group_attendance_marked_at")
+    private LocalDateTime groupAttendanceMarkedAt;
+
+    @Column(name = "group_attendance_marked_by_user_id")
+    private UUID groupAttendanceMarkedByUserId;
 
     @Column(name = "reschedule_count", nullable = false)
     @Builder.Default

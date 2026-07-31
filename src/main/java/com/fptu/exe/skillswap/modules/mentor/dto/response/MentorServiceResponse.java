@@ -6,6 +6,7 @@ import lombok.Builder;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 
 @Builder
 @Schema(description = "Mentoring service definition that the mentor manages and the frontend can show in mentor detail or booking flows.")
@@ -30,6 +31,8 @@ public record MentorServiceResponse(
         boolean isActive,
         @Schema(description = "Whether a completed booking keeps direct chat open after the post-session window", example = "false")
         boolean maintainPostSessionChat,
+        @Schema(description = "Immutable delivery format. GROUP_SESSION services are configured through group-session management.", example = "ONE_TO_ONE")
+        MentorServiceDeliveryMode deliveryMode,
         @Schema(description = "Optimistic-lock version for management mutations", example = "4")
         Integer version,
         @Schema(description = "Help topics covered by this service")

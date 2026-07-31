@@ -42,7 +42,7 @@ public class BookingChatAccessPolicy {
     public record Access(ChatMessagingAccess messagingAccess, boolean canSendMessages, boolean canUploadAttachments,
                          boolean canDownloadAttachments, ChatReadOnlyReason readOnlyReason,
                          LocalDateTime messagingWindowEndsAt, boolean postSessionChatPermanent) {
-        static Access open(LocalDateTime deadline, boolean permanent) { return new Access(ChatMessagingAccess.OPEN, true, true, true, null, deadline, permanent); }
-        static Access readOnly(ChatReadOnlyReason reason) { return new Access(ChatMessagingAccess.READ_ONLY, false, false, true, reason, null, false); }
+        public static Access open(LocalDateTime deadline, boolean permanent) { return new Access(ChatMessagingAccess.OPEN, true, true, true, null, deadline, permanent); }
+        public static Access readOnly(ChatReadOnlyReason reason) { return new Access(ChatMessagingAccess.READ_ONLY, false, false, true, reason, null, false); }
     }
 }

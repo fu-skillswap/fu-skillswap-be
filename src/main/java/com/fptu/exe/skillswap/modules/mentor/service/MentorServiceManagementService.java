@@ -13,6 +13,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotR
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
@@ -111,6 +112,7 @@ public class MentorServiceManagementService {
                 .priceScoin(normalizePriceScoin(isFree, request.priceScoin(), durationMinutes))
                 .isActive(true)
                 .maintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()))
+                .deliveryMode(request.deliveryMode() == null ? MentorServiceDeliveryMode.ONE_TO_ONE : request.deliveryMode())
                 .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
 
@@ -123,7 +125,7 @@ public class MentorServiceManagementService {
     public MentorServiceResponse createService(UUID mentorUserId, MentorServiceUpsertRequest request) {
         return createService(mentorUserId, new CreateMentorServiceRequest(
                 request.title(), request.description(), request.expectedOutcome(), request.durationMinutes(),
-                request.isFree(), request.priceScoin(), false, request.helpTopicIds()
+                request.isFree(), request.priceScoin(), false, MentorServiceDeliveryMode.ONE_TO_ONE, request.helpTopicIds()
         ));
     }
 
@@ -259,6 +261,7 @@ public class MentorServiceManagementService {
                 .priceScoin(service.isFree() ? 0 : defaultInteger(service.getPriceScoin()))
                 .isActive(service.isActive())
                 .maintainPostSessionChat(service.isMaintainPostSessionChat())
+                .deliveryMode(service.getDeliveryMode())
                 .version(service.getVersion())
                 .helpTopics(helpTopics)
                 .createdAt(service.getCreatedAt())

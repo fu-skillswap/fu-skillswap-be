@@ -21,6 +21,8 @@ spring:
       mail.smtp.starttls.enable: false
 
 application:
+  group-sessions:
+    enabled: true
   cors:
     allowed-origin-patterns: http://localhost:3000
   security:

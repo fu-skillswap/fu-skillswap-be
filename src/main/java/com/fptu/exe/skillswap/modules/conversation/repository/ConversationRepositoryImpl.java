@@ -26,6 +26,7 @@ public class ConversationRepositoryImpl implements ConversationRepositoryCustom 
                 from Conversation c
                 join ConversationParticipant cp on c.id = cp.conversation.id
                 where cp.user.id = :userId
+                  and cp.accessState <> com.fptu.exe.skillswap.modules.conversation.domain.ConversationParticipantAccess.REVOKED
                 """);
         if (cursorActivityAt != null && cursorConversationId != null) {
             jpql.append("""

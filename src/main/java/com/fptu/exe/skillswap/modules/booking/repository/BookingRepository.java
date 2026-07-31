@@ -201,6 +201,39 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             """)
     Optional<Booking> findByIdForSessionUpdate(@Param("bookingId") UUID bookingId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            left join fetch booking.groupSession groupSession
+            where booking.groupSession.id = :groupSessionId
+              and booking.status in :statuses
+            order by booking.id asc
+            """)
+    List<Booking> findGroupSeatBookingsForUpdate(
+            @Param("groupSessionId") UUID groupSessionId,
+            @Param("statuses") Collection<BookingStatus> statuses
+    );
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "groupSession"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.groupSession.id = :groupSessionId
+            order by booking.createdAt asc, booking.id asc
+            """)
+    List<Booking> findByGroupSessionIdOrderByCreatedAtAsc(@Param("groupSessionId") UUID groupSessionId);
+
+    boolean existsByMenteeIdAndGroupSessionIdAndStatusIn(
+            UUID menteeId, UUID groupSessionId, Collection<BookingStatus> statuses);
+
+    long countByGroupSessionIdAndStatusIn(UUID groupSessionId, Collection<BookingStatus> statuses);
+
     long countByMenteeIdAndStatus(UUID menteeId, BookingStatus status);
 
     long countByMenteeId(UUID menteeId);
@@ -455,21 +488,24 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(BookingStatus status, LocalDateTime acceptedAtBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot", "groupSession"})
     @Query("""
             select booking
             from Booking booking
+            left join booking.groupSession groupSession
             where booking.status = :status
               and (
                     booking.acceptedAt <= :acceptedAtCutoff
                     or booking.selectedStartTime <= :startTimeCutoff
+                    or (groupSession.id is not null and groupSession.registrationClosesAt <= :now)
               )
             order by booking.acceptedAt asc, booking.selectedStartTime asc, booking.id asc
             """)
     List<Booking> findAwaitingPaymentExpiryCandidates(
             @Param("status") BookingStatus status,
             @Param("acceptedAtCutoff") LocalDateTime acceptedAtCutoff,
-            @Param("startTimeCutoff") LocalDateTime startTimeCutoff
+            @Param("startTimeCutoff") LocalDateTime startTimeCutoff,
+            @Param("now") LocalDateTime now
     );
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)

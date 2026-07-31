@@ -225,6 +225,19 @@ Tất cả API business dùng `ApiResponse<T>`:
 - Discovery pricing, `POST /api/bookings/quote`, and `POST /api/me/bookings/{bookingId}/checkout-preview` are informational estimates. A `200` response never reserves a candidate, campaign budget, coupon, wallet credit, or payment order.
 - If booking creation or checkout later returns `400`/`409`, FE must fetch the canonical candidate or booking state and show the newly calculated amount/deadline. Do not retry a mutation automatically after a network/deploy error.
 - `pendingExpireAt` and payment `actionDeadlineAt` are server-enforced. On expiry, refresh booking detail; do not keep a locally counted-down booking actionable.
+
+## Group-session supply and seats
+- `400` for invalid whole-minute time, capacity, candidate alignment or `registrationClosesAt`; correct the draft before retrying.
+- `409` for inactive/unbound service or slot, mentor time overlap, current booking overlap, invalid lifecycle transition or stale `expectedVersion`; refetch the group-session detail and availability candidates before retrying.
+- `409` for a closed/full session, duplicate active seat, learner schedule overlap or expired payment hold. Refetch the public session/booking before enabling checkout or retrying.
+- Group-session endpoints may return `404` while `APPLICATION_GROUP_SESSIONS_ENABLED=false`; do not infer whether a session exists from that response.
+- `bookingType=GROUP_SESSION` rejects 1:1 mentor decisions, reschedule, calendar, direct chat and completion actions in Phase 2. Render only the seat/payment/cancel UI.
+
+## Group-session experience
+- `409 GROUP_SESSION_ATTENDANCE_WINDOW_CLOSED`: mentor must submit the roster after session end and before the configured 48-hour default deadline.
+- `409 GROUP_SESSION_ATTENDANCE_ROSTER_INVALID`: refetch roster; submit exactly one status for every active attendee. Attendance cannot be edited after success.
+- `409 GROUP_SESSION_VERSION_CONFLICT`: another mentor action changed the group session. Refetch its experience/roster before retrying.
+- Group chat access `403`/`404`: refetch booking and conversation. Do not retry send/upload or attempt an attachment URL after a seat cancellation, read-only transition or moderation lock.
 # Chat errors
 
 - `CHAT_4101` / `CHAT_CLIENT_MESSAGE_CONFLICT` (`409`): cùng `clientMessageId` được gửi lại với payload khác. FE giữ message local, tạo client ID mới chỉ khi người dùng thực sự soạn message khác.

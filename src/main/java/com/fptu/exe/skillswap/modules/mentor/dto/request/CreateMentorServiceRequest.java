@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 import java.util.UUID;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 
 public record CreateMentorServiceRequest(
         @NotBlank @Size(max = 200) String title,
@@ -18,5 +19,6 @@ public record CreateMentorServiceRequest(
         @NotNull Boolean isFree,
         @NotNull @Min(0) @Max(45_000_000) Integer priceScoin,
         Boolean maintainPostSessionChat,
+        MentorServiceDeliveryMode deliveryMode,
         @NotEmpty @Size(max = 20) List<@NotNull UUID> helpTopicIds
 ) {}

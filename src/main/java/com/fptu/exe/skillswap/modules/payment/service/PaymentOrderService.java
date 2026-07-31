@@ -76,6 +76,7 @@ public class PaymentOrderService {
     private final SettlementService settlementService;
     private final SessionService sessionService;
     private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService groupSessionExperienceService;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
@@ -85,6 +86,11 @@ public class PaymentOrderService {
     @Autowired
     void setBookingPricingPreviewService(BookingPricingPreviewService bookingPricingPreviewService) {
         this.bookingPricingPreviewService = bookingPricingPreviewService;
+    }
+
+    @Autowired(required = false)
+    void setGroupSessionExperienceService(com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService groupSessionExperienceService) {
+        this.groupSessionExperienceService = groupSessionExperienceService;
     }
 
     @Transactional(readOnly = true)
@@ -461,6 +467,14 @@ public class PaymentOrderService {
     }
 
     private LocalDateTime paymentDeadline(Booking booking) {
+        if (booking != null && booking.getGroupSession() != null) {
+            LocalDateTime holdDeadline = BookingDeadlinePolicy.resolvePaymentDeadline(
+                    booking.getAcceptedAt(), booking.getSelectedStartTime());
+            LocalDateTime registrationDeadline = booking.getGroupSession().getRegistrationClosesAt();
+            if (holdDeadline == null) return registrationDeadline;
+            if (registrationDeadline == null) return holdDeadline;
+            return holdDeadline.isBefore(registrationDeadline) ? holdDeadline : registrationDeadline;
+        }
         LocalDateTime start = booking.getSelectedStartTime() == null && booking.getSlot() != null
                 ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
         return BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), start);
@@ -853,8 +867,12 @@ public class PaymentOrderService {
                 : bookingRepository.findByIdForSessionUpdate(order.getBookingId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         if (booking.getStatus() == BookingStatus.PAID) {
-            sessionService.createForAcceptedBooking(booking);
-            conversationService.createDirectForAcceptedBooking(booking);
+            if (booking.getGroupSession() == null) {
+                sessionService.createForAcceptedBooking(booking);
+                conversationService.createDirectForAcceptedBooking(booking);
+            } else if (groupSessionExperienceService != null) {
+                groupSessionExperienceService.activateConfirmedSeat(booking);
+            }
             return;
         }
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
@@ -881,8 +899,12 @@ public class PaymentOrderService {
                 )
         );
 
-        sessionService.createForAcceptedBooking(booking);
-        conversationService.createDirectForAcceptedBooking(booking);
+        if (booking.getGroupSession() == null) {
+            sessionService.createForAcceptedBooking(booking);
+            conversationService.createDirectForAcceptedBooking(booking);
+        } else if (groupSessionExperienceService != null) {
+            groupSessionExperienceService.activateConfirmedSeat(booking);
+        }
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),

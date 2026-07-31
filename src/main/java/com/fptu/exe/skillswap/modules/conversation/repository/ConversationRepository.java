@@ -27,7 +27,7 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
 
     java.util.List<Conversation> findBySourceTypeAndSourceIdIn(ConversationSourceType sourceType, java.util.List<UUID> sourceIds);
 
-    @Query("SELECT c FROM Conversation c JOIN ConversationParticipant cp ON c.id = cp.conversation.id WHERE cp.user.id = :userId ORDER BY c.lastMessageAt DESC NULLS LAST, c.createdAt DESC")
+    @Query("SELECT c FROM Conversation c JOIN ConversationParticipant cp ON c.id = cp.conversation.id WHERE cp.user.id = :userId and cp.accessState <> com.fptu.exe.skillswap.modules.conversation.domain.ConversationParticipantAccess.REVOKED ORDER BY c.lastMessageAt DESC NULLS LAST, c.createdAt DESC")
     Page<Conversation> findByParticipantUserId(@Param("userId") UUID userId, Pageable pageable);
 
     @Query("""

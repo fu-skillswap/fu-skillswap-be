@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.session.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.GroupSession;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
 import com.fptu.exe.skillswap.modules.session.domain.Session;
 import com.fptu.exe.skillswap.modules.session.domain.SessionSourceType;
@@ -59,6 +60,38 @@ public class SessionService {
             return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, booking.getId())
                     .orElseThrow(() -> ex);
         }
+    }
+
+    /** One group event owns one shared session, independent of attendee bookings. */
+    @Transactional
+    public Session createForGroupSession(GroupSession groupSession) {
+        if (groupSession == null || groupSession.getId() == null) {
+            throw new IllegalArgumentException("Group session must not be null");
+        }
+        return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.GROUP_SESSION, groupSession.getId())
+                .orElseGet(() -> {
+                    Session session = Session.builder()
+                            .service(groupSession.getService())
+                            .mentor(groupSession.getMentorProfile().getUser())
+                            .sourceType(SessionSourceType.GROUP_SESSION)
+                            .sourceId(groupSession.getId())
+                            .scheduledStartTime(groupSession.getScheduledStartAt())
+                            .scheduledEndTime(groupSession.getScheduledEndAt())
+                            .calendarSyncStatus(GoogleCalendarSyncStatus.NOT_CONNECTED)
+                            .status(SessionStatus.SCHEDULED)
+                            .build();
+                    try {
+                        return sessionRepository.saveAndFlush(session);
+                    } catch (org.springframework.dao.DataIntegrityViolationException ignored) {
+                        return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.GROUP_SESSION, groupSession.getId())
+                                .orElseThrow(() -> ignored);
+                    }
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public Session findByGroupSessionId(UUID groupSessionId) {
+        return sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.GROUP_SESSION, groupSessionId).orElse(null);
     }
 
     @Transactional(readOnly = true)

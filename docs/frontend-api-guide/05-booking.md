@@ -346,6 +346,25 @@ File này mô tả toàn bộ booking lifecycle, payment dependency, completion,
 
 Feedback is accepted only after `completionOutcome=USER_CONFIRMED`. Auto-close, no-show and admin-resolved outcomes do not unlock feedback.
 
+## Group-session seat booking
+Group sessions are available only while `APPLICATION_GROUP_SESSIONS_ENABLED=true`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/api/group-sessions?mentorUserId=&serviceId=&from=&cursor=&limit=` | Public upcoming sessions with only snapshot offer, schedule and seat availability. |
+| GET | `/api/group-sessions/{groupSessionId}` | Public session detail; never exposes attendee data. |
+| POST | `/api/group-sessions/{groupSessionId}/bookings` | Authenticated learner creates one seat booking with learning-goal fields. |
+
+`POST /api/group-sessions/{groupSessionId}/bookings` atomically creates the booking and increments `reservedSeatCount`. For a paid session its internal status is `ACCEPTED_AWAITING_PAYMENT`; the booking itself is the seat hold and checkout creates the payment order later. For a free session the internal status is `PAID`, while the response remains `bookingStatus=CONFIRMED` and `paymentStatus=NOT_REQUIRED`.
+
+The response is the existing `BookingResponse` with `bookingType=GROUP_SESSION`, `groupSessionId` and a compact `groupSession` summary (ID, snapshot service title, schedule and registration close). Group payment deadline is `min(acceptedAt + 6h, registrationClosesAt)`. Checkout, payment webhooks, coupon, campaign, wallet, expiry and refund all stay booking-ID based.
+
+One learner can have one active seat per group session. Pending payment holds, paid seats and other locking bookings participate in learner calendar overlap checks. On payment expiry or learner cancellation the seat is released exactly once. Mentor cancellation releases all seats and fully refunds paid attendees. A late successful webhook after cancellation is compensated and never restores a seat.
+
+Group seats do not use mentor accept/reject or rescheduling. Phase 3 adds one shared session/conversation per GroupSession: meeting details and chat appear only after the seat is confirmed. Mentor submits attendance after the event; `PRESENT` seats enter a 24-hour learner confirmation window, while `MENTEE_NO_SHOW` uses the existing issue path. Feedback remains available only after `USER_CONFIRMED`.
+
+Published group-session intervals remain excluded from 1:1 candidate selection. FE must refetch candidates after a `409` conflict rather than assuming a parent availability slot is fully unavailable.
+
 ## Service-resource entitlement
 Tài liệu `BOOKED_MEMBERS` không được mở chỉ vì booking tồn tại. Backend dùng booking-owned policy: booking ở canonical `CONFIRMED` hoặc `COMPLETED` mới cấp quyền. Service inactive không thu hồi quyền lịch sử; resource bị mentor xóa mềm thì quyền download bị thu hồi ngay.
 

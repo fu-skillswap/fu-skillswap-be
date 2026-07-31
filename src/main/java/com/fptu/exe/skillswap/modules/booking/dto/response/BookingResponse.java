@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingType;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
@@ -188,6 +189,16 @@ public record BookingResponse(
         @Schema(description = "Action UI tiếp theo được backend gợi ý", nullable = true)
         BookingNextAction nextAction,
         @Schema(description = "Deadline action nếu backend có deadline thật", nullable = true)
-        LocalDateTime actionDeadlineAt
+        LocalDateTime actionDeadlineAt,
+        @Schema(description = "Booking format; GROUP_SESSION seats do not use direct mentor accept, reschedule, calendar or chat flows")
+        BookingType bookingType,
+        @Schema(description = "Group session backing this seat booking", nullable = true)
+        UUID groupSessionId,
+        @Schema(description = "Per-seat attendance submitted by the mentor", nullable = true)
+        com.fptu.exe.skillswap.modules.booking.domain.GroupAttendanceStatus groupAttendanceStatus,
+        @Schema(description = "When the attendance status was recorded", nullable = true)
+        LocalDateTime groupAttendanceMarkedAt,
+        @Schema(description = "Snapshot-backed group-event context for GROUP_SESSION bookings", nullable = true)
+        GroupSessionBookingSummaryResponse groupSession
 ) {
 }

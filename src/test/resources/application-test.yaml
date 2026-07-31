@@ -18,6 +18,8 @@ management:
       enabled: false
 
 application:
+  group-sessions:
+    enabled: true
   scheduling:
     # Integration tests invoke lifecycle services explicitly. Background jobs would
     # mutate shared in-memory data between test contexts and make CI nondeterministic.
