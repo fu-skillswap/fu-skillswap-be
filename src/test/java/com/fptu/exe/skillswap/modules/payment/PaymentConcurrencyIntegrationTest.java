@@ -41,7 +41,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @ActiveProfiles("test")
-public class PaymentConcurrencyIntegrationTest {
+public class PaymentConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest {
 
     @Autowired
     private PaymentOrderService paymentOrderService;

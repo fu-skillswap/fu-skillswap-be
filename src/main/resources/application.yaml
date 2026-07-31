@@ -186,6 +186,14 @@ application:
   realtime:
     outbox:
       enabled: ${REALTIME_OUTBOX_ENABLED:false}
+      cleanup-enabled: ${APPLICATION_REALTIME_OUTBOX_CLEANUP_ENABLED:true}
+      retention-days: ${APPLICATION_REALTIME_OUTBOX_RETENTION_DAYS:7}
+      cleanup-batch-size: ${APPLICATION_REALTIME_OUTBOX_CLEANUP_BATCH_SIZE:500}
+      max-retry-attempts: ${APPLICATION_REALTIME_OUTBOX_MAX_RETRY_ATTEMPTS:3}
+      max-batches-per-run: ${APPLICATION_REALTIME_OUTBOX_MAX_BATCHES_PER_RUN:100}
+      max-execution-seconds: ${APPLICATION_REALTIME_OUTBOX_MAX_EXECUTION_SECONDS:300}
+      batch-transaction-timeout-seconds: ${APPLICATION_REALTIME_OUTBOX_BATCH_TRANSACTION_TIMEOUT_SECONDS:10}
+      cleanup-cron: ${APPLICATION_REALTIME_OUTBOX_CLEANUP_CRON:0 0 2 * * *}
       poll-ms: ${REALTIME_OUTBOX_POLL_MS:1000}
       exchange: ${REALTIME_OUTBOX_EXCHANGE:skillswap.domain-events}
       chat-queue: ${REALTIME_OUTBOX_CHAT_QUEUE:skillswap.chat.realtime}

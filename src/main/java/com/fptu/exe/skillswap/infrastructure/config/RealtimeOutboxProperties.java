@@ -14,6 +14,21 @@ import org.springframework.validation.annotation.Validated;
 public class RealtimeOutboxProperties {
 
     private boolean enabled = false;
+    private boolean cleanupEnabled = true;
+    @Min(1)
+    private int retentionDays = 7;
+    @Min(10)
+    private int cleanupBatchSize = 500;
+    @Min(1)
+    private int maxRetryAttempts = 3;
+    @Min(1)
+    private int maxBatchesPerRun = 100;
+    @Min(10)
+    private int maxExecutionSeconds = 300;
+    @Min(1)
+    private int batchTransactionTimeoutSeconds = 10;
+    @NotBlank
+    private String cleanupCron = "0 0 2 * * *";
     @Min(1000)
     private long pollMs = 30000L;
     @NotBlank

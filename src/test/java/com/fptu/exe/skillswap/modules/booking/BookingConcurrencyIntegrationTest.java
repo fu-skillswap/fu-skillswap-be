@@ -53,7 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 @SpringBootTest
-class BookingConcurrencyIntegrationTest {
+class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
