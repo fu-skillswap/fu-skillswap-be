@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -87,7 +88,9 @@ class MentorAvailabilityWindowIntegrationTest {
                 .sessionDuration(60)
                 .build());
 
-        queryStartDate = LocalDate.now().plusDays(1);
+        // Keep the cross-midnight overlap case outside the default 120-minute lead-time window.
+        // CI runs in UTC while availability policy uses Asia/Ho_Chi_Minh.
+        queryStartDate = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusDays(2);
         slotStartTime = LocalDateTime.of(queryStartDate.minusDays(1), LocalTime.of(23, 30));
         slotEndTime = LocalDateTime.of(queryStartDate, LocalTime.of(1, 0));
 
