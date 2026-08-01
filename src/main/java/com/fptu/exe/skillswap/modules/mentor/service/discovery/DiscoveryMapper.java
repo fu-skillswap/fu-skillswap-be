@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementRespo
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
@@ -66,9 +67,7 @@ public class DiscoveryMapper {
             List<MentorFeaturedProjectResponse> featuredProjects,
             List<MentorAchievementResponse> achievements
     ) {
-        BigDecimal rating = defaultDecimal(row.ratingAverage());
         int reviews = defaultInteger(row.reviewCount());
-        BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
         return MentorDiscoveryCardResponse.builder()
                 .mentorUserId(row.mentorUserId())
                 .displayName(row.displayName())
@@ -82,7 +81,8 @@ public class DiscoveryMapper {
                 .featuredProjects(featuredProjects.stream().limit(2).toList())
                 .achievements(achievements.stream().limit(2).toList())
                 .isAvailable(row.isAvailable())
-                .ratingAverage(displayRating)
+                .ratingState(reviews == 0 ? MentorRatingState.NO_REVIEWS : MentorRatingState.RATED)
+                .ratingAverage(reviews == 0 ? null : row.ratingAverage())
                 .reviewCount(reviews)
                 .completedSessions(defaultInteger(row.completedSessions()))
                 .verifiedAt(row.verifiedAt())
@@ -115,10 +115,13 @@ public class DiscoveryMapper {
                 .mentorUserId(mentorService.getMentorProfile() == null ? null : mentorService.getMentorProfile().getUserId())
                 .title(mentorService.getTitle())
                 .description(mentorService.getDescription())
+                .expectedOutcome(mentorService.getExpectedOutcome())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .isFree(mentorService.isFree())
                 .priceScoin(mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0 : defaultInteger(mentorService.getPriceScoin()) + (defaultInteger(mentorService.getPriceScoin()) * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
                 .isActive(mentorService.isActive())
+                .maintainPostSessionChat(mentorService.isMaintainPostSessionChat())
+                .deliveryMode(mentorService.getDeliveryMode())
                 .version(mentorService.getVersion())
                 .helpTopics(helpTopics)
                 .createdAt(mentorService.getCreatedAt())

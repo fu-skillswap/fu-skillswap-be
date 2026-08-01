@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.shared.outbox;
 
+import com.fptu.exe.skillswap.ProjectApplication;
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.infrastructure.realtime.DomainEventOutboxCleanupScheduler;
 import com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest;
@@ -20,7 +21,10 @@ import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(
+        classes = ProjectApplication.class,
+        properties = "application.realtime.outbox.cleanup-enabled=true"
+)
 class DomainEventOutboxCleanupIntegrationTest extends AbstractPostgreSQLIntegrationTest {
 
     @Autowired

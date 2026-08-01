@@ -7,10 +7,16 @@ import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
 import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
+import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
+import com.fptu.exe.skillswap.modules.blog.service.BlogMapper;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -26,6 +32,8 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailR
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicArticlePreviewResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -68,6 +76,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.nullable;
@@ -95,6 +104,10 @@ class MentorDiscoveryServiceTest {
     private SessionFeedbackRepository sessionFeedbackRepository;
     @Mock
     private BlogPostRepository blogPostRepository;
+    @Mock
+    private BlogMapper blogMapper;
+    @Mock
+    private BookingEligibilityPolicy bookingEligibilityPolicy;
     @Mock
     private MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
     @Mock
@@ -129,6 +142,8 @@ class MentorDiscoveryServiceTest {
                 mentorAvailabilityService,
                 sessionFeedbackRepository,
                 blogPostRepository,
+                blogMapper,
+                bookingEligibilityPolicy,
                 menteeMatchingFeatureProvider,
                 paymentProperties,
                 internalTelemetryService,
@@ -319,6 +334,35 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
+    void getRecommendations_shouldKeepRankingTieBreakerIndependentFromNullableDisplayRating() {
+        stubSearchContext();
+        MentorDiscoveryQueryRow rated = discoveryRow(SECOND_MENTOR_USER_ID, "Rated mentor", new BigDecimal("4.80"), 10, 12);
+        MentorDiscoveryQueryRow noReviews = discoveryRow(MENTOR_USER_ID, "New mentor", new BigDecimal("5.00"), 0, 12);
+        DiscoveryRankingService.RecommendationScore score = new DiscoveryRankingService.RecommendationScore(new BigDecimal("77.00"), List.of());
+
+        when(discoveryCandidateProvider.recallForRecommendation(eq(USER_ID), eq(true), eq(2), any(LocalDateTime.class), anyInt()))
+                .thenReturn(List.of(rated, noReviews));
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(SECOND_MENTOR_USER_ID, MENTOR_USER_ID)), any(MenteeMatchingFeatures.class), any(LocalDateTime.class)))
+                .thenReturn(Map.of(SECOND_MENTOR_USER_ID, MentorEnrichedData.empty(), MENTOR_USER_ID, MentorEnrichedData.empty()));
+        when(discoveryRankingService.scoreRecommendation(eq(rated), eq(MentorEnrichedData.empty()), eq(studentProfile), any(MenteeMatchingFeatures.class)))
+                .thenReturn(score);
+        when(discoveryRankingService.scoreRecommendation(eq(noReviews), eq(MentorEnrichedData.empty()), eq(studentProfile), any(MenteeMatchingFeatures.class)))
+                .thenReturn(score);
+        when(discoveryMapper.toRecommendation(eq(rated), any(), any())).thenReturn(MentorRecommendationResponse.builder()
+                .matchScore(score.matchScore())
+                .mentor(MentorDiscoveryCardResponse.builder().mentorUserId(SECOND_MENTOR_USER_ID).ratingAverage(new BigDecimal("4.80")).build())
+                .build());
+        when(discoveryMapper.toRecommendation(eq(noReviews), any(), any())).thenReturn(MentorRecommendationResponse.builder()
+                .matchScore(score.matchScore())
+                .mentor(MentorDiscoveryCardResponse.builder().mentorUserId(MENTOR_USER_ID).ratingState(MentorRatingState.NO_REVIEWS).ratingAverage(null).build())
+                .build());
+
+        List<MentorRecommendationResponse> recommendations = mentorDiscoveryService.getRecommendations(USER_ID, 2);
+
+        assertEquals(MENTOR_USER_ID, recommendations.getFirst().mentor().mentorUserId());
+    }
+
+    @Test
     void getMentorDetail_shouldMapServicesAndDisplayRating() {
         when(mentorProfileRepository.findWithUserByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(mentorProfile));
         when(studentProfileRepository.findWithDetailsByUserId(MENTOR_USER_ID)).thenReturn(Optional.empty());
@@ -347,12 +391,68 @@ class MentorDiscoveryServiceTest {
                 .active(true)
                 .build());
         when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
+        when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(true), any(LocalDateTime.class)))
+                .thenReturn(true);
 
         MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(MENTOR_USER_ID);
 
-        assertEquals("Mentor Full Name", response.displayName());
+        assertEquals("Mentor Full Name", response.identity().displayName());
         assertEquals(1, response.services().size());
-        assertEquals(0, response.ratingAverage().compareTo(new BigDecimal("4.50")));
+        assertEquals(MentorRatingState.RATED, response.reputation().ratingState());
+        assertEquals(0, response.reputation().ratingAverage().compareTo(new BigDecimal("4.50")));
+        assertTrue(response.evidence().authorityContent().recentPublicArticles().isEmpty());
+        assertTrue(response.availability().canRequestBooking());
+        verify(bookingEligibilityPolicy).isPublicBookingOfferAvailable(eq(mentorProfile), eq(true), any(LocalDateTime.class));
+    }
+
+    @Test
+    void getMentorDetail_noReviewsShouldExposeNullDisplayRating() {
+        mentorProfile.setTotalReviews(0);
+        mentorProfile.setAverageRating(new BigDecimal("5.00"));
+        when(mentorProfileRepository.findWithUserByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(mentorProfile));
+        when(studentProfileRepository.findWithDetailsByUserId(MENTOR_USER_ID)).thenReturn(Optional.empty());
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), isNull(), any(LocalDateTime.class)))
+                .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(MENTOR_USER_ID)).thenReturn(List.of());
+        when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
+        when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(false), any(LocalDateTime.class)))
+                .thenReturn(false);
+
+        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(MENTOR_USER_ID);
+
+        assertEquals(MentorRatingState.NO_REVIEWS, response.reputation().ratingState());
+        assertEquals(null, response.reputation().ratingAverage());
+        assertEquals(0, response.reputation().reviewCount());
+        assertEquals(5, response.reputation().completedSessions());
+        assertTrue(response.evidence().authorityContent().recentPublicArticles().isEmpty());
+        assertTrue(!response.availability().canRequestBooking());
+    }
+
+    @Test
+    void getMentorDetail_shouldLoadAtMostThreePublicMentorArticlePreviews() {
+        BlogPost post = BlogPost.builder().id(UUID.randomUUID()).title("Spring Boot guide").build();
+        MentorPublicArticlePreviewResponse preview = new MentorPublicArticlePreviewResponse(
+                post.getId(), "Spring Boot guide", "spring-boot-guide", "Excerpt", null, 4, LocalDateTime.now());
+        when(mentorProfileRepository.findWithUserByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(mentorProfile));
+        when(studentProfileRepository.findWithDetailsByUserId(MENTOR_USER_ID)).thenReturn(Optional.empty());
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), isNull(), any(LocalDateTime.class)))
+                .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(MENTOR_USER_ID)).thenReturn(List.of());
+        when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
+        when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(false), any(LocalDateTime.class)))
+                .thenReturn(false);
+        when(blogPostRepository.findMentorPublicProfilePreviews(
+                eq(MENTOR_USER_ID), eq(BlogAuthorType.MENTOR), eq(BlogPostStatus.PUBLISHED), eq(BlogVisibility.PUBLIC), any(Pageable.class)))
+                .thenReturn(List.of(post));
+        when(blogMapper.toMentorPublicArticlePreview(post)).thenReturn(preview);
+
+        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(MENTOR_USER_ID);
+
+        assertEquals(List.of(preview), response.evidence().authorityContent().recentPublicArticles());
+        verify(blogPostRepository).findMentorPublicProfilePreviews(
+                eq(MENTOR_USER_ID), eq(BlogAuthorType.MENTOR), eq(BlogPostStatus.PUBLISHED), eq(BlogVisibility.PUBLIC),
+                argThat(pageable -> pageable.getPageNumber() == 0 && pageable.getPageSize() == 3));
+        verify(blogMapper).toMentorPublicArticlePreview(post);
     }
 
     @Test
@@ -430,6 +530,16 @@ class MentorDiscoveryServiceTest {
     }
 
     private MentorDiscoveryQueryRow discoveryRow(UUID id, String headline) {
+        return discoveryRow(id, headline, BigDecimal.valueOf(4.6), 8, 12);
+    }
+
+    private MentorDiscoveryQueryRow discoveryRow(
+            UUID id,
+            String headline,
+            BigDecimal ratingAverage,
+            int reviewCount,
+            int completedSessions
+    ) {
         return new MentorDiscoveryQueryRow(
                 id,
                 "Mentor " + id,
@@ -441,9 +551,9 @@ class MentorDiscoveryServiceTest {
                 3,
                 2,
                 true,
-                BigDecimal.valueOf(4.6),
-                8,
-                12,
+                ratingAverage,
+                reviewCount,
+                completedSessions,
                 LocalDateTime.now().minusDays(5),
                 campus.getId(),
                 campus.getName(),

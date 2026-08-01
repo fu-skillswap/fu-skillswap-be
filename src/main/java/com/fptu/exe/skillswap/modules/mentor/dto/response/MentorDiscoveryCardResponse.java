@@ -36,7 +36,9 @@ public record MentorDiscoveryCardResponse(
         List<MentorAchievementResponse> achievements,
         @Schema(description = "Cờ đánh dấu mentor đang mở lịch nhận request (discoverable)", example = "true")
         Boolean isAvailable,
-        @Schema(description = "Điểm đánh giá trung bình từ mentee", example = "4.8")
+        @Schema(description = "Display state for mentor rating. NO_REVIEWS means ratingAverage is null.", allowableValues = {"NO_REVIEWS", "RATED"}, example = "RATED")
+        MentorRatingState ratingState,
+        @Schema(description = "Điểm đánh giá trung bình từ mentee", nullable = true, example = "4.8")
         BigDecimal ratingAverage,
         @Schema(description = "Số lượt đánh giá đã nhận", example = "12")
         Integer reviewCount,

@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Flyway migration V79: Intentional application-level tuning & covering indexes for domain_event_outbox
 CREATE INDEX IF NOT EXISTS idx_outbox_status_published_at ON domain_event_outbox (status, published_at, id);
 CREATE INDEX IF NOT EXISTS idx_outbox_status_available_attempt ON domain_event_outbox (status, available_at, attempt_count, id);

@@ -336,8 +336,89 @@ Mentor Blog is separate from service learning resources. Service resources are p
 
 Only an `ACTIVE` verified mentor can create, edit, upload Blog images or publish. Loss of normal publishing eligibility does not remove an existing article; `SUSPENDED` is a moderation state and hides/archive-publishes articles server-side.
 
-## Conversion Signals
-`GET /api/mentors/{mentorUserId}` includes `authorityContent.publishedArticleCount` and `authorityContent.latestPublishedAt`. These count only the mentor's published `PUBLIC` Blog articles; premium, authenticated-only, archived and deleted articles never contribute.
+## Public Mentor Discovery Profile
+`GET /api/mentors/{mentorUserId}` is public and returns exactly six sections in the required FE render order:
+
+```text
+identity -> mentoring -> services -> evidence -> reputation -> availability
+```
+
+```json
+{
+  "identity": {
+    "mentorUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "displayName": "Nguyen Van A",
+    "avatarUrl": "https://example.com/avatar.jpg",
+    "headline": "Backend Engineer and Java Mentor",
+    "isVerified": true,
+    "verifiedAt": "2026-07-20T08:30:00"
+  },
+  "mentoring": {
+    "bio": "Peer mentor for Java backend and internship preparation.",
+    "expertiseDescription": "I help students build REST APIs and improve interview readiness.",
+    "helpTopics": [],
+    "supportLevels": { "foundation": 4, "outputReview": 3, "direction": 3 }
+  },
+  "services": [],
+  "evidence": {
+    "education": {
+      "campusId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "campusName": "FPT University HCM",
+      "programId": null,
+      "programName": null,
+      "specializationId": null,
+      "specializationName": null,
+      "semester": 7,
+      "alumni": false
+    },
+    "subjectResults": [],
+    "featuredProjects": [],
+    "achievements": [],
+    "portfolioUrl": null,
+    "githubUrl": null,
+    "authorityContent": {
+      "publishedArticleCount": 1,
+      "latestPublishedAt": "2026-07-25T08:00:00",
+      "recentPublicArticles": [
+        {
+          "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "title": "Spring Boot interview checklist",
+          "slug": "spring-boot-interview-checklist",
+          "excerpt": "Checklist for a backend internship interview.",
+          "coverImageUrl": null,
+          "readingTimeMinutes": 4,
+          "publishedAt": "2026-07-25T08:00:00"
+        }
+      ]
+    }
+  },
+  "reputation": {
+    "ratingState": "NO_REVIEWS",
+    "ratingAverage": null,
+    "reviewCount": 0,
+    "completedSessions": 0
+  },
+  "availability": {
+    "isAvailable": true,
+    "suspendedUntil": null,
+    "canRequestBooking": true
+  }
+}
+```
+
+- Collections are always `[]` when empty. `education` and `authorityContent` are always objects; optional scalar fields use `null`.
+- `ratingState=NO_REVIEWS` means FE renders “Mới tham gia, chưa có đánh giá” and must not render a fabricated 5.0 rating. `RATED` includes a numeric `ratingAverage`.
+- `completedSessions` is the mentor's persisted `totalCompletedSessions`: only a booking explicitly confirmed by the mentee (`USER_CONFIRMED`) increments it. Auto-close, no-show resolution, session timeline completion and settlement alone do not.
+- `canRequestBooking` is public offer readiness only. It is not viewer-specific authorization; quote/create validates the current mentee, service, slot and candidate again.
+- `authorityContent.recentPublicArticles` contains at most three newest mentor-owned `PUBLISHED` `PUBLIC` Blog posts. Platform, draft, archived, deleted, authenticated-only and premium posts never appear. Cover URLs are resolved public URLs only; storage keys are never returned.
+- Discovery cards and recommendation cards remain compact. They also use `ratingState` plus nullable `ratingAverage`.
+
+The availability-slot and candidate endpoints remain authenticated:
+
+```text
+GET /api/mentors/{mentorUserId}/availability-slots
+GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...
+```
 
 For client-only funnel interactions, authenticated FE may call `POST /api/mentor-discovery/funnel-events` with `{ eventType, mentorUserId, serviceId?, slotId?, source }`. Allowed events: `SERVICE_VIEWED`, `CANDIDATE_SELECTED`, `BOOKING_STARTED`. Allowed sources: `MENTOR_PROFILE`, `DISCOVERY_SEARCH`, `BLOG_ARTICLE`, `DIRECT_LINK`. This endpoint is best-effort analytics: do not retry aggressively or block navigation if it fails.
 

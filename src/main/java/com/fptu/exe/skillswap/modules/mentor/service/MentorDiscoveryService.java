@@ -8,10 +8,15 @@ import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
+import com.fptu.exe.skillswap.modules.blog.service.BlogMapper;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAuthorityContentResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatureProvider;
@@ -29,6 +34,14 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilityResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorEducationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorEvidenceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorIdentityResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorMentoringResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorReputationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSupportLevelsResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -78,6 +91,8 @@ public class MentorDiscoveryService {
     private final MentorAvailabilityService mentorAvailabilityService;
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final BlogPostRepository blogPostRepository;
+    private final BlogMapper blogMapper;
+    private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
@@ -277,13 +292,17 @@ public class MentorDiscoveryService {
                             menteeProfile,
                             menteeFeatures
                     );
-                    return discoveryMapper.toRecommendation(candidate, enrichedData, recommendationScore);
+                    return new RankedRecommendation(
+                            candidate,
+                            discoveryMapper.toRecommendation(candidate, enrichedData, recommendationScore)
+                    );
                 })
                 .sorted(Comparator
-                        .comparing(MentorRecommendationResponse::matchScore, Comparator.nullsLast(BigDecimal::compareTo)).reversed()
-                        .thenComparing(response -> defaultInteger(response.mentor().completedSessions()), Comparator.reverseOrder())
-                        .thenComparing(response -> defaultDecimal(response.mentor().ratingAverage()), Comparator.reverseOrder()))
+                        .comparing((RankedRecommendation ranked) -> ranked.response().matchScore(), Comparator.nullsLast(BigDecimal::compareTo)).reversed()
+                        .thenComparing(ranked -> defaultInteger(ranked.candidate().completedSessions()), Comparator.reverseOrder())
+                        .thenComparing(ranked -> defaultDecimal(ranked.candidate().ratingAverage()), Comparator.reverseOrder()))
                 .limit(safeLimit)
+                .map(RankedRecommendation::response)
                 .toList();
     }
 
@@ -308,54 +327,51 @@ public class MentorDiscoveryService {
         AcademicProgram program = studentProfile == null ? null : studentProfile.getProgram();
         Specialization specialization = studentProfile == null ? null : studentProfile.getSpecialization();
 
-        BigDecimal rating = defaultDecimal(mentorProfile.getAverageRating());
         int reviews = defaultInteger(mentorProfile.getTotalReviews());
-        BigDecimal displayRating = reviews == 0 ? BigDecimal.valueOf(5.0).setScale(2, RoundingMode.HALF_UP) : rating;
-
-        boolean hasCompletedProfile = hasCompletedPeerMentorProfile(mentorProfile, mentorTags, subjectResults);
         boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::isActive);
-        boolean canRequestBooking = mentorProfile.isAvailable() && mentorProfile.getVerifiedAt() != null
-                && !isBookingSuspended(mentorProfile)
-                && hasActiveServices;
+        boolean canRequestBooking = bookingEligibilityPolicy.isPublicBookingOfferAvailable(
+                mentorProfile, hasActiveServices, currentTime());
         BlogPostRepository.MentorPublicAuthorityProjection authority = blogPostRepository.getMentorPublicAuthority(mentorUserId);
+        List<com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicArticlePreviewResponse> recentPublicArticles =
+                blogPostRepository.findMentorPublicProfilePreviews(
+                                mentorUserId,
+                                BlogAuthorType.MENTOR,
+                                BlogPostStatus.PUBLISHED,
+                                BlogVisibility.PUBLIC,
+                                PageRequest.of(0, 3))
+                        .stream()
+                        .map(blogMapper::toMentorPublicArticlePreview)
+                        .toList();
 
         return MentorDiscoveryDetailResponse.builder()
-                .mentorUserId(mentorProfile.getUserId())
-                .displayName(mentorProfile.getUser().getFullName())
-                .avatarUrl(mentorProfile.getUser().getAvatarUrl())
-                .headline(mentorProfile.getHeadline())
-                .bio(studentProfile == null ? null : studentProfile.getBio())
-                .expertiseDescription(mentorProfile.getExpertiseDescription())
-                .subjectResults(subjectResults)
-                .foundationSupportLevel(mentorProfile.getFoundationSupportLevel())
-                .outputReviewSupportLevel(mentorProfile.getOutputReviewSupportLevel())
-                .directionSupportLevel(mentorProfile.getDirectionSupportLevel())
-                .featuredProjects(featuredProjects)
-                .achievements(achievements)
-                .isAvailable(mentorProfile.isAvailable())
-                .bookingSuspendedUntil(mentorProfile.getBookingSuspendedUntil())
-                .ratingAverage(displayRating)
-                .reviewCount(reviews)
-                .completedSessions(defaultInteger(mentorProfile.getTotalCompletedSessions()))
-                .verifiedAt(mentorProfile.getVerifiedAt())
-                .campusId(campus == null ? null : campus.getId())
-                .campusName(campus == null ? null : campus.getName())
-                .programId(program == null ? null : program.getId())
-                .programName(program == null ? null : program.getNameVi())
-                .specializationId(specialization == null ? null : specialization.getId())
-                .specializationName(specialization == null ? null : specialization.getNameVi())
-                .semester(studentProfile == null ? null : studentProfile.getSemester())
-                .alumni(studentProfile != null && studentProfile.isAlumni())
-                .portfolioUrl(mentorProfile.getPortfolioUrl())
-                .githubUrl(mentorProfile.getGithubUrl())
-                .helpTopicTags(discoveryMapper.filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC))
+                .identity(new MentorIdentityResponse(
+                        mentorProfile.getUserId(), mentorProfile.getUser().getFullName(), mentorProfile.getUser().getAvatarUrl(),
+                        mentorProfile.getHeadline(), mentorProfile.getVerifiedAt() != null, mentorProfile.getVerifiedAt()))
+                .mentoring(new MentorMentoringResponse(
+                        studentProfile == null ? null : studentProfile.getBio(),
+                        mentorProfile.getExpertiseDescription(),
+                        discoveryMapper.filterTagsByType(mentorTags, MentorTagType.HELP_TOPIC),
+                        new MentorSupportLevelsResponse(
+                                mentorProfile.getFoundationSupportLevel(), mentorProfile.getOutputReviewSupportLevel(),
+                                mentorProfile.getDirectionSupportLevel())))
                 .services(services)
-                .authorityContent(new MentorAuthorityContentResponse(
-                        authority == null ? 0L : authority.getPublishedArticleCount(),
-                        authority == null ? null : authority.getLatestPublishedAt()))
-                .canRequestBooking(canRequestBooking)
-                .hasCompletedProfile(hasCompletedProfile)
-                .hasActiveServices(hasActiveServices)
+                .evidence(new MentorEvidenceResponse(
+                        new MentorEducationResponse(
+                                campus == null ? null : campus.getId(), campus == null ? null : campus.getName(),
+                                program == null ? null : program.getId(), program == null ? null : program.getNameVi(),
+                                specialization == null ? null : specialization.getId(), specialization == null ? null : specialization.getNameVi(),
+                                studentProfile == null ? null : studentProfile.getSemester(),
+                                studentProfile != null && studentProfile.isAlumni()),
+                        subjectResults, featuredProjects, achievements, mentorProfile.getPortfolioUrl(), mentorProfile.getGithubUrl(),
+                        new MentorAuthorityContentResponse(
+                                authority == null ? 0L : authority.getPublishedArticleCount(),
+                                authority == null ? null : authority.getLatestPublishedAt(), recentPublicArticles)))
+                .reputation(new MentorReputationResponse(
+                        reviews == 0 ? MentorRatingState.NO_REVIEWS : MentorRatingState.RATED,
+                        reviews == 0 ? null : mentorProfile.getAverageRating(),
+                        reviews, defaultInteger(mentorProfile.getTotalCompletedSessions())))
+                .availability(new MentorAvailabilityResponse(
+                        mentorProfile.isAvailable(), mentorProfile.getBookingSuspendedUntil(), canRequestBooking))
                 .build();
     }
 
@@ -494,29 +510,17 @@ public class MentorDiscoveryService {
         return value != null && !value.trim().isEmpty();
     }
 
-    private boolean hasCompletedPeerMentorProfile(
-            MentorProfile mentorProfile,
-            List<MentorTagResponse> helpTopics,
-            List<MentorSubjectResultResponse> subjectResults
-    ) {
-        return mentorProfile != null
-                && hasText(mentorProfile.getHeadline())
-                && hasText(mentorProfile.getExpertiseDescription())
-                && hasText(mentorProfile.getPhoneNumber())
-                && mentorProfile.getFoundationSupportLevel() != null
-                && mentorProfile.getOutputReviewSupportLevel() != null
-                && mentorProfile.getDirectionSupportLevel() != null
-                && helpTopics != null
-                && !helpTopics.isEmpty()
-                && subjectResults != null
-                && !subjectResults.isEmpty();
-    }
-
     private BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : value;
     }
 
     private Integer defaultInteger(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record RankedRecommendation(
+            MentorDiscoveryQueryRow candidate,
+            MentorRecommendationResponse response
+    ) {
     }
 }

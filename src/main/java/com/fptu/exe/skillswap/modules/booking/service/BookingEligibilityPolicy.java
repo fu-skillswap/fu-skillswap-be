@@ -13,6 +13,8 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Component
 public class BookingEligibilityPolicy {
 
@@ -65,6 +67,22 @@ public class BookingEligibilityPolicy {
                 && mentorProfile.getFoundationSupportLevel() != null
                 && mentorProfile.getOutputReviewSupportLevel() != null
                 && mentorProfile.getDirectionSupportLevel() != null;
+    }
+
+    /**
+     * Public profile capability only. Requester-specific eligibility remains enforced by booking
+     * quote/create flows because a public mentor detail may have no authenticated viewer.
+     */
+    public boolean isPublicBookingOfferAvailable(
+            MentorProfile mentorProfile,
+            boolean hasActiveBookableService,
+            LocalDateTime now
+    ) {
+        if (!hasActiveBookableService || !isDiscoverableMentorForBooking(mentorProfile)) {
+            return false;
+        }
+        LocalDateTime suspendedUntil = mentorProfile.getBookingSuspendedUntil();
+        return suspendedUntil == null || now == null || !suspendedUntil.isAfter(now);
     }
 
     private boolean hasAnyRole(User user, RoleCode... roles) {

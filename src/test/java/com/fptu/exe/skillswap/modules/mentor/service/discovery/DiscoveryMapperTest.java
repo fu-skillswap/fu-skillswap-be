@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
@@ -89,12 +90,13 @@ class DiscoveryMapperTest {
         assertNotNull(response);
         assertEquals(mockRow.mentorUserId(), response.mentorUserId());
         assertEquals("Display Name", response.displayName());
+        assertEquals(MentorRatingState.RATED, response.ratingState());
         assertEquals(new BigDecimal("4.80"), response.ratingAverage());
         assertEquals(new BigDecimal("95.00"), response.matchScore());
     }
 
     @Test
-    void toCardResponse_withZeroReviews_shouldReturnDefaultRating() {
+    void toCardResponse_withZeroReviews_shouldReturnNoReviewsStateAndNullRating() {
         MentorDiscoveryQueryRow zeroReviewRow = new MentorDiscoveryQueryRow(
                 mockRow.mentorUserId(),
                 mockRow.displayName(),
@@ -122,7 +124,8 @@ class DiscoveryMapperTest {
                 List.of()
         );
 
-        assertEquals(new BigDecimal("5.00"), response.ratingAverage());
+        assertEquals(MentorRatingState.NO_REVIEWS, response.ratingState());
+        assertEquals(null, response.ratingAverage());
     }
 
     @Test
@@ -148,8 +151,10 @@ class DiscoveryMapperTest {
         MentorService service = MentorService.builder()
                 .id(UUID.randomUUID())
                 .title("Code Review")
+                .expectedOutcome("Actionable code review notes")
                 .isFree(false)
                 .priceScoin(100)
+                .maintainPostSessionChat(true)
                 .helpTopics(Set.of())
                 .build();
 
@@ -159,6 +164,8 @@ class DiscoveryMapperTest {
         assertEquals("Code Review", response.title());
         assertFalse(response.free());
         assertEquals(110, response.priceScoin());
+        assertEquals("Actionable code review notes", response.expectedOutcome());
+        assertTrue(response.maintainPostSessionChat());
     }
 
     @Test

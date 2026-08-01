@@ -78,8 +78,18 @@ public class MentorDiscoveryController {
             description = "Trả về thông tin public chi tiết của một mentor đang ở trạng thái discoverable. FE dùng sau khi user chọn một mentor card và cần xem profile, services và review trước khi chọn slot."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Chi tiết mentor"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Chi tiết mentor",
+                    content = @io.swagger.v3.oas.annotations.media.Content(examples = {
+                            @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Mentor without reviews",
+                                    value = "{\"status\":200,\"code\":\"SUCCESS\",\"data\":{\"reputation\":{\"ratingState\":\"NO_REVIEWS\",\"ratingAverage\":null,\"reviewCount\":0}}}"),
+                            @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "Rated mentor",
+                                    value = "{\"status\":200,\"code\":\"SUCCESS\",\"data\":{\"reputation\":{\"ratingState\":\"RATED\",\"ratingAverage\":4.85,\"reviewCount\":27}}}")
+                    })
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")
     })
     @GetMapping("/{mentorUserId}")

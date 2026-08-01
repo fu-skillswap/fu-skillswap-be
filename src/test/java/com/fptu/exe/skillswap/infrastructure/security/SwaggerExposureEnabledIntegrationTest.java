@@ -54,6 +54,21 @@ class SwaggerExposureEnabledIntegrationTest {
         assertThat(schemaNames.stream().anyMatch(name -> name.startsWith("PageResponse"))).isTrue();
         assertThat(schemaNames.stream().anyMatch(name -> name.startsWith("CursorPageResponse"))).isTrue();
 
+        JsonNode mentorDetailSchema = document.path("components").path("schemas")
+                .path("MentorDiscoveryDetailResponse");
+        java.util.Set<String> mentorDetailSections = new java.util.LinkedHashSet<>();
+        mentorDetailSchema.path("properties").fieldNames().forEachRemaining(mentorDetailSections::add);
+        assertThat(mentorDetailSections).containsExactly(
+                "identity", "mentoring", "services", "evidence", "reputation", "availability");
+
+        JsonNode reputationSchema = document.path("components").path("schemas")
+                .path("MentorReputationResponse");
+        assertThat(reputationSchema.path("properties").path("ratingState").path("enum"))
+                .extracting(JsonNode::asText)
+                .containsExactly("NO_REVIEWS", "RATED");
+        assertThat(reputationSchema.path("properties").path("ratingAverage").path("nullable").asBoolean())
+                .isTrue();
+
         JsonNode tags = document.path("tags");
         assertThat(tags.isArray()).isTrue();
         java.util.Set<String> tagNames = new java.util.HashSet<>();

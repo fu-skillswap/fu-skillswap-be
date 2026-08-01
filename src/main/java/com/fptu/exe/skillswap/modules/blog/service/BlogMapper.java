@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBlogAuthorSummary;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicArticlePreviewResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -71,6 +72,19 @@ public class BlogMapper {
                 post.getSeoTitle(),
                 post.getSeoDescription(),
                 post.getCanonicalUrl()
+        );
+    }
+
+    /** Maps only public-safe Blog fields for mentor profile knowledge evidence. */
+    public MentorPublicArticlePreviewResponse toMentorPublicArticlePreview(BlogPost post) {
+        return new MentorPublicArticlePreviewResponse(
+                post.getId(),
+                post.getTitle(),
+                post.getSlug(),
+                post.getExcerpt(),
+                resolveImageUrl(post.getCoverImageUrl(), post.getCoverImageObjectKey()),
+                post.getReadingTimeMinutes(),
+                post.getPublishedAt()
         );
     }
 

@@ -89,9 +89,9 @@ public class SocialShareController {
 
         try {
             MentorDiscoveryDetailResponse mentor = mentorDiscoveryService.getMentorDetail(id);
-            String title = mentor.displayName() + " | Mentor trên SkillSwap";
-            String description = mentor.headline() != null ? mentor.headline() : "Khám phá profile mentor trên SkillSwap";
-            String imageUrl = mentor.avatarUrl();
+            String title = mentor.identity().displayName() + " | Mentor trên SkillSwap";
+            String description = mentor.identity().headline() != null ? mentor.identity().headline() : "Khám phá profile mentor trên SkillSwap";
+            String imageUrl = mentor.identity().avatarUrl();
             
             String html = generateOgHtml(title, description, imageUrl, frontendUrl);
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);

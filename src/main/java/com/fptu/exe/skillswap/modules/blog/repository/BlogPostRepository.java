@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.blog.repository;
 
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPost;
+import com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -35,6 +36,24 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
               and p.publishedAt is not null
             """)
     MentorPublicAuthorityProjection getMentorPublicAuthority(@Param("mentorUserId") UUID mentorUserId);
+
+    @Query("""
+            select p
+            from BlogPost p
+            where p.authorType = :authorType
+              and p.authorUser.id = :mentorUserId
+              and p.status = :status
+              and p.visibility = :visibility
+              and p.publishedAt is not null
+            order by p.publishedAt desc, p.id desc
+            """)
+    List<BlogPost> findMentorPublicProfilePreviews(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("authorType") BlogAuthorType authorType,
+            @Param("status") BlogPostStatus status,
+            @Param("visibility") BlogVisibility visibility,
+            Pageable pageable
+    );
 
     boolean existsBySlug(String slug);
 
