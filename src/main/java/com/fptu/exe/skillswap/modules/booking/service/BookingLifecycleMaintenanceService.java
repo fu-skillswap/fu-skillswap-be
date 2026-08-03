@@ -47,10 +47,16 @@ public class BookingLifecycleMaintenanceService {
     private final BookingEventService bookingEventService;
     private final GroupSessionCommerceService groupSessionCommerceService;
     private GroupSessionExperienceService groupSessionExperienceService;
+    private AvailabilityTemplateService availabilityTemplateService;
 
     @Autowired(required = false)
     void setGroupSessionExperienceService(GroupSessionExperienceService groupSessionExperienceService) {
         this.groupSessionExperienceService = groupSessionExperienceService;
+    }
+
+    @Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
     }
 
     @Transactional
@@ -68,6 +74,7 @@ public class BookingLifecycleMaintenanceService {
             booking.setRejectReason(reason);
             if (booking.getSlot() != null) {
                 booking.getSlot().setBooked(false);
+                markTemplateDue(booking.getSlot());
             }
         }
         bookingRepository.saveAll(pendingBookings);
@@ -105,6 +112,7 @@ public class BookingLifecycleMaintenanceService {
             booking.setRejectReason("Yêu cầu đặt lịch đã tự động hết hạn vì mentor chưa phản hồi đúng hạn.");
             if (booking.getSlot() != null) {
                 booking.getSlot().setBooked(false);
+                markTemplateDue(booking.getSlot());
             }
         }
         bookingRepository.saveAll(staleBookings);
@@ -125,6 +133,12 @@ public class BookingLifecycleMaintenanceService {
                     booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()));
         }
         return staleBookings.size();
+    }
+
+    private void markTemplateDue(MentorAvailabilitySlot slot) {
+        if (availabilityTemplateService != null && slot.getId() != null) {
+            availabilityTemplateService.markSlotDue(slot.getId());
+        }
     }
 
     @Transactional
@@ -300,6 +314,9 @@ public class BookingLifecycleMaintenanceService {
         if (slot == null || slot.getId() == null) return;
         slot.setBooked(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(), SLOT_LOCKING_STATUSES, slot.getStartTime(), slot.getEndTime()));
+        if (availabilityTemplateService != null) {
+            availabilityTemplateService.markSlotDue(slot.getId());
+        }
     }
 
     private boolean isPaymentDeadlineReached(Booking booking, LocalDateTime now) {

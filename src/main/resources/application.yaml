@@ -89,6 +89,15 @@ application:
     version: ${APPLICATION_OPENAPI_VERSION:0.1.0-beta}
   scheduling:
     enabled: ${APPLICATION_SCHEDULING_ENABLED:true}
+  availability:
+    templates:
+      generation-mode: ${APPLICATION_AVAILABILITY_GENERATION_MODE:TEMPLATES}
+      horizon-days: ${APPLICATION_AVAILABILITY_TEMPLATE_HORIZON_DAYS:14}
+      scheduler-batch-size: ${APPLICATION_AVAILABILITY_TEMPLATE_SCHEDULER_BATCH_SIZE:50}
+      scheduler-max-templates-per-run: ${APPLICATION_AVAILABILITY_TEMPLATE_SCHEDULER_MAX_PER_RUN:1000}
+      claim-lease-seconds: ${APPLICATION_AVAILABILITY_TEMPLATE_CLAIM_LEASE_SECONDS:120}
+    legacy:
+      enabled: ${APPLICATION_AVAILABILITY_LEGACY_ENABLED:false}
   group-sessions:
     enabled: ${APPLICATION_GROUP_SESSIONS_ENABLED:true}
     attendance-submission-window-hours: ${APPLICATION_GROUP_SESSION_ATTENDANCE_SUBMISSION_WINDOW_HOURS:48}

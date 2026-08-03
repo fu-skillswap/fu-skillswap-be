@@ -16,7 +16,7 @@ import java.util.UUID;
 
 @Slf4j
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "application.availability.legacy", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 @Deprecated(forRemoval = false)
 public class MentorSlotGenerationScheduler {

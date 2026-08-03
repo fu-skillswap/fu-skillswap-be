@@ -66,10 +66,16 @@ public class GroupSessionManagementService {
     private final AdminAuditWriterService auditWriter;
     private final GroupSessionCommerceService groupSessionCommerceService;
     private GroupSessionExperienceService groupSessionExperienceService;
+    private AvailabilityTemplateService availabilityTemplateService;
 
     @Autowired(required = false)
     void setGroupSessionExperienceService(GroupSessionExperienceService groupSessionExperienceService) {
         this.groupSessionExperienceService = groupSessionExperienceService;
+    }
+
+    @Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
     }
 
     @Transactional(readOnly = true)
@@ -182,6 +188,9 @@ public class GroupSessionManagementService {
         session.setRegistrationStatus(GroupSessionRegistrationStatus.CLOSED);
         session.setCancelledAt(now());
         groupSessionCommerceService.cancelSeatsForSession(session, "GROUP_SESSION_CANCELLED_BY_MENTOR");
+        if (availabilityTemplateService != null && session.getSourceSlot() != null) {
+            availabilityTemplateService.markSlotDue(session.getSourceSlot().getId());
+        }
         if (groupSessionExperienceService != null) {
             groupSessionExperienceService.revokeAllForCancelledSession(session);
         }

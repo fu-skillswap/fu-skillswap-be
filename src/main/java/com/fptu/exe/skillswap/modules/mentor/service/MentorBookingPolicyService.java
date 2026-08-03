@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorBookingPoli
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorBookingPolicyResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSchedulingConstraintsResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorBookingPolicyRepository;
+import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
@@ -29,6 +30,12 @@ public class MentorBookingPolicyService {
 
     private final MentorBookingPolicyRepository mentorBookingPolicyRepository;
     private final UserRepository userRepository;
+    private AvailabilityTemplateService availabilityTemplateService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
+    }
 
     @Transactional(readOnly = true)
     public MentorBookingPolicySnapshot getEffectivePolicy(UUID mentorUserId) {
@@ -103,6 +110,7 @@ public class MentorBookingPolicyService {
             policy.setTimezone(timezone);
         }
         MentorBookingPolicy saved = mentorBookingPolicyRepository.saveAndFlush(policy);
+        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
         return new MentorBookingPolicyResponse(
                 saved.getMinimumBookingLeadTimeMinutes(),
                 saved.getMaximumBookingHorizonDays(),

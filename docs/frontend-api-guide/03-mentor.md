@@ -457,3 +457,27 @@ Publishing creates one shared group session and one group conversation immediate
 | POST | `/api/me/group-sessions/{groupSessionId}/attendance` | Submit the final complete attendee roster with `expectedVersion`. |
 
 Attendance is available after `scheduledEndAt` until the configured `APPLICATION_GROUP_SESSION_ATTENDANCE_SUBMISSION_WINDOW_HOURS` deadline (48 hours by default). The roster is immutable: mark each current attendee `PRESENT` or `MENTEE_NO_SHOW`; corrections use booking issue/admin resolution.
+
+## Availability templates
+Mentors can configure weekly availability through `/api/me/availability-templates`. Templates materialize ordinary concrete slots for the next 14 `Asia/Ho_Chi_Minh` local calendar days; candidate, booking, payment and Google Calendar continue to use those slots.
+
+- `configuredStatus`: `ACTIVE`, `PAUSED`, `ARCHIVED` is the persisted mentor choice.
+- `effectiveStatus`: `ACTIVE`, `PAUSED`, `EXPIRED`, `ARCHIVED` includes date expiry.
+- Every template mutation requires `expectedVersion`; scheduler metadata never changes it.
+- `effectiveFrom` and `effectiveTo` are inclusive. `effectiveFrom` cannot change once it is today or in the past.
+- Generated slots cannot be edited directly. Skip or restore one date through template exceptions.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/api/me/availability-templates` | Create weekly template |
+| GET | `/api/me/availability-templates?configuredStatus=&effectiveStatus=&cursor=&limit=` | Cursor-list templates, ordered by `effectiveFrom DESC, templateId DESC` |
+| GET/PUT | `/api/me/availability-templates/{templateId}` | Read/update template |
+| POST | `/api/me/availability-templates/{templateId}/pause` | Pause future supply |
+| POST | `/api/me/availability-templates/{templateId}/resume` | Resume future supply |
+| POST | `/api/me/availability-templates/{templateId}/archive` | Archive template permanently |
+| PUT | `/api/me/availability-templates/{templateId}/exceptions/{yyyy-MM-dd}` | Skip one occurrence |
+| POST | `/api/me/availability-templates/{templateId}/exceptions/{yyyy-MM-dd}/restore` | Restore one occurrence |
+
+If a manual slot overlaps generated occurrences, the first request returns `409 GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED`. Its error `data` lists `{ templateId, occurrenceDate, currentVersion }` for every occurrence. Ask for confirmation, then retry with `replaceGeneratedOccurrences=true`, optional explicit pending rejection, and all current `expectedTemplateVersions`.
+
+The list uses the standard `CursorPageResponse`; preserve `nextCursor` exactly and do not construct cursors on the client. `skippedDates` and `blockedOccurrences` only cover the current 14-day materialization horizon.

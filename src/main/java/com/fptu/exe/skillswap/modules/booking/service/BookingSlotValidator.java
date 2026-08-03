@@ -34,10 +34,16 @@ public class BookingSlotValidator {
     private final BookingRepository bookingRepository;
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final GroupSessionRepository groupSessionRepository;
+    private AvailabilityTemplateService availabilityTemplateService;
 
     public BookingSlotValidator(AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
                                 BookingRepository bookingRepository) {
         this(availabilitySlotServiceRepository, bookingRepository, null, null);
+    }
+
+    @Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
     }
 
     public void validateSelectedRange(
@@ -55,6 +61,9 @@ public class BookingSlotValidator {
         }
         if (slot == null || slot.getStartTime() == null || slot.getEndTime() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring không hợp lệ");
+        }
+        if (availabilityTemplateService != null && !availabilityTemplateService.isGeneratedSlotEligible(slot)) {
+            throw new BaseException(ErrorCode.AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE);
         }
         if (selectedStartTime.isBefore(slot.getStartTime()) || selectedEndTime.isAfter(slot.getEndTime())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải nằm hoàn toàn trong khung giờ của mentor");

@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
@@ -54,6 +55,12 @@ public class MentorServiceManagementService {
     private final BookingRepository bookingRepository;
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private AvailabilityTemplateService availabilityTemplateService;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
+    }
 
     @Transactional(readOnly = true)
     public List<MentorServiceResponse> getMyServices(UUID mentorUserId, Boolean isActive) {
@@ -192,7 +199,9 @@ public class MentorServiceManagementService {
         }
         service.setActive(request.isActive());
         touchMentorActivity(mentorProfile, LocalDateTime.now());
-        return toResponse(mentorServiceRepository.save(service));
+        MentorServiceResponse response = toResponse(mentorServiceRepository.save(service));
+        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
+        return response;
     }
 
     private MentorProfile requireEligibleMentorProfile(UUID mentorUserId) {

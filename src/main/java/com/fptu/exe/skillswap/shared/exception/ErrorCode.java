@@ -45,6 +45,23 @@ public enum ErrorCode {
     FORUM_CONTENT_PROHIBITED(400, "FORUM_4201", "error.forum.content_prohibited", "Nội dung chứa cụm từ không được phép"),
     FORUM_PROHIBITED_PHRASE_DUPLICATE(409, "FORUM_4202", "error.forum.prohibited_phrase_duplicate", "Cụm từ cấm đã tồn tại"),
 
+    // Availability templates
+    AVAILABILITY_TEMPLATE_NOT_FOUND(404, "AVAIL_4301", "error.availability.template_not_found", "Không tìm thấy availability template"),
+    AVAILABILITY_TEMPLATE_VERSION_CONFLICT(409, "AVAIL_4302", "error.availability.template_version_conflict", "Availability template đã được cập nhật"),
+    AVAILABILITY_TEMPLATE_OVERLAP(409, "AVAIL_4303", "error.availability.template_overlap", "Availability template bị trùng thời gian"),
+    AVAILABILITY_TEMPLATE_LIMIT_EXCEEDED(409, "AVAIL_4304", "error.availability.template_limit", "Đã đạt giới hạn availability template đang hoạt động"),
+    AVAILABILITY_TEMPLATE_INVALID_SCHEDULE(400, "AVAIL_4305", "error.availability.template_invalid_schedule", "Lịch availability template không hợp lệ"),
+    AVAILABILITY_TEMPLATE_INACTIVE_SERVICE(400, "AVAIL_4306", "error.availability.template_inactive_service", "Service gắn vào template không còn hợp lệ"),
+    AVAILABILITY_TEMPLATE_EXPIRED(409, "AVAIL_4307", "error.availability.template_expired", "Availability template đã hết hiệu lực"),
+    AVAILABILITY_TEMPLATE_HAS_PENDING_BOOKINGS(409, "AVAIL_4308", "error.availability.template_pending", "Template có booking đang chờ xử lý"),
+    AVAILABILITY_TEMPLATE_HAS_LOCKING_BOOKINGS(409, "AVAIL_4309", "error.availability.template_locking", "Template có booking hoặc group session đang giữ lịch"),
+    AVAILABILITY_TEMPLATE_INVALID_OCCURRENCE(400, "AVAIL_4310", "error.availability.template_invalid_occurrence", "Ngày occurrence không hợp lệ"),
+    AVAILABILITY_TEMPLATE_EXCEPTION_EXISTS(409, "AVAIL_4311", "error.availability.template_exception_exists", "Ngày này đã được bỏ qua"),
+    AVAILABILITY_TEMPLATE_EXCEPTION_NOT_FOUND(404, "AVAIL_4312", "error.availability.template_exception_not_found", "Không tìm thấy exception"),
+    GENERATED_SLOT_MANAGED_BY_TEMPLATE(409, "AVAIL_4313", "error.availability.generated_slot_managed", "Generated slot phải được quản lý qua template"),
+    GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED(409, "AVAIL_4314", "error.availability.generated_replacement_required", "Cần xác nhận thay thế generated occurrence"),
+    AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE(409, "AVAIL_4315", "error.availability.template_occurrence_unavailable", "Generated occurrence hiện không còn khả dụng"),
+
     // Chat
     CHAT_CLIENT_MESSAGE_CONFLICT(409, "CHAT_4101", "error.chat.client_message_conflict", "Client message ID đã được dùng cho nội dung khác"),
     CHAT_MESSAGE_CURSOR_INVALID(400, "CHAT_4102", "error.chat.cursor_invalid", "Cursor tin nhắn không hợp lệ"),

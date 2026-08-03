@@ -3,6 +3,11 @@
 ## Mục tiêu
 File này mô tả Google Calendar connect/disconnect/status để FE biết khi nào mentor đã sẵn sàng cho lịch tự động và sync hội họp.
 
+## Availability template boundary
+Availability templates are a SkillSwap supply editor, not Google Calendar recurrence. They materialize concrete parent slots for the next 14 Vietnam-local dates. Candidate calculation, booking locks, payment expiry, group-session reservations and history continue to read those concrete slots.
+
+Template actions never create Google Calendar events. Confirmed booking/session flows retain the existing outbox-driven provider sync. This release does not import Google free/busy data, create recurring Google events, or implement two-way calendar synchronization.
+
 ## API inventory
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |

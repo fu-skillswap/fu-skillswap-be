@@ -35,9 +35,16 @@ public class MentorAvailabilitySlot {
     @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_mentor"))
     private MentorProfile mentorProfile;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "rule_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rule"))
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "rule_id", foreignKey = @ForeignKey(name = "fk_availability_rule"))
     private MentorAvailabilityRule rule;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "template_id", foreignKey = @ForeignKey(name = "fk_availability_slot_template"))
+    private AvailabilityTemplate template;
+
+    @Column(name = "template_occurrence_date")
+    private java.time.LocalDate templateOccurrenceDate;
 
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;

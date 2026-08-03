@@ -28,18 +28,23 @@ public record CreateAvailabilitySlotRequest(
         @NotEmpty(message = "serviceIds không được để trống")
         List<@NotNull UUID> serviceIds,
 
+        Boolean replaceGeneratedOccurrences,
+        Boolean rejectPendingBookings,
+        List<@NotNull ExpectedTemplateVersionRequest> expectedTemplateVersions,
+
         @JsonIgnore
         boolean legacyJavaBridge
 ) {
     public CreateAvailabilitySlotRequest(Instant startAt, Instant endAt, String note, List<UUID> serviceIds) {
-        this(startAt, endAt, note, serviceIds, false);
+        this(startAt, endAt, note, serviceIds, false, false, List.of(), false);
     }
     /** Java-only bridge; HTTP callers use Instant UTC boundaries. */
     @Deprecated(forRemoval = true)
     public CreateAvailabilitySlotRequest(java.time.LocalDateTime startAt, java.time.LocalDateTime endAt,
                                          String note, List<UUID> serviceIds) {
         this(startAt == null ? null : startAt.toInstant(java.time.ZoneOffset.UTC),
-                endAt == null ? null : endAt.toInstant(java.time.ZoneOffset.UTC), note, serviceIds, true);
+                endAt == null ? null : endAt.toInstant(java.time.ZoneOffset.UTC), note, serviceIds,
+                false, false, List.of(), true);
     }
 
     @Deprecated(forRemoval = true)

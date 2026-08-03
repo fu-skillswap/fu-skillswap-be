@@ -107,6 +107,12 @@ public class MentorAvailabilityService {
     private final PaymentProperties paymentProperties;
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final GroupSessionRepository groupSessionRepository;
+    private AvailabilityTemplateService availabilityTemplateService;
+
+    @Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
+    }
 
     public MentorAvailabilityService(
             MentorProfileRepository mentorProfileRepository,
@@ -180,28 +186,17 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể tạo slot rảnh ở quá khứ");
         }
 
+        if (availabilityTemplateService != null) {
+            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end,
+                    Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
+                    request.expectedTemplateVersions());
+        }
         if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, start, end)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
         }
 
-        MentorAvailabilityRule rule = MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
-                .ruleType(AvailabilityRuleType.OPEN)
-                .repeatType(AvailabilityRepeatType.NONE)
-                .daysOfWeek(null)
-                .effectiveFrom(start.toLocalDate())
-                .effectiveTo(start.toLocalDate())
-                .startTime(start.toLocalTime())
-                .endTime(end.toLocalTime())
-                .timezone(APP_TIMEZONE)
-                .active(true)
-                .note(trimToNull(request.note()))
-                .build();
-        MentorAvailabilityRule savedRule = mentorAvailabilityRuleRepository.save(rule);
-
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .mentorProfile(mentorProfile)
-                .rule(savedRule)
                 .startTime(start)
                 .endTime(end)
                 .timezone(APP_TIMEZONE)
@@ -221,6 +216,7 @@ public class MentorAvailabilityService {
             replaceSlotServices(savedSlot, slotServices);
         }
         touchMentorActivity(mentorProfile, now());
+        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         return toManagedSlotResponse(savedSlot);
     }
@@ -234,6 +230,9 @@ public class MentorAvailabilityService {
 
         MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
+        if (slot.getTemplate() != null) {
+            throw new BaseException(ErrorCode.GENERATED_SLOT_MANAGED_BY_TEMPLATE);
+        }
         if (!java.util.Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
             throw slotVersionConflict(slotId, request.expectedVersion(), normalizedVersion(slot));
         }
@@ -252,6 +251,11 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa slot rảnh thành thời gian quá khứ");
         }
 
+        if (availabilityTemplateService != null) {
+            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end,
+                    Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
+                    request.expectedTemplateVersions());
+        }
         if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, start, end)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
         }
@@ -302,6 +306,7 @@ public class MentorAvailabilityService {
             replaceSlotServices(slot, slotServices);
         }
         touchMentorActivity(slot.getMentorProfile(), now());
+        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
         return toManagedSlotResponse(updatedSlot);
@@ -316,6 +321,18 @@ public class MentorAvailabilityService {
 
         MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
+        if (slot.getTemplate() != null) {
+            if (request == null || request.expectedTemplateVersion() == null) {
+                throw new BaseException(ErrorCode.AVAILABILITY_TEMPLATE_VERSION_CONFLICT,
+                        "Availability template đã được cập nhật");
+            }
+            if (availabilityTemplateService == null) {
+                throw new BaseException(ErrorCode.GENERATED_SLOT_MANAGED_BY_TEMPLATE);
+            }
+            availabilityTemplateService.deactivateGeneratedSlot(mentorUserId, slot, request.expectedTemplateVersion(),
+                    Boolean.TRUE.equals(request.rejectPendingBookings()));
+            return toManagedSlotResponse(slot);
+        }
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_ALREADY_INACTIVE");
         }
@@ -343,6 +360,7 @@ public class MentorAvailabilityService {
             mentorAvailabilityRuleRepository.save(rule);
         }
         touchMentorActivity(slot.getMentorProfile(), now());
+        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
         return toManagedSlotResponse(slot);
     }
 
@@ -461,6 +479,7 @@ public class MentorAvailabilityService {
         }
 
         slots = slots.stream()
+                .filter(slot -> availabilityTemplateService == null || availabilityTemplateService.isGeneratedSlotEligible(slot))
                 .filter(slot -> mentorBookingPolicyService == null
                         || (slot.getMentorProfile() != null
                         && slot.getMentorProfile().getUserId() != null
@@ -646,6 +665,9 @@ public class MentorAvailabilityService {
         }
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Availability slot hiện không còn hoạt động");
+        }
+        if (availabilityTemplateService != null && !availabilityTemplateService.isGeneratedSlotEligible(slot)) {
+            throw new BaseException(ErrorCode.AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE);
         }
         return slot;
     }

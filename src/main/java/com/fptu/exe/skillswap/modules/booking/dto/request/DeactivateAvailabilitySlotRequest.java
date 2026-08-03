@@ -8,5 +8,6 @@ public record DeactivateAvailabilitySlotRequest(
         @PositiveOrZero(message = "expectedVersion không hợp lệ")
         Integer expectedVersion,
         Boolean rejectPendingBookings,
-        String pendingRejectionToken
+        String pendingRejectionToken,
+        Integer expectedTemplateVersion
 ) {}

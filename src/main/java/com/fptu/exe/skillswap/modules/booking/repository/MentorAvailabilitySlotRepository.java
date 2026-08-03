@@ -119,6 +119,54 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     Optional<MentorAvailabilitySlot> findByIdForUpdate(@Param("slotId") UUID slotId);
 
     @Query("""
+            select distinct slot from MentorAvailabilitySlot slot
+            left join fetch slot.slotServices binding
+            left join fetch binding.service
+            where slot.template.id = :templateId
+              and slot.templateOccurrenceDate >= :fromDate
+              and slot.templateOccurrenceDate <= :toDate
+            order by slot.templateOccurrenceDate asc
+            """)
+    List<MentorAvailabilitySlot> findTemplateOccurrences(
+            @Param("templateId") UUID templateId,
+            @Param("fromDate") java.time.LocalDate fromDate,
+            @Param("toDate") java.time.LocalDate toDate);
+
+    @Query("""
+            select slot from MentorAvailabilitySlot slot
+            where slot.template.id = :templateId and slot.templateOccurrenceDate = :occurrenceDate
+            """)
+    Optional<MentorAvailabilitySlot> findByTemplateIdAndOccurrenceDate(
+            @Param("templateId") UUID templateId,
+            @Param("occurrenceDate") java.time.LocalDate occurrenceDate);
+
+    @Query("""
+            select slot from MentorAvailabilitySlot slot
+            where slot.mentorProfile.userId = :mentorUserId
+              and slot.template is not null
+              and slot.isActive = true
+              and slot.startTime < :endTime and slot.endTime > :startTime
+            order by slot.template.id asc, slot.templateOccurrenceDate asc
+            """)
+    List<MentorAvailabilitySlot> findActiveGeneratedOverlaps(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("""
+            select slot from MentorAvailabilitySlot slot
+            where slot.mentorProfile.userId = :mentorUserId
+              and slot.template is null
+              and slot.isActive = true
+              and slot.startTime < :endTime and slot.endTime > :startTime
+            order by slot.startTime asc, slot.id asc
+            """)
+    List<MentorAvailabilitySlot> findActiveManualOverlaps(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("""
             select distinct slot.mentorProfile.userId
             from MentorAvailabilitySlot slot
             where slot.mentorProfile.userId in :mentorUserIds

@@ -90,6 +90,15 @@ Tất cả API business dùng `ApiResponse<T>`:
 - `PAYMENT_PROVIDER_ERROR`
 - `INSUFFICIENT_BALANCE`
 
+### Availability templates
+- `AVAILABILITY_TEMPLATE_VERSION_CONFLICT`: HTTP `409`; reload template and require explicit resubmission.
+- `AVAILABILITY_TEMPLATE_OVERLAP`, `AVAILABILITY_TEMPLATE_LIMIT_EXCEEDED`, `AVAILABILITY_TEMPLATE_HAS_PENDING_BOOKINGS`, `AVAILABILITY_TEMPLATE_HAS_LOCKING_BOOKINGS`: HTTP `409`; refresh state. Pending withdrawal requires mentor confirmation.
+- `AVAILABILITY_TEMPLATE_INVALID_SCHEDULE`, `AVAILABILITY_TEMPLATE_INACTIVE_SERVICE`, `AVAILABILITY_TEMPLATE_INVALID_OCCURRENCE`: HTTP `400`; preserve form and request correction.
+- `AVAILABILITY_TEMPLATE_EXPIRED`: HTTP `409`; extend `effectiveTo` before resume.
+- `GENERATED_SLOT_MANAGED_BY_TEMPLATE`: HTTP `409`; manage the occurrence through its template.
+- `GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED`: HTTP `409`; refetch conflicting template versions and retry only after confirmation.
+- `AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE`: HTTP `409`; refetch availability/candidates.
+
 ### Blog editor concurrency
 - `BLOG_POST_VERSION_CONFLICT`
   - HTTP `409`.

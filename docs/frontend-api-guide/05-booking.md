@@ -3,6 +3,11 @@
 ## Mục tiêu
 File này mô tả toàn bộ booking lifecycle, payment dependency, completion, issue/dispute và các action mentor/mentee phải gọi đúng thứ tự.
 
+## Availability-template compatibility
+Booking remains slot-based. A generated slot is valid only when its owning template remains active, matches current schedule, has no skipped-date exception, and has at least one active bound service. On `409 AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE`, refetch candidates instead of retrying an old selected segment.
+
+When cancellation, payment expiry, refund, or group-session cancellation releases a future generated slot, the backend reconciles its owning template. A paused, archived, expired, or changed template never reopens stale availability.
+
 ## API inventory
 ### Booking của mentee
 | Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |

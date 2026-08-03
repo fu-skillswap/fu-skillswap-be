@@ -127,10 +127,16 @@ public class BookingService {
     private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
     private final GroupSessionCommerceService groupSessionCommerceService;
     private GroupSessionExperienceService groupSessionExperienceService;
+    private AvailabilityTemplateService availabilityTemplateService;
 
     @Autowired(required = false)
     void setGroupSessionExperienceService(GroupSessionExperienceService groupSessionExperienceService) {
         this.groupSessionExperienceService = groupSessionExperienceService;
+    }
+
+    @Autowired(required = false)
+    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
+        this.availabilityTemplateService = availabilityTemplateService;
     }
 
     public BookingService(
@@ -1807,6 +1813,9 @@ public class BookingService {
                 slot.getEndTime()
         );
         slot.setBooked(hasAcceptedBookings);
+        if (availabilityTemplateService != null) {
+            availabilityTemplateService.markSlotDue(slot.getId());
+        }
     }
 
     private void touchMentorActivity(MentorProfile mentorProfile, LocalDateTime activityTime) {
@@ -2028,7 +2037,7 @@ public class BookingService {
             booking.setRejectedAt(now);
             booking.setRejectReason(reason);
             if (booking.getSlot() != null) {
-                booking.getSlot().setBooked(false);
+                refreshSlotBookedFlag(booking.getSlot());
             }
         }
         bookingRepository.saveAll(staleBookings);
