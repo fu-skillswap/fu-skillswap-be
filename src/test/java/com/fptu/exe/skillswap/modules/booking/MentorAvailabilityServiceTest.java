@@ -125,9 +125,6 @@ class MentorAvailabilityServiceTest {
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
                 .thenReturn(false);
 
-        when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         MentorAvailabilitySlot expectedSlot = MentorAvailabilitySlot.builder()
                 .id(UUID.randomUUID())
                 .mentorProfile(mentorProfile)
@@ -193,9 +190,6 @@ class MentorAvailabilityServiceTest {
                 .thenReturn(false);
         when(mentorServiceRepository.findAllById(request.serviceIds()))
                 .thenReturn(List.of(mentorService));
-        when(mentorAvailabilityRuleRepository.save(any(MentorAvailabilityRule.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-
         UUID slotId = UUID.randomUUID();
         MentorAvailabilitySlot savedSlot = MentorAvailabilitySlot.builder()
                 .id(slotId)

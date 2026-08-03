@@ -51,7 +51,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(GeneratedOccurrenceReplacementException.class)
     public ResponseEntity<ApiResponse<Object>> handleGeneratedOccurrenceReplacement(GeneratedOccurrenceReplacementException ex) {
-        return buildResponse(ex.getErrorCode(), ex.getMessage(), ex.getOccurrences());
+        return buildResponse(ex.getErrorCode(), ex.getMessage(), ex.getData());
     }
 
     @ExceptionHandler(BaseException.class)

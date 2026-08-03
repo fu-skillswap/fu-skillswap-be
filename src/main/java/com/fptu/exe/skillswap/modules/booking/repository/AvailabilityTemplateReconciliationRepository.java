@@ -28,8 +28,8 @@ public interface AvailabilityTemplateReconciliationRepository extends JpaReposit
               and reconciliation.next_reconcile_at <= :now
               and (reconciliation.claimed_until is null or reconciliation.claimed_until < :now)
             order by reconciliation.next_reconcile_at asc, reconciliation.template_id asc
-            for update skip locked
             limit :limit
+            for update skip locked
             """, nativeQuery = true)
     List<UUID> findDueTemplateIdsForClaim(@Param("today") LocalDate today,
                                           @Param("horizonEnd") LocalDate horizonEnd,
