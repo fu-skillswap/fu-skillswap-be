@@ -40,13 +40,10 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignO
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor

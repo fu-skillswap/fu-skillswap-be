@@ -310,11 +310,11 @@ public class AdminCampaignService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Campaign đã lưu trữ không thể đổi trạng thái");
         }
         boolean allowed = switch (current) {
-            case DRAFT -> target == CampaignStatus.SCHEDULED || target == CampaignStatus.ACTIVE;
-            case SCHEDULED -> target == CampaignStatus.ACTIVE || target == CampaignStatus.DRAFT || target == CampaignStatus.ENDED;
-            case ACTIVE -> target == CampaignStatus.PAUSED || target == CampaignStatus.ENDED;
-            case PAUSED -> target == CampaignStatus.ACTIVE || target == CampaignStatus.ENDED;
-            case ENDED -> target == CampaignStatus.ARCHIVED;
+            case DRAFT -> target == CampaignStatus.SCHEDULED || target == CampaignStatus.ACTIVE || target == CampaignStatus.CANCELLED;
+            case SCHEDULED -> target == CampaignStatus.ACTIVE || target == CampaignStatus.DRAFT || target == CampaignStatus.ENDED || target == CampaignStatus.CANCELLED;
+            case ACTIVE -> target == CampaignStatus.PAUSED || target == CampaignStatus.ENDED || target == CampaignStatus.EXHAUSTED || target == CampaignStatus.CANCELLED;
+            case PAUSED -> target == CampaignStatus.ACTIVE || target == CampaignStatus.ENDED || target == CampaignStatus.CANCELLED;
+            case ENDED, EXHAUSTED, CANCELLED -> target == CampaignStatus.ARCHIVED;
             case ARCHIVED -> false;
         };
         if (!allowed) {

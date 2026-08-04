@@ -60,7 +60,7 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
     long countByCampaignIdAndStatusNotIn(UUID campaignId, Collection<PaymentOrderStatus> excludedStatuses);
 
     @Query("""
-            select coalesce(sum(po.totalScoin), 0)
+            select coalesce(sum(po.grossScoin), 0)
             from PaymentOrder po
             where po.campaignId = :campaignId
               and po.status not in :excludedStatuses

@@ -31,9 +31,9 @@ application:
       expiration: 86400000
       refresh-token:
         expiration: 604800000
-    google:
-      client-id: test-google-client-id
-      token-encryption-key: Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=
+  google:
+    client-id: test-google-client-id
+    token-encryption-key: Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=
   upload:
     dir: ./target/uploads-test
   mail:

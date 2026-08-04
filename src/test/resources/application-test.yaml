@@ -35,3 +35,9 @@ application:
       version: v1
       aes-key: Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=
       hmac-key: Q3Vyc29yUGhhc2UxSG1hY0tleUZvclNraWxsU3dhcDAx
+  security:
+    jwt:
+      secret-key: c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0
+      expiration: 86400000
+      refresh-token:
+        expiration: 604800000
