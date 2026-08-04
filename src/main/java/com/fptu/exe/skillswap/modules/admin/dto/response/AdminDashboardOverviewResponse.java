@@ -26,6 +26,8 @@ public record AdminDashboardOverviewResponse(
         @Schema(description = "Khối số liệu tài chính hệ thống.")
         AdminDashboardFinancialOverviewResponse financial,
         @Schema(description = "Khối số liệu retention và conversion.")
-        AdminDashboardRetentionOverviewResponse retention
+        AdminDashboardRetentionOverviewResponse retention,
+        @Schema(description = "Khối số liệu tổng quan về campaign và coupon khuyến mãi.")
+        AdminDashboardCampaignOverviewResponse campaigns
 ) {
 }

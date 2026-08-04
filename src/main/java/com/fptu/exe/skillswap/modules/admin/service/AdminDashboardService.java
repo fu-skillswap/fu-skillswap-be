@@ -36,15 +36,33 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
+import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
+import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
+import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
+import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
+import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
+
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AdminDashboardService {
 
     private static final String TIMEZONE = DateTimeUtil.ZONE_HCM;
+    private static final List<PaymentOrderStatus> EXCLUDED_STATUSES =
+            List.of(PaymentOrderStatus.FAILED, PaymentOrderStatus.CANCELLED, PaymentOrderStatus.EXPIRED);
 
     private final AdminDashboardQueryRepository adminDashboardQueryRepository;
     private final AdminQueueWorkbenchService adminQueueWorkbenchService;
+    private final CampaignRepository campaignRepository;
+    private final CouponRepository couponRepository;
+    private final CouponRedemptionRepository couponRedemptionRepository;
+    private final PaymentOrderRepository paymentOrderRepository;
 
     public AdminDashboardOverviewResponse getOverview() {
         LocalDateTime snapshotAt = DateTimeUtil.now();
@@ -81,6 +99,27 @@ public class AdminDashboardService {
         LocalDateTime lastMonth = snapshotAt.minusDays(30);
         var retentionStats = adminDashboardQueryRepository.fetchRetentionOverview(yesterday, lastMonth);
 
+        long activeCampaigns = campaignRepository.countByStatus(CampaignStatus.ACTIVE);
+        long scheduledCampaigns = campaignRepository.countByStatus(CampaignStatus.SCHEDULED);
+        List<Campaign> activeCampaignList = campaignRepository.findByStatus(CampaignStatus.ACTIVE);
+        long totalBudgetScoin = activeCampaignList.stream().mapToLong(c -> c.getBudgetScoin() == null ? 0L : c.getBudgetScoin()).sum();
+        long totalBudgetUsedScoin = activeCampaignList.stream().mapToLong(c -> {
+            Integer used = paymentOrderRepository.sumCampaignCreditByCampaignIdAndStatusNotIn(c.getId(), EXCLUDED_STATUSES);
+            return used == null ? 0L : used.longValue();
+        }).sum();
+
+        long activeCoupons = couponRepository.countByStatus(CouponStatus.ACTIVE);
+        long totalRedemptions = couponRedemptionRepository.count();
+
+        AdminDashboardCampaignOverviewResponse campaignOverview = new AdminDashboardCampaignOverviewResponse(
+                activeCampaigns,
+                scheduledCampaigns,
+                totalBudgetScoin,
+                totalBudgetUsedScoin,
+                activeCoupons,
+                totalRedemptions
+        );
+
         return new AdminDashboardOverviewResponse(
                 snapshotAt,
                 new AdminDashboardUsersOverviewResponse(
@@ -114,7 +153,8 @@ public class AdminDashboardService {
                         retentionStats.signupToMentorConversionRate(),
                         retentionStats.dau(),
                         retentionStats.mau()
-                )
+                ),
+                campaignOverview
         );
     }
 

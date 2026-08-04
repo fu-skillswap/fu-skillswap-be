@@ -9,4 +9,10 @@ import java.util.UUID;
 public interface CampaignBenefitRepository extends JpaRepository<CampaignBenefit, UUID> {
 
     List<CampaignBenefit> findByCampaignIdAndActiveTrue(UUID campaignId);
+
+    List<CampaignBenefit> findByCampaignId(UUID campaignId);
+
+    long countByCampaignId(UUID campaignId);
+
+    void deleteByCampaignIdAndId(UUID campaignId, UUID id);
 }
