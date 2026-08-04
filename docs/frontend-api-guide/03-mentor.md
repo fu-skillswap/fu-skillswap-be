@@ -1,483 +1,461 @@
-# Mentor
+# Mentor Service (`03-mentor.md`)
 
-## Mục tiêu
-File này là guide cho toàn bộ phần mentor-facing:
-- mentor profile
-- mentor services
-- mentor verification
-- mentor readiness cho discovery/booking
+Tài liệu Hướng dẫn Tích hợp & Vận hành Dịch vụ Mentor (Mentor Service Usage & Frontend Integration Guide) dành cho Đội ngũ Phát triển Frontend, Mobile, QA và Product.
 
-FE phải phân biệt rõ:
-- `mentor profile` là hồ sơ cá nhân/chuyên môn
-- `mentor verification` là quy trình xác thực
-- `mentor service` là sản phẩm/offer mentor bán
-- `availability` và policy đặt lịch nằm ở booking/discovery, không phải profile
+---
 
-## API inventory
-### Master data cho form mentor
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/catalog/help-topics` | Public | - | - | `List<HelpTopicResponse>` | - | Help topic dùng cho profile/service/discovery |
-| GET | `/api/catalog/mentor-profile-options` | Public | - | - | `MentorProfileOptionsResponse` | - | Label support level 1..4 |
+## 1. Overview (Tổng quan)
 
-### Mentor profile
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/me/mentor-profile` | Authenticated | mentee or mentor | - | `MentorProfileResponse` | - | Hồ sơ mentor hiện tại |
-| PUT | `/api/me/mentor-profile` | Authenticated | mentee or mentor | `MentorProfileUpsertRequest` | `MentorProfileResponse` | - | Tạo/cập nhật profile mentor |
+**Mentor Service** quản lý toàn bộ vòng đời hoạt động của Mentor trên hệ thống SkillSwap: từ thiết lập hồ sơ chuyên môn (`MentorProfile`), quy trình nộp và duyệt minh chứng xác thực (`MentorVerificationRequest`), quản lý các gói dịch vụ hỗ trợ (`MentorService`), tài liệu học tập bảo mật (`Service Learning Resources`), chính sách đặt lịch (`MentorBookingPolicy`), đến hệ thống xuất bản bài viết chuyên môn (`Mentor Blog`) và quản lý lịch rảnh định kỳ (`Availability Templates`).
 
-### Mentor profile items
-| Method | Endpoint | Auth | Role | Request | Response | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| GET/POST | `/api/me/mentor-projects` | Authenticated | mentee or mentor | `MentorFeaturedProjectRequest` for POST | `List`/`MentorFeaturedProjectResponse` | List or create featured projects. |
-| PUT/DELETE | `/api/me/mentor-projects/{projectId}` | Authenticated | owner | `MentorFeaturedProjectRequest` for PUT | `MentorFeaturedProjectResponse`/`Void` | Update or remove a featured project. |
-| PUT | `/api/me/mentor-projects/{projectId}/picture` | Authenticated | owner | multipart part `file` | `MentorFeaturedProjectResponse` | Existing direct multipart project-picture endpoint; do not reuse it for verification, resources or Blog images. |
-| GET/POST | `/api/me/mentor-achievements` | Authenticated | mentee or mentor | `MentorAchievementRequest` for POST | `List`/`MentorAchievementResponse` | List or create education/achievement items. |
-| PUT/DELETE | `/api/me/mentor-achievements/{achievementId}` | Authenticated | owner | `MentorAchievementRequest` for PUT | `MentorAchievementResponse`/`Void` | Update or remove an achievement. |
+### Trách nhiệm chính của Service
+- **Quản lý Hồ sơ Chuyên môn Mentor (`MentorProfile`)**: Thiết lập tiêu đề (headline), mô tả kinh nghiệm, điểm chuyên môn, mức hỗ trợ 1..4 (Foundation, Output Review, Direction), chủ đề hỗ trợ (Help Topics), dự án tiêu biểu (Featured Projects) và bằng cấp/thành tích (Achievements).
+- **Quy trình Quy đổi & Xác thực Mentor (`MentorVerification`)**: Hỗ trợ quy trình 2 bước upload tài liệu minh chứng bảo mật trực tiếp lên S3/R2 storage via Presigned Upload URLs, gửi yêu cầu xét duyệt cho Admin, xử lý quy trình yêu cầu chỉnh sửa (Revision) và xem lịch sử sự kiện (Timeline).
+- **Quản lý Dịch vụ Mentoring (`MentorService`)**: Tạo và quản lý gói 1-1 hoặc Group Session, thiết lập giá trị SCoin, thời lượng (durationMinutes - immutable), cờ hỗ trợ chat sau buổi học (`maintainPostSessionChat`) và cơ chế khóa lạc quan (Optimistic Locking via `version`).
+- **Quản lý Tài liệu Học tập Bảo mật (`Service Learning Resources`)**: Upload 2 bước tài liệu đính kèm gói dịch vụ (PDF, DOCX, PPTX, TEXT, MARKDOWN, PNG, JPEG - tối đa 15 MiB), phân quyền truy cập (`BOOKED_MEMBERS` vs `AUTHENTICATED`) và cấp link tải bảo mật thời gian ngắn.
+- **Trình diễn Hồ sơ Công khai (`Public Mentor Profile`)**: Cung cấp cấu trúc dữ liệu công khai 6 phần chuẩn mực (`identity` -> `mentoring` -> `services` -> `evidence` -> `reputation` -> `availability`) phục vụ hiển thị chi tiết Mentor cho Mentee.
 
-### Mentor services
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/me/mentor-services` | Authenticated | mentor | optional query `isActive=true|false` | `List<MentorServiceResponse>` | - | Omit query để lấy cả active và inactive |
-| GET | `/api/me/mentor-services/constraints` | Authenticated | mentor | - | `MentorServiceConstraintsResponse` | - | Allowed durations và price bounds chỉ đọc cho form tạo/sửa service |
-| GET | `/api/me/mentor-services/{serviceId}` | Authenticated | mentor | path `serviceId` | `MentorServiceResponse` | - | Chi tiết service |
-| POST | `/api/me/mentor-services` | Authenticated | mentor | `CreateMentorServiceRequest` | `MentorServiceResponse` | - | Tạo service, gồm duration |
-| PUT | `/api/me/mentor-services/{serviceId}` | Authenticated | mentor | `UpdateMentorServiceRequest` | `MentorServiceResponse` | - | Cập nhật mutable fields với `expectedVersion`; duration immutable |
-| PATCH | `/api/me/mentor-services/{serviceId}/active` | Authenticated | mentor | `MentorServiceActiveRequest` | `MentorServiceResponse` | - | Bật/tắt service |
-| GET | `/api/me/mentor-booking-policy` | Authenticated | mentor | - | `MentorBookingPolicyResponse` | - | Policy mentor tự sửa được |
-| PATCH | `/api/me/mentor-booking-policy` | Authenticated | mentor | `UpdateMentorBookingPolicyRequest` | `MentorBookingPolicyResponse` | - | Patch policy với `expectedVersion` |
-| GET | `/api/me/mentor-scheduling-constraints` | Authenticated | mentor | - | `MentorSchedulingConstraintsResponse` | - | Giới hạn platform, read-only |
+---
 
-### Service learning resources
-| Method | Endpoint | Auth | Role | Request | Response | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| POST | `/api/me/mentor-services/{serviceId}/resources/upload-url` | Authenticated | mentor | `MentorServiceResourceUploadUrlRequest` | `MentorServiceResourceUploadUrlResponse` | Creates one private upload intent. |
-| POST | `/api/me/mentor-services/{serviceId}/resources` | Authenticated | mentor | `MentorServiceResourceCreateRequest` | `MentorServiceResourceResponse` | Confirms the intent and creates metadata. |
-| GET | `/api/me/mentor-services/{serviceId}/resources` | Authenticated | mentor | - | `List<MentorServiceResourceResponse>` | Full management list, including inactive history. |
-| PUT | `/api/me/mentor-services/{serviceId}/resources/{resourceId}` | Authenticated | mentor | `MentorServiceResourceUpdateRequest` | `MentorServiceResourceResponse` | Metadata only; file content is immutable. |
-| DELETE | `/api/me/mentor-services/{serviceId}/resources/{resourceId}?expectedVersion=` | Authenticated | mentor | query `expectedVersion` | `Void` | Soft-deletes and immediately revokes downloads. |
-| GET | `/api/mentor-services/{serviceId}/resources` | Authenticated | any logged-in user | - | `List<MentorServiceResourceResponse>` | Reader metadata; never exposes a storage key or URL. |
-| POST | `/api/mentor-service-resources/{resourceId}/download-url` | Authenticated | entitled reader | - | `MentorServiceResourceDownloadResponse` | Re-authorizes and returns a short-lived private credential. |
+## 2. Business Purpose (Mục đích Nghiệp vụ)
 
-Upload is a two-step flow: call `POST .../upload-url` with `filename`, `resourceType`; PUT bytes to `uploadUrl` using the returned `requiredContentType`; then confirm through `POST .../resources` with `uploadIntentId`. The client never submits an object key.
+1. **Chuẩn hóa Danh tính & Năng lực Mentor**: Đảm bảo chỉ những Mentor đã được Admin xét duyệt minh chứng (`verifiedAt != null`, `mentorStatus = ACTIVE`) mới được phép kích hoạt gói dịch vụ và mở lịch nhận Booking từ Mentee.
+2. **Bảo mật Tài liệu & Minh chứng Tuyệt đối**:
+   - Sử dụng cơ chế Upload Intent 2 bước (Presigned URL) cho cả Verification Document và Service Learning Resource. Mã JavaScript ở Client không bao giờ nhận hoặc lưu `objectKey` hay storage bucket credential.
+   - Link tải tài liệu bảo mật (`download-url`) chỉ được cấp phát theo phiên (short-lived) dựa trên quyền hạn đăng ký buổi học thành công của Mentee.
+3. **Chống Race Condition trong Quản lý Dịch vụ (Optimistic Locking)**: Tất cả các thao tác cập nhật gói dịch vụ (`PUT`), bật/tắt dịch vụ (`PATCH /active`), và chỉnh sửa chính sách đặt lịch (`PATCH /booking-policy`) đều bắt buộc gửi kèm `version` (hoặc `expectedVersion`) để tránh ghi đè dữ liệu khi nhiều tab/người dùng cùng thao tác.
+4. **Cam kết Rõ ràng về Trải nghiệm Chat Sau Buổi học**: Field `maintainPostSessionChat` công khai minh bạch cam kết hỗ trợ của Mentor (mặc định `false`: chat mở đến 24h sau buổi học; `true`: duy trì chat dài hạn khi kết thúc thành công).
+5. **Đánh giá Uy tín Dựa trên Kết quả Thực tế**: Chỉ số `completedSessions` chỉ được tăng lên khi Mentee xác nhận hoàn tất buổi học thành công (`USER_CONFIRMED`). Mọi trường hợp tự động đóng session hay hủy lịch đều không làm tăng chỉ số này.
 
-Chỉ hỗ trợ `PDF`, `DOCX`, `PPTX`, `TEXT`, `MARKDOWN`, `PNG`, `JPEG`. `.img` không được hỗ trợ. Tài liệu mặc định nên là `BOOKED_MEMBERS`; `AUTHENTICATED` cho mọi người dùng đã đăng nhập.
+---
 
-### Mentor verification
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/api/me/mentor-verification/request` | Authenticated | any authenticated except admin/system | - | `MentorVerificationRequestResponse` | - | Mở/khôi phục wizard verification |
-| GET | `/api/me/mentor-verification` | Authenticated | any authenticated except admin/system | - | `MentorVerificationRequestResponse` | - | Lấy request hiện tại |
-| GET | `/api/me/mentor-verification/timeline` | Authenticated | any authenticated except admin/system | - | `List<MentorVerificationTimelineEventResponse>` | - | Timeline trạng thái |
-| GET | `/api/me/mentor-verification/documents/{documentId}` | Authenticated | any authenticated except admin/system | path `documentId` | `MentorVerificationDocumentResponse` | - | Metadata document |
-| POST | `/api/me/mentor-verification/documents/upload-intents` | Authenticated | mentee or mentor | `MentorVerificationDocumentUploadIntentRequest` | `MentorVerificationDocumentUploadIntentResponse` | - | Xin private presigned PUT URL cho một document |
-| POST | `/api/me/mentor-verification/documents` | Authenticated | mentee or mentor | `MentorVerificationDocumentUploadRequest` | `MentorVerificationRequestResponse` | - | Confirm `uploadIntentId` sau khi upload object |
-| DELETE | `/api/me/mentor-verification/documents/{documentId}` | Authenticated | any authenticated except admin/system | path `documentId` | `MentorVerificationRequestResponse` | - | Xóa mềm document khi draft/revision |
-| POST | `/api/me/mentor-verification/submit` | Authenticated | any authenticated except admin/system | `MentorVerificationSubmitRequest` | `MentorVerificationRequestResponse` | - | Nộp hồ sơ cho admin review |
-| POST | `/api/me/mentor-verification/withdraw` | Authenticated | any authenticated except admin/system | - | `MentorVerificationRequestResponse` | - | Rút hồ sơ khi trạng thái cho phép |
+## 3. User Journey / UX Flow (Luồng Trải nghiệm Người dùng)
 
-## Call order chuẩn
-### 1) Mentor profile
-1. FE load `/api/catalog/help-topics` và `/api/catalog/mentor-profile-options` nếu cần render form.
-2. FE gọi `GET /api/me/mentor-profile`.
-3. FE hiển thị form edit/create theo response.
-4. FE gọi `PUT /api/me/mentor-profile`.
-5. Sau save, FE refresh lại mentor profile để lấy canonical state.
+```
++-------------------------------------------------------------------------------------------------------+
+|                                    LUỒNG ĐĂNG KÝ & VẬN HÀNH MENTOR                                    |
++-------------------------------------------------------------------------------------------------------+
 
-### 2) Verification
-1. FE gọi `POST /api/me/mentor-verification/request`.
-2. FE gọi `POST /api/me/mentor-verification/documents/upload-intents` với `filename`, `contentType`, `sizeBytes`.
-3. FE PUT bytes tới `uploadUrl` trước `expiresAt`, gửi đúng header trong `requiredHeaders`.
-4. FE gọi `POST /api/me/mentor-verification/documents` với `{ "documentType": "...", "uploadIntentId": "uuid" }`.
-5. Khi checklist đủ, FE gọi `POST /api/me/mentor-verification/submit`.
-6. FE dùng `GET /api/me/mentor-verification/timeline` để render tiến độ.
-7. Nếu admin yêu cầu sửa, FE cho phép user quay lại wizard và tạo intent mới.
+  Frontend (Browser)                  Backend (SkillSwap API)                 Storage (S3/R2) / Admin
+          |                                     |                                         |
+   1. Đã xong Hồ sơ Sinh viên (StudentProfileCompleted = true)                           |
+          |                                     |                                         |
+   2. PUT /api/me/mentor-profile -------------->|-- Lưu thông tin chuyên môn ------------>|
+          |<-- 200 OK (MentorProfileResponse) --|                                         |
+          |                                     |                                         |
+   3. POST /api/me/mentor-verification/request ->|-- Khởi tạo Wizard Verification --------->|
+          |<-- 200 OK (Draft Request) ----------|                                         |
+          |                                     |                                         |
+   4. POST /documents/upload-intents ---------->|-- Sinh Presigned Upload URL ------------>|
+          |<-- 200 OK (uploadUrl, intentId) ----|                                         |
+          |                                     |                                         |
+   5. PUT bytes trực tiếp lên Storage ----------|---------------------------------------->|
+          | (Dùng uploadUrl & requiredHeaders)  |                                         |
+          |                                     |                                         |
+   6. POST /documents (Confirm Intent) -------->|-- Xác nhận metadata tài liệu ---------->|
+          |<-- 200 OK --------------------------|                                         |
+          |                                     |                                         |
+   7. POST /mentor-verification/submit --------->|-- Chuyển trạng thái PENDING_REVIEW ---->|
+          |<-- 200 OK --------------------------|                                         |
+          |                                     | (Admin kiểm tra & duyệt APPROVED)       |
+   8. GET /api/me/onboarding-status ------------>|                                         |
+          |<-- 200 OK { nextAction: "EXPLORE" } |                                         |
+          |                                     |                                         |
+   9. POST /api/me/mentor-services ------------>|-- Tạo gói dịch vụ mentoring ------------>|
+          |<-- 200 OK (MentorServiceResponse) --|                                         |
+          |                                     |                                         |
+  10. Thiết lập Lịch rảnh & Sẵn sàng nhận Booking từ Mentee                               |
+```
 
-### 3) Service catalog
-1. FE chỉ mở phần service management khi user có quyền mentor.
-2. FE gọi `GET /api/me/mentor-services`.
-3. FE tạo/sửa/bật tắt service bằng đúng endpoint của service.
-4. Sau mỗi action, refresh lại list service.
+---
 
-## Post-session chat policy
-`CreateMentorServiceRequest` và `UpdateMentorServiceRequest` có field boolean `maintainPostSessionChat`.
+## 4. Service Concepts (Khái niệm Cốt lõi & Domain Model)
 
-- `false` (mặc định): sau booking effective, chat mở đến `scheduledEndAt + 24 giờ`.
-- `true`: khi booking hoàn tất với outcome hợp lệ, mentor và mentee tiếp tục chat dài hạn.
-- Field này là một phần của offer. FE phải hiển thị rõ “Chat đến 24h sau buổi học” hoặc “Bao gồm chat sau buổi học”.
-- Thay đổi service chỉ áp dụng cho booking tạo sau đó; booking giữ snapshot policy riêng.
+### 4.1 Cấu trúc Hồ sơ Công khai 6 Phần (`Public Mentor Profile`)
+API công khai `GET /api/mentors/{mentorUserId}` trả về đúng 6 section theo thứ tự hiển thị chuẩn trên Frontend:
+1. `identity`: ID, tên hiển thị, avatar, headline, cờ `isVerified`, mốc `verifiedAt`.
+2. `mentoring`: Bio, mô tả chuyên môn, danh sách `helpTopics`, ma trận mức hỗ trợ 1..4 (`foundation`, `outputReview`, `direction`).
+3. `services`: Danh sách các gói dịch vụ đang hoạt động (`isActive = true`).
+4. `evidence`: Bằng cấp học thuật (`education`), bảng điểm (`subjectResults`), dự án tiêu biểu (`featuredProjects`), thành tích (`achievements`), link Portfolio/Github, và bài viết chuyên môn (`authorityContent`).
+5. `reputation`: Trạng thái đánh giá (`ratingState`: `NO_REVIEWS` vs `RATED`), điểm trung bình (`ratingAverage`), số lượt đánh giá (`reviewCount`), số buổi học hoàn tất (`completedSessions`).
+6. `availability`: Cờ sẵn sàng (`isAvailable`), tạm ngưng (`suspendedUntil`), và cờ cho phép đặt lịch (`canRequestBooking`).
 
-Mentor service response exposes `maintainPostSessionChat` so mentees know the communication promise before booking.
+### 4.2 Cơ chế Upload Intent 2 Bước (Presigned Storage Upload)
+- **Bước 1 (Request Intent)**: Client gọi API xin intent (Verification: `POST .../documents/upload-intents`, Resource: `POST .../resources/upload-url`) gửi `filename`, `contentType`, `sizeBytes`. Backend trả về `uploadIntentId`, `uploadUrl` (URL s3/r2 presigned) và `requiredHeaders` (hoặc `requiredContentType`).
+- **Bước 2 (Direct Upload)**: Client dùng `fetch`/`axios` thực hiện request `PUT` trực tiếp file binary tới `uploadUrl` với đúng `headers`.
+- **Bước 3 (Confirm Intent)**: Client gọi API xác nhận (Verification: `POST .../documents`, Resource: `POST .../resources`) truyền `uploadIntentId`. Backend kiểm tra file tồn tại trên storage và lưu metadata vào DB.
 
-## Ý nghĩa field quan trọng
-### Mentor profile
-- `headline`
-  - tagline ngắn dùng trên card/detail
-- `expertiseDescription`
-  - mô tả kinh nghiệm/chuyên môn
-- `isAvailable`
-  - mentor đang mở lịch hay không
-- `helpTopics`
-  - chủ đề mentor hỗ trợ
-- `subjectResults`
-  - điểm/môn học dùng cho matching
-- `foundationSupportLevel`, `outputReviewSupportLevel`, `directionSupportLevel`
-  - mức support 1..4, dùng cho discovery/matching
-- `minimumBookingLeadTimeMinutes`
-  - lead time đặt lịch tối thiểu
-- `maximumBookingHorizonDays`
-  - horizon đặt lịch tối đa
-- `bookingTimezone`
-  - timezone của mentor
-- `bookingSuspendedUntil`
-  - nếu có, mentor tạm ngưng nhận booking tới thời điểm này
-- `verifiedAt`
-  - mốc mentor được xác thực
+### 4.3 Khóa Lạc quan trong Quản lý Dịch vụ (`Optimistic Locking`)
+- Mọi gói dịch vụ (`MentorService`) đều có trường `version` kiểu số nguyên.
+- Khi gửi request cập nhật (`PUT /api/me/mentor-services/{id}`) hoặc đổi trạng thái (`PATCH .../active`), Frontend phải gửi đúng `version` hiện tại.
+- Nếu `version` ở DB đã bị thay đổi bởi thao tác khác, Backend trả về lỗi `409 RESOURCE_CONFLICT`. Client phải tải lại danh sách dịch vụ để lấy `version` mới nhất.
 
-### Mentor service
-- `durationMinutes`
-  - thời lượng immutable sau khi tạo; booking snapshot lại ngay lúc mentee gửi request
-- `isFree`
-  - service free hay có phí
-- `priceScoin`
-  - giá nếu có phí
-- `helpTopics`
-  - chủ đề liên quan tới service
-- `isActive`
-  - service đang mở hay tắt
-- `version`
-  - optimistic-lock version. FE gửi lại đúng giá trị này trong update/active mutation và phải dùng version server trả về sau success.
+---
 
-### Mentor booking policy
-- `minimumBookingLeadTimeMinutes`, `maximumBookingHorizonDays`, `timezone`
-  - chỉ ảnh hưởng availability reads và booking mới; không hồi tố pending/confirmed booking hay slot cũ.
-- `version`
-  - bắt buộc khi PATCH policy. Hai tab cùng sửa: conflict 409 thì reload policy, giữ draft cục bộ rồi để mentor xác nhận gửi lại.
-- `maximumAvailabilityQueryDays`, `maximumParentSlotDurationMinutes`
-  - platform constraints read-only. Không gửi trong PATCH policy.
+## 5. API List (Danh sách API)
 
-### Verification
-- `requestStatus`
-  - trạng thái request hiện tại
-- `documents`
-  - danh sách minh chứng đã upload
-- `timeline`
-  - chuỗi sự kiện submit/review/revision/approve/reject/withdraw
-- `MentorVerificationDocumentUploadIntentRequest`
-  - `filename`, `contentType`, `sizeBytes`; chỉ nhận JPG, PNG hoặc PDF, tối đa 15 MiB.
-- `MentorVerificationDocumentUploadIntentResponse`
-  - `uploadIntentId`, `uploadUrl`, `expiresAt`, `requiredHeaders`.
-  - Không chứa `objectKey`, bucket URL hoặc public URL.
-- `MentorVerificationDocumentUploadRequest`
-  - chỉ chứa `documentType` và `uploadIntentId`; không gửi filename, MIME, size hay object key lần nữa.
+| Method | Endpoint | Quyền truy cập | Rate Limit | Mục đích | Thời điểm/Đối tượng gọi |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/me/mentor-profile` | Authenticated | Không giới hạn | Lấy hồ sơ chuyên môn mentor của caller | Màn hình Quản lý Hồ sơ Mentor |
+| `PUT` | `/api/me/mentor-profile` | Authenticated | Không giới hạn | Tạo mới/Cập nhật hồ sơ chuyên môn mentor | Bấm "Lưu Hồ sơ Mentor" |
+| `POST` | `/api/me/mentor-verification/request` | Authenticated | Không giới hạn | Khởi tạo/Khôi phục Wizard xác thực Mentor | Màn hình Xác thực Mentor |
+| `GET` | `/api/me/mentor-verification` | Authenticated | Không giới hạn | Lấy chi tiết hồ sơ xác thực và danh sách tài liệu | Màn hình Wizard Verification |
+| `POST` | `/api/me/mentor-verification/documents/upload-intents` | Authenticated | Không giới hạn | Xin Presigned Upload URL cho tài liệu xác thực | Khi chọn file đính kèm minh chứng |
+| `POST` | `/api/me/mentor-verification/documents` | Authenticated | Không giới hạn | Xác nhận tài liệu xác thực sau khi upload S3/R2 | Ngay sau khi PUT file lên S3/R2 200 |
+| `POST` | `/api/me/mentor-verification/submit` | Authenticated | Không giới hạn | Nộp hồ sơ xác thực cho Admin xét duyệt | Khi đã upload đủ minh chứng bắt buộc |
+| `GET` | `/api/me/mentor-services` | Mentor Role | Không giới hạn | Lấy danh sách gói dịch vụ của Mentor | Trang Quản lý Dịch vụ Mentoring |
+| `POST` | `/api/me/mentor-services` | Mentor Role | Không giới hạn | Tạo gói dịch vụ mới (gồm `durationMinutes`) | Form Tạo Gói Dịch vụ |
+| `PUT` | `/api/me/mentor-services/{serviceId}` | Mentor Role | Không giới hạn | Cập nhật thông tin dịch vụ (`durationMinutes` immutable) | Form Sửa Gói Dịch vụ |
+| `PATCH` | `/api/me/mentor-services/{serviceId}/active` | Mentor Role | Không giới hạn | Bật/tắt trạng thái hoạt động của dịch vụ | Nút Toggle Bật/Tắt Dịch vụ |
+| `GET` | `/api/mentors/{mentorUserId}` | Public | Không giới hạn | Lấy thông tin công khai 6 phần của Mentor | Trang Chi tiết Mentor (Mentee view) |
 
-## State / phase guide
-### Mentor profile readiness
-- `exists = false`
-  - chưa có profile
-- `requiredFieldsCompleted = false`
-  - chưa đủ field bắt buộc cho discovery/verification
-- `hasCompletedProfile = true` ở discovery
-  - mentor đã đủ dữ liệu public
+---
 
-### Verification status
-- `NOT_STARTED`
-  - chưa mở request
-- `PENDING_REVIEW`
-  - đã submit, đang chờ admin review
-- `NEEDS_REVISION`
-  - bị yêu cầu sửa hồ sơ/minh chứng
-- `APPROVED`
-  - đã được duyệt
-- `REJECTED`
-  - bị từ chối
-- `WITHDRAWN`
-  - user rút hồ sơ
+## 6. API Usage Guide (Hướng dẫn Sử dụng Chi tiết API)
 
-### Service readiness
-- `isActive = true`
-  - service có thể xuất hiện trong booking/discovery
-- `active = false`
-  - service vẫn còn lịch sử nhưng không nhận request mới
-
-## FE không được làm
-- Không dùng `isAvailable` để thay thế slot availability.
-- Không cho mentor dùng service CRUD nếu chưa vào đúng mentor flow.
-- Không coi verification là tự động có role mentor; role và verification là hai chuyện khác nhau.
-- Không upload file verification trực tiếp qua multipart vào BE ở flow prod.
-- Không dùng `/api/files/upload-url` cho verification. Endpoint generic chỉ tồn tại ở local profile.
-- Không lưu, tự tạo hoặc gửi `objectKey`/`publicUrl` cho verification document.
-- Không tự quyết định mentor đủ điều kiện booking chỉ từ `mentor profile` mà bỏ qua service/availability.
-- Không đưa `durationMinutes` vào update request hoặc tự đổi duration của service đã có booking history.
-- Không dùng `DELETE` để xóa service. Tắt service bằng endpoint `/active`; reactivation không tự gắn lại service vào slot cũ.
-
-## FE anti-patterns
-- Không trộn mentor profile form với verification wizard.
-- Không dùng `helpTopics` của blog/forum để thay cho mentor help topics.
-- Không hiển thị service action cho user không phải mentor.
-- Không coi `mentorStatus` hoặc `verifiedAt` là đủ; luôn xem thêm service/availability trước khi cho booking.
-
-## Response JSON example
-### Mentor profile
+### 6.1 `GET /api/mentors/{mentorUserId}`
+- **Mục đích**: Lấy dữ liệu công khai chi tiết của Mentor phục vụ hiển thị cho Mentee trước khi đặt lịch.
+- **Quyền truy cập**: Public (Không cần đăng nhập).
+- **Response Body**:
 ```json
 {
-  "timestamp": "2026-07-13T10:30:00Z",
+  "timestamp": "2026-08-04T09:00:00Z",
   "status": 200,
   "code": "SUCCESS",
   "message": "OK",
   "data": {
-    "exists": true,
-    "requiredFieldsCompleted": true,
-    "userId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "email": "mentor@fpt.edu.vn",
-    "displayName": "Nguyễn Văn A",
-    "avatarUrl": "https://example.com/avatar.jpg",
-    "mentorStatus": "ACTIVE",
-    "headline": "Senior Backend Developer, Spring Boot Expert",
-    "expertiseDescription": "Có 2 năm kinh nghiệm làm Java Spring Boot...",
-    "isAvailable": true,
-    "bookingSuspendedUntil": null,
-    "lateCancellationPenaltyPoints": 0,
-    "verifiedAt": "2026-05-15T10:00:00",
-    "minimumBookingLeadTimeMinutes": 120,
-    "maximumBookingHorizonDays": 30,
-    "bookingTimezone": "Asia/Ho_Chi_Minh",
-    "helpTopics": [
-      { "id": "44444444-4444-4444-4444-444444444444", "code": "SPRING_BOOT", "nameVi": "Spring Boot", "nameEn": "Spring Boot", "weight": 10 }
+    "identity": {
+      "mentorUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "displayName": "Nguyễn Văn A",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "headline": "Senior Spring Boot Engineer",
+      "isVerified": true,
+      "verifiedAt": "2026-07-20T08:30:00"
+    },
+    "mentoring": {
+      "bio": "Kinh nghiệm 3 năm làm Microservices và AWS.",
+      "expertiseDescription": "Hỗ trợ học viên làm đồ án tốt nghiệp và ôn phỏng vấn Java Backend.",
+      "helpTopics": [],
+      "supportLevels": { "foundation": 4, "outputReview": 3, "direction": 3 }
+    },
+    "services": [
+      {
+        "serviceId": "55555555-5555-5555-5555-555555555555",
+        "title": "1-1 Mock Interview Java Backend",
+        "description": "Luyện phỏng vấn 1-1 trực tiếp",
+        "durationMinutes": 60,
+        "isFree": false,
+        "priceScoin": 100,
+        "isActive": true,
+        "maintainPostSessionChat": true
+      }
     ],
-    "subjectResults": [],
-    "foundationSupportLevel": 4,
-    "outputReviewSupportLevel": 4,
-    "directionSupportLevel": 3,
-    "featuredProjects": [],
-    "achievements": [],
-    "githubUrl": "https://github.com/mentor",
-    "portfolioUrl": "https://mentor.dev",
-    "phoneNumber": "0900000000",
-    "ratingAverage": 4.8,
-    "reviewCount": 12,
-    "completedSessions": 15,
-    "createdAt": "2026-06-01T10:00:00",
-    "updatedAt": "2026-07-01T10:00:00"
+    "evidence": {
+      "education": {
+        "campusName": "FPT University HCM",
+        "programName": "Kỹ thuật phần mềm",
+        "specializationName": "Web Development",
+        "semester": 9,
+        "alumni": true
+      },
+      "subjectResults": [],
+      "featuredProjects": [],
+      "achievements": [],
+      "portfolioUrl": "https://mentor.dev",
+      "githubUrl": "https://github.com/mentor",
+      "authorityContent": { "publishedArticleCount": 2, "recentPublicArticles": [] }
+    },
+    "reputation": {
+      "ratingState": "RATED",
+      "ratingAverage": 4.9,
+      "reviewCount": 12,
+      "completedSessions": 15
+    },
+    "availability": {
+      "isAvailable": true,
+      "suspendedUntil": null,
+      "canRequestBooking": true
+    }
   }
 }
 ```
 
-### Mentor service
+---
+
+### 6.2 `POST /api/me/mentor-verification/documents/upload-intents`
+- **Mục đích**: Xin Presigned Upload URL để đẩy file minh chứng (Bằng cấp, Chứng chỉ, Bảng điểm) trực tiếp lên Cloud Storage.
+- **Request Body**:
 ```json
 {
-  "timestamp": "2026-07-13T10:30:00Z",
+  "filename": "bang_tot_nghiep_fpt.pdf",
+  "contentType": "application/pdf",
+  "sizeBytes": 2048576
+}
+```
+- **Response Body**:
+```json
+{
+  "timestamp": "2026-08-04T09:01:00Z",
   "status": 200,
   "code": "SUCCESS",
   "message": "OK",
-  "data": [
-    {
-      "serviceId": "55555555-5555-5555-5555-555555555555",
-      "mentorUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "title": "Spring Boot Interview Coaching",
-      "description": "Ôn phỏng vấn backend",
-      "expectedOutcome": "Chuẩn bị bộ câu hỏi thực chiến",
-      "durationMinutes": 90,
-      "isFree": false,
-      "priceScoin": 100,
-      "isActive": true,
-      "deliveryMode": "ONE_TO_ONE",
-      "maintainPostSessionChat": false,
-      "version": 4,
-      "helpTopics": [],
-      "createdAt": "2026-06-01T10:00:00",
-      "updatedAt": "2026-07-01T10:00:00"
+  "data": {
+    "uploadIntentId": "9fa85f64-5717-4562-b3fc-2c963f66afa9",
+    "uploadUrl": "https://storage.skillswap.asia/verification-docs/temp-key?X-Amz-Algorithm=...",
+    "expiresAt": "2026-08-04T09:16:00Z",
+    "requiredHeaders": {
+      "Content-Type": "application/pdf"
     }
-  ]
-}
-```
-
-## UI mapping
-- Mentor profile screen:
-  - render readiness, headline, support levels, help topics và trạng thái `isAvailable`
-- Mentor service screen:
-  - tách rõ list service active/inactive, CTA create/edit/activate/archive
-- Verification wizard:
-  - hiển thị checklist và timeline, không trộn với profile form
-- Discovery card:
-  - dùng profile/service đã xác thực để quyết định mentor có lên listing hay không
-
-## API success/error behavior
-- `GET /api/me/mentor-profile`
-  - success: fill form/view
-  - nếu `exists=false`: FE mở create flow
-- `PUT /api/me/mentor-profile`
-  - success: refresh profile và discovery-relevant state
-  - 400: fix field/selection relation
-- `POST/PUT/PATCH mentor-services`
-  - success: refresh service list
-  - 409: service đang được dùng trong flow khác, refresh rồi thử lại
-- `verification request/submit/documents`
-  - success: refresh timeline và request detail
-  - 400: checklist chưa đủ, upload intent hết hạn hoặc metadata storage không khớp
-  - 404: upload intent không thuộc user hiện tại hoặc không tồn tại; tạo intent mới thay vì retry bằng ID cũ
-
-## Ghi chú cho AI Agent và FE dev
-- `isAvailable` không thay thế slot availability.
-- `mentorStatus` và `verifiedAt` là signal, không phải toàn bộ readiness.
-- Verification không đồng nghĩa có role mentor; mentor flow và role flow là hai lớp khác nhau.
-
-## Mentor Blog Authoring
-Mentor Blog is separate from service learning resources. Service resources are private/downloadable material; Blog images are public assets used for public article presentation.
-
-| Method | Endpoint | When |
-| --- | --- | --- |
-| GET/POST | `/api/me/blog/posts` | List/create own mentor drafts. |
-| GET/PUT | `/api/me/blog/posts/{postId}` | Load or edit own Markdown article. |
-| POST | `/api/me/blog/posts/{postId}/publish` | Publish a complete draft with `expectedVersion`. |
-| POST | `/api/me/blog/posts/{postId}/archive` | Remove own article from readers with `expectedVersion`. |
-| POST | `/api/me/blog/assets/upload-intents` | Request a public Blog image upload credential. |
-| POST | `/api/me/blog/assets/{intentId}/confirm` | Confirm upload and receive an `assetId`. |
-
-Only an `ACTIVE` verified mentor can create, edit, upload Blog images or publish. Loss of normal publishing eligibility does not remove an existing article; `SUSPENDED` is a moderation state and hides/archive-publishes articles server-side.
-
-## Public Mentor Discovery Profile
-`GET /api/mentors/{mentorUserId}` is public and returns exactly six sections in the required FE render order:
-
-```text
-identity -> mentoring -> services -> evidence -> reputation -> availability
-```
-
-```json
-{
-  "identity": {
-    "mentorUserId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-    "displayName": "Nguyen Van A",
-    "avatarUrl": "https://example.com/avatar.jpg",
-    "headline": "Backend Engineer and Java Mentor",
-    "isVerified": true,
-    "verifiedAt": "2026-07-20T08:30:00"
-  },
-  "mentoring": {
-    "bio": "Peer mentor for Java backend and internship preparation.",
-    "expertiseDescription": "I help students build REST APIs and improve interview readiness.",
-    "helpTopics": [],
-    "supportLevels": { "foundation": 4, "outputReview": 3, "direction": 3 }
-  },
-  "services": [],
-  "evidence": {
-    "education": {
-      "campusId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-      "campusName": "FPT University HCM",
-      "programId": null,
-      "programName": null,
-      "specializationId": null,
-      "specializationName": null,
-      "semester": 7,
-      "alumni": false
-    },
-    "subjectResults": [],
-    "featuredProjects": [],
-    "achievements": [],
-    "portfolioUrl": null,
-    "githubUrl": null,
-    "authorityContent": {
-      "publishedArticleCount": 1,
-      "latestPublishedAt": "2026-07-25T08:00:00",
-      "recentPublicArticles": [
-        {
-          "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-          "title": "Spring Boot interview checklist",
-          "slug": "spring-boot-interview-checklist",
-          "excerpt": "Checklist for a backend internship interview.",
-          "coverImageUrl": null,
-          "readingTimeMinutes": 4,
-          "publishedAt": "2026-07-25T08:00:00"
-        }
-      ]
-    }
-  },
-  "reputation": {
-    "ratingState": "NO_REVIEWS",
-    "ratingAverage": null,
-    "reviewCount": 0,
-    "completedSessions": 0
-  },
-  "availability": {
-    "isAvailable": true,
-    "suspendedUntil": null,
-    "canRequestBooking": true
   }
 }
 ```
 
-- Collections are always `[]` when empty. `education` and `authorityContent` are always objects; optional scalar fields use `null`.
-- `ratingState=NO_REVIEWS` means FE renders “Mới tham gia, chưa có đánh giá” and must not render a fabricated 5.0 rating. `RATED` includes a numeric `ratingAverage`.
-- `completedSessions` is the mentor's persisted `totalCompletedSessions`: only a booking explicitly confirmed by the mentee (`USER_CONFIRMED`) increments it. Auto-close, no-show resolution, session timeline completion and settlement alone do not.
-- `canRequestBooking` is public offer readiness only. It is not viewer-specific authorization; quote/create validates the current mentee, service, slot and candidate again.
-- `authorityContent.recentPublicArticles` contains at most three newest mentor-owned `PUBLISHED` `PUBLIC` Blog posts. Platform, draft, archived, deleted, authenticated-only and premium posts never appear. Cover URLs are resolved public URLs only; storage keys are never returned.
-- Discovery cards and recommendation cards remain compact. They also use `ratingState` plus nullable `ratingAverage`.
+---
 
-The availability-slot and candidate endpoints remain authenticated:
-
-```text
-GET /api/mentors/{mentorUserId}/availability-slots
-GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId=...
+### 6.3 `POST /api/me/mentor-services`
+- **Mục đích**: Tạo gói dịch vụ mentoring mới.
+- **Request Body**:
+```json
+{
+  "title": "Tư vấn Đồ án Tốt nghiệp SE",
+  "description": "Hướng dẫn thiết kế kiến trúc phần mềm và code review",
+  "expectedOutcome": "Hoàn thiện sơ đồ kiến trúc và tối ưu code base",
+  "durationMinutes": 60,
+  "isFree": false,
+  "priceScoin": 150,
+  "deliveryMode": "ONE_TO_ONE",
+  "maintainPostSessionChat": true,
+  "helpTopicIds": ["44444444-4444-4444-4444-444444444444"]
+}
 ```
 
-For client-only funnel interactions, authenticated FE may call `POST /api/mentor-discovery/funnel-events` with `{ eventType, mentorUserId, serviceId?, slotId?, source }`. Allowed events: `SERVICE_VIEWED`, `CANDIDATE_SELECTED`, `BOOKING_STARTED`. Allowed sources: `MENTOR_PROFILE`, `DISCOVERY_SEARCH`, `BLOG_ARTICLE`, `DIRECT_LINK`. This endpoint is best-effort analytics: do not retry aggressively or block navigation if it fails.
+---
 
-## Discovery pricing preview
-Authenticated users may call `GET /api/mentor-services/{serviceId}/pricing-preview` for an active service of a discoverable mentor. The response contains `basePriceScoin`, mentee surcharge, currently eligible campaign discount, `estimatedPayableScoin`, `campaignName`, `pricingVersion`, `calculatedAt`, `isEstimate=true`, and the disclaimer `Final price is calculated at checkout.`
+## 7. Common Flow Examples (Các Luồng Phối hợp API Thực tế)
 
-This is a browse-time estimate only. It never reserves campaign budget, coupon, wallet credit, candidate time, or a booking. Coupon and wallet credit are intentionally not included; FE must label the result as an estimate and refresh the transactional checkout preview after mentor acceptance.
+### 7.1 Luồng Nộp Minh chứng & Xin Xác thực Mentor 2 Bước
 
-## Group-session supply and seat commerce (Phase 2)
-`MentorService.deliveryMode` is `ONE_TO_ONE` by default or `GROUP_SESSION`. The delivery mode is fixed after service creation; create a separate service when a mentor offers both formats.
+```
+Frontend (Verification Wizard)          Backend API                             Cloud Storage (S3/R2)
+        |                                   |                                             |
+   1. Chọn file PDF/Image minh chứng        |                                             |
+        |                                   |                                             |
+   2. POST /documents/upload-intents ------>|-- Kiểm tra định dạng & sizeBytes (<15MB) -->|
+        | (filename, contentType, size)     |-- Sinh Presigned URL tạm thời (TTL 15m) ----|
+        |<-- Trả uploadUrl & intentId ------|                                             |
+        |                                   |                                             |
+   3. PUT binary file ------------------------------------------------------------------->|
+        | (Gửi đúng requiredHeaders)        |<-- S3/R2 xác nhận nhận file 200 OK ---------|
+        |                                   |                                             |
+   4. POST /documents (Confirm) ----------->|-- Kiểm tra file thực tế trên Storage ------->|
+        | (uploadIntentId, documentType)    |-- Lưu metadata tài liệu vào DB ------------>|
+        |<-- 200 OK (Cập nhật checklist) ---|                                             |
+        |                                   |                                             |
+   5. Bấm "Nộp Hồ sơ Xác thực"              |                                             |
+   6. POST /mentor-verification/submit ---->|-- Kiểm tra đủ checklist bắt buộc ----------->|
+        |<-- 200 OK (Status: PENDING_REVIEW)|-- Gửi Notification báo cho Admin ----------->|
+```
 
-Group-session APIs are enabled only when `APPLICATION_GROUP_SESSIONS_ENABLED=true`. A group session freezes service title, description, expected outcome, duration, free flag and base SCoin price on publish. Later service edits never change a published session or its seat bookings.
+---
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/me/mentor-services/{serviceId}/group-sessions` | Create a `DRAFT` from a bound availability slot and UTC candidate start. |
-| GET | `/api/me/mentor-services/{serviceId}/group-sessions` | List mentor-owned group sessions for a service. |
-| GET/PUT | `/api/me/group-sessions/{groupSessionId}` | Read or edit a draft with `expectedVersion`. |
-| POST | `/api/me/group-sessions/{groupSessionId}/publish` | Atomically transition `DRAFT -> OPEN` and reserve the interval. |
-| POST | `/api/me/group-sessions/{groupSessionId}/close-registration` | Stop future enrolment for an open session. |
-| POST | `/api/me/group-sessions/{groupSessionId}/increase-capacity` | Increase capacity only while both session and registration are `OPEN`; it never reopens registration. |
-| POST | `/api/me/group-sessions/{groupSessionId}/cancel` | Cancel a draft or open session. |
-| GET | `/api/me/group-sessions/{groupSessionId}/attendees?limit=` | Mentor-only roster with attendee identity, joined time and derived `WAITING_PAYMENT`, `CONFIRMED` or `CANCELLED` state. |
+## 8. State Machine (Ma trận Trạng thái Mentor Profile, Verification & Service)
 
-`startAt` and optional `registrationClosesAt` are whole-minute UTC Instants. `scheduledEndAt` is derived from the service duration. Capacity is 2-20. `reservedSeatCount` includes both paid seats and still-live payment holds. A published group session reserves only its exact interval inside the parent availability slot.
+### 8.1 Vòng đời Xác thực Mentor (`MentorVerificationStatus`)
 
-Mentor cancellation closes registration, expires unpaid holds, cancels every attendee booking and starts the existing full-refund path for paid seats. Do not expose payment-provider IDs, wallet use, coupon values or checkout links in the roster.
+```
+             +-----------------------+
+             |      NOT_STARTED      | (Chưa mở Wizard xác thực)
+             +-----------------------+
+                         |
+           POST /mentor-verification/request
+                         |
+                         v
+             +-----------------------+
+             |         DRAFT         | (Đang upload tài liệu minh chứng)
+             +-----------------------+
+                         |
+            POST /verification/submit
+                         |
+                         v
+             +-----------------------+
+             |    PENDING_REVIEW     | (Đang chờ Admin kiểm tra)
+             +-----------------------+
+              /          |          \
+     Admin Approve   Admin Reject   Admin Require Revision
+            /            |            \
+           v             v             v
+    +------------+ +------------+ +-----------------------+
+    |  APPROVED  | |  REJECTED  | |    NEEDS_REVISION     |
+    +------------+ +------------+ +-----------------------+
+                                              |
+                                     Sửa minh chứng & Nộp lại
+                                              |
+                                              v
+                                   (Quay về PENDING_REVIEW)
+```
 
-## Group experience and attendance (Phase 3)
-Publishing creates one shared group session and one group conversation immediately, so the mentor can prepare its meeting details before learners join. It never creates a direct session, direct chat or calendar event for an attendee seat.
+---
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/me/group-sessions/{groupSessionId}/experience` | Read shared session, meeting and group conversation IDs. |
-| PUT | `/api/me/group-sessions/{groupSessionId}/meeting` | Set the one shared meeting platform/link. |
-| POST | `/api/me/group-sessions/{groupSessionId}/attendance` | Submit the final complete attendee roster with `expectedVersion`. |
+## 9. Error Handling (Quản lý và Xử lý Lỗi)
 
-Attendance is available after `scheduledEndAt` until the configured `APPLICATION_GROUP_SESSION_ATTENDANCE_SUBMISSION_WINDOW_HOURS` deadline (48 hours by default). The roster is immutable: mark each current attendee `PRESENT` or `MENTEE_NO_SHOW`; corrections use booking issue/admin resolution.
+| HTTP Status | Backend Error Code | Nguyên nhân / Điều kiện phát sinh | Hành động Bắt buộc của Frontend |
+| --- | --- | --- | --- |
+| `400 BAD_REQUEST` | `BAD_REQUEST` | File upload vượt quá 15 MiB, sai định dạng (chỉ nhận PDF, PNG, JPG), hoặc chưa điền đủ trường bắt buộc. | Hiển thị thông báo lỗi file/form, giữ nguyên wizard state. |
+| `400 BAD_REQUEST` | `INVALID_INPUT` | Thử thay đổi `durationMinutes` của gói dịch vụ đã tạo (trường này là Immutable). | Khóa ô input durationMinutes ở màn hình Edit Service. |
+| `401 UNAUTHENTICATED` | `UNAUTHENTICATED` | Chưa đăng nhập hoặc Access Token hết hạn. | Chuyển luồng Refresh Token. |
+| `403 FORBIDDEN` | `ACCESS_DENIED` | Người dùng chưa có vai trò `MENTOR` hoặc chưa được duyệt `APPROVED` thử tạo/bật dịch vụ. | Bật Modal thông báo "Bạn cần hoàn tất xác thực Mentor trước khi tạo dịch vụ". |
+| `409 RESOURCE_CONFLICT` | `RESOURCE_CONFLICT` | Sai cờ khóa lạc quan `version` khi sửa dịch vụ hoặc chính sách đặt lịch. | Tải lại dữ liệu mới nhất từ server, giữ bản nháp của user và hỏi xác nhận đè. |
 
-## Availability templates
-Mentors can configure weekly availability through `/api/me/availability-templates`. Templates materialize ordinary concrete slots for the next 14 `Asia/Ho_Chi_Minh` local calendar days; candidate, booking, payment and Google Calendar continue to use those slots.
+---
 
-- `configuredStatus`: `ACTIVE`, `PAUSED`, `ARCHIVED` is the persisted mentor choice.
-- `effectiveStatus`: `ACTIVE`, `PAUSED`, `EXPIRED`, `ARCHIVED` includes date expiry.
-- Every template mutation requires `expectedVersion`; scheduler metadata never changes it.
-- `effectiveFrom` and `effectiveTo` are inclusive. `effectiveFrom` cannot change once it is today or in the past.
-- Generated slots cannot be edited directly. Skip or restore one date through template exceptions.
+## 10. Permission & Security (Phân quyền và Bảo mật)
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| POST | `/api/me/availability-templates` | Create weekly template |
-| GET | `/api/me/availability-templates?configuredStatus=&effectiveStatus=&cursor=&limit=` | Cursor-list templates, ordered by `effectiveFrom DESC, templateId DESC` |
-| GET/PUT | `/api/me/availability-templates/{templateId}` | Read/update template |
-| POST | `/api/me/availability-templates/{templateId}/pause` | Pause future supply |
-| POST | `/api/me/availability-templates/{templateId}/resume` | Resume future supply |
-| POST | `/api/me/availability-templates/{templateId}/archive` | Archive template permanently |
-| PUT | `/api/me/availability-templates/{templateId}/exceptions/{yyyy-MM-dd}` | Skip one occurrence |
-| POST | `/api/me/availability-templates/{templateId}/exceptions/{yyyy-MM-dd}/restore` | Restore one occurrence |
+1. **Phân định Rõ ràng Giữa Role và Verification**:
+   - Vai trò `MENTOR` trong danh sách `roles` của user quyết định quyền truy cập các menu quản trị dịch vụ.
+   - Trạng thái `mentorVerificationStatus == "APPROVED"` và `verifiedAt != null` quyết định việc Mentor có được xuất hiện trên danh sách tìm kiếm công khai (Discovery) và nhận Booking hay không.
+2. **Bảo mật File Minh chứng & Tài liệu Học tập**:
+   - Nghiêm cấm upload file trực tiếp qua server backend ở luồng sản xuất. Bắt buộc qua cơ chế Upload Intent 2 bước.
+   - Client tuyệt đối không tự tạo hoặc gửi `objectKey` hay storage bucket URL.
+3. **Hiển thị Rating Minh bạch (`ratingState`)**:
+   - Nếu Mentor chưa có đánh giá nào, Backend trả `ratingState = "NO_REVIEWS"` và `ratingAverage = null`. Frontend **nghiêm cấm** tự hiển thị điểm 5.0 giả tạo.
 
-If a manual slot overlaps generated occurrences, the first request returns `409 GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED`. Its error `data` lists `{ templateId, occurrenceDate, currentVersion }` for every occurrence. Ask for confirmation, then retry with `replaceGeneratedOccurrences=true`, optional explicit pending rejection, and all current `expectedTemplateVersions`.
+---
 
-The list uses the standard `CursorPageResponse`; preserve `nextCursor` exactly and do not construct cursors on the client. `skippedDates` and `blockedOccurrences` only cover the current 14-day materialization horizon.
+## 11. Frontend Integration Rules (Quy tắc Tích hợp Cho Frontend)
+
+### Frontend NÊN:
+- Kiểm tra `ratingState`: Nếu là `NO_REVIEWS`, render nhãn *"Mới tham gia, chưa có đánh giá"*. Nếu là `RATED`, render điểm `ratingAverage` cùng số sao.
+- Tải danh mục `help-topics` và `mentor-profile-options` khi khởi tạo form cấu hình hồ sơ Mentor.
+- Luôn gửi kèm `version` (hoặc `expectedVersion`) trong các request cập nhật dịch vụ hoặc chính sách đặt lịch.
+
+### Frontend KHÔNG ĐƯỢC:
+- **KHÔNG ĐƯỢC** cho phép sửa trường `durationMinutes` khi edit gói dịch vụ đã tồn tại. Nếu muốn đổi thời lượng, yêu cầu Mentor tạo gói dịch vụ mới.
+- **KHÔNG ĐƯỢC** dùng nút `DELETE` để xóa dịch vụ. Bắt buộc tắt dịch vụ bằng API `PATCH /api/me/mentor-services/{id}/active` (truyền `isActive = false`).
+- **KHÔNG ĐƯỢC** dùng cờ `isAvailable` trên profile để thay thế cho danh sách khung giờ rảnh (`Availability Slots`).
+
+---
+
+## 12. Edge Cases (Các Kịch bản Biên & Xử lý Rủi ro)
+
+1. **Upload Intent Hết Hạn (TTL 15 phút)**:
+   - Nếu người dùng ngâm trang quá 15 phút trước khi bấm tải file lên S3/R2, request `PUT` binary sẽ bị S3/R2 từ chối (HTTP 403 Expired). Frontend phải bắt lỗi và tự động xin `uploadIntentId` mới mà không bắt user chọn lại file.
+2. **Gợi ý Nhu cầu Chat Sau Buổi học (`maintainPostSessionChat`)**:
+   - Khi Mentor đổi cờ `maintainPostSessionChat`, thay đổi này chỉ áp dụng cho các Booking đặt mới sau đó. Các Booking đã đặt trước đó vẫn giữ nguyên chính sách tại thời điểm đặt lịch.
+3. **Cung cấp Lịch rảnh Nhóm (`Group Session Supply`)**:
+   - Dịch vụ Group Session yêu cầu `deliveryMode = GROUP_SESSION`. Khi xuất bản một Group Session, tiêu đề, mô tả và giá SCoin sẽ bị đóng băng (Frozen).
+
+---
+
+## 13. Related Services (Các Service Liên quan trong Hệ thống)
+
+- **Academic Service**: Cung cấp bằng cấp/học kỳ của sinh viên phục vụ hiển thị phần `evidence.education`.
+- **Booking Service**: Đọc gói dịch vụ `MentorService` và khung giờ rảnh `AvailabilitySlot` để khởi tạo đơn đặt lịch.
+- **Chat & Conversation Service**: Tự động mở phòng chat nhóm hoặc phòng chat 1-1 dựa trên cờ `maintainPostSessionChat` và thời gian kết thúc buổi học.
+
+---
+
+## 14. Frontend Implementation Guide (Hướng dẫn Lập trình Frontend Chi tiết - Staff Engineer Level)
+
+### 14.1 Screen Mapping (Sơ đồ Màn hình -> Component -> API -> Behavior)
+
+#### A. Màn hình Quản lý Hồ sơ Chuyên môn Mentor (`/mentor/profile/edit`)
+- **React Components**: `MentorProfileEditPage.tsx`, `SupportLevelSelector.tsx`, `HelpTopicTagSelect.tsx`
+- **APIs Triggered**:
+  1. `GET /api/catalog/help-topics` & `GET /api/catalog/mentor-profile-options` (Preload)
+  2. `GET /api/me/mentor-profile` (Pre-fill dữ liệu)
+  3. `PUT /api/me/mentor-profile` (Lưu thông tin)
+- **Expected Behavior**: Render các mức hỗ trợ 1..4 từ options API. Sau khi lưu 200: Invalidate cache `['mentor-profile', 'me']` và thông báo thành công.
+
+#### B. Màn hình Wizard Xác thực Mentor (`/mentor/verification`)
+- **React Components**: `VerificationWizardPage.tsx`, `DocumentUploader.tsx`, `VerificationTimelineView.tsx`
+- **APIs Triggered**:
+  1. `GET /api/me/mentor-verification` (Lấy trạng thái hiện tại)
+  2. `POST /api/me/mentor-verification/documents/upload-intents` (Khi chọn file)
+  3. Direct `PUT` binary to S3/R2 Presigned URL
+  4. `POST /api/me/mentor-verification/documents` (Xác nhận sau upload)
+  5. `POST /api/me/mentor-verification/submit` (Nộp hồ sơ)
+- **Expected Behavior**: Hiển thị danh sách checklist tài liệu đã upload. Nút "Nộp xét duyệt" chỉ sáng khi đã upload đủ minh chứng bắt buộc.
+
+#### C. Màn hình Quản lý Gói Dịch vụ Mentoring (`/mentor/services`)
+- **React Components**: `MentorServiceListPage.tsx`, `CreateServiceModal.tsx`, `EditServiceModal.tsx`
+- **APIs Triggered**:
+  1. `GET /api/me/mentor-services` (Lấy danh sách gói dịch vụ)
+  2. `POST /api/me/mentor-services` (Tạo gói mới)
+  3. `PUT /api/me/mentor-services/{id}` (Sửa thông tin - `durationMinutes` bị disable)
+  4. `PATCH /api/me/mentor-services/{id}/active` (Bật/Tắt dịch vụ)
+- **Expected Behavior**: Phân tách 2 tab Dịch vụ Đang bật (`Active`) và Đã tắt (`Inactive`). Khi bấm Toggle Active, gửi kèm `version` hiện tại.
+
+---
+
+### 14.2 Frontend Mentor State Machine (Ma trận Trạng thái Client)
+
+```
+                       +-----------------------+
+                       |   PROFILE_INCOMPLETE  | (Chưa điền đủ Mentor Profile)
+                       +-----------------------+
+                                   |
+                         PUT /me/mentor-profile
+                                   |
+                                   v
+                       +-----------------------+
+                       |   VERIFICATION_DRAFT  | (Chưa nộp minh chứng xác thực)
+                       +-----------------------+
+                                   |
+                       POST /verification/submit
+                                   |
+                                   v
+                       +-----------------------+
+                       |    PENDING_REVIEW     | (Đang chờ Admin duyệt)
+                       +-----------------------+
+                                   |
+                            Admin Approved
+                                   |
+                                   v
+                       +-----------------------+
+                       |    MENTOR_READY       | (Đã duyệt, được tạo dịch vụ & mở lịch)
+                       +-----------------------+
+```
+
+---
+
+### 14.3 API Calling Lifecycle & Timing (Thời điểm Gọi API Tuyệt đối)
+
+| API Endpoint | App Startup | Open Profile Form | Select File Verification | Save Service | Toggle Active | User Action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `GET /api/catalog/help-topics` | ❌ KHÔNG | ✅ CÓ (Nếu chưa Cache) | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG |
+| `GET /api/me/mentor-profile` | ❌ KHÔNG | ✅ CÓ (Pre-fill form) | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG |
+| `PUT /api/me/mentor-profile` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ Khi bấm "Lưu Hồ sơ" |
+| `POST .../documents/upload-intents` | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ (Ngay khi chọn file) | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG |
+| `POST /api/me/mentor-services` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ | ❌ KHÔNG | ✅ Khi bấm "Tạo Gói Dịch vụ" |
+| `PATCH .../services/{id}/active` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ | ✅ Khi bấm công tắc Toggle Active |
+
+---
+
+### 14.4 Error UX Mapping & UI Component Rules (Xử lý Lỗi Cấp độ UX)
+
+#### A. Lỗi Vượt Dung lượng File Upload (`HTTP 400`)
+- **UI Component**: File Dropzone trong `DocumentUploader.tsx`.
+- **Visual State**: Viền đỏ nhấp nháy + Thông báo dưới khung dropzone.
+- **Error Message**: *"Kích thước tập tin vượt quá giới hạn cho phép (Tối đa 15 MiB). Vui lòng chọn tập tin nhỏ hơn."*
+
+#### B. Lỗi Xung đột Khóa Lạc quan `version` (`HTTP 409`)
+- **UI Component**: Modal Chỉnh sửa Dịch vụ (`EditServiceModal.tsx`).
+- **Visual State**: Hiển thị Modal Cảnh báo Xung đột Dữ liệu.
+- **Action Required**: *"Thông tin dịch vụ đã được cập nhật từ một phiên làm việc khác. Vui lòng tải lại dữ liệu mới nhất."* (Cung cấp nút "Tải lại Dữ liệu").
+
+#### C. Lỗi Chưa Được Duyệt Mentor (`HTTP 403`)
+- **UI Component**: Nút "Tạo Gói Dịch vụ Mới".
+- **Visual State**: Nút bị Disable + Tooltip giải thích.
+- **Tooltip Message**: *"Bạn cần hoàn tất quy trình xác thực Mentor và được Admin duyệt trước khi tạo gói dịch vụ."*
+
+---
+
+### 14.5 React Query / State Management Cache Rules (Chiến lược Cấu hình Cache)
+
+| Query Key / Dữ liệu Cache | Stale Time | Garbage Collection (GC) Time | Refetch On Window Focus | Điều kiện Xóa Cache (Invalidation Triggers) |
+| --- | --- | --- | --- | --- |
+| `['catalog', 'help-topics']` | 24 giờ (`24 * 60 * 60 * 1000`) | 48 giờ | `false` | Thay đổi phiên bản ứng dụng |
+| `['mentor-profile', 'me']` | 10 phút | 60 phút | `false` | `PUT /api/me/mentor-profile` thành công |
+| `['mentor-verification', 'me']` | 0 ms | 10 phút | `true` | `POST /verification/submit`, `POST /documents` thành công |
+| `['mentor-services', 'me']` | 5 phút | 30 phút | `false` | `POST /services`, `PUT /services/{id}`, `PATCH /active` thành công |
+| `['public-mentor', mentorId]` | 5 phút | 30 phút | `false` | Đặt lịch thành công, Đánh giá mới được duyệt |

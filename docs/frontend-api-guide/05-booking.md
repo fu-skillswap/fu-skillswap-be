@@ -1,377 +1,407 @@
-# Booking
+# Booking Service (`05-booking.md`)
 
-## Mục tiêu
-File này mô tả toàn bộ booking lifecycle, payment dependency, completion, issue/dispute và các action mentor/mentee phải gọi đúng thứ tự.
+Tài liệu Hướng dẫn Tích hợp & Vận hành Dịch vụ Đặt lịch Mentoring (Booking Service Usage & Frontend Integration Guide) dành cho Đội ngũ Phát triển Frontend, Mobile, QA và Product.
 
-## Availability-template compatibility
-Booking remains slot-based. A generated slot is valid only when its owning template remains active, matches current schedule, has no skipped-date exception, and has at least one active bound service. On `409 AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE`, refetch candidates instead of retrying an old selected segment.
+---
 
-When cancellation, payment expiry, refund, or group-session cancellation releases a future generated slot, the backend reconciles its owning template. A paused, archived, expired, or changed template never reopens stale availability.
+## 1. Overview (Tổng quan)
 
-## API inventory
-### Booking của mentee
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/api/bookings/quote` | Authenticated | mentee-capable | `BookingQuoteRequest` | `BookingQuoteResponse` | - | Read-only validation, estimate and deadlines; no booking/hold/reservation. |
-| POST | `/api/bookings` | Authenticated | mentee-capable | `CreateBookingRequest` | `BookingResponse` | - | Tạo booking request mới |
-| GET | `/api/me/bookings` | Authenticated | participant | `BookingListRequest` | `PageResponse<BookingResponse>` | `status`, `sessionStatus` legacy | Danh sách booking của tôi |
-| GET | `/api/me/bookings/{bookingId}` | Authenticated | participant | path `bookingId` | `BookingResponse` | legacy fields present | Booking detail |
-| POST | `/api/me/bookings/{bookingId}/cancel` | Authenticated | mentee | `CancelBookingRequest` | `BookingResponse` | - | Hủy booking của mentee |
-| POST | `/api/me/bookings/{bookingId}/reschedule-requests` | Authenticated | mentee | `CreateBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Đề xuất đổi lịch |
-| GET | `/api/me/bookings/{bookingId}/reschedule-requests` | Authenticated | participant | - | `BookingRescheduleRequestResponse[]` | - | Lịch sử đổi lịch |
-| POST | `/api/me/bookings/reschedule-requests/{requestId}/accept` | Authenticated | participant | `RespondBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Accept reschedule |
-| POST | `/api/me/bookings/reschedule-requests/{requestId}/reject` | Authenticated | participant | `RespondBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Reject reschedule |
-| POST | `/api/me/bookings/{bookingId}/confirm` | Authenticated | mentee | `ConfirmBookingRequest` | `BookingResponse` | - | Mentee xác nhận sau session |
-| POST | `/api/me/bookings/{bookingId}/complete` | Authenticated | mentee or legacy unified action | `CompleteBookingRequest` | `BookingResponse` | - | FE chỉ dùng khi màn/flow cần entrypoint chung |
-| POST | `/api/me/bookings/{bookingId}/issue` | Authenticated | participant | `SubmitBookingIssueRequest` | `BookingIssueResponse` | - | Báo issue/dispute |
-| POST | `/api/me/bookings/{bookingId}/issue/respond` | Authenticated | counterparty | `RespondBookingIssueRequest` | `BookingIssueResponse` | - | Counterparty phản hồi issue 1 lần |
+**Booking Service** quản lý toàn bộ vòng đời đặt lịch học giữa Mentee và Mentor: từ tính toán giá và kiểm tra điều kiện (`Booking Quote`), tạo yêu cầu đặt lịch (`Create Booking`), xử lý phản hồi từ Mentor (Accept/Reject), tích hợp thanh toán (`Checkout Preview`), thực thi session, xác nhận hoàn thành (`Confirm & Complete`), đổi lịch (`Reschedule`), xử lý tranh chấp (`Issue & Dispute`), đến lưu snapshot cờ chat và phân quyền tài liệu học tập.
 
-### Booking của mentor
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/api/mentor/bookings/{bookingId}/accept` | Authenticated | mentor | `AcceptBookingRequest` | `BookingResponse` | - | Chấp nhận request |
-| POST | `/api/mentor/bookings/{bookingId}/reject` | Authenticated | mentor | `RejectBookingRequest` | `BookingResponse` | - | Từ chối request |
-| POST | `/api/mentor/bookings/{bookingId}/cancel` | Authenticated | mentor | `CancelBookingRequest` | `BookingResponse` | - | Hủy booking đã accept |
-| POST | `/api/mentor/bookings/{bookingId}/reschedule-requests` | Authenticated | mentor | `CreateBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Mentor đề xuất đổi lịch |
-| POST | `/api/mentor/bookings/reschedule-requests/{requestId}/accept` | Authenticated | mentor | `RespondBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Mentor accept đổi lịch |
-| POST | `/api/mentor/bookings/reschedule-requests/{requestId}/reject` | Authenticated | mentor | `RespondBookingRescheduleRequest` | `BookingRescheduleRequestResponse` | - | Mentor reject đổi lịch |
-| POST | `/api/mentor/bookings/{bookingId}/complete` | Authenticated | mentor | `CompleteBookingRequest` | `BookingResponse` | - | Mentor mark complete |
-| PATCH | `/api/mentor/bookings/{bookingId}/meeting-link` | Authenticated | mentor | `SaveMeetingLinkRequest` | `BookingResponse` | - | Lưu/cập nhật meeting link |
+### Trách nhiệm chính của Service
+- **Tính toán Báo giá & Điều kiện (`Booking Quote`)**: Kiểm tra thời gian `startAt`, tính toán hạn chót xử lý SLA (`pendingExpireAt`), báo giá ước tính và chính sách hủy lịch trước khi tạo đơn. API này hoàn toàn read-only, không giữ chỗ hay giữ coupon.
+- **Tạo Đơn Đặt lịch (`Create Booking`)**: Nhận `slotId`, `serviceId`, `startAt` (UTC Instant) và `learningGoal`. Backend tự động tính `scheduledEndAt` dựa trên thời lượng cố định của dịch vụ. Yêu cầu HTTP Header `Idempotency-Key` để chống trùng đơn.
+- **Quản lý Phản hồi từ Mentor (`Accept / Reject / Cancel`)**: Mentor chấp nhận hoặc từ chối yêu cầu. Nếu chấp nhận gói có phí, đơn chuyển sang trạng thái chờ thanh toán (`WAITING_PAYMENT`).
+- **Xem trước Thanh toán (`Checkout Preview`)**: Áp dụng mã giảm giá (`couponCode`), tính toán số SCoin thực trả (`finalPayableScoin`), hạn chót thanh toán (`paymentDeadlineAt`) và trả link thanh toán.
+- **Xác nhận Hoàn thành & Tranh chấp (`Completion & Dispute`)**: Mentor đánh dấu hoàn tất (`Complete`), Mentee xác nhận hài lòng (`Confirm`), hoặc một trong hai bên báo cáo sự cố (`Submit Issue`) đưa đơn vào trạng thái kiểm tra (`UNDER_REVIEW`).
 
-### Pricing và checkout
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/mentor-services/{serviceId}/pricing-preview` | Authenticated | active user | path `serviceId` | `ServicePricingPreviewResponse` | Campaign-aware browse estimate only; no coupon, wallet, hold, or reservation. |
-| POST | `/api/me/bookings/{bookingId}/checkout-preview` | Authenticated | booking mentee | `PaymentCheckoutPreviewRequest` | `PaymentCheckoutPreviewResponse` | Only while `ACCEPTED_AWAITING_PAYMENT`; estimate only, including optional coupon and current wallet/campaign value. |
+---
 
-### Availability slot
-| Method | Endpoint | Auth | Role | Request DTO | Response DTO | Deprecated/Legacy | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| POST | `/api/me/availability-slots` | Authenticated | mentor | `CreateAvailabilitySlotRequest` | `MentorManagedAvailabilitySlotResponse` | - | Tạo slot rảnh |
-| GET | `/api/me/availability-slots` | Authenticated | mentor | query `fromDate`, `toDate` | `MentorManagedAvailabilitySlotResponse[]` | - | Danh sách slot của mentor |
-| PUT | `/api/me/availability-slots/{slotId}` | Authenticated | mentor | `UpdateAvailabilitySlotRequest` | `MentorManagedAvailabilitySlotResponse` | - | Sửa slot |
-| POST | `/api/me/availability-slots/{slotId}/deactivate` | Authenticated | mentor | `DeactivateAvailabilitySlotRequest` + `Idempotency-Key` | `MentorManagedAvailabilitySlotResponse` | - | Deactivate terminal; không có reactivate |
+## 2. Business Purpose (Mục đích Nghiệp vụ)
 
-## Call order chuẩn
-### Tạo booking
-1. FE mở mentor detail để xem service và availability.
-2. FE chọn parent availability slot.
-3. FE chọn service trong slot.
-4. FE chọn exact `startAt` theo candidate hợp lệ. `endAt` là derived data của backend, không gửi khi create booking.
-5. FE có thể gọi `POST /api/bookings/quote` với cùng `slotId`, `serviceId`, `startAt` để lấy kiểm tra read-only, `pendingExpireAt`, pricing estimate và policy hoàn/hủy.
-6. Quote không giữ slot, không tạo booking, không reserve campaign/coupon/wallet và không phải giá cuối cùng. FE vẫn phải xử lý candidate stale khi submit.
-7. FE tạo một `Idempotency-Key` opaque mới và gọi `POST /api/bookings`.
-8. FE giữ `bookingId` để đi tiếp sang payment hoặc chờ mentor action.
+1. **Chuẩn hóa Vòng đời Đặt lịch (Canonical State Machine)**: Tách biệt rõ ràng 4 nhóm trạng thái độc lập (`bookingStatus`, `paymentStatus`, `settlementStatus`, `completionOutcome`) giúp Frontend render chính xác giao diện theo từng giai đoạn.
+2. **Chống Tạo Đơn Trùng Lặp (Idempotency Control)**: Bắt buộc gửi HTTP Header `Idempotency-Key` khi khởi tạo Booking. Nếu gặp sự cố mạng retry, Backend trả lại đúng Booking cũ đã tạo thay vì sinh đơn mới.
+3. **Bảo đảm Thời gian Phục vụ SLA (Automatic Expiration)**:
+   - Hạn chót Mentor duyệt đơn (`pendingExpireAt`): `min(createdAt + 12h, scheduledStartAt - 3h)`. Đơn quá hạn tự chuyển `REQUEST_EXPIRED`.
+   - Hạn chót Mentee thanh toán (`paymentDeadlineAt`): `min(acceptedAt + 6h, scheduledStartAt - 1h)`. Đơn quá hạn tự chuyển `PAYMENT_EXPIRED`.
+4. **Bảo lưu Cam kết Chat bằng Snapshot Policy**: Snapshot cờ `maintainPostSessionChatSnapshot` được lưu nguyên bản tại thời điểm tạo đơn. Mọi thay đổi về chính sách dịch vụ của Mentor sau đó không làm ảnh hưởng đến quyền lợi chat của đơn hàng cũ.
+5. **Chỉ Mở Đánh giá Khi Mentee Xác nhận Hợp lệ**: API gửi Đánh giá (`POST /api/bookings/{bookingId}/feedback`) chỉ mở khi `completionOutcome == USER_CONFIRMED`. Các trường hợp tự động đóng (`AUTO_CLOSED`) hoặc báo lỗi (`NO_SHOW`) không thể mở form đánh giá.
 
-### Mentor phản hồi
-- `accept`
-  - booking đi sang chờ payment hoặc confirmed nếu service free
-- `reject`
-  - booking kết thúc ở nhánh từ chối
-- `cancel`
-  - chỉ dùng khi booking đã accept hoặc đã ở trạng thái phù hợp backend
+---
 
-### Payment và confirm
-- Nếu service có phí:
-  1. Sau khi mentor accept, FE gọi `POST /api/me/bookings/{bookingId}/checkout-preview` với `couponCode` tùy chọn để hiển thị `couponDiscountScoin`, campaign credit, wallet credit, `finalPayableScoin` và `paymentDeadlineAt`.
-  2. Checkout preview chỉ là estimate: không tạo payment order/link, không reserve coupon/campaign/wallet và không gọi payment provider.
-  3. FE checkout payment; checkout thật tính lại toàn bộ số tiền một cách authoritative.
-  4. FE chờ webhook/provider sync. Booking chuyển sang confirmed khi payment hoàn tất.
-- Nếu service free:
-  - booking có thể đi thẳng sang confirmed sau accept.
+## 3. User Journey / UX Flow (Luồng Trải nghiệm Người dùng)
 
-### Sau session
-1. Mentor gọi `POST /api/mentor/bookings/{bookingId}/complete`.
-2. Mentee gọi `POST /api/me/bookings/{bookingId}/confirm`.
-3. Nếu có vấn đề, participant gọi `POST /api/me/bookings/{bookingId}/issue`.
-4. Counterparty phản hồi issue bằng `issue/respond`.
+```
++-------------------------------------------------------------------------------------------------------+
+|                                    LUỒNG ĐẶT LỊCH & THỰC THI SESSION                                  |
++-------------------------------------------------------------------------------------------------------+
 
-### Feedback
-`POST /api/bookings/{bookingId}/feedback` chi danh cho mentee cua booking co `completionOutcome=USER_CONFIRMED`. Moi booking chi co mot feedback. Auto-close, no-show va admin-resolved outcome khong mo feedback.
+  Mentee (Frontend)                    Backend (SkillSwap API)                 Mentor (Frontend)
+          |                                     |                                         |
+   1. Chọn Service & Candidate Segment          |                                         |
+          |                                     |                                         |
+   2. POST /api/bookings/quote ---------------->|-- Validate điều kiện & SLA ------------>|
+          |<-- 200 OK (BookingQuoteResponse) ---|                                         |
+          |                                     |                                         |
+   3. POST /api/bookings (Idempotency-Key) ---->|-- Tạo Booking (Status: REQUESTED) ------>|
+          |<-- 200 OK (BookingResponse) --------|---------------------------------------->| (Báo Notification)
+          |                                     |                                         |
+          |                                     | 4. Mentor chọn "Đồng ý"                 |
+          |                                     |<-- POST /mentor/bookings/{id}/accept ---|
+   5. Báo Notification "Đã chấp nhận" <--------| (Status: WAITING_PAYMENT)               |
+          |                                     |                                         |
+   6. POST /me/bookings/{id}/checkout-preview ->|-- Tính toán Coupon & SCoin Ví ---------->|
+          |<-- 200 OK (finalPayableScoin) ------|                                         |
+          |                                     |                                         |
+   7. Thanh toán SCoin / Ví VNPay ------------->|-- Trừ SCoin & Khóa tiền Settlement --->|
+          |<-- 200 OK (Status: CONFIRMED) ------|---------------------------------------->|
+          |                                     |                                         |
+   8. Tham gia Buổi học qua Google Meet         | 9. Mentor bấm "Hoàn thành Session"       |
+          |<------------------------------------|<-- POST /mentor/bookings/{id}/complete ---|
+          |                                     |                                         |
+  10. Mentee bấm "Xác nhận Buổi học"            |                                         |
+          |-- POST /me/bookings/{id}/confirm -->|-- Giải ngân SCoin cho Mentor (RELEASE) ->|
+          |<-- 200 OK (Outcome: USER_CONFIRMED) |                                         |
+          |                                     |                                         |
+  11. Mở Form Đánh giá (Feedback)               |                                         |
+```
 
-## Booking chat snapshot
-`BookingResponse.maintainPostSessionChatSnapshot` là snapshot của service policy tại lúc tạo booking. FE không được đọc lại policy hiện tại của service để suy luận quyền chat cho booking cũ.
+---
 
-- Booking effective tạo hoặc liên kết vào một direct conversation dài hạn của cặp mentor/mentee và sinh đúng một system message `BOOKING_CONFIRMED`.
-- Snapshot `true` chỉ cấp chat dài hạn sau `USER_CONFIRMED` hoặc `AUTO_CLOSED`.
-- Refund, cancel, reject, expire hoặc no-show không tự cấp quyền dài hạn; một refund không thu hồi quyền dài hạn do booking hợp lệ trước đó cấp.
-- Khi booking `UNDER_REVIEW`, chat chuyển read-only tạm thời cho cả hai bên đến khi dispute được resolve.
-- `BookingResponse.maintainPostSessionChatSnapshot` is canonical for that booking; service changes never rewrite an existing booking's chat promise.
+## 4. Service Concepts (Khái niệm Cốt lõi & Domain Model)
 
-## Canonical state model
-### FE phải đọc `bookingStatus`
-- `REQUESTED`
-- `WAITING_PAYMENT`
-- `CONFIRMED`
-- `REJECTED_BY_MENTOR`
-- `CANCELED_BY_MENTEE`
-- `CANCELED_BY_MENTOR`
-- `REQUEST_EXPIRED`
-- `PAYMENT_EXPIRED`
-- `UNDER_REVIEW`
-- `COMPLETED`
+### 4.1 Bốn Ma trận Trạng thái Chuẩn (Canonical State Model)
+Frontend bắt buộc phải kết hợp 4 trường dữ liệu sau để hiển thị đúng UI:
+1. `bookingStatus` (Trạng thái Vòng đời Đặt lịch):
+   - `REQUESTED`: Mới gửi yêu cầu, chờ Mentor duyệt.
+   - `WAITING_PAYMENT`: Mentor đã duyệt, chờ Mentee thanh toán.
+   - `CONFIRMED`: Đã thanh toán / Service miễn phí, sẵn sàng tham gia.
+   - `REJECTED_BY_MENTOR`: Mentor từ chối yêu cầu.
+   - `CANCELED_BY_MENTEE` / `CANCELED_BY_MENTOR`: Một trong 2 bên hủy lịch.
+   - `REQUEST_EXPIRED`: Hết hạn chờ Mentor duyệt (Quá 12h hoặc 3h trước buổi học).
+   - `PAYMENT_EXPIRED`: Hết hạn chờ Mentee thanh toán (Quá 6h hoặc 1h trước buổi học).
+   - `UNDER_REVIEW`: Đang khiếu nại tranh chấp (Issue / Dispute).
+   - `COMPLETED`: Đã hoàn tất toàn bộ quy trình.
+2. `paymentStatus` (Trạng thái Thanh toán): `NOT_REQUIRED`, `PENDING`, `PAID`, `FAILED`, `EXPIRED`, `REFUNDED`.
+3. `settlementStatus` (Trạng thái Tiền ví): `HELD` (Backend tạm giữ tiền trên hệ thống), `RELEASED` (Đã giải ngân cho Mentor), `REFUNDED` (Đã hoàn tiền lại cho Mentee).
+4. `completionOutcome` (Kết quả Buổi học): `USER_CONFIRMED`, `AUTO_CLOSED`, `UNDER_REVIEW`, `NO_SHOW_MENTEE`, `NO_SHOW_MENTOR`.
 
-### FE phải đọc `paymentStatus`
-- `NOT_REQUIRED`
-- `PENDING`
-- `PAID`
-- `FAILED`
-- `EXPIRED`
-- `REFUNDED`
+### 4.2 Giao diện Hướng dẫn Hiển thị Đơn giản (`Display Guidance`)
+Backend hỗ trợ sẵn 2 trường gợi ý UI:
+- `displayState`: `PENDING_MENTOR_RESPONSE`, `PAYMENT_REQUIRED`, `MENTOR_ACTION_REQUIRED`, `UPCOMING`, `IN_SESSION`, `WAITING_CONFIRMATION`, `UNDER_REVIEW`, `FEEDBACK_REQUIRED`, `COMPLETED`, `CANCELED_OR_EXPIRED`.
+- `nextAction`: Mã gợi ý nút bấm chính (ví dụ: `PAY_NOW`, `CONFIRM_SESSION`, `LEAVE_FEEDBACK`).
 
-### FE phải đọc `settlementStatus`
-- `HELD`
-- `RELEASED`
-- `REFUNDED`
+---
 
-### FE phải đọc `completionOutcome`
-- `USER_CONFIRMED`
-- `AUTO_CLOSED`
-- `UNDER_REVIEW`
-- `NO_SHOW_MENTEE`
-- `NO_SHOW_MENTOR`
+## 5. API List (Danh sách API)
 
-## Mapping legacy -> canonical
-| Persisted `BookingStatus` | Public `BookingLifecycleStatus` |
-| --- | --- |
-| `PENDING` | `REQUESTED` |
-| `ACCEPTED_AWAITING_PAYMENT` | `WAITING_PAYMENT` |
-| `PAID`, `ACCEPTED`, `AWAITING_MENTOR_COMPLETION`, `AWAITING_MENTEE_CONFIRMATION` | `CONFIRMED` |
-| `REJECTED` | `REJECTED_BY_MENTOR` |
-| `EXPIRED` | `REQUEST_EXPIRED` |
-| `CANCELLED_BY_MENTEE` | `CANCELED_BY_MENTEE` |
-| `CANCELLED_BY_MENTOR` | `CANCELED_BY_MENTOR` |
-| `UNDER_REVIEW` | `UNDER_REVIEW` |
-| `COMPLETED`, `AUTO_CLOSED`, `NO_SHOW` | `COMPLETED` |
+| Method | Endpoint | Quyền truy cập | Header Bắt buộc | Mục đích | Thời điểm/Đối tượng gọi |
+| --- | --- | --- | --- | --- | --- |
+| `POST` | `/api/bookings/quote` | Authenticated | Bearer | Báo giá ước tính, kiểm tra SLA & chính sách hoàn hủy (Read-only) | Trước khi submit form đặt lịch |
+| `POST` | `/api/bookings` | Authenticated | `Idempotency-Key` | Khởi tạo yêu cầu đặt lịch mới | Bấm "Gửi yêu cầu Đặt lịch" |
+| `GET` | `/api/me/bookings` | Authenticated | Bearer | Lấy danh sách lịch học của tôi (có lọc status/role) | Trang Lịch học của tôi |
+| `GET` | `/api/me/bookings/{bookingId}` | Authenticated | Bearer | Lấy thông tin chi tiết canonical của 1 đơn đặt lịch | Màn hình Chi tiết Đơn đặt lịch |
+| `POST` | `/api/mentor/bookings/{bookingId}/accept` | Mentor Role | Bearer | Mentor chấp nhận yêu cầu đặt lịch | Mentor bấm "Chấp nhận" |
+| `POST` | `/api/mentor/bookings/{bookingId}/reject` | Mentor Role | Bearer | Mentor từ chối yêu cầu đặt lịch | Mentor bấm "Từ chối" |
+| `POST` | `/api/me/bookings/{bookingId}/checkout-preview` | Mentee Role | Bearer | Tính toán mã giảm giá, giá SCoin thực trả & hạn thanh toán | Màn hình Thanh toán Checkout |
+| `POST` | `/api/me/bookings/{bookingId}/cancel` | Mentee Role | Bearer | Mentee hủy đơn đặt lịch | Mentee bấm "Hủy đơn" |
+| `POST` | `/api/mentor/bookings/{bookingId}/cancel` | Mentor Role | Bearer | Mentor hủy đơn đặt lịch đã nhận | Mentor bấm "Hủy đơn" |
+| `POST` | `/api/mentor/bookings/{bookingId}/complete` | Mentor Role | Bearer | Mentor đánh dấu đã hoàn thành buổi học | Mentor bấm "Hoàn tất Session" |
+| `POST` | `/api/me/bookings/{bookingId}/confirm` | Mentee Role | Bearer | Mentee xác nhận hài lòng sau buổi học | Mentee bấm "Xác nhận Học xong" |
+| `POST` | `/api/me/bookings/{bookingId}/issue` | Participant | Bearer | Báo cáo sự cố/tranh chấp buổi học (Mentor/Mentee Vắng mặt) | Bấm "Báo cáo Sự cố" |
+| `POST` | `/api/bookings/{bookingId}/feedback` | Mentee Role | Bearer | Gửi đánh giá sao & nhận xét dịch vụ | Bấm "Gửi Đánh giá" |
 
-## Ý nghĩa field quan trọng
-### `BookingResponse`
-- `bookingStatus`
-  - canonical booking state
-- `paymentStatus`
-  - trạng thái payment riêng
-- `settlementStatus`
-  - trạng thái settlement riêng
-- `completionOutcome`
-  - kết quả sau session
-- `releasedAt`, `refundedAt`, `refundedScoin`, `refundReason`
-  - settlement summary cho FE hiển thị
-- `canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback`
-  - UI hint, không phải source of truth duy nhất
-- `status`, `sessionStatus`
-  - legacy/deprecated
+---
 
-### Request DTO
-- `CreateBookingRequest`
-  - `slotId`, `serviceId`, minute-aligned UTC `startAt`, learning goal. Backend derive `scheduledEndAt` từ immutable service duration.
-- `AcceptBookingRequest`
-  - note tùy chọn của mentor
-- `RejectBookingRequest`
-  - lý do reject
-- `CancelBookingRequest`
-  - lý do hủy
-- `CompleteBookingRequest`
-  - note hoàn thành
-- `ConfirmBookingRequest`
-  - note xác nhận của mentee
-- `SubmitBookingIssueRequest`
-  - loại issue + mô tả
-- `RespondBookingIssueRequest`
-  - phản hồi của counterparty
-- `CreateBookingRescheduleRequest`
-  - đề xuất lịch mới
-- `RespondBookingRescheduleRequest`
-  - lý do accept/reject
-- `SaveMeetingLinkRequest`
-  - meeting link/location
+## 6. API Usage Guide (Hướng dẫn Sử dụng Chi tiết API)
 
-## FE phải làm
-- Chỉ dùng `bookingStatus` + `paymentStatus` + `settlementStatus` + `completionOutcome` để render flow.
-- Dùng `canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback` như UI hint.
-- Gọi booking detail sau mỗi action quan trọng để refresh canonical state.
-- Đọc lại state trước khi cho user bấm action tiếp theo.
-- Giữ nguyên cùng `Idempotency-Key` và body khi retry create sau network timeout. Không dùng lại key cho booking khác.
+### 6.1 `POST /api/bookings`
 
-## FE không được làm
-- Không suy ra completed chỉ từ `PAID`.
-- Không dùng legacy `status/sessionStatus` để build flow mới.
-- Không cho review nếu outcome không phải `USER_CONFIRMED`.
-- Không auto-close ở FE; auto-close là backend/scheduler responsibility.
-- Không suy diễn settlement release từ payment success một mình.
-- Không gửi legacy `availabilitySlotId`, `selectedStartTime` hoặc `selectedEndTime` trong create request.
+#### Purpose
+Khởi tạo đơn đặt lịch mới từ Mentee gửi tới Mentor.
 
-## Availability management reset
-### UTC và date range
-- Slot boundaries và booking scheduled boundaries là UTC `Instant`, bắt buộc đúng phút (`seconds=0`, `nanoseconds=0`). Actual session/payment/provider timestamps không có rule này.
-- Mọi overlap dùng `[startAt, endAt)`: segment liền kề không overlap.
-- `GET /api/me/availability-slots` bắt buộc có cả `fromDate` và `toDate`; range là ngày local inclusive trong timezone policy mentor, server đổi sang `[fromDate 00:00, toDate + 1 day 00:00)` UTC. Range tối đa xem ở `/api/me/mentor-scheduling-constraints`.
+#### Request Headers
+- `Idempotency-Key` (`String`, Bắt buộc): Chuỗi UUID ngẫu nhiên duy nhất cho mỗi giao dịch tạo đơn.
 
-### Slot mutation
-- `CreateAvailabilitySlotRequest` nhận `startAt`, `endAt`, `note`, `serviceIds` non-empty. `serviceIds` là set: thứ tự/duplicate không có nghĩa nghiệp vụ.
-- `UpdateAvailabilitySlotRequest` là full replacement và bắt buộc `expectedVersion`. Note-only được phép; đổi time hoặc gỡ service có booking locking bị block.
-- Khi chỉ có pending bị ảnh hưởng, server trả 409 với lý do `SLOT_HAS_PENDING_BOOKINGS`; FE phải reload slot, hiển thị xác nhận, rồi retry với `rejectPendingBookings=true` sau khi backend hỗ trợ confirmation token.
-- `POST .../deactivate` yêu cầu `expectedVersion`. Slot inactive vẫn thấy ở management list nhưng không thể reactivate; request mới vào slot inactive bị conflict.
-
-### Candidate field mapping
-- `isSelectable=true`: FE có thể submit `startAt` vào create booking.
-- `blockReason`: `PAST_OR_STARTED`, `OUTSIDE_BOOKING_POLICY`, `LOCKING_BOOKING_OVERLAP`, `PENDING_QUOTA_REACHED`. Đây là hint read-side; submit vẫn phải xử lý conflict latest từ backend.
-- Khi `serviceId` bị omit ở reader slot list, UI chỉ nhận service còn ít nhất một candidate selectable; không hiển thị service không thể book trong parent slot đó.
-
-## Response JSON example
-### Booking detail
+#### Request Body (`CreateBookingRequest`)
 ```json
 {
-  "timestamp": "2026-07-13T10:30:00Z",
+  "slotId": "6fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "serviceId": "55555555-5555-5555-5555-555555555555",
+  "startAt": "2026-08-05T08:00:00Z",
+  "learningGoal": "Muốn tư vấn kiến trúc Microservices cho đồ án Spring Boot"
+}
+```
+
+#### Response Body (`BookingResponse`)
+```json
+{
+  "timestamp": "2026-08-04T09:40:00Z",
   "status": 200,
   "code": "SUCCESS",
   "message": "OK",
   "data": {
     "bookingId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-    "sessionId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-    "sessionStatus": "PAID",
-    "actualSessionId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-    "actualSessionStatus": "PAID",
-    "bookingStatus": "CONFIRMED",
-    "paymentStatus": "PAID",
+    "bookingStatus": "REQUESTED",
+    "paymentStatus": "PENDING",
     "settlementStatus": "HELD",
     "completionOutcome": null,
-    "releasedAt": null,
-    "refundedAt": null,
-    "refundedScoin": null,
-    "refundReason": null,
-    "canCancel": false,
-    "canComplete": true,
+    "displayState": "PENDING_MENTOR_RESPONSE",
+    "nextAction": "WAIT_FOR_MENTOR",
+    "actionDeadlineAt": "2026-08-04T21:40:00Z",
+    "maintainPostSessionChatSnapshot": true,
+    "canCancel": true,
+    "canComplete": false,
     "canReschedule": false,
     "canSubmitFeedback": false
   }
 }
 ```
 
-### Issue response
+---
+
+### 6.2 `POST /api/me/bookings/{bookingId}/confirm`
+
+#### Purpose
+Mentee xác nhận đã hoàn tất buổi học thành công. Hệ thống tiến hành giải ngân SCoin cho Mentor và kích hoạt quyền đánh giá (Feedback).
+
+#### Response Body (`BookingResponse`)
 ```json
 {
-  "timestamp": "2026-07-13T10:30:00Z",
+  "timestamp": "2026-08-05T09:30:00Z",
   "status": 200,
   "code": "SUCCESS",
   "message": "OK",
   "data": {
-    "issueId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
     "bookingId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-    "issueType": "MENTOR_NO_SHOW",
-    "status": "UNDER_REVIEW",
-    "respondedAt": null
+    "bookingStatus": "COMPLETED",
+    "paymentStatus": "PAID",
+    "settlementStatus": "RELEASED",
+    "completionOutcome": "USER_CONFIRMED",
+    "displayState": "FEEDBACK_REQUIRED",
+    "nextAction": "LEAVE_FEEDBACK",
+    "releasedAt": "2026-08-05T09:30:00Z",
+    "canCancel": false,
+    "canComplete": false,
+    "canReschedule": false,
+    "canSubmitFeedback": true
   }
 }
 ```
 
-## UI mapping
-- Booking request form:
-  - dùng `CreateBookingRequest`
-- Booking list:
-  - map từ `bookingStatus`, `paymentStatus`, `settlementStatus`
-- Payment banner:
-  - chỉ show khi `bookingStatus=WAITING_PAYMENT`
-- Completion action:
-  - mentor/mentee action buttons hiển thị theo `canComplete`, `canSubmitFeedback`
-- Issue screen:
-  - hiển thị riêng cho dispute/report flow, không trộn vào cancel flow
+---
 
-## Payment redirect flow
-### Khi nào redirect
-- Chỉ redirect sang payment provider khi backend trả `PaymentCheckoutResponse.checkoutUrl`.
-- Chỉ redirect cho booking cần thanh toán, tức booking đang ở nhánh `WAITING_PAYMENT`.
+## 7. Common Flow Examples (Các Luồng Phối hợp API Thực tế)
 
-### Flow chuẩn
-1. FE gọi checkout API.
-2. Backend trả `checkoutUrl`, `expiresAt`, `remainingPayableScoin/Vnd`.
-3. FE redirect user sang `checkoutUrl`.
-4. Sau khi user quay lại app, FE gọi booking detail hoặc payment order detail để refresh.
-5. FE không tự set booking thành confirmed từ URL return.
+### 7.1 Luồng Thanh toán Đơn hàng Đã Chấp nhận (`Checkout Flow`)
 
-### Khi nào không redirect
-- Booking free.
-- Booking đã hết hạn.
-- Booking bị conflict hoặc bị backend từ chối checkout.
+```
+Mentee (Frontend)                    Backend API                             Payment Gateway (VNPay/SCoin)
+        |                                     |                                             |
+   1. Nhận thông báo Mentor đã Accept         |                                             |
+   2. Mở màn hình Checkout                    |                                             |
+        |------------------------------------>|-- POST /me/bookings/{id}/checkout-preview --|
+        |                                     |   (?couponCode=SUMMER2026)                  |
+        |<-- Trả finalPayableScoin & Deadline |                                             |
+   3. Bấm "Thanh toán bằng SCoin / Ví"        |                                             |
+        |------------------------------------>|-- Khởi tạo Giao dịch Thanh toán ----------->|
+        |<-- Trả checkoutUrl (nếu có VNPay) --|                                             |
+   4. Trình duyệt chuyển hướng checkoutUrl ---->|-------------------------------------------->|
+        |<-- Callback kết quả thanh toán -----|                                             |
+   5. Backend cập nhật bookingStatus = CONFIRMED, paymentStatus = PAID                      |
+   6. Frontend reload Booking Detail để cập nhật giao diện "Sẵn sàng tham gia"              |
+```
 
-## Permission matrix
-| Action | Mentee | Mentor | Điều kiện |
+---
+
+## 8. State Machine (Ma trận Trạng thái Booking, Payment, Settlement & Outcome)
+
+### 8.1 Ma trận Chuyển đổi Trạng thái Đơn Đặt lịch (`BookingLifecycleStatus`)
+
+```
+                                  +-----------------------+
+                                  |       REQUESTED       | (Mentee gửi yêu cầu)
+                                  +-----------------------+
+                                   /          |          \
+                 Mentor Reject /  /           |           \ Mentee Cancel /
+                 Quá hạn 12h/3h  /            |            \ Hết hạn Chờ
+                                v             v             v
+                    +-------------------+ +-------------------+ +-----------------------+
+                    | REJECTED_BY_MENTOR| |  WAITING_PAYMENT  | |  CANCELED_BY_MENTEE   |
+                    +-------------------+ +-------------------+ +-----------------------+
+                                              |          \
+                                        Thanh toán    Thanh toán quá hạn 6h/1h
+                                        thành công        \
+                                              |            v
+                                              v   +-----------------------+
+                                  +-------------------+ |    PAYMENT_EXPIRED    |
+                                  |     CONFIRMED     | +-----------------------+
+                                  +-------------------+
+                                   /          |          \
+                     Báo báo Issue/           |           \ Mentor Cancel /
+                     Tranh chấp              |            \ Hủy lịch
+                           /                  v            v
+                          v       +-------------------+ +-----------------------+
+              +-----------------+ |     COMPLETED     | |   CANCELED_BY_MENTOR  |
+              |  UNDER_REVIEW   | +-------------------+ +-----------------------+
+              +-----------------+ (USER_CONFIRMED / AUTO_CLOSED)
+```
+
+---
+
+## 9. Error Handling (Quản lý và Xử lý Lỗi)
+
+| HTTP Status | Backend Error Code | Nguyên nhân / Điều kiện phát sinh | Hành động Bắt buộc của Frontend |
 | --- | --- | --- | --- |
-| Create booking | ✅ | ❌ | chỉ user đang book mentor |
-| Accept booking | ❌ | ✅ | booking phải thuộc mentor |
-| Reject booking | ❌ | ✅ | booking phải thuộc mentor |
-| Cancel booking | ✅ | ✅ | chỉ ở trạng thái cho phép backend |
-| Complete booking | ✅ | ✅ | theo role và trạng thái session |
-| Confirm booking | ✅ | ❌ | chỉ mentee sau session |
-| Report issue | ✅ | ✅ | đúng issue type và đúng role reporter |
-| Respond issue | ✅ | ✅ | chỉ counterparty của người report |
-| Checkout payment | ✅ | ❌ | booking đang chờ thanh toán |
+| `400 BAD_REQUEST` | `INVALID_INPUT` | Minute-aligned startAt sai (không đúng 00 giây), hoặc learningGoal trống. | Báo lỗi form, yêu cầu nhập đúng thông tin. |
+| `401 UNAUTHENTICATED` | `UNAUTHENTICATED` | Chưa xác thực tài khoản người dùng. | Kích hoạt luồng refresh token. |
+| `409 RESOURCE_CONFLICT` | `RESOURCE_CONFLICT` | Segment bị trùng với booking khác, hoặc đơn đã đổi trạng thái bởi bên kia. | Reload lại Booking Detail để cập nhật UI mới nhất. |
+| `409 RESOURCE_CONFLICT` | `AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE` | Lịch rảnh định kỳ của Mentor vừa bị sửa/hủy. | Yêu cầu user chọn lại phân đoạn thời gian khác. |
 
-## API success/error behavior
-- `POST /api/bookings/quote` và `POST /api/me/bookings/{bookingId}/checkout-preview`
-  - success: render price/deadline as estimate only; submit/checkout vẫn có thể thay đổi vì campaign, coupon, wallet và availability được revalidated.
-  - 400/409: refetch candidate hoặc booking canonical before allowing a new attempt; never treat a preview as a reservation.
-- `POST /api/bookings`
-  - success: giữ `bookingId`, refresh detail và chờ mentor/payment
-  - 409: slot/service không còn hợp lệ, phải chọn lại
-- `accept/reject`
-  - success: refresh booking detail
-  - 409: booking đã bị xử lý bởi người khác trước đó
-- `checkout`
-  - success: redirect `checkoutUrl`
-  - 409/400: booking không còn ở trạng thái chờ thanh toán
-- `complete/confirm`
-  - success: refresh detail và chờ settlement auto/manual
-  - 409: session đã bị chốt theo trạng thái khác
-- `issue/respond`
-  - success: refresh issue detail + booking detail
-  - 400: sai vai trò responder hoặc issue type không hợp lệ
+---
 
-## Ghi chú cho AI Agent và FE dev
-- `BookingStatus` là persisted internal state, không phải field FE tự invent.
-- `bookingStatus`, `paymentStatus`, `settlementStatus`, `completionOutcome` mới là canonical contract cho UI.
-- `AUTO_CLOSED` là outcome, không phải trạng thái FE tự set.
+## 10. Permission & Security (Phân quyền và Bảo mật)
 
-## Display Guidance
-`BookingResponse` also has read-only UI guidance: `displayState`, `nextAction`, `actionDeadlineAt`. It reduces duplicated FE mapping but never replaces canonical lifecycle fields.
+1. **Chống Thao tác Trái Quyền (Role & Ownership Enforcer)**:
+   - Mentee không thể gọi các API `accept` / `reject` / `complete` của Mentor.
+   - Mentor không thể gọi API `confirm` của Mentee.
+   - Chỉ người dùng tham gia vào đơn (`participant`) mới được phép truy vấn thông tin chi tiết.
+2. **Đảm bảo An toàn Giao dịch (Idempotency)**:
+   - Header `Idempotency-Key` được bắt buộc với API `POST /api/bookings`. Nếu client retry do gián đoạn mạng, Backend cam kết không tạo trùng đơn.
+3. **Hiển thị Link Google Meet Bảo mật**:
+   - Link họp mặt (`meetingLink`) chỉ hiển thị khi `bookingStatus == CONFIRMED` và thời gian buổi học sắp diễn ra.
 
-`pendingExpireAt` is the mentor-response SLA for a pending booking. For a pending booking, it is `min(createdAt + 12h, scheduledStartAt - 3h)` and is also returned as `actionDeadlineAt`. The server expires the request after that deadline and notifies both parties. A payment-required booking uses `min(acceptedAt + 6h, scheduledStartAt - 1h)` as its payment deadline and `actionDeadlineAt`.
+---
 
-`cancellationRefundPolicy` is a read model of the current platform policy, not a per-service promise. It exposes the early cancellation threshold, early/late mentee refund percentages, mentor-cancellation refund percentage and mentor-no-show refund percentage.
+## 11. Frontend Integration Rules (Quy tắc Tích hợp Cho Frontend)
 
-| `displayState` | Typical FE treatment |
-| --- | --- |
-| `PENDING_MENTOR_RESPONSE` | Mentee waits for mentor. |
-| `PAYMENT_REQUIRED` | Show checkout only when `nextAction=PAY_NOW`. |
-| `MENTOR_ACTION_REQUIRED` | Mentor accepts/rejects or marks the completed session. |
-| `UPCOMING`, `IN_SESSION` | Show schedule and meeting entry. |
-| `WAITING_CONFIRMATION` | Mentee confirms before `actionDeadlineAt`. |
-| `UNDER_REVIEW` | Show issue status; no settlement inference. |
-| `FEEDBACK_REQUIRED` | Mentee can call `POST /api/bookings/{bookingId}/feedback`. |
-| `COMPLETED`, `CANCELED_OR_EXPIRED` | Terminal presentation. |
+### Frontend NÊN:
+- Sử dụng các cờ trợ lý UI (`canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback`) để bật/tắt các nút bấm hành động trên giao diện.
+- Gọi lại `GET /api/me/bookings/{bookingId}` sau mỗi thao tác quan trọng để đảm bảo dữ liệu đồng bộ tuyệt đối với Backend.
+- Sinh `Idempotency-Key` mới (chuỗi UUIDv4) trước mỗi lần người dùng bấm nút submit đặt lịch.
 
-Feedback is accepted only after `completionOutcome=USER_CONFIRMED`. Auto-close, no-show and admin-resolved outcomes do not unlock feedback.
+### Frontend KHÔNG ĐƯỢC:
+- **KHÔNG ĐƯỢC** tự suy đoán đơn đã hoàn thành chỉ dựa vào cờ `paymentStatus == PAID`.
+- **KHÔNG ĐƯỢC** dùng các trường cũ (`status`, `sessionStatus`) để xây dựng luồng xử lý mới.
+- **KHÔNG ĐƯỢC** tự động chốt trạng thái `AUTO_CLOSED` ở Client; việc này thuộc trách nhiệm của Scheduler Backend.
 
-## Group-session seat booking
-Group sessions are available only while `APPLICATION_GROUP_SESSIONS_ENABLED=true`.
+---
 
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/api/group-sessions?mentorUserId=&serviceId=&from=&cursor=&limit=` | Public upcoming sessions with only snapshot offer, schedule and seat availability. |
-| GET | `/api/group-sessions/{groupSessionId}` | Public session detail; never exposes attendee data. |
-| POST | `/api/group-sessions/{groupSessionId}/bookings` | Authenticated learner creates one seat booking with learning-goal fields. |
+## 12. Edge Cases (Các Kịch bản Biên & Xử lý Rủi ro)
 
-`POST /api/group-sessions/{groupSessionId}/bookings` atomically creates the booking and increments `reservedSeatCount`. For a paid session its internal status is `ACCEPTED_AWAITING_PAYMENT`; the booking itself is the seat hold and checkout creates the payment order later. For a free session the internal status is `PAID`, while the response remains `bookingStatus=CONFIRMED` and `paymentStatus=NOT_REQUIRED`.
+1. **Hủy Lịch Đột xuất & Chính sách Hoàn tiền (`Cancellation Policy`)**:
+   - Nếu Mentee hủy sớm (trước mốc quy định): Hoàn tiền lại theo tỷ lệ phần trăm cấu hình (`cancellationRefundPolicy`).
+   - Nếu Mentor hủy lịch hoặc vắng mặt (`NO_SHOW_MENTOR`): Mentee luôn được hoàn lại **100%** số SCoin đã trả.
+2. **Tranh chấp/Khiếu nại Buổi học (`UNDER_REVIEW`)**:
+   - Khi có báo cáo sự cố (`Submit Issue`), đơn chuyển thành `UNDER_REVIEW`, tính năng chat chuyển sang chế độ Chỉ đọc (Read-only), và tiến trình giải ngân tiền ví bị tạm dừng cho đến khi Admin xử lý xong.
 
-The response is the existing `BookingResponse` with `bookingType=GROUP_SESSION`, `groupSessionId` and a compact `groupSession` summary (ID, snapshot service title, schedule and registration close). Group payment deadline is `min(acceptedAt + 6h, registrationClosesAt)`. Checkout, payment webhooks, coupon, campaign, wallet, expiry and refund all stay booking-ID based.
+---
 
-One learner can have one active seat per group session. Pending payment holds, paid seats and other locking bookings participate in learner calendar overlap checks. On payment expiry or learner cancellation the seat is released exactly once. Mentor cancellation releases all seats and fully refunds paid attendees. A late successful webhook after cancellation is compensated and never restores a seat.
+## 13. Related Services (Các Service Liên quan trong Hệ thống)
 
-Group seats do not use mentor accept/reject or rescheduling. Phase 3 adds one shared session/conversation per GroupSession: meeting details and chat appear only after the seat is confirmed. Mentor submits attendance after the event; `PRESENT` seats enter a 24-hour learner confirmation window, while `MENTEE_NO_SHOW` uses the existing issue path. Feedback remains available only after `USER_CONFIRMED`.
+- **Mentor Service**: Đọc thông tin gói dịch vụ `MentorService` và cờ chat snapshot `maintainPostSessionChatSnapshot`.
+- **Payment & Wallet Service**: Thực thi giao dịch trừ SCoin khi thanh toán và hoàn SCoin khi hủy đơn.
+- **Notification Service**: Gửi thông báo đẩy (Push/Email) khi có yêu cầu mới, chấp nhận, hủy đơn, hoặc nhắc nhở buổi học.
 
-Published group-session intervals remain excluded from 1:1 candidate selection. FE must refetch candidates after a `409` conflict rather than assuming a parent availability slot is fully unavailable.
+---
 
-## Service-resource entitlement
-Tài liệu `BOOKED_MEMBERS` không được mở chỉ vì booking tồn tại. Backend dùng booking-owned policy: booking ở canonical `CONFIRMED` hoặc `COMPLETED` mới cấp quyền. Service inactive không thu hồi quyền lịch sử; resource bị mentor xóa mềm thì quyền download bị thu hồi ngay.
+## 14. Frontend Implementation Guide (Hướng dẫn Lập trình Frontend Chi tiết - Staff Engineer Level)
 
-## Premium Blog entitlement
-`BOOKED_MEMBERS` Blog follows the same booking-owned boundary as service resources, but is read through `GET /api/me/blog/library?serviceId=`. Blog never reads raw booking states. FE must not show premium posts in generic feed/search/trending, and must treat a `404` from a premium detail as non-enumerating access denial.
+### 14.1 Screen Mapping (Sơ đồ Màn hình -> Component -> API -> Behavior)
+
+#### A. Form Đặt Lịch Mentoring (`BookingRequestModal.tsx`)
+- **React Components**: `BookingRequestModal.tsx`, `QuoteSummaryBox.tsx`, `LearningGoalInput.tsx`
+- **APIs Triggered**:
+  1. `POST /api/bookings/quote` (Tính toán báo giá ước tính & xem SLA)
+  2. `POST /api/bookings` (Khi bấm "Gửi yêu cầu", truyền `Idempotency-Key`)
+- **Expected Behavior**: Hiển thị bảng tóm tắt giá và thời gian hạn chót duyệt đơn. Khi tạo đơn 200 OK: Chuyển hướng sang màn hình Chi tiết Đơn hàng.
+
+#### B. Màn hình Chi tiết Đơn Đặt Lịch (`BookingDetailPage.tsx`)
+- **React Components**: `BookingDetailPage.tsx`, `BookingStatusBadge.tsx`, `ActionControlPanel.tsx`, `MeetingLinkBox.tsx`
+- **APIs Triggered**:
+  1. `GET /api/me/bookings/{bookingId}` (Khi mount trang)
+  2. `POST /api/mentor/bookings/{id}/accept` hoặc `reject` (Thao tác của Mentor)
+  3. `POST /api/me/bookings/{id}/confirm` (Thao tác của Mentee sau session)
+- **Expected Behavior**: Hiển thị badge trạng thái chuẩn canonical. Render các nút bấm hành động tương ứng với cờ `canCancel`, `canComplete`, `canSubmitFeedback`.
+
+#### C. Màn hình Thanh toán Checkout (`BookingCheckoutPage.tsx`)
+- **React Components**: `BookingCheckoutPage.tsx`, `CouponInput.tsx`, `ScoinPayButton.tsx`
+- **APIs Triggered**:
+  1. `POST /api/me/bookings/{bookingId}/checkout-preview` (Khi nhập mã giảm giá)
+  2. Executing payment -> Redirect gateway
+- **Expected Behavior**: Hiển thị countdown timer đếm ngược hạn thanh toán (`paymentDeadlineAt`). Sau khi thanh toán thành công: Reload lại Booking Detail.
+
+---
+
+### 14.2 Frontend Booking State Machine (Ma trận Trạng thái Client)
+
+```
+                       +-----------------------+
+                       |    DRAFT_REQUEST      | (User chọn slot & service)
+                       +-----------------------+
+                                   |
+                          POST /api/bookings
+                                   |
+                                   v
+                       +-----------------------+
+                       |  WAITING_ACCEPTANCE   | (Chờ Mentor duyệt)
+                       +-----------------------+
+                                   |
+                            Mentor Accept
+                                   |
+                                   v
+                       +-----------------------+
+                       |    WAITING_PAYMENT    | (Chờ Mentee thanh toán SCoin)
+                       +-----------------------+
+                                   |
+                           Thanh toán 200 OK
+                                   |
+                                   v
+                       +-----------------------+
+                       |       CONFIRMED       | (Sẵn sàng tham gia buổi học)
+                       +-----------------------+
+                                   |
+                           Session Hoàn tất
+                                   |
+                                   v
+                       +-----------------------+
+                       |       COMPLETED       | (Mentee xác nhận -> Mở Feedback)
+                       +-----------------------+
+```
+
+---
+
+### 14.3 API Calling Lifecycle & Timing (Thời điểm Gọi API Tuyệt đối)
+
+| API Endpoint | Open Booking Modal | Fill Learning Goal | Submit Booking | Mentor Accept | Mentee Confirm | User Action |
+| --- | --- | --- | --- | --- | --- | --- |
+| `POST /api/bookings/quote` | ✅ CÓ (Read-only) | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG |
+| `POST /api/bookings` | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ (`Idempotency-Key`) | ❌ KHÔNG | ❌ KHÔNG | ✅ Bấm "Gửi Yêu cầu" |
+| `GET /api/me/bookings/{id}` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ (Sau Accept) | ✅ CÓ (Sau Confirm) | ❌ KHÔNG |
+| `POST .../checkout-preview` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ Khi mở màn Checkout |
+| `POST .../confirm` | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ❌ KHÔNG | ✅ CÓ | ✅ Bấm "Xác nhận Học xong" |
+
+---
+
+### 14.4 Error UX Mapping & UI Component Rules (Xử lý Lỗi Cấp độ UX)
+
+#### A. Lỗi Xung đột Khung giờ / Quá hạn SLA (`HTTP 409`)
+- **UI Component**: Modal Báo lỗi Đặt lịch (`BookingConflictModal.tsx`).
+- **Toast Message**: *"Khung giờ hoặc gói dịch vụ này vừa thay đổi trạng thái. Vui lòng chọn lại khung giờ rảnh mới."*
+- **Action**: Nút "Tải lại Lịch rảnh".
+
+#### B. Lỗi Đơn hàng Hết hạn Thanh toán (`PAYMENT_EXPIRED`)
+- **UI Component**: Banner thông báo trên `BookingDetailPage.tsx`.
+- **Visual State**: Banner màu xám cảnh báo hết hạn.
+- **Message**: *"Thời gian chờ thanh toán cho buổi học này đã hết hạn. Đơn đặt lịch đã tự động hủy."*
+
+---
+
+### 14.5 React Query / State Management Cache Rules (Chiến lược Cấu hình Cache)
+
+| Query Key / Dữ liệu Cache | Stale Time | Garbage Collection (GC) Time | Refetch On Window Focus | Điều kiện Xóa Cache (Invalidation Triggers) |
+| --- | --- | --- | --- | --- |
+| `['booking', 'quote', slotId, serviceId]` | 0 ms | 2 phút | `false` | Thay đổi lựa chọn ô giờ/gói dịch vụ |
+| `['booking', 'detail', bookingId]` | 0 ms | 15 phút | `true` | `accept`, `reject`, `confirm`, `cancel`, `checkout` thành công |
+| `['my-bookings', filterState]` | 1 phút | 10 phút | `true` | Thực hiện bất kỳ mutation booking nào |
+| `['checkout-preview', bookingId]` | 0 ms | 5 phút | `false` | Nhập mã coupon mới |
