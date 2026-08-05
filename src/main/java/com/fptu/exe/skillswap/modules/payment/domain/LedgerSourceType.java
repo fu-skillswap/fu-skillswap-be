@@ -8,5 +8,6 @@ public enum LedgerSourceType {
     MANUAL,
     PAYOUT_REQUEST,
     REFUND,
-    PAYMENT_ATTEMPT
+    PAYMENT_ATTEMPT,
+    COURSE_ENROLLMENT
 }
