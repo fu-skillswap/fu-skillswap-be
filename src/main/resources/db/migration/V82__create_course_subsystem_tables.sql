@@ -19,7 +19,7 @@ CREATE TABLE courses (
     version BIGINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    CONSTRAINT fk_courses_mentor FOREIGN KEY (mentor_profile_id) REFERENCES mentor_profiles(id)
+    CONSTRAINT fk_courses_mentor FOREIGN KEY (mentor_profile_id) REFERENCES mentor_profiles(user_id)
 );
 
 CREATE TABLE course_sessions (
