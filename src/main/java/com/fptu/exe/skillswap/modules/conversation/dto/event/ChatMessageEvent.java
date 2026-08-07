@@ -11,6 +11,7 @@ import java.util.UUID;
 public record ChatMessageEvent(
         UUID conversationId,
         UUID messageId,
+        long sequence,
         UUID senderId,
         String senderName,
         MessageType messageType,

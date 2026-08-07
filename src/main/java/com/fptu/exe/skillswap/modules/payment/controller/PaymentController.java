@@ -10,6 +10,8 @@ import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
+import com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.time.Duration;
 
 @RestController
 @RequiredArgsConstructor
@@ -35,6 +38,7 @@ import java.util.UUID;
 public class PaymentController {
 
     private final PaymentOrderService paymentOrderService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(summary = "Tạo payment order cho booking", description = "FE gọi sau khi booking đã sẵn sàng thanh toán. Backend tự áp coupon/credit, sau đó tạo Hosted Payment Link thật từ PayOS và trả checkoutUrl cho FE redirect.")
     @SecurityRequirement(name = "bearerAuth")
@@ -44,6 +48,13 @@ public class PaymentController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PaymentCheckoutRequest request) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                RateLimitScope.SECURITY,
+                "payment:checkout:" + principal.getPublicId(),
+                5,
+                Duration.ofMinutes(1),
+                "Bạn đang tạo checkout quá nhanh, vui lòng chờ trước khi thử lại"
+        );
         PaymentCheckoutResponse response = paymentOrderService.checkout(principal.getPublicId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }

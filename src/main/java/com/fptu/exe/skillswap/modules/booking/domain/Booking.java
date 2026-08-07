@@ -34,6 +34,12 @@ public class Booking {
     @GeneratedUuidV7
     private UUID id;
 
+    /** Last line of defence for lifecycle writers that do not hold the booking row lock. */
+    @Version
+    @Column(nullable = false)
+    @Builder.Default
+    private Long version = 0L;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "mentee_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentee"))
     private User mentee;

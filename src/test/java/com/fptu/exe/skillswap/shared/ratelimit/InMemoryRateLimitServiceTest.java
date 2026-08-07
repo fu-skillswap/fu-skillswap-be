@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.shared.ratelimit;
 
 import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
-import com.fptu.exe.skillswap.shared.exception.BaseException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -23,9 +22,10 @@ class InMemoryRateLimitServiceTest {
 
         service.check(RateLimitScope.SECURITY, "auth:first", 10, Duration.ofMinutes(1), "blocked");
 
-        BaseException rejection = assertThrows(BaseException.class,
+        RateLimitExceededException rejection = assertThrows(RateLimitExceededException.class,
                 () -> service.check(RateLimitScope.SECURITY, "auth:second", 10, Duration.ofMinutes(1), "blocked"));
         assertEquals("TOO_MANY_REQUESTS", rejection.getErrorCode().name());
+        org.junit.jupiter.api.Assertions.assertTrue(rejection.getRetryAfterSeconds() >= 1);
 
         assertDoesNotThrow(() -> service.check(
                 RateLimitScope.BUSINESS, "booking:first", 10, Duration.ofMinutes(1), "blocked"));

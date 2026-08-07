@@ -31,6 +31,8 @@ public class RealtimeOutboxProperties {
     private String cleanupCron = "0 0 2 * * *";
     @Min(1000)
     private long pollMs = 30000L;
+    @Min(100)
+    private long publisherConfirmTimeoutMs = 3000L;
     @NotBlank
     private String exchange = "skillswap.domain-events";
     @NotBlank

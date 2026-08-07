@@ -97,6 +97,11 @@ class PaymentOrderServiceTest {
             org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(null);
         });
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            java.util.function.Consumer<org.springframework.transaction.TransactionStatus> callback = invocation.getArgument(0);
+            callback.accept(null);
+            return null;
+        }).when(transactionTemplate).executeWithoutResult(any());
 
         paymentOrderService = new PaymentOrderService(
                 bookingRepository,
@@ -204,7 +209,7 @@ class PaymentOrderServiceTest {
         assertEquals(0, response.remainingPayableScoin());
         assertNull(response.paymentLink());
         verify(creditLedgerService).reserveCredit(eq(menteeId), eq(72_000), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any());
-        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+        verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
         // PayOsGateway must NOT be called for credit-covered checkout
         verify(payOsGateway, never()).createPaymentLink(any());
     }
@@ -488,7 +493,7 @@ class PaymentOrderServiceTest {
 
         paymentOrderService.handleWebhook(request);
 
-        verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
+        verify(creditLedgerService, never()).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
         verify(paymentOrderRepository, never()).save(any());
     }
 

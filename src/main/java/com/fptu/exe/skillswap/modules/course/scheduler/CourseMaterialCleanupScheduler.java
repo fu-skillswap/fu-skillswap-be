@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.course.scheduler;
 
-import com.fptu.exe.skillswap.infrastructure.bunny.client.BunnyVideoClient;
 import com.fptu.exe.skillswap.modules.course.domain.CourseMaterial;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
@@ -35,8 +34,9 @@ public class CourseMaterialCleanupScheduler {
         for (CourseMaterial material : expiredMaterials) {
             log.info("Expiring material upload ID: {}", material.getId());
             material.setStatus(MaterialStatus.EXPIRED);
+            material.setDeleteRequestedAt(Instant.now());
             materialRepository.save(material);
-            
+
             // If it was a Bunny.net video, use the outbox to delete the placeholder video GUID
             if (material.getStorageProviderType() == StorageProviderType.BUNNY_VIDEO && material.getBunnyVideoId() != null) {
                 com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent outboxEvent = com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent.builder()

@@ -7,5 +7,6 @@ package com.fptu.exe.skillswap.modules.payment.domain;
 public enum PaymentSettlementStatus {
     HELD,
     RELEASED,
+    PARTIALLY_SETTLED,
     REFUNDED
 }

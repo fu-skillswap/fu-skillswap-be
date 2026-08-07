@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ValidationErrorResponse;
 import com.fptu.exe.skillswap.shared.dto.response.VersionConflictData;
+import com.fptu.exe.skillswap.shared.ratelimit.RateLimitExceededException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.TraceContext;
 
@@ -35,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.http.HttpHeaders;
 
 @RestControllerAdvice
 @Slf4j
@@ -57,6 +59,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ApiResponse<Object>> handleBaseException(BaseException ex) {
         return buildResponse(ex.getErrorCode(), ex.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleRateLimitExceeded(RateLimitExceededException ex) {
+        return buildResponse(ex.getErrorCode(), ex.getMessage(), null, ex.getRetryAfterSeconds());
     }
 
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
@@ -223,6 +230,15 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ApiResponse<Object>> buildResponse(ErrorCode errorCode, String message, Object data) {
+        return buildResponse(errorCode, message, data, null);
+    }
+
+    private ResponseEntity<ApiResponse<Object>> buildResponse(
+            ErrorCode errorCode,
+            String message,
+            Object data,
+            Long retryAfterSeconds
+    ) {
         applyTraceIdHeader();
         ApiResponse<Object> response = ApiResponse.builder()
                 .timestamp(DateTimeUtil.now())
@@ -230,9 +246,13 @@ public class GlobalExceptionHandler {
                 .code(errorCode.getCode())
                 .message(message != null ? message : errorCode.getMessage())
                 .data(data)
+                .retryAfterSeconds(retryAfterSeconds)
                 .build();
-
-        return new ResponseEntity<>(response, HttpStatus.valueOf(errorCode.getStatus()));
+        ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()));
+        if (retryAfterSeconds != null) {
+            builder.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds));
+        }
+        return builder.body(response);
     }
 
     private ResponseEntity<ApiResponse<Object>> buildValidationResponse(org.springframework.validation.BindingResult bindingResult) {

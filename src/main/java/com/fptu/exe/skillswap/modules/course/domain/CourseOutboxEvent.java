@@ -59,6 +59,9 @@ public class CourseOutboxEvent {
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;
 
+    @Column(name = "processing_started_at")
+    private Instant processingStartedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

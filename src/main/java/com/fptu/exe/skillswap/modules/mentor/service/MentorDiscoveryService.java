@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAuthorityContent
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatureProvider;
 import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -52,6 +53,7 @@ import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryEnrichme
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryKeywordSupport;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryRankingService;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorEnrichedData;
+import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorRecommendationFacade;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
@@ -102,8 +104,8 @@ public class MentorDiscoveryService {
     private final DiscoveryRankingService discoveryRankingService;
     private final DiscoveryMapper discoveryMapper;
 
-    @Value("${application.discovery.recall-window-size:100}")
-    private int defaultRecallWindowSize = 100;
+    private final DiscoveryProperties discoveryProperties;
+    private final MentorRecommendationFacade mentorRecommendationFacade;
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
@@ -160,7 +162,7 @@ public class MentorDiscoveryService {
                 relevanceSort,
                 orders,
                 currentTime(),
-                defaultRecallWindowSize
+                discoveryProperties.recallWindowSize()
         );
 
         if (hasKeyword && candidateWindow.isEmpty()) {
@@ -175,7 +177,7 @@ public class MentorDiscoveryService {
                         relevanceSort,
                         orders,
                         currentTime(),
-                        defaultRecallWindowSize
+                        discoveryProperties.recallWindowSize()
                 );
             }
         }
@@ -206,15 +208,17 @@ public class MentorDiscoveryService {
                     .build();
         }
 
+        LocalDateTime evaluatedAt = currentTime();
         List<MentorDiscoveryCardResponse> content;
         if (relevanceSort) {
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, menteeFeatures, currentTime());
+            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, menteeFeatures, evaluatedAt);
             List<DiscoveryRankingService.RankedSearchCandidate> rankedCandidates = discoveryRankingService.rankSearchCandidates(
                     rows,
                     menteeProfile,
                     menteeFeatures,
                     normalizedKeyword,
-                    enrichedDataByMentor
+                    enrichedDataByMentor,
+                    evaluatedAt
             );
 
             int fromIndex = Math.min(requestedPage * requestedSize, rankedCandidates.size());
@@ -231,14 +235,15 @@ public class MentorDiscoveryService {
                     .map(MentorDiscoveryQueryRow::mentorUserId)
                     .toList();
 
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(pageMentorIds, menteeFeatures, currentTime());
+            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(pageMentorIds, menteeFeatures, evaluatedAt);
 
             List<DiscoveryRankingService.RankedSearchCandidate> rankedPageRows = discoveryRankingService.rankSearchCandidates(
                     pageRows,
                     menteeProfile,
                     menteeFeatures,
                     normalizedKeyword,
-                    enrichedDataByMentor
+                    enrichedDataByMentor,
+                    evaluatedAt
             );
             content = rankedPageRows.stream()
                     .map(candidate -> discoveryMapper.toCardResponseFromEnriched(candidate.row(), candidate.enrichedData(), candidate.matchScore()))
@@ -255,55 +260,8 @@ public class MentorDiscoveryService {
                 .build();
     }
 
-    @Transactional(readOnly = true)
     public List<MentorRecommendationResponse> getRecommendations(UUID currentUserId, int limit) {
-        if (currentUserId == null) {
-            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
-        }
-
-        int safeLimit = Math.min(Math.max(limit, 1), 12);
-        StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
-        MenteeMatchingFeatures menteeFeatures = menteeMatchingFeatureProvider.getLatestFeatures(currentUserId);
-        LocalDateTime now = currentTime();
-        boolean richProfile = menteeProfile != null
-                && menteeProfile.getProgram() != null
-                && menteeProfile.getSpecialization() != null;
-        List<MentorDiscoveryQueryRow> candidates = discoveryCandidateProvider.recallForRecommendation(
-                currentUserId,
-                richProfile,
-                safeLimit,
-                now,
-                defaultRecallWindowSize
-        );
-
-        if (candidates.isEmpty()) {
-            return List.of();
-        }
-
-        List<UUID> candidateIds = candidates.stream().map(MentorDiscoveryQueryRow::mentorUserId).toList();
-        Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, menteeFeatures, now);
-
-        return candidates.stream()
-                .map(candidate -> {
-                    MentorEnrichedData enrichedData = enrichedDataByMentor.getOrDefault(candidate.mentorUserId(), MentorEnrichedData.empty());
-                    DiscoveryRankingService.RecommendationScore recommendationScore = discoveryRankingService.scoreRecommendation(
-                            candidate,
-                            enrichedData,
-                            menteeProfile,
-                            menteeFeatures
-                    );
-                    return new RankedRecommendation(
-                            candidate,
-                            discoveryMapper.toRecommendation(candidate, enrichedData, recommendationScore)
-                    );
-                })
-                .sorted(Comparator
-                        .comparing((RankedRecommendation ranked) -> ranked.response().matchScore(), Comparator.nullsLast(BigDecimal::compareTo)).reversed()
-                        .thenComparing(ranked -> defaultInteger(ranked.candidate().completedSessions()), Comparator.reverseOrder())
-                        .thenComparing(ranked -> defaultDecimal(ranked.candidate().ratingAverage()), Comparator.reverseOrder()))
-                .limit(safeLimit)
-                .map(RankedRecommendation::response)
-                .toList();
+        return mentorRecommendationFacade.getRecommendations(currentUserId, limit);
     }
 
     @Transactional(readOnly = true)
@@ -510,17 +468,7 @@ public class MentorDiscoveryService {
         return value != null && !value.trim().isEmpty();
     }
 
-    private BigDecimal defaultDecimal(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : value;
-    }
-
     private Integer defaultInteger(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private record RankedRecommendation(
-            MentorDiscoveryQueryRow candidate,
-            MentorRecommendationResponse response
-    ) {
     }
 }

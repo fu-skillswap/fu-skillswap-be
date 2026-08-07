@@ -10,6 +10,8 @@ public interface StorageGateway {
 
     StorageUploadResult uploadFile(MultipartFile file, String subFolder);
 
+    void uploadFile(String objectKey, java.nio.file.Path file, String contentType, java.util.Map<String, String> metadata) throws IOException;
+
     void deleteFile(String objectKey);
 
     PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType);
@@ -34,7 +36,7 @@ public interface StorageGateway {
 
     record PresignedUpload(String uploadUrl, String publicUrl, String objectKey) {}
 
-    record ObjectMetadata(String objectKey, String contentType, long sizeBytes) {}
+    record ObjectMetadata(String objectKey, String contentType, long sizeBytes, java.util.Map<String, String> metadata) {}
 
     record PrivatePresignedUpload(String uploadUrl, String objectKey, java.time.Instant expiresAt) {}
 

@@ -175,12 +175,6 @@ public class ChatController {
         return ApiResponse.created(response);
     }
 
-    @PatchMapping("/{conversationId}/messages/{messageId}")
-    @Operation(summary = "Edit my chat message", description = "Only the sender can edit an active text message within the configured edit window and with the expected version.")
-    public ApiResponse<MessageResponse> editMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.UpdateMessageRequest request) {
-        return ApiResponse.success(conversationService.editMessage(conversationId, messageId, userPrincipal.getId(), request));
-    }
-
     @DeleteMapping("/{conversationId}/messages/{messageId}")
     @Operation(summary = "Delete my chat message", description = "Creates a tombstone and immediately revokes its attachment access; retention holds still control physical deletion.")
     public ApiResponse<MessageResponse> deleteMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.conversation.dto.request.DeleteMessageRequest request) {

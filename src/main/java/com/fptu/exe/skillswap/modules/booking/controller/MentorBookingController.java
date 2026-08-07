@@ -15,6 +15,8 @@ import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
+import com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.time.Duration;
 
 @RestController
 @RequestMapping("/api/mentor/bookings")
@@ -43,6 +46,7 @@ public class MentorBookingController {
 
     private final BookingService bookingService;
     private final BookingRescheduleService bookingRescheduleService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(
             summary = "Chấp nhận booking request",
@@ -114,6 +118,13 @@ public class MentorBookingController {
             @Valid @RequestBody CancelBookingRequest request
     ) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                RateLimitScope.SECURITY,
+                "booking:cancel:" + principal.getPublicId(),
+                3,
+                Duration.ofHours(1),
+                "Bạn đang gửi yêu cầu hủy hoặc hoàn tiền quá nhanh, vui lòng thử lại sau"
+        );
         return ApiResponse.success(bookingService.cancelBookingByMentor(principal.getPublicId(), bookingId, request));
     }
 

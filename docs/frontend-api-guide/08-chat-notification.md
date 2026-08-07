@@ -65,6 +65,7 @@ Tài liệu Hướng dẫn Tích hợp & Vận hành Dịch vụ Trò chuyện v
 ## 4. Service Concepts (Khái niệm Cốt lõi & Domain Model)
 
 ### 4.1 Mô hình Phân trang Con trỏ Sequence (`Sequence Window Pagination`)
+- Event `CHAT_MESSAGE_CREATED` trên `/user/queue/chat/messages` luôn có `messageId` và `sequence`; Frontend dedupe theo `messageId` và render theo `sequence`, không theo thời điểm nhận STOMP.
 - API `/api/me/conversations/{id}/messages` hỗ trợ 2 tham số con trỏ:
   - KHÔNG truyền `beforeSequence` và `afterSequence`: Lấy trang 30 tin nhắn mới nhất (Initial page).
   - `beforeSequence = X`: Lấy các tin nhắn cũ hơn sequence `X` (Dùng khi người dùng cuộn lên trên để xem lịch sử).
@@ -89,7 +90,6 @@ Khi cờ `canSendMessages = false`, trường `readOnlyReason` sẽ trả về l
 | `GET` | `/api/me/conversations/{conversationId}` | Participant | Lấy thông tin metadata và cờ quyền hạn của phòng chat | Màn hình Khung Chat |
 | `GET` | `/api/me/conversations/{conversationId}/messages` | Participant | Lấy danh sách tin nhắn theo cửa sổ `sequence` | Mở khung chat / Cuộn xem lịch sử / Reconnect |
 | `POST` | `/api/me/conversations/{conversationId}/messages` | Participant | Gửi tin nhắn mới (hỗ trợ `clientMessageId` & đính kèm) | Bấm nút Gửi tin nhắn |
-| `PATCH` | `/api/me/conversations/{conversationId}/messages/{messageId}` | Sender | Chỉnh sửa nội dung tin nhắn Text (trong vòng 15 phút) | Bấm "Sửa tin nhắn" |
 | `DELETE` | `/api/me/conversations/{conversationId}/messages/{messageId}` | Sender | Xóa tin nhắn (tạo Tombstone, thu hồi quyền file) | Bấm "Xóa tin nhắn" |
 | `PATCH` | `/api/me/conversations/{conversationId}/read` | Participant | Cập nhật con trỏ `lastReadSequence` của caller | Khi người dùng xem tin nhắn mới |
 | `GET` | `/api/me/conversations/unread-count` | Participant | Lấy tổng số tin nhắn chưa đọc toàn bộ Inbox | Badge đếm chưa đọc trên Navbar |

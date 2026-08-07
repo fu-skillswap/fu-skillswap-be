@@ -13,6 +13,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -68,9 +69,12 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
 
         try {
             restTemplate.exchange(url, HttpMethod.DELETE, entity, Void.class);
+        } catch (HttpClientErrorException.NotFound ignored) {
+            // Deletion is idempotent: a previously removed Bunny object is already in the desired state.
+            log.info("Bunny video {} was already deleted", videoId);
         } catch (Exception e) {
             log.error("Failed to delete video on Bunny.net for videoId: {}", videoId, e);
-            // Non-blocking error since this is usually part of cleanup
+            throw new RuntimeException("Error deleting video from provider", e);
         }
     }
 

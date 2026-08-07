@@ -16,7 +16,17 @@ public interface CourseVaultService {
     
     BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, BunnyWebhookPayload payload);
     
-    void processWebhookEventIdempotent(BunnyWebhookEvent event);
+    java.util.List<java.util.UUID> claimWebhookEvents(int limit);
+
+    void processWebhookEventIdempotent(java.util.UUID eventId);
+
+    void markWebhookEventFailed(java.util.UUID eventId, Throwable cause);
+
+    java.util.List<java.util.UUID> claimCourseOutboxEvents(int limit);
+
+    void processCourseOutboxEvent(java.util.UUID eventId);
+
+    void markCourseOutboxEventFailed(java.util.UUID eventId, Throwable cause);
     
     void deleteMaterial(UUID userId, UUID courseId, UUID materialId);
     

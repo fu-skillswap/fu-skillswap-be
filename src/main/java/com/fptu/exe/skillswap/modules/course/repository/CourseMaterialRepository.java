@@ -13,7 +13,8 @@ import java.util.UUID;
 @Repository
 public interface CourseMaterialRepository extends JpaRepository<CourseMaterial, UUID> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"courseSession"})
-    List<CourseMaterial> findByCourseIdOrderByUploadedAtAsc(UUID courseId);
+    List<CourseMaterial> findByCourseIdAndStatusNotAndDeletedAtIsNullOrderByUploadedAtAsc(
+            UUID courseId, MaterialStatus status);
     
     Optional<CourseMaterial> findByBunnyLibraryIdAndBunnyVideoId(String bunnyLibraryId, String bunnyVideoId);
     

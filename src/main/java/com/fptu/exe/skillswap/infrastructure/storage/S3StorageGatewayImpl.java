@@ -58,6 +58,28 @@ public class S3StorageGatewayImpl implements StorageGateway {
     }
 
     @Override
+    public void uploadFile(String objectKey, java.nio.file.Path file, String contentType, java.util.Map<String, String> metadata) {
+        PutObjectRequest.Builder builder = PutObjectRequest.builder()
+                .bucket(properties.getBucket())
+                .key(objectKey)
+                .contentType(contentType);
+        
+        if (metadata != null && !metadata.isEmpty()) {
+            builder.metadata(metadata);
+        }
+
+        PutObjectRequest request = builder.build();
+
+        try {
+            s3Client.putObject(request, RequestBody.fromFile(file));
+            log.info("S3/R2 upload success: bucket={}, key={}", properties.getBucket(), objectKey);
+        } catch (S3Exception ex) {
+            log.error("Lỗi khi upload file lên S3/R2. bucket={}, key={}", properties.getBucket(), objectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể tải lên tệp tin");
+        }
+    }
+
+    @Override
     public void deleteFile(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
             return;
@@ -124,7 +146,8 @@ public class S3StorageGatewayImpl implements StorageGateway {
             return new ObjectMetadata(
                     objectKey,
                     response.contentType(),
-                    response.contentLength() == null ? 0L : response.contentLength()
+                    response.contentLength() == null ? 0L : response.contentLength(),
+                    response.metadata()
             );
         } catch (S3Exception ex) {
             if (ex.statusCode() == 404) {

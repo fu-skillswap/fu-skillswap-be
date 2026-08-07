@@ -442,6 +442,7 @@ public class ConversationService {
         com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent event = com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
                 .conversationId(conversation.getId())
                 .messageId(message.getId())
+                .sequence(message.getSequence())
                 .senderId(sender.getId())
                 .senderName(sender.getFullName())
                 .messageType(message.getMessageType())
@@ -479,6 +480,7 @@ public class ConversationService {
                             com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
                                     .conversationId(event.conversationId())
                                     .messageId(event.messageId())
+                                    .sequence(event.sequence())
                                     .senderId(event.senderId())
                                     .senderName(event.senderName())
                                     .messageType(event.messageType())
@@ -718,6 +720,7 @@ public class ConversationService {
                         com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent.builder()
                                 .conversationId(conversationId)
                                 .messageId(messageId)
+                                .sequence(message.getSequence())
                                 .senderId(senderId)
                                 .senderName(message.getSender() != null ? message.getSender().getFullName() : "Hệ thống")
                                 .messageType(message.getMessageType())
@@ -812,15 +815,6 @@ public class ConversationService {
     @Transactional(readOnly = true)
     public boolean isParticipant(UUID conversationId, UUID userId) {
         return participantRepository.existsByConversationIdAndUserId(conversationId, userId);
-    }
-
-    @Transactional
-    public com.fptu.exe.skillswap.modules.conversation.dto.response.MessageResponse editMessage(UUID conversationId, UUID messageId, UUID userId, com.fptu.exe.skillswap.modules.conversation.dto.request.UpdateMessageRequest request) {
-        var message = messageRepository.findById(messageId).filter(m -> m.getConversation().getId().equals(conversationId))
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tin nhắn"));
-        assertEditable(message, userId, request.expectedVersion());
-        message.setContent(request.content().trim()); message.setEditedAt(DateTimeUtil.now());
-        return toMessageResponse(messageRepository.saveAndFlush(message), userId);
     }
 
     @Transactional

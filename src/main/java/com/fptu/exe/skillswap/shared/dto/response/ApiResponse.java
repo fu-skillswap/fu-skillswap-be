@@ -37,6 +37,9 @@ public class ApiResponse<T> {
     @Schema(description = "Typed payload of the response. This is null for error responses and may also be null for successful operations that only update state.")
     private T data;
 
+    @Schema(description = "Seconds the client should wait before retrying. Present only for HTTP 429 rate-limit responses.", example = "35", nullable = true)
+    private Long retryAfterSeconds;
+
     public static <T> ApiResponse<T> success(T data) {
         return ApiResponse.<T>builder()
                 .timestamp(DateTimeUtil.now())

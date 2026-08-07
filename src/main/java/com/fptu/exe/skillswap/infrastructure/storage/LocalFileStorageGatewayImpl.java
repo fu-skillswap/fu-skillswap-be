@@ -69,6 +69,14 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
     }
 
     @Override
+    public void uploadFile(String objectKey, java.nio.file.Path file, String contentType, java.util.Map<String, String> metadata) throws IOException {
+        Path target = rootDir.resolve(objectKey);
+        Files.createDirectories(target.getParent());
+        Files.copy(file, target, StandardCopyOption.REPLACE_EXISTING);
+        log.info("Local direct path upload success: {}", target);
+    }
+
+    @Override
     public void deleteFile(String objectKey) {
         if (objectKey == null || objectKey.isBlank()) {
             return;
@@ -122,13 +130,14 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
             // Local/test profile: file may not exist because we are simulating the
             // presigned-upload flow (client uploads to CDN; local storage cannot verify).
             // Return sentinel metadata — sizeBytes=0 signals "unknown size" to callers.
-            return new ObjectMetadata(objectKey, guessContentType(objectKey), 0L);
+            return new ObjectMetadata(objectKey, guessContentType(objectKey), 0L, java.util.Collections.emptyMap());
         }
         try {
             return new ObjectMetadata(
                     objectKey,
                     Files.probeContentType(target),
-                    Files.size(target)
+                    Files.size(target),
+                    java.util.Collections.emptyMap()
             );
         } catch (IOException ex) {
             throw new com.fptu.exe.skillswap.shared.exception.BaseException(

@@ -44,12 +44,14 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS is required}
 
     volumes:
+      # The STOMP relay is required for the browser WebSocket endpoint; AMQP is not public.
+      - ./ops/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
       - rabbitmq_data:/var/lib/rabbitmq
 
     mem_limit: 384m
 
     healthcheck:
-      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && rabbitmq-plugins is_enabled rabbitmq_stomp"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -95,6 +97,13 @@ services:
       - SPRING_RABBITMQ_PORT=${SPRING_RABBITMQ_PORT:-5672}
       - SPRING_RABBITMQ_USERNAME=${RABBITMQ_DEFAULT_USER:?RABBITMQ_DEFAULT_USER is required}
       - SPRING_RABBITMQ_PASSWORD=${RABBITMQ_DEFAULT_PASS:?RABBITMQ_DEFAULT_PASS is required}
+
+      # Full-launch realtime topology. The app validates that these two switches stay paired.
+      - REALTIME_OUTBOX_ENABLED=${REALTIME_OUTBOX_ENABLED:-true}
+      - REALTIME_OUTBOX_PUBLISHER_CONFIRM_TIMEOUT_MS=${REALTIME_OUTBOX_PUBLISHER_CONFIRM_TIMEOUT_MS:-3000}
+      - WEBSOCKET_STOMP_ENABLED=${WEBSOCKET_STOMP_ENABLED:-true}
+      - WEBSOCKET_STOMP_RELAY_HOST=${WEBSOCKET_STOMP_RELAY_HOST:-rabbitmq}
+      - WEBSOCKET_STOMP_RELAY_PORT=${WEBSOCKET_STOMP_RELAY_PORT:-61613}
 
       - PAYOS_CLIENT_ID=${PAYOS_CLIENT_ID:-}
       - PAYOS_API_KEY=${PAYOS_API_KEY:-}

@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 CREATE TABLE courses (
     id UUID PRIMARY KEY,
     mentor_profile_id UUID NOT NULL,

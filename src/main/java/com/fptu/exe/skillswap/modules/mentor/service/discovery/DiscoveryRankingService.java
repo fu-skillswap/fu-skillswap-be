@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -28,7 +27,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DiscoveryRankingService {
 
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     private static final BigDecimal SAME_PROGRAM_SCORE = decimal(25);
     private static final BigDecimal SAME_SPECIALIZATION_SCORE = decimal(20);
@@ -76,7 +74,8 @@ public class DiscoveryRankingService {
             StudentProfile menteeProfile,
             MenteeMatchingFeatures menteeFeatures,
             String normalizedKeyword,
-            java.util.Map<UUID, MentorEnrichedData> enrichedDataByMentor
+            java.util.Map<UUID, MentorEnrichedData> enrichedDataByMentor,
+            LocalDateTime evaluatedAt
     ) {
         return rows.stream()
                 .map(row -> {
@@ -86,13 +85,14 @@ public class DiscoveryRankingService {
                             menteeProfile,
                             menteeFeatures,
                             normalizedKeyword,
-                            enrichedData
+                            enrichedData,
+                            evaluatedAt
                     );
                     return new RankedSearchCandidate(
                             row,
                             enrichedData,
                             rawScore,
-                            calculateSearchScorePercentage(rawScore, normalizedKeyword, enrichedData.services().size(), menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null, menteeFeatures)
+                            calculateSearchScorePercentage(rawScore, normalizedKeyword, enrichedData.services().size(), menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null, menteeFeatures, evaluatedAt)
                     );
                 })
                 .sorted(Comparator
@@ -150,23 +150,26 @@ public class DiscoveryRankingService {
             MentorDiscoveryQueryRow candidate,
             MentorEnrichedData enrichedData,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures
+            MenteeMatchingFeatures menteeFeatures,
+            LocalDateTime evaluatedAt
     ) {
-        List<String> reasons = new ArrayList<>();
-        BigDecimal score = calculateMatchScore(
+        List<RecommendationReason> reasons = new ArrayList<>();
+        RecommendationScoreBreakdown breakdown = calculateMatchScoreBreakdown(
                 candidate,
                 enrichedData,
                 menteeProfile,
                 menteeFeatures,
-                reasons
+                reasons,
+                evaluatedAt
         );
+        BigDecimal score = breakdown.totalRawScore();
 
         BigDecimal maxScore = SAME_PROGRAM_SCORE
                 .add(SAME_SPECIALIZATION_SCORE)
                 .add(SAME_CAMPUS_SCORE)
                 .add(MENTOR_ALUMNI_SCORE.max(MENTOR_HIGHER_SEMESTER_SCORE))
                 .add(MAX_RECOMMENDATION_QUALITY_SCORE)
-                .add(calculateMaxCapabilityScore(menteeFeatures))
+                .add(calculateMaxCapabilityScore(menteeFeatures, evaluatedAt))
                 .add(HAS_AVAILABILITY_BONUS_SCORE)
                 .add(serviceBonusScore(MAX_SEARCH_SERVICE_BONUS_COUNT));
         if (menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null) {
@@ -176,52 +179,69 @@ public class DiscoveryRankingService {
         maxScore = maxScore.max(BigDecimal.ONE);
         BigDecimal percentageScore = score.multiply(BigDecimal.valueOf(100)).divide(maxScore, 2, RoundingMode.HALF_UP);
 
-        if (defaultInteger(candidate.completedSessions()) > 0 && reasons.stream().noneMatch("Đã có phiên mentoring hoàn thành"::equals)) {
-            reasons.add("Đã có phiên mentoring hoàn thành");
+        if (defaultInteger(candidate.completedSessions()) > 0) {
+            addReason(reasons, RecommendationReasonCode.COMPLETED_SESSION);
         }
 
         if (reasons.isEmpty()) {
-            reasons.add("Phù hợp với các tiêu chí discovery hiện tại");
+            addReason(reasons, RecommendationReasonCode.DEFAULT_DISCOVERY_MATCH);
         }
 
-        return new RecommendationScore(percentageScore, reasons.stream().limit(3).toList());
+        return new RecommendationScore(
+                percentageScore,
+                reasons.stream()
+                        .limit(3)
+                        .map(RecommendationReasonTextMapper::toVietnamese)
+                        .toList(),
+                new RecommendationScoreBreakdown(
+                        breakdown.academicScore(),
+                        breakdown.qualityScore(),
+                        breakdown.capabilityScore(),
+                        breakdown.serviceScore(),
+                        breakdown.availabilityScore(),
+                        breakdown.durationScore(),
+                        breakdown.totalRawScore(),
+                        percentageScore
+                )
+        );
     }
 
-    private BigDecimal calculateMatchScore(
+    private RecommendationScoreBreakdown calculateMatchScoreBreakdown(
             MentorDiscoveryQueryRow candidate,
             MentorEnrichedData enrichedData,
             StudentProfile menteeProfile,
             MenteeMatchingFeatures menteeFeatures,
-            List<String> reasons
+            List<RecommendationReason> reasons,
+            LocalDateTime evaluatedAt
     ) {
-        BigDecimal baseScore = ZERO;
+        BigDecimal academicScore = ZERO;
 
         if (menteeProfile != null) {
             if (sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId())) {
-                baseScore = baseScore.add(SAME_PROGRAM_SCORE);
-                reasons.add("Cùng chương trình học");
+                academicScore = academicScore.add(SAME_PROGRAM_SCORE);
+                addReason(reasons, RecommendationReasonCode.SAME_PROGRAM);
             }
             if (sameUuid(menteeProfile.getSpecialization() == null ? null : menteeProfile.getSpecialization().getId(), candidate.specializationId())) {
-                baseScore = baseScore.add(SAME_SPECIALIZATION_SCORE);
-                reasons.add("Cùng chuyên ngành với mentee");
+                academicScore = academicScore.add(SAME_SPECIALIZATION_SCORE);
+                addReason(reasons, RecommendationReasonCode.SAME_SPECIALIZATION);
             }
             if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
-                baseScore = baseScore.add(SAME_CAMPUS_SCORE);
-                reasons.add("Cùng campus");
+                academicScore = academicScore.add(SAME_CAMPUS_SCORE);
+                addReason(reasons, RecommendationReasonCode.SAME_CAMPUS);
             }
             if (Boolean.TRUE.equals(candidate.alumni()) && shouldBoostAlumni(candidate, menteeFeatures)) {
-                baseScore = baseScore.add(MENTOR_ALUMNI_SCORE);
-                reasons.add("Mentor là cựu sinh viên");
+                academicScore = academicScore.add(MENTOR_ALUMNI_SCORE);
+                addReason(reasons, RecommendationReasonCode.MENTOR_ALUMNI);
             } else {
                 Integer menteeSemester = menteeProfile.getSemester();
                 Integer mentorSemester = candidate.semester();
                 if (menteeSemester != null && mentorSemester != null) {
                     if (mentorSemester > menteeSemester) {
-                        baseScore = baseScore.add(MENTOR_HIGHER_SEMESTER_SCORE);
-                        reasons.add("Mentor đi trước mentee về học kỳ");
+                        academicScore = academicScore.add(MENTOR_HIGHER_SEMESTER_SCORE);
+                        addReason(reasons, RecommendationReasonCode.HIGHER_SEMESTER);
                     } else if (mentorSemester.equals(menteeSemester)) {
-                        baseScore = baseScore.add(MENTOR_EQUAL_SEMESTER_SCORE);
-                        reasons.add("Mentor cùng học kỳ chuyên ngành với mentee");
+                        academicScore = academicScore.add(MENTOR_EQUAL_SEMESTER_SCORE);
+                        addReason(reasons, RecommendationReasonCode.SAME_SEMESTER);
                     }
                 }
             }
@@ -231,43 +251,60 @@ public class DiscoveryRankingService {
         int reviews = defaultInteger(candidate.reviewCount());
         int completedSessions = defaultInteger(candidate.completedSessions());
         if (rating.compareTo(BigDecimal.valueOf(4.5)) >= 0) {
-            reasons.add("Được đánh giá cao từ mentee");
+            addReason(reasons, RecommendationReasonCode.HIGH_RATING);
         }
         if (reviews >= 5) {
-            reasons.add("Có lượng đánh giá đủ tin cậy");
+            addReason(reasons, RecommendationReasonCode.TRUSTED_REVIEW_VOLUME);
         }
         if (completedSessions >= 10) {
-            reasons.add("Đã có kinh nghiệm mentoring thực tế");
+            addReason(reasons, RecommendationReasonCode.MENTORING_EXPERIENCE);
         }
         if (calculateAcceptanceRate(candidate).compareTo(decimal("0.80")) >= 0) {
-            reasons.add("Tỷ lệ chấp nhận yêu cầu ổn định");
+            addReason(reasons, RecommendationReasonCode.STABLE_ACCEPTANCE_RATE);
         }
         if (calculateNonCancellationRate(candidate).compareTo(decimal("0.90")) >= 0) {
-            reasons.add("Ít hủy lịch sau khi đã nhận");
+            addReason(reasons, RecommendationReasonCode.LOW_CANCELLATION_RATE);
         }
-        if (isRecentlyActive(candidate)) {
-            reasons.add("Hoạt động gần đây");
+        if (isRecentlyActive(candidate, evaluatedAt)) {
+            addReason(reasons, RecommendationReasonCode.RECENT_ACTIVITY);
         }
-        baseScore = baseScore.add(calculateSearchQualityScore(candidate));
-        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), reasons);
-        if (capabilityScore.compareTo(BigDecimal.ZERO) > 0) {
-            baseScore = baseScore.add(capabilityScore);
-        }
+        BigDecimal qualityScore = calculateSearchQualityScore(candidate, evaluatedAt);
+        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), reasons, evaluatedAt);
+        BigDecimal serviceScore = enrichedData.services().isEmpty()
+                ? ZERO
+                : serviceBonusScore(enrichedData.services().size());
+        BigDecimal availabilityScore = enrichedData.hasAvailability() ? HAS_AVAILABILITY_BONUS_SCORE : ZERO;
+        BigDecimal durationScore = enrichedData.hasPreferredDurationAvailability()
+                ? DURATION_PREFERENCE_MATCH_BONUS
+                : ZERO;
 
         if (!enrichedData.services().isEmpty()) {
-            baseScore = baseScore.add(serviceBonusScore(enrichedData.services().size()));
-            reasons.add("Có " + enrichedData.services().size() + " dịch vụ đang hoạt động");
+            addReason(reasons, RecommendationReasonCode.ACTIVE_SERVICES, enrichedData.services().size());
         }
         if (enrichedData.hasAvailability()) {
-            baseScore = baseScore.add(HAS_AVAILABILITY_BONUS_SCORE);
-            reasons.add("Có lịch rảnh khả dụng");
+            addReason(reasons, RecommendationReasonCode.HAS_AVAILABILITY);
         }
         if (enrichedData.hasPreferredDurationAvailability()) {
-            baseScore = baseScore.add(DURATION_PREFERENCE_MATCH_BONUS);
-            reasons.add("Có slot phù hợp đúng thời lượng mentee muốn book");
+            addReason(reasons, RecommendationReasonCode.PREFERRED_DURATION_AVAILABLE);
         }
 
-        return baseScore.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal totalRawScore = academicScore
+                .add(qualityScore)
+                .add(capabilityScore)
+                .add(serviceScore)
+                .add(availabilityScore)
+                .add(durationScore)
+                .setScale(2, RoundingMode.HALF_UP);
+        return new RecommendationScoreBreakdown(
+                academicScore,
+                qualityScore,
+                capabilityScore,
+                serviceScore,
+                availabilityScore,
+                durationScore,
+                totalRawScore,
+                ZERO
+        );
     }
 
     private BigDecimal calculateSearchScore(
@@ -275,7 +312,8 @@ public class DiscoveryRankingService {
             StudentProfile menteeProfile,
             MenteeMatchingFeatures menteeFeatures,
             String normalizedKeyword,
-            MentorEnrichedData enrichedData
+            MentorEnrichedData enrichedData,
+            LocalDateTime evaluatedAt
     ) {
         BigDecimal extraBonus = ZERO;
         if (!enrichedData.services().isEmpty()) {
@@ -291,8 +329,8 @@ public class DiscoveryRankingService {
         List<String> tokens = keywordSupport.tokenizeSearchText(normalizedKeyword);
         if (tokens.isEmpty()) {
             return calculatePersonalizationScore(row, menteeProfile, menteeFeatures)
-                    .add(calculateSearchQualityScore(row))
-                    .add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null))
+                    .add(calculateSearchQualityScore(row, evaluatedAt))
+                    .add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt))
                     .add(extraBonus)
                     .setScale(2, RoundingMode.HALF_UP);
         }
@@ -384,10 +422,9 @@ public class DiscoveryRankingService {
         }
 
         if (row.verifiedAt() != null) {
-            LocalDateTime now = currentTime();
-            if (row.verifiedAt().isAfter(now.minusDays(7))) {
+            if (row.verifiedAt().isAfter(evaluatedAt.minusDays(7))) {
                 score = score.add(VERIFIED_RECENT_7D_BONUS);
-            } else if (row.verifiedAt().isAfter(now.minusDays(30))) {
+            } else if (row.verifiedAt().isAfter(evaluatedAt.minusDays(30))) {
                 score = score.add(VERIFIED_RECENT_30D_BONUS);
             }
         }
@@ -400,8 +437,8 @@ public class DiscoveryRankingService {
         }
 
         score = score.add(calculatePersonalizationScore(row, menteeProfile, menteeFeatures));
-        score = score.add(calculateSearchQualityScore(row));
-        score = score.add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null));
+        score = score.add(calculateSearchQualityScore(row, evaluatedAt));
+        score = score.add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt));
         score = score.add(extraBonus);
         return score.setScale(2, RoundingMode.HALF_UP);
     }
@@ -412,7 +449,8 @@ public class DiscoveryRankingService {
             MenteeMatchingFeatures menteeFeatures,
             List<MentorTagResponse> helpTopics,
             List<MentorSubjectResultResponse> subjectResults,
-            List<String> reasons
+            List<RecommendationReason> reasons,
+            LocalDateTime evaluatedAt
     ) {
         if (menteeFeatures == null || !menteeFeatures.hasAnySignal()) {
             return ZERO;
@@ -427,23 +465,23 @@ public class DiscoveryRankingService {
                 && hasSubjectMatchSignal(candidate, menteeProfile, helpTopics, subjectResults)
                 && (defaultInteger(candidate.foundationSupportLevel()) >= 3 || defaultInteger(candidate.outputReviewSupportLevel()) >= 3)) {
             score = score.add(MENTOR_FIT_SUBJECT_BONUS);
-            addReason(reasons, "Khớp kiểu mentor mạnh đúng phần đang cần");
+            addReason(reasons, RecommendationReasonCode.SUBJECT_FIT);
         }
         if ("MENTOR_FIT_RECENT_ALUMNI".equals(mentorFitCode) && Boolean.TRUE.equals(candidate.alumni())) {
             score = score.add(MENTOR_FIT_ALUMNI_BONUS);
-            addReason(reasons, "Khớp nhu cầu góc nhìn alumni/OJT");
+            addReason(reasons, RecommendationReasonCode.ALUMNI_OJT_FIT);
         }
         if ("MENTOR_FIT_SIMILAR_EXPERIENCE".equals(mentorFitCode) && defaultInteger(candidate.completedSessions()) > 0) {
             score = score.add(decimal("8.00"));
-            addReason(reasons, "Mentor đã có trải nghiệm mentoring thực tế");
+            addReason(reasons, RecommendationReasonCode.SIMILAR_MENTORING_EXPERIENCE);
         }
         if (score.compareTo(BigDecimal.ZERO) > 0) {
-            addReason(reasons, "Khớp nhu cầu mentoring đã khai báo");
+            addReason(reasons, RecommendationReasonCode.DECLARED_NEEDS_MATCH);
         }
-        return applyMatchingRecencyMultiplier(score, menteeFeatures).setScale(2, RoundingMode.HALF_UP);
+        return applyMatchingRecencyMultiplier(score, menteeFeatures, evaluatedAt).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateMaxCapabilityScore(MenteeMatchingFeatures menteeFeatures) {
+    private BigDecimal calculateMaxCapabilityScore(MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
         if (menteeFeatures == null || !menteeFeatures.hasAnySignal()) {
             return ZERO;
         }
@@ -465,7 +503,7 @@ public class DiscoveryRankingService {
             maxScore = maxScore.add(decimal("8.00"));
         }
         
-        return applyMatchingRecencyMultiplier(maxScore, menteeFeatures).setScale(2, RoundingMode.HALF_UP);
+        return applyMatchingRecencyMultiplier(maxScore, menteeFeatures, evaluatedAt).setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculatePersonalizationScore(
@@ -503,7 +541,7 @@ public class DiscoveryRankingService {
         return baseScore;
     }
 
-    private BigDecimal calculateSearchQualityScore(MentorDiscoveryQueryRow row) {
+    private BigDecimal calculateSearchQualityScore(MentorDiscoveryQueryRow row, LocalDateTime evaluatedAt) {
         BigDecimal score = ZERO;
         BigDecimal rating = defaultDecimal(row.ratingAverage());
         int reviews = defaultInteger(row.reviewCount());
@@ -512,12 +550,12 @@ public class DiscoveryRankingService {
         score = score.add(calculateBayesianRating(rating, reviews).multiply(RATING_QUALITY_MULTIPLIER));
         score = score.add(boundedLogScore(reviews, 10, MAX_REVIEW_VOLUME_SCORE));
         score = score.add(boundedLogScore(completedSessions, 50, MAX_SESSION_VOLUME_SCORE));
-        score = score.add(calculateBehaviorScore(row));
+        score = score.add(calculateBehaviorScore(row, evaluatedAt));
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures) {
-        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount, hasDurationPreference, menteeFeatures);
+    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
+        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount, hasDurationPreference, menteeFeatures, evaluatedAt);
         maxScore = maxScore.max(BigDecimal.ONE);
 
         BigDecimal percentage = rawScore.multiply(BigDecimal.valueOf(100))
@@ -531,13 +569,13 @@ public class DiscoveryRankingService {
         return percentage;
     }
 
-    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures) {
+    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
         int tokenCount = keywordSupport.tokenizeSearchText(normalizedKeyword).size();
         int cappedServiceCount = Math.min(Math.max(activeServiceCount, 0), MAX_SEARCH_SERVICE_BONUS_COUNT);
 
         BigDecimal maxScore = MAX_SEARCH_PERSONALIZATION_SCORE
                 .add(MAX_SEARCH_QUALITY_SCORE)
-                .add(calculateMaxCapabilityScore(menteeFeatures))
+                .add(calculateMaxCapabilityScore(menteeFeatures, evaluatedAt))
                 .add(serviceBonusScore(cappedServiceCount))
                 .add(HAS_AVAILABILITY_BONUS_SCORE);
         if (hasDurationPreference) {
@@ -563,22 +601,21 @@ public class DiscoveryRankingService {
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateBehaviorScore(MentorDiscoveryQueryRow row) {
+    private BigDecimal calculateBehaviorScore(MentorDiscoveryQueryRow row, LocalDateTime evaluatedAt) {
         BigDecimal score = ZERO;
         score = score.add(calculateAcceptanceRate(row).multiply(MAX_ACCEPTANCE_RATE_SCORE));
         score = score.add(calculateNonCancellationRate(row).multiply(MAX_CANCELLATION_RELIABILITY_SCORE));
 
         if (row.lastActiveAt() != null) {
-            LocalDateTime now = currentTime();
-            if (!row.lastActiveAt().isBefore(now.minusDays(14))) {
+            if (!row.lastActiveAt().isBefore(evaluatedAt.minusDays(14))) {
                 score = score.add(RECENT_ACTIVITY_14D_BONUS);
-            } else if (!row.lastActiveAt().isBefore(now.minusDays(30))) {
+            } else if (!row.lastActiveAt().isBefore(evaluatedAt.minusDays(30))) {
                 score = score.add(RECENT_ACTIVITY_30D_BONUS);
             }
         }
 
         if (row.verifiedAt() != null
-                && row.verifiedAt().isAfter(currentTime().minusDays(14))
+                && row.verifiedAt().isAfter(evaluatedAt.minusDays(14))
                 && defaultInteger(row.completedSessions()) <= 3
                 && defaultInteger(row.reviewCount()) <= 2) {
             score = score.add(COLD_START_VERIFIED_BONUS);
@@ -587,15 +624,15 @@ public class DiscoveryRankingService {
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal applyMatchingRecencyMultiplier(BigDecimal score, MenteeMatchingFeatures menteeFeatures) {
+    private BigDecimal applyMatchingRecencyMultiplier(BigDecimal score, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
         if (score == null || menteeFeatures == null || menteeFeatures.latestAnsweredAt() == null) {
             return score == null ? ZERO : score;
         }
         LocalDateTime latestAnsweredAt = menteeFeatures.latestAnsweredAt();
-        if (latestAnsweredAt.isBefore(currentTime().minusDays(90))) {
+        if (latestAnsweredAt.isBefore(evaluatedAt.minusDays(90))) {
             return score.multiply(STALE_MATCHING_90D_MULTIPLIER);
         }
-        if (latestAnsweredAt.isBefore(currentTime().minusDays(30))) {
+        if (latestAnsweredAt.isBefore(evaluatedAt.minusDays(30))) {
             return score.multiply(STALE_MATCHING_30D_MULTIPLIER);
         }
         return score;
@@ -623,10 +660,10 @@ public class DiscoveryRankingService {
         );
     }
 
-    private boolean isRecentlyActive(MentorDiscoveryQueryRow row) {
+    private boolean isRecentlyActive(MentorDiscoveryQueryRow row, LocalDateTime evaluatedAt) {
         return row != null
                 && row.lastActiveAt() != null
-                && !row.lastActiveAt().isBefore(currentTime().minusDays(30));
+                && !row.lastActiveAt().isBefore(evaluatedAt.minusDays(30));
     }
 
     private int countTokenMatches(List<String> fields, List<String> tokens) {
@@ -703,9 +740,15 @@ public class DiscoveryRankingService {
         return CAPABILITY_MATCH_MULTIPLIER.multiply(BigDecimal.valueOf(aligned)).setScale(2, RoundingMode.HALF_UP);
     }
 
-    private void addReason(List<String> reasons, String reason) {
-        if (reasons != null && reason != null && reasons.stream().noneMatch(reason::equals)) {
-            reasons.add(reason);
+    private void addReason(List<RecommendationReason> reasons, RecommendationReasonCode code) {
+        if (reasons != null && code != null && reasons.stream().noneMatch(reason -> reason.code() == code)) {
+            reasons.add(RecommendationReason.of(code));
+        }
+    }
+
+    private void addReason(List<RecommendationReason> reasons, RecommendationReasonCode code, int count) {
+        if (reasons != null && code != null && reasons.stream().noneMatch(reason -> reason.code() == code)) {
+            reasons.add(RecommendationReason.counted(code, count));
         }
     }
 
@@ -764,9 +807,6 @@ public class DiscoveryRankingService {
         return value == null ? 0 : value;
     }
 
-    private static LocalDateTime currentTime() {
-        return LocalDateTime.now(APP_ZONE);
-    }
 
     private static BigDecimal decimal(int value) {
         return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
@@ -786,7 +826,11 @@ public class DiscoveryRankingService {
 
     public record RecommendationScore(
             BigDecimal matchScore,
-            List<String> matchReasons
+            List<String> matchReasons,
+            RecommendationScoreBreakdown breakdown
     ) {
+        public RecommendationScore(BigDecimal matchScore, List<String> matchReasons) {
+            this(matchScore, matchReasons, RecommendationScoreBreakdown.empty());
+        }
     }
 }

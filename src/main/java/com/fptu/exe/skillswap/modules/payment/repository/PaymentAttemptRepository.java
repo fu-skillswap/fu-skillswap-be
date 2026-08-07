@@ -21,6 +21,10 @@ public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, 
     Optional<PaymentAttempt> findByProviderOrderCode(String providerOrderCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select pa from PaymentAttempt pa where pa.id = :id")
+    Optional<PaymentAttempt> findByIdForUpdate(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select pa from PaymentAttempt pa where pa.providerOrderCode = :providerOrderCode")
     Optional<PaymentAttempt> findByProviderOrderCodeForUpdate(@Param("providerOrderCode") String providerOrderCode);
 

@@ -325,6 +325,39 @@ class ConversationServiceUnitTest {
     }
 
     @Test
+    void buildChatMessageDeliveries_shouldExposePersistedSequence() {
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder().id(conversationId).type(ConversationType.DIRECT).build();
+        User sender = new User();
+        sender.setId(senderId);
+        sender.setFullName("Sender");
+        Message message = Message.builder()
+                .id(messageId)
+                .conversation(conversation)
+                .sender(sender)
+                .sequence(42L)
+                .content("Ordered message")
+                .createdAt(LocalDateTime.now())
+                .build();
+        User recipient = new User();
+        recipient.setId(UUID.randomUUID());
+
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                ConversationParticipant.builder().conversation(conversation).user(sender).build(),
+                ConversationParticipant.builder().conversation(conversation).user(recipient).build()
+        ));
+
+        var deliveries = conversationService.buildChatMessageDeliveries(conversationId, messageId, senderId);
+
+        assertEquals(1, deliveries.size());
+        assertEquals(42L, deliveries.getFirst().event().sequence());
+    }
+
+    @Test
     void getConversationDetail_shouldReturnDetail_whenUserIsParticipant() {
         UUID conversationId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();

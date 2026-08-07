@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- V84__course_subsystem_production_hardening.sql
 
 -- 1. Modify bunny_webhook_events

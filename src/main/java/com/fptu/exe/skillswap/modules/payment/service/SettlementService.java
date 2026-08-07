@@ -147,6 +147,61 @@ public class SettlementService {
         paymentOrderRepository.save(paymentOrder);
     }
 
+    /**
+     * Releases one immutable course-session allocation. The allocation UUID, not the course or
+     * enrollment UUID, is the ledger source so repeated scheduler runs cannot merge sessions.
+     */
+    @Transactional
+    public void releaseCourseAllocation(UUID mentorUserId,
+                                        UUID allocationId,
+                                        int mentorPayoutScoin,
+                                        int platformRevenueScoin,
+                                        int basePriceScoin,
+                                        int buyerFeeScoin,
+                                        int mentorCommissionScoin,
+                                        String operationKey) {
+        if (mentorUserId == null || allocationId == null || operationKey == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Course settlement release thiếu định danh bắt buộc");
+        }
+        SettlementAccount mentorAccount = lockMentorAccount(mentorUserId);
+        SettlementAccount platformAccount = lockPlatformAccount();
+        if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                mentorAccount.getId(), LedgerSourceType.COURSE_ENROLLMENT, allocationId, SettlementEntryType.RELEASE
+        ).isPresent()) {
+            return;
+        }
+        int mentorPayout = Math.max(0, mentorPayoutScoin);
+        int platformRevenue = Math.max(0, platformRevenueScoin);
+        // Commission is part of the base price, while the buyer fee is charged on top.
+        int gross = Math.addExact(Math.max(0, basePriceScoin), Math.max(0, buyerFeeScoin));
+        settlementAccountRepository.addBalance(mentorAccount.getId(), java.math.BigDecimal.valueOf(mentorPayout));
+        settlementEntryRepository.save(SettlementEntry.builder()
+                .accountId(mentorAccount.getId())
+                .entryType(SettlementEntryType.RELEASE)
+                .sourceType(LedgerSourceType.COURSE_ENROLLMENT)
+                .sourceId(allocationId)
+                .amountScoin(mentorPayout)
+                .balanceEffectScoin(mentorPayout)
+                .grossScoin(gross)
+                .commissionScoin(Math.max(0, mentorCommissionScoin))
+                .mentorNetScoin(mentorPayout)
+                .memo("Course session allocation release " + operationKey)
+                .build());
+        settlementAccountRepository.addBalance(platformAccount.getId(), java.math.BigDecimal.valueOf(platformRevenue));
+        settlementEntryRepository.save(SettlementEntry.builder()
+                .accountId(platformAccount.getId())
+                .entryType(SettlementEntryType.COMMISSION)
+                .sourceType(LedgerSourceType.COURSE_ENROLLMENT)
+                .sourceId(allocationId)
+                .amountScoin(platformRevenue)
+                .balanceEffectScoin(platformRevenue)
+                .grossScoin(gross)
+                .commissionScoin(Math.max(0, mentorCommissionScoin))
+                .mentorNetScoin(mentorPayout)
+                .memo("Course platform revenue " + operationKey)
+                .build());
+    }
+
     /** Full refund used only for the resolved mentor no-show path. */
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
@@ -221,6 +276,11 @@ public class SettlementService {
                     grossScoin,
                     "Full refund for early mentee cancellation of booking " + booking.getId()
             );
+            paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
+            paymentOrder.setRefundedAt(DateTimeUtil.now());
+            paymentOrder.setRefundedScoin(grossScoin);
+            paymentOrder.setRefundReason("EARLY_MENTEE_CANCELLATION");
+            paymentOrderRepository.save(paymentOrder);
             return;
         }
 
@@ -275,6 +335,11 @@ public class SettlementService {
                     .memo("Platform commission from late mentee cancellation of booking " + booking.getId())
                     .build());
         }
+        paymentOrder.setSettlementStatus(PaymentSettlementStatus.PARTIALLY_SETTLED);
+        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedScoin(refundShare);
+        paymentOrder.setRefundReason("LATE_MENTEE_CANCELLATION");
+        paymentOrderRepository.save(paymentOrder);
     }
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
@@ -313,6 +378,11 @@ public class SettlementService {
                 grossScoin,
                 "Full refund because mentor cancelled booking " + booking.getId()
         );
+        paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
+        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedScoin(grossScoin);
+        paymentOrder.setRefundReason("MENTOR_CANCELLATION");
+        paymentOrderRepository.save(paymentOrder);
     }
 
     @Transactional(readOnly = true)

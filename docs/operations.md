@@ -12,7 +12,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml
 ```
 
 PostgreSQL and the backend bind only to loopback. The host reverse proxy owns
-public HTTP/HTTPS access. RabbitMQ is not publicly exposed.
+public HTTP/HTTPS access. RabbitMQ is not publicly exposed. It runs the STOMP
+plugin for browser WebSocket relay and the durable realtime fanout queues only;
+email, Google Calendar, Bunny and payment workers remain PostgreSQL-backed jobs.
 
 ## First setup
 
@@ -28,6 +30,11 @@ public HTTP/HTTPS access. RabbitMQ is not publicly exposed.
 The production `.env` must provide database, RabbitMQ, JWT, cursor encryption,
 CORS and other enabled-provider values. `APP_IMAGE` is injected by CI and must
 always be an immutable SHA image, never `latest`.
+
+For the full launch, keep `REALTIME_OUTBOX_ENABLED=true` and
+`WEBSOCKET_STOMP_ENABLED=true` together. Compose mounts
+`ops/rabbitmq/enabled_plugins`, which enables `rabbitmq_stomp`; the RabbitMQ
+healthcheck verifies both the broker and the plugin before the backend starts.
 
 ## Release path
 

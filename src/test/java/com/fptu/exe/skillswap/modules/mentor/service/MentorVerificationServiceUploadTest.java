@@ -123,7 +123,7 @@ class MentorVerificationServiceUploadTest {
         lenient().when(storageGateway.headObject(any())).thenAnswer(invocation -> {
             String key = invocation.getArgument(0);
             String ct = key != null && key.toLowerCase().endsWith(".jpg") ? "image/jpeg" : "image/jpeg";
-            return new StorageGateway.ObjectMetadata(key, ct, 123L);
+            return new StorageGateway.ObjectMetadata(key, ct, 123L, java.util.Collections.emptyMap());
         });
 
         service = new MentorVerificationService(

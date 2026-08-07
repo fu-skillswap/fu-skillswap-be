@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Expiry;
 import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
-import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
@@ -62,7 +61,7 @@ public class InMemoryRateLimitService {
         RateLimitBucket bucket = cache.getIfPresent(cacheKey);
         if (bucket == null && resolvedScope == RateLimitScope.SECURITY
                 && cache.estimatedSize() >= maximumSizes.get(resolvedScope)) {
-            reject(resolvedScope, limit, message);
+            reject(resolvedScope, limit, message, retryAfterSeconds(expireAtEpochMilli));
         }
         if (bucket == null) {
             bucket = cache.get(cacheKey, k -> new RateLimitBucket(new AtomicInteger(0), expireAtEpochMilli));
@@ -70,7 +69,7 @@ public class InMemoryRateLimitService {
         int currentCount = bucket.getCount().incrementAndGet();
 
         if (currentCount > limit) {
-            reject(resolvedScope, limit, message);
+            reject(resolvedScope, limit, message, retryAfterSeconds(bucket.getExpireAtEpochMilli()));
         }
     }
 
@@ -105,14 +104,19 @@ public class InMemoryRateLimitService {
         };
     }
 
-    private void reject(RateLimitScope scope, int limit, String message) {
+    private long retryAfterSeconds(long expireAtEpochMilli) {
+        long remainingMillis = Math.max(1, expireAtEpochMilli - System.currentTimeMillis());
+        return (remainingMillis + 999) / 1_000;
+    }
+
+    private void reject(RateLimitScope scope, int limit, String message, long retryAfterSeconds) {
         meterRegistry.counter("rate_limit_blocked_total", "scope", scope.name().toLowerCase()).increment();
         if (blockLogWindows.asMap().putIfAbsent(scope, Boolean.TRUE) == null) {
             log.warn("Rate limit is blocking requests in scope={}; limit={}", scope, limit);
         }
-        throw new BaseException(
-                ErrorCode.TOO_MANY_REQUESTS,
-                message == null || message.isBlank() ? ErrorCode.TOO_MANY_REQUESTS.getMessage() : message
+        throw new RateLimitExceededException(
+                message == null || message.isBlank() ? ErrorCode.TOO_MANY_REQUESTS.getMessage() : message,
+                retryAfterSeconds
         );
     }
 

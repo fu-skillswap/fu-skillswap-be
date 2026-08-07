@@ -9,6 +9,7 @@ public final class DomainEventOutboxEventTypes {
     public static final String NOTIFICATION_BADGE_UPDATED = "notification.badge.updated";
 
     public static final String COURSE_MATERIAL_DELETE_REQUESTED = "course.material.delete_requested";
+    public static final String COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED = "course.material.upload_initialization_requested";
 
     private DomainEventOutboxEventTypes() {
     }

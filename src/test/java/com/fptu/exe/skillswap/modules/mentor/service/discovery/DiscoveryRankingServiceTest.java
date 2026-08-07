@@ -91,7 +91,8 @@ class DiscoveryRankingServiceTest {
                 studentProfile,
                 new MenteeMatchingFeatures(4, 2, 2, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now()),
                 "spring boot",
-                Map.of(MENTOR_A, strongData, MENTOR_B, weakData)
+                Map.of(MENTOR_A, strongData, MENTOR_B, weakData),
+                LocalDateTime.now()
         );
 
         assertEquals(MENTOR_A, ranked.getFirst().row().mentorUserId());
@@ -107,13 +108,15 @@ class DiscoveryRankingServiceTest {
                 alumni,
                 MentorEnrichedData.empty(),
                 studentProfile,
-                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now())
+                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now()),
+                LocalDateTime.now()
         );
         DiscoveryRankingService.RecommendationScore nonAlumniScore = rankingService.scoreRecommendation(
                 nonAlumni,
                 MentorEnrichedData.empty(),
                 studentProfile,
-                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now())
+                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now()),
+                LocalDateTime.now()
         );
 
         assertTrue(alumniScore.matchScore().compareTo(nonAlumniScore.matchScore()) > 0);
@@ -127,13 +130,15 @@ class DiscoveryRankingServiceTest {
                 candidate,
                 MentorEnrichedData.empty(),
                 studentProfile,
-                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(5))
+                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(5)),
+                LocalDateTime.now()
         );
         DiscoveryRankingService.RecommendationScore stale = rankingService.scoreRecommendation(
                 candidate,
                 MentorEnrichedData.empty(),
                 studentProfile,
-                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(120))
+                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(120)),
+                LocalDateTime.now()
         );
 
         assertTrue(recent.matchScore().compareTo(stale.matchScore()) > 0);

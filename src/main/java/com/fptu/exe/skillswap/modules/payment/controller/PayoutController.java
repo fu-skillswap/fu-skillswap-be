@@ -10,6 +10,8 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
+import com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -31,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 
 @RestController
 @RequiredArgsConstructor
@@ -40,6 +43,7 @@ import java.util.UUID;
 public class PayoutController {
 
     private final PayoutService payoutService;
+    private final InMemoryRateLimitService rateLimitService;
 
     @Operation(summary = "Tạo payout request", description = "Mentor tạo yêu cầu rút settlement balance đang có.")
     @PreAuthorize("hasRole('MENTOR')")
@@ -49,6 +53,13 @@ public class PayoutController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PayoutRequestCreateRequest request) {
         ensureAuthenticated(principal);
+        rateLimitService.check(
+                RateLimitScope.SECURITY,
+                "payment:payout-request:" + principal.getPublicId(),
+                3,
+                Duration.ofHours(1),
+                "Bạn đang tạo yêu cầu rút tiền quá nhanh, vui lòng thử lại sau"
+        );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(payoutService.createRequest(principal.getPublicId(), request)));
     }
 

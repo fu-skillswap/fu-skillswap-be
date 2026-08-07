@@ -48,7 +48,7 @@ Tất cả API business dùng `ApiResponse<T>`:
 | 413 | Payload quá lớn | Bảo user giảm kích thước file/body |
 | 415 | Unsupported media type | Sửa content type |
 | 422 | Reserved for semantic validation when a runtime endpoint explicitly emits `UNPROCESSABLE_ENTITY` | Hiện chưa có flow public nào phát mã này; không hard-code UX riêng trước khi endpoint dùng nó |
-| 429 | Thao tác quá nhanh | Backoff và retry sau |
+| 429 | Thao tác quá nhanh | Đọc `Retry-After` và `retryAfterSeconds`, chờ đúng thời gian rồi mới retry |
 | 500 | Lỗi hệ thống | Show fallback, retry có kiểm soát |
 
 ## Deploy And Network Recovery
@@ -122,7 +122,9 @@ Tất cả API business dùng `ApiResponse<T>`:
 - `401`
   - refresh 1 lần, không loop vô hạn
 - `429`
-  - backoff
+  - Backend trả HTTP header `Retry-After` (giây) và top-level body field `retryAfterSeconds`.
+  - Disable action/countdown theo giá trị này; không dùng retry loop thay thế khi giá trị đã có.
+  - Retry sau countdown nếu action idempotent hoặc user chủ động bấm lại.
 - `409`
   - refresh data rồi thử lại nếu business cho phép
 - `500`

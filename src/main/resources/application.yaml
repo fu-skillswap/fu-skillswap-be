@@ -225,6 +225,14 @@ application:
     documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}}
     presigned-ttl-minutes: ${STORAGE_PRESIGNED_TTL_MINUTES:15}
     allowed-content-types: ${STORAGE_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,application/pdf}
+    lifecycle:
+      cleanup-enabled: ${STORAGE_LIFECYCLE_CLEANUP_ENABLED:true}
+      archive-enabled: ${STORAGE_LIFECYCLE_ARCHIVE_ENABLED:true}
+      email-outbox-retention-days: ${STORAGE_LIFECYCLE_EMAIL_OUTBOX_RETENTION_DAYS:7}
+      course-outbox-retention-days: ${STORAGE_LIFECYCLE_COURSE_OUTBOX_RETENTION_DAYS:7}
+      bunny-webhook-retention-days: ${STORAGE_LIFECYCLE_BUNNY_WEBHOOK_RETENTION_DAYS:7}
+      internal-telemetry-retention-days: ${STORAGE_LIFECYCLE_TELEMETRY_RETENTION_DAYS:14}
+      audit-log-retention-days: ${STORAGE_LIFECYCLE_AUDIT_LOG_RETENTION_DAYS:90}
   system-admin:
     emails: ${SYSTEM_ADMIN_EMAILS:}
   mentor-verification:

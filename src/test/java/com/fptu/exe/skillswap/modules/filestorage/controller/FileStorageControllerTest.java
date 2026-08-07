@@ -17,6 +17,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.web.multipart.MultipartFile;
+
 class FileStorageControllerTest {
 
     @Test
@@ -35,6 +40,31 @@ class FileStorageControllerTest {
         assertThatThrownBy(() -> controller.getUploadUrl(principal, "proof.png", "image/png"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404 NOT_FOUND");
+    }
+
+    @Test
+    void getUploadUrl_FailsFast_WhenStorageGatewayIsMissing() {
+        ObjectProvider<StorageGateway> storageGatewayProvider = mockStorageGatewayProvider(null);
+        StorageProperties storageProperties = new StorageProperties();
+        storageProperties.setAllowedContentTypes(List.of("text/plain"));
+        Environment environment = mock(Environment.class);
+        // Pretend we bypassed the local profile check or we are on local profile but S3 is not configured
+        when(environment.matchesProfiles("local")).thenReturn(true);
+        FileStorageController controller = new FileStorageController(
+                storageGatewayProvider,
+                storageProperties,
+                environment
+        );
+
+        UserPrincipal principal = UserPrincipal.create(UUID.randomUUID(), "user@test.com", List.of(RoleCode.MENTEE));
+
+        assertThatThrownBy(() -> controller.getUploadUrl(principal, "test.txt", "text/plain"))
+                .isInstanceOf(BaseException.class)
+                .satisfies(e -> {
+                    BaseException ex = (BaseException) e;
+                    assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.STORAGE_ERROR);
+                    assertThat(ex.getMessage()).isEqualTo("Hệ thống chưa cấu hình storage để upload file");
+                });
     }
 
     @SuppressWarnings("unchecked")

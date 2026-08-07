@@ -280,6 +280,21 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             LocalDateTime pendingExpireAt
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking from Booking booking
+            join fetch booking.mentee
+            join fetch booking.mentorProfile
+            left join fetch booking.slot
+            where booking.status = :status
+              and booking.pendingExpireAt <= :pendingExpireAt
+            order by booking.pendingExpireAt asc, booking.id asc
+            """)
+    List<Booking> findPendingExpiryCandidatesForUpdate(
+            @Param("status") BookingStatus status,
+            @Param("pendingExpireAt") LocalDateTime pendingExpireAt
+    );
+
     @Query("""
             select booking
             from Booking booking

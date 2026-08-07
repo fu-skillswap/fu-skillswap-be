@@ -101,7 +101,7 @@ public class BookingLifecycleMaintenanceService {
     @Transactional
     public int expireStalePendingBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        List<Booking> staleBookings = bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
+        List<Booking> staleBookings = bookingRepository.findPendingExpiryCandidatesForUpdate(
                 BookingStatus.PENDING, now);
         if (staleBookings.isEmpty()) {
             return 0;

@@ -75,6 +75,9 @@ public class BunnyWebhookEvent {
     @Column(name = "processed_at")
     private Instant processedAt;
 
+    @Column(name = "processing_started_at")
+    private Instant processingStartedAt;
+
     @Version
     @Column(nullable = false)
     @Builder.Default

@@ -9,6 +9,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.core.MessagePostProcessor;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.time.LocalDateTime;
@@ -20,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -39,6 +42,7 @@ class DomainEventOutboxPublisherSchedulerTest {
     @BeforeEach
     void setUp() {
         when(properties.getExchange()).thenReturn("skillswap.domain-events");
+        lenient().when(properties.getPublisherConfirmTimeoutMs()).thenReturn(100L);
     }
 
     @Test
@@ -53,6 +57,7 @@ class DomainEventOutboxPublisherSchedulerTest {
                 .status(DomainEventOutboxStatus.PENDING)
                 .build();
         when(txHelper.reserveNextBatch(100)).thenReturn(List.of(outbox));
+        acknowledgePublish();
 
         boolean hadWork = scheduler.pollAndPublishPendingEvents();
         assertTrue(hadWork);
@@ -61,7 +66,8 @@ class DomainEventOutboxPublisherSchedulerTest {
                 eq("skillswap.domain-events"),
                 eq(DomainEventOutboxEventTypes.CHAT_MESSAGE_CREATED),
                 eq(outbox.getPayloadJson()),
-                any(MessagePostProcessor.class)
+                any(MessagePostProcessor.class),
+                any(CorrelationData.class)
         );
         verify(txHelper).markAsPublished(outbox.getId());
     }
@@ -84,12 +90,47 @@ class DomainEventOutboxPublisherSchedulerTest {
                         eq("skillswap.domain-events"),
                         eq(DomainEventOutboxEventTypes.NOTIFICATION_CREATED),
                         any(String.class),
-                        any(MessagePostProcessor.class)
+                        any(MessagePostProcessor.class),
+                        any(CorrelationData.class)
                 );
 
         boolean hadWork = scheduler.pollAndPublishPendingEvents();
         assertTrue(hadWork);
 
         verify(txHelper).handlePublishFailure(outbox.getId(), 0, "broker unavailable");
+    }
+
+    @Test
+    void publishPendingEvents_shouldRetryWhenBrokerNacks() {
+        DomainEventOutbox outbox = DomainEventOutbox.builder()
+                .id(UUID.randomUUID())
+                .aggregateType("CONVERSATION")
+                .aggregateId(UUID.randomUUID())
+                .eventType(DomainEventOutboxEventTypes.CHAT_MESSAGE_CREATED)
+                .payloadJson("{\"messageId\":\"1\"}")
+                .availableAt(LocalDateTime.now().minusMinutes(1))
+                .status(DomainEventOutboxStatus.PENDING)
+                .attemptCount(2)
+                .build();
+        when(txHelper.reserveNextBatch(100)).thenReturn(List.of(outbox));
+        doAnswer(invocation -> {
+            CorrelationData correlation = invocation.getArgument(4);
+            correlation.getFuture().complete(new CorrelationData.Confirm(false, "queue unavailable"));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                any(String.class), any(String.class), any(String.class), any(MessagePostProcessor.class), any(CorrelationData.class));
+
+        scheduler.pollAndPublishPendingEvents();
+
+        verify(txHelper).handlePublishFailure(outbox.getId(), 2, "Rabbit broker rejected event: queue unavailable");
+    }
+
+    private void acknowledgePublish() {
+        doAnswer(invocation -> {
+            CorrelationData correlation = invocation.getArgument(4);
+            correlation.getFuture().complete(new CorrelationData.Confirm(true, null));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(
+                any(String.class), any(String.class), any(String.class), any(MessagePostProcessor.class), any(CorrelationData.class));
     }
 }

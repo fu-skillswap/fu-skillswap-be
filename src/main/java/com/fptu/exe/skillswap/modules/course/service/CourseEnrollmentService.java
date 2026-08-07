@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -56,24 +57,26 @@ public class CourseEnrollmentService {
         int platformRevenueFromMentor = (int) Math.round(basePrice * MENTOR_FEE_RATE);
         int mentorPayout = basePrice - platformRevenueFromMentor;
 
-        // Process Wallet Deduction (Reserve and consume immediately for direct enrollment)
-        // For course, we will just reserve and immediately consume for simplicity
+        // Allocate the immutable financial identity before touching the wallet. Course IDs are
+        // shared by every learner and therefore cannot be ledger source IDs.
+        UUID enrollmentId = UuidUtil.generateUuidV7();
         creditLedgerService.reserveCredit(
             studentUserId, 
             totalPaid, 
             LedgerSourceType.COURSE_ENROLLMENT, 
-            courseId, 
+            enrollmentId,
             java.util.List.of(CreditOriginType.values()), // All origins allowed
             "Course Enrollment Reservation: " + course.getTitle()
         );
         creditLedgerService.consumeReservedCredit(
             studentUserId,
             LedgerSourceType.COURSE_ENROLLMENT,
-            courseId,
+            enrollmentId,
             "Course Enrollment Deduction: " + course.getTitle()
         );
 
         CourseEnrollment enrollment = CourseEnrollment.builder()
+                .id(enrollmentId)
                 .course(course)
                 .studentUserId(studentUserId)
                 .basePriceScoin(basePrice)

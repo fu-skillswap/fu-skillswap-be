@@ -2,7 +2,11 @@ package com.fptu.exe.skillswap.modules.course.repository;
 
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
 import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -23,4 +27,8 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
     List<CourseEnrollment> findByStatusAndSeatReservedUntilBefore(EnrollmentStatus status, Instant now);
     
     Optional<CourseEnrollment> findByPaymentOrderId(UUID paymentOrderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select enrollment from CourseEnrollment enrollment where enrollment.id = :id")
+    Optional<CourseEnrollment> findByIdForUpdate(@Param("id") UUID id);
 }
