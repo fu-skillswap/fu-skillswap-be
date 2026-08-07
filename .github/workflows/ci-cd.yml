@@ -86,7 +86,6 @@ jobs:
 
     - name: Validate release scripts and compose topology
       run: |
-        chmod +x ops/*.sh scripts/verify-migration-policy.sh
         set +e
         REQUIRE_CLEAN_WORKTREE=true sh ops/release-preflight.sh
         preflight_status=$?
