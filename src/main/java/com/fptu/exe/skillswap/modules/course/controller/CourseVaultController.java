@@ -17,16 +17,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
+@Tag(name = "Course Vault", description = "Endpoints for managing course materials and videos")
 public class CourseVaultController {
 
     private final CourseVaultService courseVaultService;
 
+    @Operation(summary = "Initialize video upload for a course")
     @PostMapping("/me/mentor/courses/{courseId}/materials/video/create-upload")
     public ApiResponse<CourseVideoUploadInitResponse> createVideoUpload(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -37,6 +41,7 @@ public class CourseVaultController {
         return ApiResponse.success(response);
     }
 
+    @Operation(summary = "Get materials for a course")
     @GetMapping("/me/courses/{courseId}/materials")
     public ApiResponse<List<CourseMaterialSummaryResponse>> getCourseMaterials(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -46,6 +51,7 @@ public class CourseVaultController {
         return ApiResponse.success(materials);
     }
 
+    @Operation(summary = "Get playback URL for a course video")
     @GetMapping("/me/courses/{courseId}/materials/{materialId}/playback")
     public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(
             @AuthenticationPrincipal UserPrincipal principal,

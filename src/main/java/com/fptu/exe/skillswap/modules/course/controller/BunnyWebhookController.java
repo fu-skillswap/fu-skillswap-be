@@ -14,18 +14,22 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/webhooks/bunny")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Webhooks", description = "Endpoints for external webhooks")
 public class BunnyWebhookController {
 
     private final CourseVaultService courseVaultService;
     private final BunnyWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
 
+    @Operation(summary = "Handle Bunny webhook events for video encoding")
     @PostMapping("/video-events")
     public ResponseEntity<Void> handleBunnyWebhook(
             @RequestHeader(value = "Signature", required = false) String signatureHeader,
