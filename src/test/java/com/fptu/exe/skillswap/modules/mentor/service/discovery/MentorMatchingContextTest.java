@@ -15,7 +15,7 @@ class MentorMatchingContextTest {
         UUID userId = UUID.randomUUID();
         LocalDateTime evaluatedAt = LocalDateTime.of(2026, 8, 6, 15, 0);
 
-        MentorMatchingContext context = new MentorMatchingContext(userId, null, null, evaluatedAt, " structured-v1 ");
+        MentorMatchingContext context = new MentorMatchingContext(userId, null, evaluatedAt, " structured-v1 ");
 
         assertEquals(userId, context.menteeUserId());
         assertEquals(evaluatedAt, context.evaluatedAt());
@@ -27,10 +27,10 @@ class MentorMatchingContextTest {
         LocalDateTime evaluatedAt = LocalDateTime.of(2026, 8, 6, 15, 0);
 
         assertThrows(NullPointerException.class,
-                () -> new MentorMatchingContext(null, null, null, evaluatedAt, "structured-v1"));
+                () -> new MentorMatchingContext(null, null, evaluatedAt, "structured-v1"));
         assertThrows(NullPointerException.class,
-                () -> new MentorMatchingContext(UUID.randomUUID(), null, null, null, "structured-v1"));
+                () -> new MentorMatchingContext(UUID.randomUUID(), null, null, "structured-v1"));
         assertThrows(IllegalArgumentException.class,
-                () -> new MentorMatchingContext(UUID.randomUUID(), null, null, evaluatedAt, " "));
+                () -> new MentorMatchingContext(UUID.randomUUID(), null, evaluatedAt, " "));
     }
 }

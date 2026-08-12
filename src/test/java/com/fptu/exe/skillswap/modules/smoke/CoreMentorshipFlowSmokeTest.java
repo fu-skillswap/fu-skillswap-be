@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.smoke;
 
-import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;

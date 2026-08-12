@@ -29,7 +29,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             select mp.userId
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -66,7 +66,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             select count(mp.userId)
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -110,7 +110,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             select mp.userId
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -223,7 +223,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             select count(mp.userId)
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -488,7 +488,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             )
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -507,7 +507,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             )
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
             left join sp.specialization specialization
@@ -566,7 +566,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             )
             from MentorProfile mp
             join mp.user u
-            left join com.fptu.exe.skillswap.modules.academic.domain.StudentProfile sp on sp.userId = mp.userId
+            left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.program program
             where ((:status is not null and mp.status = :status)
                 or (:status is null and mp.status <> com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT))

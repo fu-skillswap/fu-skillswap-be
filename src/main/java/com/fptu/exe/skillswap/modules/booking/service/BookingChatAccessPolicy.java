@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.*;
-import com.fptu.exe.skillswap.modules.conversation.domain.*;
-import com.fptu.exe.skillswap.modules.conversation.repository.ConversationBookingLinkRepository;
+import com.fptu.exe.skillswap.modules.chat.domain.*;
+import com.fptu.exe.skillswap.modules.chat.repository.ConversationBookingLinkRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import lombok.RequiredArgsConstructor;

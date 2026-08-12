@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.identity.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.dto.response.OnboardingStatusResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
-import com.fptu.exe.skillswap.modules.matching.service.MentoringMatchProfileService;
+
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -32,7 +32,7 @@ public class OnboardingStatusController {
     private final AcademicService academicService;
     private final MentorProfileService mentorProfileService;
     private final MentorVerificationService mentorVerificationService;
-    private final MentoringMatchProfileService mentoringMatchProfileService;
+
 
     @GetMapping
     @Operation(
@@ -48,7 +48,7 @@ public class OnboardingStatusController {
         UUID userId = principal.getPublicId();
         boolean studentProfileCompleted = academicService.hasCompletedStudentProfile(userId);
         boolean mentorProfileCompleted = mentorProfileService.hasCompletedMentorProfile(userId);
-        boolean mentoringNeedsCompleted = mentoringMatchProfileService.hasCompletedCurrentActivation(userId);
+
         String verificationStatus = mentorVerificationService.getLatestVerificationStatus(userId);
         List<RoleCode> roles = principal.getRoles();
 
@@ -84,7 +84,7 @@ public class OnboardingStatusController {
         OnboardingStatusResponse response = OnboardingStatusResponse.builder()
                 .studentProfileCompleted(studentProfileCompleted)
                 .mentorProfileCompleted(mentorProfileCompleted)
-                .mentoringNeedsCompleted(mentoringNeedsCompleted)
+
                 .mentorVerificationStatus(verificationStatus)
                 .roles(roles)
                 .nextRecommendedAction(nextAction)

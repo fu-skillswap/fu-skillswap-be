@@ -1,10 +1,9 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatureProvider;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
+
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -26,7 +25,7 @@ import java.util.UUID;
 public class MentorRecommendationFacade {
 
     private final StudentProfileRepository studentProfileRepository;
-    private final MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
+
     private final DiscoveryCandidateProvider discoveryCandidateProvider;
     private final DiscoveryEnrichmentService discoveryEnrichmentService;
     private final DiscoveryRankingService discoveryRankingService;
@@ -41,11 +40,11 @@ public class MentorRecommendationFacade {
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
         StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
-        MenteeMatchingFeatures menteeFeatures = menteeMatchingFeatureProvider.getLatestFeatures(currentUserId);
+
         MentorMatchingContext context = new MentorMatchingContext(
                 currentUserId,
                 menteeProfile,
-                menteeFeatures,
+
                 DateTimeUtil.now(),
                 discoveryProperties.recommendationAlgorithmVersion()
         );
@@ -69,7 +68,6 @@ public class MentorRecommendationFacade {
                 .toList();
         Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(
                 candidateIds,
-                context.matchingFeatures(),
                 context.evaluatedAt()
         );
 
@@ -83,7 +81,6 @@ public class MentorRecommendationFacade {
                             candidate,
                             enrichedData,
                             context.menteeProfile(),
-                            context.matchingFeatures(),
                             context.evaluatedAt()
                     );
                     return new RankedRecommendation(

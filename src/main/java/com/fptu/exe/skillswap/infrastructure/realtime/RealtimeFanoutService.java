@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.infrastructure.realtime;
 
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
-import com.fptu.exe.skillswap.modules.conversation.dto.event.ChatMessageEvent;
-import com.fptu.exe.skillswap.modules.conversation.dto.response.ConversationResponse;
+import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
+import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;

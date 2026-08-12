@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.admin;
 
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;

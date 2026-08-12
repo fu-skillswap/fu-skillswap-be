@@ -7,7 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
@@ -104,10 +104,10 @@ class BookingServiceTest {
     private jakarta.persistence.EntityManager entityManager;
 
     @Mock
-    private com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
+    private com.fptu.exe.skillswap.modules.booking.service.SessionService sessionService;
 
     @Mock
-    private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
 
     @Mock
     private SettlementService settlementService;
@@ -204,10 +204,10 @@ class BookingServiceTest {
                 .thenReturn(Optional.of(service));
 
         org.mockito.Mockito.lenient().when(sessionService.findByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
-                .thenReturn(new com.fptu.exe.skillswap.modules.session.domain.Session());
+                .thenReturn(new com.fptu.exe.skillswap.modules.booking.domain.Session());
 
         org.mockito.Mockito.lenient().when(sessionService.createForAcceptedBooking(org.mockito.ArgumentMatchers.any()))
-                .thenReturn(new com.fptu.exe.skillswap.modules.session.domain.Session());
+                .thenReturn(new com.fptu.exe.skillswap.modules.booking.domain.Session());
 
         org.mockito.Mockito.lenient().when(mentorProfileRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(mentorProfile));
@@ -578,7 +578,7 @@ class BookingServiceTest {
     void saveMeetingLink_sameValues_shouldNotCreateNotification() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
         booking.setLocation("Room 201");
-        com.fptu.exe.skillswap.modules.session.domain.Session session = new com.fptu.exe.skillswap.modules.session.domain.Session();
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = new com.fptu.exe.skillswap.modules.booking.domain.Session();
         session.setMeetingPlatform(MeetingPlatform.GOOGLE_MEET);
         session.setMeetingLink("https://meet.google.com/abc");
         when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
@@ -989,18 +989,18 @@ class BookingServiceTest {
             assertEquals(status, response.status());
             assertEquals(status, response.sessionStatus());
             assertNull(response.actualSessionId());
-            assertEquals(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.SCHEDULED, response.actualSessionStatus());
+            assertEquals(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.SCHEDULED, response.actualSessionStatus());
         }
     }
 
     @Test
     void actualSessionFields_shouldMirrorRealSessionEntityWhenPresent() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        com.fptu.exe.skillswap.modules.session.domain.Session session = com.fptu.exe.skillswap.modules.session.domain.Session.builder()
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = com.fptu.exe.skillswap.modules.booking.domain.Session.builder()
                 .id(UUID.randomUUID())
-                .sourceType(com.fptu.exe.skillswap.modules.session.domain.SessionSourceType.BOOKING)
+                .sourceType(com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType.BOOKING)
                 .sourceId(booking.getId())
-                .status(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED)
+                .status(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.COMPLETED)
                 .build();
         when(sessionService.findByBookingId(booking.getId())).thenReturn(session);
 
@@ -1009,7 +1009,7 @@ class BookingServiceTest {
         assertEquals(booking.getId(), response.sessionId());
         assertEquals(BookingStatus.ACCEPTED, response.sessionStatus());
         assertEquals(session.getId(), response.actualSessionId());
-        assertEquals(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED, response.actualSessionStatus());
+        assertEquals(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.COMPLETED, response.actualSessionStatus());
     }
 
     @Test

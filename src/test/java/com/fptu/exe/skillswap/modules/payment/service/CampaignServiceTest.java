@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;

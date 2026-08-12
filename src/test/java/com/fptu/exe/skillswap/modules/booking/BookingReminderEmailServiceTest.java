@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import com.fptu.exe.skillswap.modules.booking.service.BookingReminderEmailService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

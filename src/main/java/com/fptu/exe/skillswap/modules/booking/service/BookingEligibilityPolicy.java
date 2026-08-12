@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;

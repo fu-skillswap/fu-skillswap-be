@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+
 
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -10,7 +10,7 @@ import java.util.UUID;
 public record MentorMatchingContext(
         UUID menteeUserId,
         StudentProfile menteeProfile,
-        MenteeMatchingFeatures matchingFeatures,
+
         LocalDateTime evaluatedAt,
         String algorithmVersion
 ) {

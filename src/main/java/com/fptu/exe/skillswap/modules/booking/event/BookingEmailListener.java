@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
-import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
-import com.fptu.exe.skillswap.modules.mail.template.HtmlEmailTemplate;
+import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;

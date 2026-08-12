@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.session.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;

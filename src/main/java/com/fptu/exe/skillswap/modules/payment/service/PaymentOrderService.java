@@ -25,7 +25,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepositor
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -75,7 +75,7 @@ public class PaymentOrderService {
     private final PayOsGateway payOsGateway;
     private final SettlementService settlementService;
     private final SessionService sessionService;
-    private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private final com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
     private com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService groupSessionExperienceService;
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;

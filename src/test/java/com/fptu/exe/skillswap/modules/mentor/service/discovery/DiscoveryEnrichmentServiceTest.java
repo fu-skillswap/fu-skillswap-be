@@ -18,7 +18,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -75,7 +75,7 @@ class DiscoveryEnrichmentServiceTest {
 
     @Test
     void loadMentorEnrichedData_emptyInput_shouldReturnEmptyMap() {
-        assertTrue(enrichmentService.loadMentorEnrichedData(List.of(), null, LocalDateTime.now()).isEmpty());
+        assertTrue(enrichmentService.loadMentorEnrichedData(List.of(), LocalDateTime.now()).isEmpty());
     }
 
     @Test
@@ -136,12 +136,10 @@ class DiscoveryEnrichmentServiceTest {
                 .thenReturn(List.of(service));
         when(mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(List.of(MENTOR_ID), LocalDateTime.of(2026, 7, 9, 10, 0)))
                 .thenReturn(List.of(MENTOR_ID));
-        when(availabilitySlotServiceRepository.findMentorUserIdsWithFutureActiveSlotServiceDuration(List.of(MENTOR_ID), 30, LocalDateTime.of(2026, 7, 9, 10, 0)))
-                .thenReturn(List.of(MENTOR_ID));
+
 
         Map<UUID, MentorEnrichedData> result = enrichmentService.loadMentorEnrichedData(
                 List.of(MENTOR_ID),
-                new MenteeMatchingFeatures(3, 2, 2, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now()),
                 LocalDateTime.of(2026, 7, 9, 10, 0)
         );
 
@@ -152,7 +150,6 @@ class DiscoveryEnrichmentServiceTest {
         assertEquals(1, enrichedData.achievements().size());
         assertEquals(1, enrichedData.services().size());
         assertTrue(enrichedData.hasAvailability());
-        assertTrue(enrichedData.hasPreferredDurationAvailability());
     }
 
     @Test

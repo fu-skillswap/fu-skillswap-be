@@ -14,7 +14,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -44,7 +44,6 @@ public class DiscoveryEnrichmentService {
 
     public Map<UUID, MentorEnrichedData> loadMentorEnrichedData(
             Collection<UUID> mentorUserIds,
-            MenteeMatchingFeatures menteeFeatures,
             LocalDateTime now
     ) {
         if (mentorUserIds == null || mentorUserIds.isEmpty()) {
@@ -57,7 +56,7 @@ public class DiscoveryEnrichmentService {
         Map<UUID, List<MentorAchievementResponse>> achievementsByMentor = loadAchievementsByMentor(mentorUserIds);
         Map<UUID, List<MentorService>> servicesByMentor = groupServicesByMentor(loadActiveServicesByMentorIds(mentorUserIds));
         Set<UUID> mentorsWithAvailability = loadMentorsWithAvailability(mentorUserIds, now);
-        Set<UUID> mentorsWithPreferredDurationAvailability = loadMentorsWithPreferredDurationAvailability(mentorUserIds, menteeFeatures, now);
+        Set<UUID> mentorsWithPreferredDurationAvailability = Collections.emptySet();
 
         Map<UUID, MentorEnrichedData> result = new HashMap<>();
         for (UUID mentorUserId : mentorUserIds) {
@@ -105,19 +104,7 @@ public class DiscoveryEnrichmentService {
         ).orElse(List.of()));
     }
 
-    private Set<UUID> loadMentorsWithPreferredDurationAvailability(
-            Collection<UUID> mentorUserIds,
-            MenteeMatchingFeatures menteeFeatures,
-            LocalDateTime now
-    ) {
-        Integer preferredDuration = toPreferredDurationMinutes(menteeFeatures == null ? null : menteeFeatures.durationPreferenceCode());
-        if (preferredDuration == null) {
-            return Collections.emptySet();
-        }
-        return new java.util.HashSet<>(Optional.ofNullable(
-                availabilitySlotServiceRepository.findMentorUserIdsWithFutureActiveSlotServiceDuration(mentorUserIds, preferredDuration, now)
-        ).orElse(List.of()));
-    }
+
 
     private List<MentorService> loadActiveServicesByMentorIds(Collection<UUID> mentorUserIds) {
         return Optional.ofNullable(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(new ArrayList<>(mentorUserIds)))
@@ -187,16 +174,5 @@ public class DiscoveryEnrichmentService {
         return result;
     }
 
-    private Integer toPreferredDurationMinutes(String durationPreferenceCode) {
-        if (durationPreferenceCode == null || durationPreferenceCode.isBlank()) {
-            return null;
-        }
-        return switch (durationPreferenceCode) {
-            case "DURATION_15" -> 15;
-            case "DURATION_30" -> 30;
-            case "DURATION_60" -> 60;
-            case "DURATION_90" -> 90;
-            default -> null;
-        };
-    }
+
 }

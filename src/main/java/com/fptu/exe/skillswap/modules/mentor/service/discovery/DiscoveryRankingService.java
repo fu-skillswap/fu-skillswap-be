@@ -1,12 +1,11 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -72,7 +71,6 @@ public class DiscoveryRankingService {
     public List<RankedSearchCandidate> rankSearchCandidates(
             List<MentorDiscoveryQueryRow> rows,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures,
             String normalizedKeyword,
             java.util.Map<UUID, MentorEnrichedData> enrichedDataByMentor,
             LocalDateTime evaluatedAt
@@ -83,7 +81,6 @@ public class DiscoveryRankingService {
                     BigDecimal rawScore = calculateSearchScore(
                             row,
                             menteeProfile,
-                            menteeFeatures,
                             normalizedKeyword,
                             enrichedData,
                             evaluatedAt
@@ -92,7 +89,7 @@ public class DiscoveryRankingService {
                             row,
                             enrichedData,
                             rawScore,
-                            calculateSearchScorePercentage(rawScore, normalizedKeyword, enrichedData.services().size(), menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null, menteeFeatures, evaluatedAt)
+                            calculateSearchScorePercentage(rawScore, normalizedKeyword, enrichedData.services().size(), false, evaluatedAt)
                     );
                 })
                 .sorted(Comparator
@@ -150,7 +147,6 @@ public class DiscoveryRankingService {
             MentorDiscoveryQueryRow candidate,
             MentorEnrichedData enrichedData,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures,
             LocalDateTime evaluatedAt
     ) {
         List<RecommendationReason> reasons = new ArrayList<>();
@@ -158,7 +154,6 @@ public class DiscoveryRankingService {
                 candidate,
                 enrichedData,
                 menteeProfile,
-                menteeFeatures,
                 reasons,
                 evaluatedAt
         );
@@ -169,12 +164,10 @@ public class DiscoveryRankingService {
                 .add(SAME_CAMPUS_SCORE)
                 .add(MENTOR_ALUMNI_SCORE.max(MENTOR_HIGHER_SEMESTER_SCORE))
                 .add(MAX_RECOMMENDATION_QUALITY_SCORE)
-                .add(calculateMaxCapabilityScore(menteeFeatures, evaluatedAt))
+                .add(calculateMaxCapabilityScore(evaluatedAt))
                 .add(HAS_AVAILABILITY_BONUS_SCORE)
                 .add(serviceBonusScore(MAX_SEARCH_SERVICE_BONUS_COUNT));
-        if (menteeFeatures != null && menteeFeatures.durationPreferenceCode() != null) {
-            maxScore = maxScore.add(DURATION_PREFERENCE_MATCH_BONUS);
-        }
+
 
         maxScore = maxScore.max(BigDecimal.ONE);
         BigDecimal percentageScore = score.multiply(BigDecimal.valueOf(100)).divide(maxScore, 2, RoundingMode.HALF_UP);
@@ -210,7 +203,6 @@ public class DiscoveryRankingService {
             MentorDiscoveryQueryRow candidate,
             MentorEnrichedData enrichedData,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures,
             List<RecommendationReason> reasons,
             LocalDateTime evaluatedAt
     ) {
@@ -229,7 +221,7 @@ public class DiscoveryRankingService {
                 academicScore = academicScore.add(SAME_CAMPUS_SCORE);
                 addReason(reasons, RecommendationReasonCode.SAME_CAMPUS);
             }
-            if (Boolean.TRUE.equals(candidate.alumni()) && shouldBoostAlumni(candidate, menteeFeatures)) {
+            if (Boolean.TRUE.equals(candidate.alumni()) && shouldBoostAlumni(candidate)) {
                 academicScore = academicScore.add(MENTOR_ALUMNI_SCORE);
                 addReason(reasons, RecommendationReasonCode.MENTOR_ALUMNI);
             } else {
@@ -269,7 +261,7 @@ public class DiscoveryRankingService {
             addReason(reasons, RecommendationReasonCode.RECENT_ACTIVITY);
         }
         BigDecimal qualityScore = calculateSearchQualityScore(candidate, evaluatedAt);
-        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), reasons, evaluatedAt);
+        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), reasons, evaluatedAt);
         BigDecimal serviceScore = enrichedData.services().isEmpty()
                 ? ZERO
                 : serviceBonusScore(enrichedData.services().size());
@@ -310,7 +302,6 @@ public class DiscoveryRankingService {
     private BigDecimal calculateSearchScore(
             MentorDiscoveryQueryRow row,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures,
             String normalizedKeyword,
             MentorEnrichedData enrichedData,
             LocalDateTime evaluatedAt
@@ -328,9 +319,9 @@ public class DiscoveryRankingService {
 
         List<String> tokens = keywordSupport.tokenizeSearchText(normalizedKeyword);
         if (tokens.isEmpty()) {
-            return calculatePersonalizationScore(row, menteeProfile, menteeFeatures)
+            return calculatePersonalizationScore(row, menteeProfile)
                     .add(calculateSearchQualityScore(row, evaluatedAt))
-                    .add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt))
+                    .add(calculateCapabilityScore(row, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt))
                     .add(extraBonus)
                     .setScale(2, RoundingMode.HALF_UP);
         }
@@ -436,9 +427,9 @@ public class DiscoveryRankingService {
             score = score.add(SESSION_VELOCITY_MED_BONUS);
         }
 
-        score = score.add(calculatePersonalizationScore(row, menteeProfile, menteeFeatures));
+        score = score.add(calculatePersonalizationScore(row, menteeProfile));
         score = score.add(calculateSearchQualityScore(row, evaluatedAt));
-        score = score.add(calculateCapabilityScore(row, menteeProfile, menteeFeatures, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt));
+        score = score.add(calculateCapabilityScore(row, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt));
         score = score.add(extraBonus);
         return score.setScale(2, RoundingMode.HALF_UP);
     }
@@ -446,70 +437,21 @@ public class DiscoveryRankingService {
     private BigDecimal calculateCapabilityScore(
             MentorDiscoveryQueryRow candidate,
             StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures,
             List<MentorTagResponse> helpTopics,
             List<MentorSubjectResultResponse> subjectResults,
             List<RecommendationReason> reasons,
             LocalDateTime evaluatedAt
     ) {
-        if (menteeFeatures == null || !menteeFeatures.hasAnySignal()) {
-            return ZERO;
-        }
-        BigDecimal score = ZERO;
-        score = score.add(levelAlignmentScore(menteeFeatures.foundationNeedLevel(), candidate.foundationSupportLevel()));
-        score = score.add(levelAlignmentScore(menteeFeatures.outputReviewNeedLevel(), candidate.outputReviewSupportLevel()));
-        score = score.add(levelAlignmentScore(menteeFeatures.directionNeedLevel(), candidate.directionSupportLevel()));
-
-        String mentorFitCode = menteeFeatures.mentorFitCode();
-        if ("MENTOR_FIT_SUBJECT_MATCH".equals(mentorFitCode)
-                && hasSubjectMatchSignal(candidate, menteeProfile, helpTopics, subjectResults)
-                && (defaultInteger(candidate.foundationSupportLevel()) >= 3 || defaultInteger(candidate.outputReviewSupportLevel()) >= 3)) {
-            score = score.add(MENTOR_FIT_SUBJECT_BONUS);
-            addReason(reasons, RecommendationReasonCode.SUBJECT_FIT);
-        }
-        if ("MENTOR_FIT_RECENT_ALUMNI".equals(mentorFitCode) && Boolean.TRUE.equals(candidate.alumni())) {
-            score = score.add(MENTOR_FIT_ALUMNI_BONUS);
-            addReason(reasons, RecommendationReasonCode.ALUMNI_OJT_FIT);
-        }
-        if ("MENTOR_FIT_SIMILAR_EXPERIENCE".equals(mentorFitCode) && defaultInteger(candidate.completedSessions()) > 0) {
-            score = score.add(decimal("8.00"));
-            addReason(reasons, RecommendationReasonCode.SIMILAR_MENTORING_EXPERIENCE);
-        }
-        if (score.compareTo(BigDecimal.ZERO) > 0) {
-            addReason(reasons, RecommendationReasonCode.DECLARED_NEEDS_MATCH);
-        }
-        return applyMatchingRecencyMultiplier(score, menteeFeatures, evaluatedAt).setScale(2, RoundingMode.HALF_UP);
+        return ZERO;
     }
 
-    private BigDecimal calculateMaxCapabilityScore(MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
-        if (menteeFeatures == null || !menteeFeatures.hasAnySignal()) {
-            return ZERO;
-        }
-        BigDecimal maxScore = ZERO;
-        int foundationMax = menteeFeatures.foundationNeedLevel() != null ? menteeFeatures.foundationNeedLevel() : 0;
-        int outputMax = menteeFeatures.outputReviewNeedLevel() != null ? menteeFeatures.outputReviewNeedLevel() : 0;
-        int directionMax = menteeFeatures.directionNeedLevel() != null ? menteeFeatures.directionNeedLevel() : 0;
-        
-        maxScore = maxScore.add(CAPABILITY_MATCH_MULTIPLIER.multiply(BigDecimal.valueOf(foundationMax)));
-        maxScore = maxScore.add(CAPABILITY_MATCH_MULTIPLIER.multiply(BigDecimal.valueOf(outputMax)));
-        maxScore = maxScore.add(CAPABILITY_MATCH_MULTIPLIER.multiply(BigDecimal.valueOf(directionMax)));
-
-        String mentorFitCode = menteeFeatures.mentorFitCode();
-        if ("MENTOR_FIT_SUBJECT_MATCH".equals(mentorFitCode)) {
-            maxScore = maxScore.add(MENTOR_FIT_SUBJECT_BONUS);
-        } else if ("MENTOR_FIT_RECENT_ALUMNI".equals(mentorFitCode)) {
-            maxScore = maxScore.add(MENTOR_FIT_ALUMNI_BONUS);
-        } else if ("MENTOR_FIT_SIMILAR_EXPERIENCE".equals(mentorFitCode)) {
-            maxScore = maxScore.add(decimal("8.00"));
-        }
-        
-        return applyMatchingRecencyMultiplier(maxScore, menteeFeatures, evaluatedAt).setScale(2, RoundingMode.HALF_UP);
+    private BigDecimal calculateMaxCapabilityScore(LocalDateTime evaluatedAt) {
+        return ZERO;
     }
 
     private BigDecimal calculatePersonalizationScore(
             MentorDiscoveryQueryRow candidate,
-            StudentProfile menteeProfile,
-            MenteeMatchingFeatures menteeFeatures
+            StudentProfile menteeProfile
     ) {
         BigDecimal baseScore = ZERO;
         if (menteeProfile == null) {
@@ -525,7 +467,7 @@ public class DiscoveryRankingService {
         if (sameUuid(menteeProfile.getCampus() == null ? null : menteeProfile.getCampus().getId(), candidate.campusId())) {
             baseScore = baseScore.add(SAME_CAMPUS_SCORE);
         }
-        if (Boolean.TRUE.equals(candidate.alumni()) && shouldBoostAlumni(candidate, menteeFeatures)) {
+        if (Boolean.TRUE.equals(candidate.alumni()) && shouldBoostAlumni(candidate)) {
             baseScore = baseScore.add(MENTOR_ALUMNI_SCORE);
         } else {
             Integer menteeSemester = menteeProfile.getSemester();
@@ -554,8 +496,8 @@ public class DiscoveryRankingService {
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
-        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount, hasDurationPreference, menteeFeatures, evaluatedAt);
+    private BigDecimal calculateSearchScorePercentage(BigDecimal rawScore, String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, LocalDateTime evaluatedAt) {
+        BigDecimal maxScore = calculateSearchScoreMax(normalizedKeyword, activeServiceCount, hasDurationPreference, evaluatedAt);
         maxScore = maxScore.max(BigDecimal.ONE);
 
         BigDecimal percentage = rawScore.multiply(BigDecimal.valueOf(100))
@@ -569,13 +511,13 @@ public class DiscoveryRankingService {
         return percentage;
     }
 
-    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
+    private BigDecimal calculateSearchScoreMax(String normalizedKeyword, int activeServiceCount, boolean hasDurationPreference, LocalDateTime evaluatedAt) {
         int tokenCount = keywordSupport.tokenizeSearchText(normalizedKeyword).size();
         int cappedServiceCount = Math.min(Math.max(activeServiceCount, 0), MAX_SEARCH_SERVICE_BONUS_COUNT);
 
         BigDecimal maxScore = MAX_SEARCH_PERSONALIZATION_SCORE
                 .add(MAX_SEARCH_QUALITY_SCORE)
-                .add(calculateMaxCapabilityScore(menteeFeatures, evaluatedAt))
+                .add(calculateMaxCapabilityScore(evaluatedAt))
                 .add(serviceBonusScore(cappedServiceCount))
                 .add(HAS_AVAILABILITY_BONUS_SCORE);
         if (hasDurationPreference) {
@@ -624,17 +566,7 @@ public class DiscoveryRankingService {
         return score.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal applyMatchingRecencyMultiplier(BigDecimal score, MenteeMatchingFeatures menteeFeatures, LocalDateTime evaluatedAt) {
-        if (score == null || menteeFeatures == null || menteeFeatures.latestAnsweredAt() == null) {
-            return score == null ? ZERO : score;
-        }
-        LocalDateTime latestAnsweredAt = menteeFeatures.latestAnsweredAt();
-        if (latestAnsweredAt.isBefore(evaluatedAt.minusDays(90))) {
-            return score.multiply(STALE_MATCHING_90D_MULTIPLIER);
-        }
-        if (latestAnsweredAt.isBefore(evaluatedAt.minusDays(30))) {
-            return score.multiply(STALE_MATCHING_30D_MULTIPLIER);
-        }
+    private BigDecimal applyMatchingRecencyMultiplier(BigDecimal score, LocalDateTime evaluatedAt) {
         return score;
     }
 
@@ -702,15 +634,8 @@ public class DiscoveryRankingService {
         return left != null && left.equals(right);
     }
 
-    private boolean shouldBoostAlumni(MentorDiscoveryQueryRow candidate, MenteeMatchingFeatures menteeFeatures) {
-        if (!Boolean.TRUE.equals(candidate.alumni()) || menteeFeatures == null) {
-            return false;
-        }
-        if ("MENTOR_FIT_RECENT_ALUMNI".equals(menteeFeatures.mentorFitCode())) {
-            return true;
-        }
-        Integer directionNeedLevel = menteeFeatures.directionNeedLevel();
-        return directionNeedLevel != null && directionNeedLevel >= 3;
+    private boolean shouldBoostAlumni(MentorDiscoveryQueryRow candidate) {
+        return false;
     }
 
     private boolean hasSubjectMatchSignal(

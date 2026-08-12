@@ -1,12 +1,12 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -89,7 +89,6 @@ class DiscoveryRankingServiceTest {
         List<DiscoveryRankingService.RankedSearchCandidate> ranked = rankingService.rankSearchCandidates(
                 List.of(weak, strong),
                 studentProfile,
-                new MenteeMatchingFeatures(4, 2, 2, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now()),
                 "spring boot",
                 Map.of(MENTOR_A, strongData, MENTOR_B, weakData),
                 LocalDateTime.now()
@@ -99,50 +98,7 @@ class DiscoveryRankingServiceTest {
         assertTrue(ranked.getFirst().score().compareTo(ranked.get(1).score()) > 0);
     }
 
-    @Test
-    void scoreRecommendation_recentAlumniIntent_shouldBoostAlumni() {
-        MentorDiscoveryQueryRow alumni = row(MENTOR_A, "Alumni mentor", true, true, 4.7, 8);
-        MentorDiscoveryQueryRow nonAlumni = row(MENTOR_B, "Non alumni mentor", true, false, 4.7, 8);
 
-        DiscoveryRankingService.RecommendationScore alumniScore = rankingService.scoreRecommendation(
-                alumni,
-                MentorEnrichedData.empty(),
-                studentProfile,
-                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now()),
-                LocalDateTime.now()
-        );
-        DiscoveryRankingService.RecommendationScore nonAlumniScore = rankingService.scoreRecommendation(
-                nonAlumni,
-                MentorEnrichedData.empty(),
-                studentProfile,
-                new MenteeMatchingFeatures(2, 2, 4, "MENTOR_FIT_RECENT_ALUMNI", "DURATION_30", LocalDateTime.now()),
-                LocalDateTime.now()
-        );
-
-        assertTrue(alumniScore.matchScore().compareTo(nonAlumniScore.matchScore()) > 0);
-    }
-
-    @Test
-    void scoreRecommendation_staleMatching_shouldReduceScore() {
-        MentorDiscoveryQueryRow candidate = row(MENTOR_A, "Stable mentor", true, false, 4.7, 8);
-
-        DiscoveryRankingService.RecommendationScore recent = rankingService.scoreRecommendation(
-                candidate,
-                MentorEnrichedData.empty(),
-                studentProfile,
-                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(5)),
-                LocalDateTime.now()
-        );
-        DiscoveryRankingService.RecommendationScore stale = rankingService.scoreRecommendation(
-                candidate,
-                MentorEnrichedData.empty(),
-                studentProfile,
-                new MenteeMatchingFeatures(3, 3, 3, "MENTOR_FIT_SUBJECT_MATCH", "DURATION_30", LocalDateTime.now().minusDays(120)),
-                LocalDateTime.now()
-        );
-
-        assertTrue(recent.matchScore().compareTo(stale.matchScore()) > 0);
-    }
 
     @Test
     void sortRowsForRequestedSort_ratingAverage_shouldSortDescending() {

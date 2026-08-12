@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.catalog.domain;
 
-import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
+import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import jakarta.persistence.*;
 import lombok.*;
 

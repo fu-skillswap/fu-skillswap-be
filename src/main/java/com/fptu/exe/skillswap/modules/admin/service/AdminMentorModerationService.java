@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectR
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;

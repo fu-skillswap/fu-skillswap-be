@@ -20,7 +20,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -71,7 +71,7 @@ class PaymentOrderServiceTest {
     @Mock private PayOsGateway payOsGateway;
     @Mock private SettlementService settlementService;
     @Mock private SessionService sessionService;
-    @Mock private com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    @Mock private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
     @Mock private NotificationService notificationService;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private InternalTelemetryService internalTelemetryService;

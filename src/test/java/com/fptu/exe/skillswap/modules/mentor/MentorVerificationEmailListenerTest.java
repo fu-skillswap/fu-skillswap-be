@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
-import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailListener;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import org.junit.jupiter.api.Test;

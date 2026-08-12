@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;

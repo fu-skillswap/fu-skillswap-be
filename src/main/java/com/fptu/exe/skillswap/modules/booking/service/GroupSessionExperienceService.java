@@ -12,11 +12,11 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.GroupSessionMeetingReq
 import com.fptu.exe.skillswap.modules.booking.dto.response.GroupSessionExperienceResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.GroupSessionRepository;
-import com.fptu.exe.skillswap.modules.conversation.domain.ConversationParticipantAccess;
-import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.session.domain.Session;
-import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;

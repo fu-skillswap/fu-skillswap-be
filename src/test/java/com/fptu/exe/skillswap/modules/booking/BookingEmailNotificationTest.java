@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.booking;
 
-import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
@@ -24,7 +24,7 @@ import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.mail.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;

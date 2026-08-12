@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.booking;
 
-import com.fptu.exe.skillswap.modules.academic.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
+import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
@@ -19,11 +19,11 @@ import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotService
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
-import com.fptu.exe.skillswap.modules.conversation.domain.ConversationSourceType;
-import com.fptu.exe.skillswap.modules.conversation.dto.request.SendMessageRequest;
-import com.fptu.exe.skillswap.modules.conversation.repository.ConversationRepository;
-import com.fptu.exe.skillswap.modules.conversation.repository.MessageRepository;
-import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
+import com.fptu.exe.skillswap.modules.chat.dto.request.SendMessageRequest;
+import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;

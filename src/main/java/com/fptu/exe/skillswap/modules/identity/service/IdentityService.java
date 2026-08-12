@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.config.RefreshTokenCookieProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSessionState;

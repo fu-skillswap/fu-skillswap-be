@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingType;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
-import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 

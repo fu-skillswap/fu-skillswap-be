@@ -43,8 +43,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.session.service.SessionService;
-import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
@@ -115,8 +115,8 @@ public class BookingService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final BookingEventService bookingEventService;
     private final EntityManager entityManager;
-    private final com.fptu.exe.skillswap.modules.session.service.SessionService sessionService;
-    private final com.fptu.exe.skillswap.modules.conversation.service.ConversationService conversationService;
+    private final com.fptu.exe.skillswap.modules.booking.service.SessionService sessionService;
+    private final com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
     private final com.fptu.exe.skillswap.modules.payment.service.SettlementService settlementService;
     private final com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService paymentOrderService;
     private final BookingSlotValidator bookingSlotValidator;
@@ -377,7 +377,7 @@ public class BookingService {
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsForBookings(page.getContent())
                 : java.util.Collections.emptyMap();
-        java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
+        java.util.Map<UUID, com.fptu.exe.skillswap.modules.booking.domain.Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
                 : java.util.Collections.emptyMap();
         java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId =
@@ -773,7 +773,7 @@ public class BookingService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận thanh toán");
         }
 
-        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = sessionService.findByBookingId(bookingId);
         if (session == null) {
             session = sessionService.createForAcceptedBooking(booking);
         }
@@ -865,9 +865,9 @@ public class BookingService {
             booking.setActualEndTime(selectedEndTime(booking));
         }
 
-        com.fptu.exe.skillswap.modules.session.domain.Session session = sessionService.findByBookingId(bookingId);
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = sessionService.findByBookingId(bookingId);
         if (session != null) {
-            session.setStatus(com.fptu.exe.skillswap.modules.session.domain.SessionStatus.COMPLETED);
+            session.setStatus(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.COMPLETED);
             if (session.getActualStartTime() == null) {
                 session.setActualStartTime(selectedStartTime(booking));
             }
@@ -1076,7 +1076,7 @@ public class BookingService {
         java.util.Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsForBookings(page.getContent())
                 : java.util.Collections.emptyMap();
-        java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId = sessionService != null
+        java.util.Map<UUID, com.fptu.exe.skillswap.modules.booking.domain.Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
                 : java.util.Collections.emptyMap();
 
@@ -1215,13 +1215,13 @@ public class BookingService {
 
     private BookingResponse toBookingResponse(Booking booking,
                                               java.util.Map<UUID, UUID> bookingToConversationMap,
-                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId) {
+                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.booking.domain.Session> sessionsByBookingId) {
         return toBookingResponse(booking, bookingToConversationMap, sessionsByBookingId, null);
     }
 
     private BookingResponse toBookingResponse(Booking booking,
                                               java.util.Map<UUID, UUID> bookingToConversationMap,
-                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.session.domain.Session> sessionsByBookingId,
+                                              java.util.Map<UUID, com.fptu.exe.skillswap.modules.booking.domain.Session> sessionsByBookingId,
                                               java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId) {
         User mentee = booking.getMentee();
         MentorProfile mentorProfile = booking.getMentorProfile();
@@ -1233,7 +1233,7 @@ public class BookingService {
                 paymentOrdersByBookingId
         );
 
-        com.fptu.exe.skillswap.modules.session.domain.Session session = null;
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = null;
         if (sessionsByBookingId != null) {
             session = sessionsByBookingId.get(booking.getId());
         }
@@ -1256,10 +1256,10 @@ public class BookingService {
         if (bookingToConversationMap != null && bookingToConversationMap.containsKey(booking.getId())) {
             conversationId = bookingToConversationMap.get(booking.getId());
         } else if (booking.getGroupSession() != null && conversationService != null) {
-            com.fptu.exe.skillswap.modules.conversation.domain.Conversation conv = conversationService.findGroupConversation(booking.getGroupSession().getId());
+            com.fptu.exe.skillswap.modules.chat.domain.Conversation conv = conversationService.findGroupConversation(booking.getGroupSession().getId());
             conversationId = conv == null ? null : conv.getId();
         } else if (conversationService != null) {
-            com.fptu.exe.skillswap.modules.conversation.domain.Conversation conv = conversationService.findByBookingId(booking.getId());
+            com.fptu.exe.skillswap.modules.chat.domain.Conversation conv = conversationService.findByBookingId(booking.getId());
             if (conv == null && mentee != null && mentee.getId() != null && mentorUser != null && mentorUser.getId() != null) {
                 conv = conversationService.findDirectByParticipants(mentorUser.getId(), mentee.getId());
             }

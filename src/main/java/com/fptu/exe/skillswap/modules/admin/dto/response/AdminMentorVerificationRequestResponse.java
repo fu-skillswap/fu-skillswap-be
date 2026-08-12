@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.admin.dto.response;
 
-import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
+import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;

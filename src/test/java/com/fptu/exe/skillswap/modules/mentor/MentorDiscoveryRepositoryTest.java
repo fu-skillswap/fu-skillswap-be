@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor;
 
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;

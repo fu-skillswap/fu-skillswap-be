@@ -9,9 +9,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.GroupSessionAttendance
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.GroupSessionRepository;
 import com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService;
-import com.fptu.exe.skillswap.modules.conversation.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.session.service.SessionService;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.Test;
 

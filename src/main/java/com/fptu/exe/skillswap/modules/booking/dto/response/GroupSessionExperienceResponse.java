@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
-import com.fptu.exe.skillswap.modules.session.domain.SessionStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 
 import java.time.LocalDateTime;
 import java.util.UUID;

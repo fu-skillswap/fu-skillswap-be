@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;

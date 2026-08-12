@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.session.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;

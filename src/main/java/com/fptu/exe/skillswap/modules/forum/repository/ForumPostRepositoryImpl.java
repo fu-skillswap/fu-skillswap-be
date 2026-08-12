@@ -16,7 +16,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
 
 @Repository

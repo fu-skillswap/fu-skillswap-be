@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.demo.seeder;
 
-import com.fptu.exe.skillswap.modules.academic.domain.CampusCode;
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.academic.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.SpecializationRepository;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.CampusCode;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;

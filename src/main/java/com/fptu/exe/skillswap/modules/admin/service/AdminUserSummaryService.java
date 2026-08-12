@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryAcademicProfileResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryActivityResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryMentorProfileResponse;

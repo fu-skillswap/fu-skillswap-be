@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.modules.academic.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.admin.domain.AdminCaseActivityEventType;
 import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
-import com.fptu.exe.skillswap.modules.academic.dto.response.StudentProfileResponse;
+import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorVerificationQueueFilterRequest;

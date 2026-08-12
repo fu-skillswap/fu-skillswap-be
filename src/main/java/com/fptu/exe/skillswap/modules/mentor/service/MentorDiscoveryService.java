@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.academic.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.academic.domain.Campus;
-import com.fptu.exe.skillswap.modules.academic.domain.Specialization;
-import com.fptu.exe.skillswap.modules.academic.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.academic.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
+import com.fptu.exe.skillswap.modules.identity.domain.Campus;
+import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
@@ -19,8 +19,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.service.BlogMapper;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAuthorityContentResponse;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatureProvider;
-import com.fptu.exe.skillswap.modules.matching.service.MenteeMatchingFeatures;
+
 import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
@@ -95,7 +94,7 @@ public class MentorDiscoveryService {
     private final BlogPostRepository blogPostRepository;
     private final BlogMapper blogMapper;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
-    private final MenteeMatchingFeatureProvider menteeMatchingFeatureProvider;
+
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
     private final DiscoveryKeywordSupport discoveryKeywordSupport;
@@ -111,7 +110,7 @@ public class MentorDiscoveryService {
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
         StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
-        MenteeMatchingFeatures menteeFeatures = currentUserId == null ? null : menteeMatchingFeatureProvider.getLatestFeatures(currentUserId);
+
         boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
         String normalizedKeyword = discoveryKeywordSupport.normalizeSearchText(safeRequest.getKeyword());
         String keywordPattern = discoveryKeywordSupport.toLikePattern(safeRequest.getKeyword());
@@ -211,11 +210,11 @@ public class MentorDiscoveryService {
         LocalDateTime evaluatedAt = currentTime();
         List<MentorDiscoveryCardResponse> content;
         if (relevanceSort) {
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, menteeFeatures, evaluatedAt);
+            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, evaluatedAt);
             List<DiscoveryRankingService.RankedSearchCandidate> rankedCandidates = discoveryRankingService.rankSearchCandidates(
                     rows,
                     menteeProfile,
-                    menteeFeatures,
+
                     normalizedKeyword,
                     enrichedDataByMentor,
                     evaluatedAt
@@ -235,12 +234,12 @@ public class MentorDiscoveryService {
                     .map(MentorDiscoveryQueryRow::mentorUserId)
                     .toList();
 
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(pageMentorIds, menteeFeatures, evaluatedAt);
+            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(pageMentorIds, evaluatedAt);
 
             List<DiscoveryRankingService.RankedSearchCandidate> rankedPageRows = discoveryRankingService.rankSearchCandidates(
                     pageRows,
                     menteeProfile,
-                    menteeFeatures,
+
                     normalizedKeyword,
                     enrichedDataByMentor,
                     evaluatedAt
@@ -269,7 +268,7 @@ public class MentorDiscoveryService {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         internalTelemetryService.record("MENTOR_VIEWED", null, "MENTOR", mentorUserId, Map.of());
         StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
-        MentorEnrichedData enrichedData = discoveryEnrichmentService.loadMentorEnrichedData(List.of(mentorUserId), null, currentTime())
+        MentorEnrichedData enrichedData = discoveryEnrichmentService.loadMentorEnrichedData(List.of(mentorUserId), currentTime())
                 .getOrDefault(mentorUserId, MentorEnrichedData.empty());
         List<MentorTagResponse> mentorTags = enrichedData.helpTopics();
         List<MentorSubjectResultResponse> subjectResults = enrichedData.subjectResults();
