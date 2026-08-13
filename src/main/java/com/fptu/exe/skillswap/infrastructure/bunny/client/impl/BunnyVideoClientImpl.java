@@ -89,10 +89,10 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
     }
 
     @Override
-    public String generateSignedPlaybackUrl(String videoId, long ttlSeconds) {
+    public String generateSignedPlaybackUrl(String videoId, long ttlSeconds, String clientIp) {
         long expiresAt = Instant.now().plusSeconds(ttlSeconds).getEpochSecond();
-        // Bunny Token Auth for embed: token = sha256(securityKey + videoId + expiresAt)
-        String rawData = properties.getTokenAuthKey() + videoId + expiresAt;
+        // Bunny Token Auth for embed with IP validation: token = sha256(securityKey + videoId + expiresAt + clientIp)
+        String rawData = properties.getTokenAuthKey() + videoId + expiresAt + (clientIp != null ? clientIp : "");
         String token = hashSha256(rawData);
 
         return String.format("https://%s/embed/%s/%s?token=%s&expires=%d",

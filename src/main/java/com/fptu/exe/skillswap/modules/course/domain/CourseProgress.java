@@ -3,8 +3,6 @@ package com.fptu.exe.skillswap.modules.course.domain;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
@@ -26,9 +24,9 @@ import java.util.UUID;
 
 @Entity
 @Table(
-    name = "course_enrollments",
+    name = "course_progresses",
     uniqueConstraints = {
-        @UniqueConstraint(name = "uk_course_enrollments_student", columnNames = {"course_id", "student_user_id"})
+        @UniqueConstraint(name = "uk_course_progress_student", columnNames = {"student_user_id", "course_id"})
     }
 )
 @Getter
@@ -36,45 +34,34 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CourseEnrollment {
+public class CourseProgress {
 
     @Id
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_enrollments_course"))
-    private Course course;
-
     @Column(name = "student_user_id", nullable = false)
     private UUID studentUserId;
 
-    @Column(name = "payment_order_id")
-    private UUID paymentOrderId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_progress_course"))
+    private Course course;
 
-    @Column(name = "base_price_scoin", nullable = false)
+    @Column(name = "completed_lectures", nullable = false)
     @Builder.Default
-    private int basePriceScoin = 0;
+    private int completedLectures = 0;
 
-    @Column(name = "buyer_fee_scoin", nullable = false)
+    @Column(name = "total_lectures", nullable = false)
     @Builder.Default
-    private int buyerFeeScoin = 0;
+    private int totalLectures = 0;
 
-    @Column(name = "mentor_commission_scoin", nullable = false)
+    @Column(name = "overall_percentage", nullable = false)
     @Builder.Default
-    private int mentorCommissionScoin = 0;
+    private int overallPercentage = 0;
 
-    @Column(name = "mentor_payout_scoin", nullable = false)
-    @Builder.Default
-    private int mentorPayoutScoin = 0;
-
-    @Column(name = "paid_amount_scoin", nullable = false)
-    private int paidAmountScoin;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    @Builder.Default
-    private EnrollmentStatus status = EnrollmentStatus.ACTIVE;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "last_studied_lecture_id", foreignKey = @ForeignKey(name = "fk_course_progress_last_lecture"))
+    private CourseLecture lastStudiedLecture;
 
     @Column(name = "completed_at")
     private Instant completedAt;
@@ -84,16 +71,16 @@ public class CourseEnrollment {
     @Builder.Default
     private Long version = 0L;
 
-    @Column(name = "enrolled_at", nullable = false, updatable = false)
-    private Instant enrolledAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        enrolledAt = Instant.now();
-        updatedAt = enrolledAt;
+        createdAt = Instant.now();
+        updatedAt = createdAt;
     }
 
     @PreUpdate

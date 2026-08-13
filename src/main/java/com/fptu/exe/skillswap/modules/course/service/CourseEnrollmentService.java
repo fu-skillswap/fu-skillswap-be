@@ -5,9 +5,6 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
 import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
@@ -17,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -43,11 +39,8 @@ public class CourseEnrollmentService {
             throw new IllegalStateException("Student already enrolled");
         }
 
-        // Atomic Capacity Update
-        int updatedRows = courseRepository.incrementConfirmedCount(courseId, course.getMaxStudents());
-        if (updatedRows == 0) {
-            throw new IllegalStateException("Course is full");
-        }
+        // Increment enrolled count (unlimited capacity for self-paced)
+        courseRepository.incrementEnrolledCount(courseId);
 
         // Snapshot pricing
         int basePrice = course.getPriceScoin();
@@ -57,8 +50,6 @@ public class CourseEnrollmentService {
         int platformRevenueFromMentor = (int) Math.round(basePrice * MENTOR_FEE_RATE);
         int mentorPayout = basePrice - platformRevenueFromMentor;
 
-        // Allocate the immutable financial identity before touching the wallet. Course IDs are
-        // shared by every learner and therefore cannot be ledger source IDs.
         UUID enrollmentId = UuidUtil.generateUuidV7();
         creditLedgerService.reserveCredit(
             studentUserId, 
@@ -89,7 +80,7 @@ public class CourseEnrollmentService {
 
         enrollment = enrollmentRepository.save(enrollment);
 
-        // Generate per-session settlements
+        // Generate hold-period settlement
         settlementService.generateSettlements(enrollment);
 
         return enrollment;

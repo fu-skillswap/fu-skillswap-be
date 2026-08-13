@@ -17,18 +17,16 @@ import java.util.UUID;
 @ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CourseSettlementLifecycleScheduler {
 
-    private static final int DISPUTE_WINDOW_HOURS = 24;
-
     private final CourseSettlementService courseSettlementService;
 
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void progressEscrowLifecycle() {
         try {
-            int eligible = courseSettlementService.markCompletedSessionsEligible();
-            Instant releaseCutoff = Instant.now().minusSeconds(DISPUTE_WINDOW_HOURS * 3600L);
+            int eligible = courseSettlementService.markEligibleSettlements();
+            Instant now = Instant.now();
             int released = 0;
-            for (UUID allocationId : courseSettlementService.findEligibleAllocationIdsBefore(releaseCutoff)) {
-                if (courseSettlementService.releaseEligibleAllocation(allocationId, Instant.now())) {
+            for (UUID allocationId : courseSettlementService.findEligibleAllocationIdsBefore(now)) {
+                if (courseSettlementService.releaseEligibleAllocation(allocationId, now)) {
                     released++;
                 }
             }

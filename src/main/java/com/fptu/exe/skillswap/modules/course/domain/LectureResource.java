@@ -22,32 +22,28 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "course_materials")
+@Table(name = "lecture_resources")
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CourseMaterial {
+public class LectureResource {
 
     @Id
     @GeneratedUuidV7
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_materials_course"))
-    private Course course;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "course_session_id", foreignKey = @ForeignKey(name = "fk_course_materials_session"))
-    private CourseSession courseSession;
+    @JoinColumn(name = "lecture_id", nullable = false, foreignKey = @ForeignKey(name = "fk_lecture_resources_lecture"))
+    private CourseLecture lecture;
 
     @Column(nullable = false, length = 200)
     private String title;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "material_type", nullable = false, length = 32)
-    private MaterialType materialType;
+    @Column(name = "resource_type", nullable = false, length = 32)
+    private MaterialType resourceType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "storage_provider_type", nullable = false, length = 32)
@@ -56,11 +52,6 @@ public class CourseMaterial {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private MaterialStatus status;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "access_scope", nullable = false, length = 32)
-    @Builder.Default
-    private MaterialAccessScope accessScope = MaterialAccessScope.COURSE_LEVEL;
 
     // Bunny.net specific fields
     @Column(name = "bunny_video_id", length = 64)
@@ -88,9 +79,6 @@ public class CourseMaterial {
     @Column(name = "file_size_bytes")
     private Long fileSizeBytes;
 
-    @Column(name = "available_from")
-    private Instant availableFrom;
-
     @Column(name = "uploaded_by", nullable = false)
     private UUID uploadedBy;
 
@@ -99,9 +87,6 @@ public class CourseMaterial {
 
     @Column(name = "deleted_at")
     private Instant deletedAt;
-
-    @Column(name = "delete_requested_at")
-    private Instant deleteRequestedAt;
 
     @Version
     @Column(nullable = false)

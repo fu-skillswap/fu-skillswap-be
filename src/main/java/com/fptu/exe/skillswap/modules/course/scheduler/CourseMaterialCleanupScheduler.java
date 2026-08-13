@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.course.scheduler;
 
-import com.fptu.exe.skillswap.modules.course.domain.CourseMaterial;
+import com.fptu.exe.skillswap.modules.course.domain.LectureResource;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
-import com.fptu.exe.skillswap.modules.course.repository.CourseMaterialRepository;
+import com.fptu.exe.skillswap.modules.course.repository.LectureResourceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,39 +18,38 @@ import java.util.List;
 @Slf4j
 public class CourseMaterialCleanupScheduler {
 
-    private final CourseMaterialRepository materialRepository;
+    private final LectureResourceRepository resourceRepository;
     private final com.fptu.exe.skillswap.modules.course.repository.CourseOutboxEventRepository outboxEventRepository;
 
     // Run every hour
     @Scheduled(cron = "0 0 * * * *")
     @Transactional
     public void cleanupExpiredUploads() {
-        log.info("Starting cleanup of expired course material uploads");
+        log.info("Starting cleanup of expired lecture resource uploads");
         
-        // Find UPLOADING materials older than 24 hours
         Instant cutoff = Instant.now().minusSeconds(24 * 3600);
-        List<CourseMaterial> expiredMaterials = materialRepository.findByStatusAndUploadedAtBefore(MaterialStatus.UPLOADING, cutoff);
+        List<LectureResource> expiredResources = resourceRepository.findAll().stream()
+                .filter(r -> r.getStatus() == MaterialStatus.UPLOADING && r.getUploadedAt().isBefore(cutoff))
+                .toList();
         
-        for (CourseMaterial material : expiredMaterials) {
-            log.info("Expiring material upload ID: {}", material.getId());
-            material.setStatus(MaterialStatus.EXPIRED);
-            material.setDeleteRequestedAt(Instant.now());
-            materialRepository.save(material);
+        for (LectureResource resource : expiredResources) {
+            log.info("Expiring resource upload ID: {}", resource.getId());
+            resource.setStatus(MaterialStatus.EXPIRED);
+            resourceRepository.save(resource);
 
-            // If it was a Bunny.net video, use the outbox to delete the placeholder video GUID
-            if (material.getStorageProviderType() == StorageProviderType.BUNNY_VIDEO && material.getBunnyVideoId() != null) {
+            if (resource.getStorageProviderType() == StorageProviderType.BUNNY_VIDEO && resource.getBunnyVideoId() != null) {
                 com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent outboxEvent = com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent.builder()
-                        .aggregateType("CourseMaterial")
-                        .aggregateId(material.getId())
+                        .aggregateType("LectureResource")
+                        .aggregateId(resource.getId())
                         .eventType(com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED)
                         .payloadJson("{}")
                         .status("PENDING")
                         .build();
                 outboxEventRepository.save(outboxEvent);
-                log.info("Scheduled deletion of expired video GUID {} from Bunny.net", material.getBunnyVideoId());
+                log.info("Scheduled deletion of expired video GUID {} from Bunny.net", resource.getBunnyVideoId());
             }
         }
         
-        log.info("Finished cleanup of expired course material uploads. Processed {} items.", expiredMaterials.size());
+        log.info("Finished cleanup of expired lecture resource uploads. Processed {} items.", expiredResources.size());
     }
 }

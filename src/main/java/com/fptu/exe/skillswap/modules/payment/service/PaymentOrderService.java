@@ -13,6 +13,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentProvider;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
@@ -76,7 +77,7 @@ public class PaymentOrderService {
     private final SettlementService settlementService;
     private final SessionService sessionService;
     private final com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
-    private com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService groupSessionExperienceService;
+
     private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
@@ -88,10 +89,6 @@ public class PaymentOrderService {
         this.bookingPricingPreviewService = bookingPricingPreviewService;
     }
 
-    @Autowired(required = false)
-    void setGroupSessionExperienceService(com.fptu.exe.skillswap.modules.booking.service.GroupSessionExperienceService groupSessionExperienceService) {
-        this.groupSessionExperienceService = groupSessionExperienceService;
-    }
 
     @Transactional(readOnly = true)
     public PaymentCheckoutPreviewResponse previewCheckout(
@@ -138,7 +135,7 @@ public class PaymentOrderService {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
             }
 
-            PaymentOrder existingOrder = paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+            PaymentOrder existingOrder = paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
             PaymentAttempt latestAttempt = existingOrder == null
                     ? null
                     : paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(existingOrder.getId()).orElse(null);
@@ -262,7 +259,7 @@ public class PaymentOrderService {
             paymentAttemptRepository.save(attempt);
             paymentOrderRepository.save(order);
             internalTelemetryService.record(
-                    "PAYMENT_STARTED", currentUserId, "BOOKING", order.getBookingId(),
+                    "PAYMENT_STARTED", currentUserId, "BOOKING", order.getTargetId(),
                     java.util.Map.of("paymentOrderId", String.valueOf(order.getId()))
             );
             return toResponse(order, attempt);
@@ -324,7 +321,7 @@ public class PaymentOrderService {
                             "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
             PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-            Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+            Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(order.getTargetId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
 
             String providerEventId = resolveProviderEventId(verified);
@@ -364,11 +361,11 @@ public class PaymentOrderService {
         });
     }
 
-    public PaymentCheckoutResponse getByBookingId(UUID currentUserId, UUID bookingId) {
+    public PaymentCheckoutResponse getByTarget(UUID currentUserId, PaymentTargetType targetType, UUID targetId) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingId(bookingId)
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetId(targetType, targetId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
         if (!currentUserId.equals(order.getPayerUserId()) && !currentUserId.equals(order.getMentorUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Không có quyền xem payment order này");
@@ -387,7 +384,7 @@ public class PaymentOrderService {
         if (bookingId == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingId(bookingId).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId).orElse(null);
         if (order == null) {
             return;
         }
@@ -407,9 +404,9 @@ public class PaymentOrderService {
         );
         for (PaymentOrder order : staleOrders) {
             try {
-                synchronizeProviderStatusForBooking(order.getBookingId());
+                synchronizeProviderStatusForBooking(order.getTargetId());
             } catch (RuntimeException ex) {
-                log.warn("Failed to reconcile payment order {} for booking {}: {}", order.getId(), order.getBookingId(), ex.getMessage());
+                log.warn("Failed to reconcile payment order {} for booking {}: {}", order.getId(), order.getTargetId(), ex.getMessage());
             }
         }
     }
@@ -419,7 +416,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -442,7 +439,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -488,14 +485,7 @@ public class PaymentOrderService {
     }
 
     private LocalDateTime paymentDeadline(Booking booking) {
-        if (booking != null && booking.getGroupSession() != null) {
-            LocalDateTime holdDeadline = BookingDeadlinePolicy.resolvePaymentDeadline(
-                    booking.getAcceptedAt(), booking.getSelectedStartTime());
-            LocalDateTime registrationDeadline = booking.getGroupSession().getRegistrationClosesAt();
-            if (holdDeadline == null) return registrationDeadline;
-            if (registrationDeadline == null) return holdDeadline;
-            return holdDeadline.isBefore(registrationDeadline) ? holdDeadline : registrationDeadline;
-        }
+
         LocalDateTime start = booking.getSelectedStartTime() == null && booking.getSlot() != null
                 ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
         return BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), start);
@@ -562,7 +552,7 @@ public class PaymentOrderService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
         if (order == null) {
             return;
         }
@@ -585,7 +575,8 @@ public class PaymentOrderService {
         if (!StringUtils.hasText(draftOrder.getOrderCode())) {
             draftOrder.setOrderCode(generateOrderCode(paymentOrderId));
         }
-        draftOrder.setBookingId(booking.getId());
+        draftOrder.setTargetType(PaymentTargetType.BOOKING);
+        draftOrder.setTargetId(booking.getId());
         draftOrder.setPayerUserId(currentUserId);
         draftOrder.setMentorUserId(booking.getMentorProfile().getUserId());
         draftOrder.setServiceId(booking.getService() == null ? null : booking.getService().getId());
@@ -721,7 +712,7 @@ public class PaymentOrderService {
         attempt.setProviderPaymentLinkId(paymentLink.providerPaymentLinkId());
         switch (providerStatus) {
             case "PAID", "SUCCESS", "00" -> {
-                Booking booking = bookingRepository.findByIdForSessionUpdate(order.getBookingId()).orElseThrow();
+                Booking booking = bookingRepository.findByIdForSessionUpdate(order.getTargetId()).orElseThrow();
                 finalizeInternalPayment(order, attempt, attempt.getProviderTransactionId(),
                         attempt.getProviderEventId(), paymentLink.providerStatus(), booking);
             }
@@ -867,15 +858,11 @@ public class PaymentOrderService {
     private void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
         Booking booking = lockedBooking != null
                 ? lockedBooking
-                : bookingRepository.findByIdForSessionUpdate(order.getBookingId())
+                : bookingRepository.findByIdForSessionUpdate(order.getTargetId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         if (booking.getStatus() == BookingStatus.PAID) {
-            if (booking.getGroupSession() == null) {
-                sessionService.createForAcceptedBooking(booking);
-                conversationService.createDirectForAcceptedBooking(booking);
-            } else if (groupSessionExperienceService != null) {
-                groupSessionExperienceService.activateConfirmedSeat(booking);
-            }
+            sessionService.createForAcceptedBooking(booking);
+            conversationService.createDirectForAcceptedBooking(booking);
             return;
         }
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
@@ -902,12 +889,8 @@ public class PaymentOrderService {
                 )
         );
 
-        if (booking.getGroupSession() == null) {
-            sessionService.createForAcceptedBooking(booking);
-            conversationService.createDirectForAcceptedBooking(booking);
-        } else if (groupSessionExperienceService != null) {
-            groupSessionExperienceService.activateConfirmedSeat(booking);
-        }
+        sessionService.createForAcceptedBooking(booking);
+        conversationService.createDirectForAcceptedBooking(booking);
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
@@ -948,7 +931,7 @@ public class PaymentOrderService {
     }
 
     private PaymentCheckoutResponse finalizeFullyPaidOrder(PaymentOrder savedOrder) {
-        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(savedOrder.getBookingId())
+        Booking lockedBooking = bookingRepository.findByIdForSessionUpdate(savedOrder.getTargetId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
         if (savedOrder.getCreditFinalizedAt() == null) {
             savedOrder.setCreditFinalizedAt(DateTimeUtil.now());
@@ -1054,9 +1037,9 @@ public class PaymentOrderService {
         return PaymentCheckoutResponse.builder()
                 .paymentOrderId(order.getId())
                 .orderCode(order.getOrderCode())
-                .bookingId(order.getBookingId())
+                .bookingId(order.getTargetId())
                 .attemptNo(attempt == null ? null : attempt.getAttemptNo())
-                .basePriceScoin(order.getGrossScoin())
+                .priceScoin(order.getGrossScoin())
                 .couponDiscountScoin(order.getCouponDiscountScoin())
                 .campaignCreditAppliedScoin(order.getCampaignCreditScoin())
                 .userCreditAppliedScoin(order.getUserCreditScoin())

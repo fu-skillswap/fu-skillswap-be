@@ -5,6 +5,9 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -18,7 +21,7 @@ public interface CourseRepository extends JpaRepository<Course, UUID> {
     
     Page<Course> findByStatus(CourseStatus status, Pageable pageable);
     
-    @org.springframework.data.jpa.repository.Modifying
-    @org.springframework.data.jpa.repository.Query("UPDATE Course c SET c.confirmedCount = c.confirmedCount + 1 WHERE c.id = :id AND c.confirmedCount < :maxStudents")
-    int incrementConfirmedCount(@org.springframework.data.repository.query.Param("id") UUID id, @org.springframework.data.repository.query.Param("maxStudents") int maxStudents);
+    @Modifying
+    @Query("UPDATE Course c SET c.enrolledCount = c.enrolledCount + 1 WHERE c.id = :id")
+    int incrementEnrolledCount(@Param("id") UUID id);
 }

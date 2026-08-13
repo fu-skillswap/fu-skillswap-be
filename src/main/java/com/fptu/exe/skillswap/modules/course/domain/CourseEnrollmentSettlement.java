@@ -7,9 +7,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -21,12 +20,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(
-    name = "course_enrollment_settlements",
-    uniqueConstraints = {
-        @UniqueConstraint(name = "uk_course_settlements_enrollment_session", columnNames = {"enrollment_id", "course_session_id"})
-    }
-)
+@Table(name = "course_enrollment_settlements")
 @Getter
 @Setter
 @Builder
@@ -38,13 +32,9 @@ public class CourseEnrollmentSettlement {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "enrollment_id", nullable = false, foreignKey = @ForeignKey(name = "fk_settlements_enrollment"))
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "enrollment_id", nullable = false, unique = true, foreignKey = @ForeignKey(name = "fk_settlements_enrollment"))
     private CourseEnrollment enrollment;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "course_session_id", nullable = false, foreignKey = @ForeignKey(name = "fk_settlements_session"))
-    private CourseSession courseSession;
 
     @Column(name = "mentor_payout_scoin", nullable = false)
     private int mentorPayoutScoin;
@@ -61,7 +51,7 @@ public class CourseEnrollmentSettlement {
     @Column(name = "platform_revenue_scoin", nullable = false)
     private int platformRevenueScoin;
 
-    /** Learner voluntary refunds exclude the buyer fee by the locked policy. */
+    /** Learner voluntary refunds exclude the buyer fee by policy. */
     @Column(name = "student_refundable_scoin", nullable = false)
     private int studentRefundableScoin;
 

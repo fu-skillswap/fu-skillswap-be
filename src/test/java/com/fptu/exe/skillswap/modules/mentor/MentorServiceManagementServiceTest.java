@@ -238,6 +238,6 @@ class MentorServiceManagementServiceTest {
         var response = mentorServiceManagementService.createService(mentorUserId, request);
 
         assertEquals(true, response.free());
-        assertEquals(0, response.priceScoin());
+        assertEquals(0, response.basePriceScoin());
     }
 }

@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-/** Public booking shape. The persisted discriminator is the nullable group-session relation. */
+/** Public booking shape. All bookings are now 1-on-1. */
 public enum BookingType {
-    ONE_TO_ONE,
-    GROUP_SESSION
+    ONE_TO_ONE
 }

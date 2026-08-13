@@ -56,9 +56,17 @@ public class CourseVaultController {
     public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID courseId,
-            @PathVariable UUID materialId) {
+            @PathVariable UUID materialId,
+            jakarta.servlet.http.HttpServletRequest request) {
             
-        CourseVideoPlaybackResponse response = courseVaultService.getPlaybackAuthorization(principal.getId(), courseId, materialId);
+        String clientIp = request.getHeader("X-Forwarded-For");
+        if (clientIp == null || clientIp.isEmpty() || "unknown".equalsIgnoreCase(clientIp)) {
+            clientIp = request.getRemoteAddr();
+        } else {
+            clientIp = clientIp.split(",")[0].trim();
+        }
+            
+        CourseVideoPlaybackResponse response = courseVaultService.getPlaybackAuthorization(principal.getId(), courseId, materialId, clientIp);
         return ApiResponse.success(response);
     }
 }

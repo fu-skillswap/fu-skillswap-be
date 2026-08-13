@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceManagementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
@@ -60,7 +60,7 @@ public class MentorServiceController {
             description = "Trả về danh sách dịch vụ mentoring thuộc về mentor hiện tại. Có thể lọc theo query param `active=true|false|all`, mặc định là `all` để FE quản lý cả service đang bật và đã xóa mềm."
     )
     @GetMapping
-    public ApiResponse<List<MentorServiceResponse>> getMyServices(
+    public ApiResponse<List<MentorServiceManagementResponse>> getMyServices(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) Boolean isActive
     ) {
@@ -73,7 +73,7 @@ public class MentorServiceController {
             description = "Trả về chi tiết một dịch vụ mentoring thuộc về mentor hiện tại. FE dùng trước khi mở màn sửa dịch vụ hoặc khi cần hiển thị thông tin đầy đủ của một service."
     )
     @GetMapping("/{serviceId}")
-    public ApiResponse<MentorServiceResponse> getMyServiceDetail(
+    public ApiResponse<MentorServiceManagementResponse> getMyServiceDetail(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID serviceId
     ) {
@@ -86,7 +86,7 @@ public class MentorServiceController {
             description = "Tạo một dịch vụ mentoring mới cho mentor hiện tại. Contract hiện tại vẫn nhận title, description, expectedOutcome, durationMinutes, pricing/free flags và help topics của dịch vụ. FE cần bám đúng schema runtime hiện tại thay vì suy luận từ plan phase sau."
     )
     @PostMapping
-    public ApiResponse<MentorServiceResponse> createService(
+    public ApiResponse<MentorServiceManagementResponse> createService(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody CreateMentorServiceRequest request
     ) {
@@ -99,7 +99,7 @@ public class MentorServiceController {
             description = "Cập nhật một dịch vụ mentoring hiện có của mentor theo contract runtime hiện tại, bao gồm thông tin mô tả, pricing/free flags và help topics."
     )
     @PutMapping("/{serviceId}")
-    public ApiResponse<MentorServiceResponse> updateService(
+    public ApiResponse<MentorServiceManagementResponse> updateService(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID serviceId,
             @Valid @RequestBody UpdateMentorServiceRequest request
@@ -113,7 +113,7 @@ public class MentorServiceController {
             description = "Bật hoặc tắt một dịch vụ mentoring của mentor hiện tại. FE dùng khi mentor muốn tạm dừng hoặc mở lại dịch vụ mà không xóa hẳn dữ liệu service."
     )
     @PatchMapping("/{serviceId}/active")
-    public ApiResponse<MentorServiceResponse> changeActiveStatus(
+    public ApiResponse<MentorServiceManagementResponse> changeActiveStatus(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID serviceId,
             @Valid @RequestBody MentorServiceActiveRequest request

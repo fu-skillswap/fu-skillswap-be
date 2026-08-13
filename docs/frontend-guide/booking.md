@@ -1,6 +1,6 @@
 # Frontend Integration Guide — Booking & Scheduling Module
 
-Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend (FE) cách tích hợp với **Booking & Scheduling Module** (Quản lý Đặt lịch Mentoring 1-on-1, Khung giờ Rảnh Availability Slots, Lịch lặp Hàng tuần Templates, Đổi lịch Reschedule và Group Sessions) của SkillSwap Backend.
+Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend (FE) cách tích hợp với **Booking & Scheduling Module** (Quản lý Đặt lịch Mentoring 1-on-1, Khung giờ Rảnh Availability Slots, Lịch lặp Hàng tuần Templates và Đổi lịch Reschedule) của SkillSwap Backend.
 
 ---
 

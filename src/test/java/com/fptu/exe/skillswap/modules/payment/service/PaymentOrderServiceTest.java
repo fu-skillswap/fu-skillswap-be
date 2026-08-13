@@ -13,6 +13,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutResponse;
@@ -192,7 +193,7 @@ class PaymentOrderServiceTest {
     @Test
     void checkout_creditFullyCovers_shouldCompleteInternallyWithoutPaymentLink() {
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
         when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(72_000)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
@@ -219,13 +220,13 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-CANCEL-1")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
 
-        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMenteeCancellation(booking, false);
@@ -242,13 +243,13 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-CANCEL-2")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .status(PaymentOrderStatus.PAID)
                 .build();
 
-        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMenteeCancellation(booking, true);
@@ -262,13 +263,13 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-MENTOR-CANCEL-1")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
 
-        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMentorCancellation(booking);
@@ -284,13 +285,13 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-EXPIRE-1")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
                 .build();
 
-        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.expireAwaitingPayment(booking);
@@ -306,13 +307,13 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-MENTOR-CANCEL-2")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .status(PaymentOrderStatus.PAID)
                 .build();
 
-        when(paymentOrderRepository.findByBookingIdForUpdate(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
         paymentOrderService.handleMentorCancellation(booking);
@@ -331,7 +332,7 @@ class PaymentOrderServiceTest {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .orderCode("PAY-TEST")
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -429,7 +430,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -469,7 +470,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -504,7 +505,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode(String.valueOf(orderCode))
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -553,7 +554,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .orderCode("PAY-SURPLUS")
                 .providerOrderCode(String.valueOf(111L)) // Original successful code
                 .payerUserId(menteeId)
@@ -595,7 +596,7 @@ class PaymentOrderServiceTest {
     void getByBookingId_providerStatusPaid_shouldFinalizeAsWebhookFallback() {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode("123456789")
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -611,7 +612,7 @@ class PaymentOrderServiceTest {
                 .providerOrderCode("123456789")
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())).thenReturn(Optional.of(attempt));
         when(payOsGateway.getPaymentLink(123456789L))
                 .thenReturn(new PayOsGateway.PaymentLinkDetails("pl-123", "PAID", LocalDateTime.now().minusMinutes(5), null));
@@ -622,7 +623,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentCheckoutResponse response = paymentOrderService.getByBookingId(menteeId, bookingId);
+        PaymentCheckoutResponse response = paymentOrderService.getByTarget(menteeId, com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId);
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         assertEquals(PaymentAttemptStatus.SUCCEEDED, attempt.getStatus());
@@ -635,7 +636,7 @@ class PaymentOrderServiceTest {
     void getByBookingId_providerStatusSuccess_shouldAlsoFinalizeAsPaidFallback() {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
                 .providerOrderCode("987654321")
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
@@ -651,7 +652,7 @@ class PaymentOrderServiceTest {
                 .providerOrderCode("987654321")
                 .build();
 
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())).thenReturn(Optional.of(attempt));
         when(payOsGateway.getPaymentLink(987654321L))
                 .thenReturn(new PayOsGateway.PaymentLinkDetails("pl-987", "SUCCESS", LocalDateTime.now().minusMinutes(3), null));
@@ -662,7 +663,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentCheckoutResponse response = paymentOrderService.getByBookingId(menteeId, bookingId);
+        PaymentCheckoutResponse response = paymentOrderService.getByTarget(menteeId, com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId);
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         assertEquals("SUCCESS", response.providerStatus());
@@ -745,7 +746,7 @@ class PaymentOrderServiceTest {
         );
 
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(paymentOrderRepository.findByBookingId(bookingId)).thenReturn(Optional.empty());
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
         // With surcharge-added price = 79,200
         when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(79_200)))

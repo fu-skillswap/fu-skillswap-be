@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.payment.repository;
 
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -16,13 +17,13 @@ import java.util.UUID;
 
 public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID> {
 
-    Optional<PaymentOrder> findByBookingId(UUID bookingId);
+    Optional<PaymentOrder> findByTargetTypeAndTargetId(PaymentTargetType targetType, UUID targetId);
 
-    List<PaymentOrder> findByBookingIdIn(Collection<UUID> bookingIds);
+    List<PaymentOrder> findByTargetTypeAndTargetIdIn(PaymentTargetType targetType, Collection<UUID> targetIds);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select po from PaymentOrder po where po.bookingId = :bookingId")
-    Optional<PaymentOrder> findByBookingIdForUpdate(@Param("bookingId") UUID bookingId);
+    @Query("select po from PaymentOrder po where po.targetType = :targetType and po.targetId = :targetId")
+    Optional<PaymentOrder> findByTargetTypeAndTargetIdForUpdate(@Param("targetType") PaymentTargetType targetType, @Param("targetId") UUID targetId);
 
     Optional<PaymentOrder> findByOrderCode(String orderCode);
 
@@ -36,11 +37,11 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
     @Query("select po from PaymentOrder po where po.providerOrderCode = :providerOrderCode")
     Optional<PaymentOrder> findByProviderOrderCodeForUpdate(@Param("providerOrderCode") String providerOrderCode);
 
-    boolean existsByBookingId(UUID bookingId);
+    boolean existsByTargetTypeAndTargetId(PaymentTargetType targetType, UUID targetId);
 
     boolean existsByProviderOrderCode(String providerOrderCode);
 
-    boolean existsByBookingIdAndStatus(UUID bookingId, PaymentOrderStatus status);
+    boolean existsByTargetTypeAndTargetIdAndStatus(PaymentTargetType targetType, UUID targetId, PaymentOrderStatus status);
 
     boolean existsByProviderEventId(String providerEventId);
 

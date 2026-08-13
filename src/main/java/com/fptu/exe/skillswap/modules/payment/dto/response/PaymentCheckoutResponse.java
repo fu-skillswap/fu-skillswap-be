@@ -10,12 +10,13 @@ import java.util.UUID;
 
 @Builder
 @Schema(description = "Kết quả checkout payment cho booking")
-public record PaymentCheckoutResponse(
+    public record PaymentCheckoutResponse(
         UUID paymentOrderId,
         String orderCode,
         UUID bookingId,
         Integer attemptNo,
-        Integer basePriceScoin,
+        @Schema(description = "The 110% final service price to be paid by Mentee")
+        Integer priceScoin,
         Integer couponDiscountScoin,
         Integer campaignCreditAppliedScoin,
         Integer userCreditAppliedScoin,

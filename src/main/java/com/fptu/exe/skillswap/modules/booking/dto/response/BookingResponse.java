@@ -73,7 +73,7 @@ public record BookingResponse(
         Integer serviceDurationSnapshot,
         @Schema(description = "Snapshot cờ miễn phí của service", nullable = true)
         Boolean serviceIsFreeSnapshot,
-        @Schema(description = "Snapshot giá dịch vụ theo SCoin", nullable = true)
+        @Schema(description = "Snapshot giá gốc dịch vụ theo SCoin (chưa bao gồm 10% phụ phí nền tảng cho mentee)", nullable = true)
         Integer servicePriceScoinSnapshot,
         @Schema(description = "Booking-time snapshot of ongoing post-session chat entitlement")
         Boolean maintainPostSessionChatSnapshot,
@@ -189,16 +189,6 @@ public record BookingResponse(
         @Schema(description = "Action UI tiếp theo được backend gợi ý", nullable = true)
         BookingNextAction nextAction,
         @Schema(description = "Deadline action nếu backend có deadline thật", nullable = true)
-        LocalDateTime actionDeadlineAt,
-        @Schema(description = "Booking format; GROUP_SESSION seats do not use direct mentor accept, reschedule, calendar or chat flows")
-        BookingType bookingType,
-        @Schema(description = "Group session backing this seat booking", nullable = true)
-        UUID groupSessionId,
-        @Schema(description = "Per-seat attendance submitted by the mentor", nullable = true)
-        com.fptu.exe.skillswap.modules.booking.domain.GroupAttendanceStatus groupAttendanceStatus,
-        @Schema(description = "When the attendance status was recorded", nullable = true)
-        LocalDateTime groupAttendanceMarkedAt,
-        @Schema(description = "Snapshot-backed group-event context for GROUP_SESSION bookings", nullable = true)
-        GroupSessionBookingSummaryResponse groupSession
+        LocalDateTime actionDeadlineAt
 ) {
 }

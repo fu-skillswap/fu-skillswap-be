@@ -45,14 +45,7 @@ public class BookingLifecycleMaintenanceService {
     private final SettlementService settlementService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEventService bookingEventService;
-    private final GroupSessionCommerceService groupSessionCommerceService;
-    private GroupSessionExperienceService groupSessionExperienceService;
     private AvailabilityTemplateService availabilityTemplateService;
-
-    @Autowired(required = false)
-    void setGroupSessionExperienceService(GroupSessionExperienceService groupSessionExperienceService) {
-        this.groupSessionExperienceService = groupSessionExperienceService;
-    }
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
@@ -146,7 +139,7 @@ public class BookingLifecycleMaintenanceService {
         LocalDateTime now = DateTimeUtil.now();
         List<UUID> candidateIds = bookingRepository.findAwaitingPaymentExpiryCandidates(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT, now.minusMinutes(PAYMENT_WINDOW_MINUTES),
-                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES), now)
+                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES))
                 .stream().map(Booking::getId).toList();
         List<Booking> expiredBookings = new ArrayList<>();
         for (UUID bookingId : candidateIds) {
@@ -159,9 +152,7 @@ public class BookingLifecycleMaintenanceService {
             booking.setRejectedAt(now);
             booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng "
                     + PAYMENT_DEADLINE_TEXT + ".");
-            if (booking.getGroupSession() != null) {
-                groupSessionCommerceService.releaseSeatForTerminalTransition(booking, BookingStatus.ACCEPTED_AWAITING_PAYMENT);
-            } else if (booking.getSlot() != null && booking.getSlot().getStartTime() != null
+            if (booking.getSlot() != null && booking.getSlot().getStartTime() != null
                     && now.isBefore(booking.getSlot().getStartTime())) {
                 refreshSlotBookedFlag(booking.getSlot());
             }
@@ -217,9 +208,7 @@ public class BookingLifecycleMaintenanceService {
     private boolean processPostSessionCandidate(UUID bookingId, LocalDateTime now) {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
         if (booking == null) return false;
-        if (booking.getGroupSession() != null) {
-            return groupSessionExperienceService != null && groupSessionExperienceService.autoCloseIfDue(bookingId, now);
-        }
+
         BookingStatus oldStatus = booking.getStatus();
         if ((oldStatus == BookingStatus.PAID || oldStatus == BookingStatus.ACCEPTED)
                 && selectedEndTime(booking) != null && !now.isBefore(selectedEndTime(booking))) {
@@ -295,9 +284,6 @@ public class BookingLifecycleMaintenanceService {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
                 settlementService.refundForMentorNoShow(booking);
                 incrementMentorNoShow(booking);
-                if (booking.getGroupSession() != null && groupSessionExperienceService != null) {
-                    groupSessionExperienceService.revokeSeat(booking, true);
-                }
             } else {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
                 settlementService.releaseForBooking(booking);
@@ -320,10 +306,7 @@ public class BookingLifecycleMaintenanceService {
     }
 
     private boolean isPaymentDeadlineReached(Booking booking, LocalDateTime now) {
-        if (booking.getGroupSession() != null) {
-            LocalDateTime deadline = groupSessionCommerceService.resolvePaymentDeadline(booking);
-            return deadline != null && !deadline.isAfter(now);
-        }
+
         LocalDateTime startDeadline = booking.getSelectedStartTime() == null && booking.getSlot() != null
                 ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
         LocalDateTime deadline = BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), startDeadline);

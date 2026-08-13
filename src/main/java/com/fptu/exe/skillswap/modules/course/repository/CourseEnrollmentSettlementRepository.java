@@ -10,13 +10,12 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface CourseEnrollmentSettlementRepository extends JpaRepository<CourseEnrollmentSettlement, UUID> {
-    List<CourseEnrollmentSettlement> findByCourseSessionId(UUID courseSessionId);
-
-    List<CourseEnrollmentSettlement> findByEnrollmentId(UUID enrollmentId);
+    Optional<CourseEnrollmentSettlement> findByEnrollmentId(UUID enrollmentId);
     
     List<CourseEnrollmentSettlement> findByStatus(CourseSettlementStatus status);
 
@@ -25,23 +24,12 @@ public interface CourseEnrollmentSettlementRepository extends JpaRepository<Cour
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select settlement from CourseEnrollmentSettlement settlement where settlement.id = :id")
-    java.util.Optional<CourseEnrollmentSettlement> findByIdForUpdate(@Param("id") UUID id);
+    Optional<CourseEnrollmentSettlement> findByIdForUpdate(@Param("id") UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select settlement from CourseEnrollmentSettlement settlement
-            join fetch settlement.enrollment enrollment
-            where settlement.courseSession.id = :sessionId
-            order by settlement.enrollment.id asc
-            """)
-    List<CourseEnrollmentSettlement> findByCourseSessionIdForUpdate(@Param("sessionId") UUID sessionId);
-
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("""
-            select settlement from CourseEnrollmentSettlement settlement
-            join fetch settlement.courseSession
             where settlement.enrollment.id = :enrollmentId
-            order by settlement.courseSession.scheduledStartAt asc, settlement.id asc
             """)
-    List<CourseEnrollmentSettlement> findByEnrollmentIdForUpdate(@Param("enrollmentId") UUID enrollmentId);
+    Optional<CourseEnrollmentSettlement> findByEnrollmentIdForUpdate(@Param("enrollmentId") UUID enrollmentId);
 }

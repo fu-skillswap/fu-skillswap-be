@@ -26,6 +26,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
 import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequest;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -383,7 +384,7 @@ class AdminDashboardControllerIntegrationTest {
     private void createPaymentOrder(UUID mentorUserId, UUID payerUserId, PaymentOrderStatus status, LocalDateTime eventTime) {
         PaymentOrder paymentOrder = paymentOrderRepository.save(PaymentOrder.builder()
                 .orderCode(UUID.randomUUID().toString())
-                .bookingId(UUID.randomUUID())
+                .targetType(PaymentTargetType.BOOKING).targetId(UUID.randomUUID())
                 .payerUserId(payerUserId)
                 .mentorUserId(mentorUserId)
                 .grossScoin(100)

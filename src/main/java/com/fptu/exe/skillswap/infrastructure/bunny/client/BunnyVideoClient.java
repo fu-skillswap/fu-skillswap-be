@@ -27,10 +27,11 @@ public interface BunnyVideoClient {
 
     /**
      * Generates a signed playback URL using Bunny.net Token Authentication specification.
-     * Encapsulates the HMAC/SHA256 signing logic.
+     * Encapsulates the HMAC/SHA256 signing logic, including IP binding.
      * @param videoId The GUID of the video.
      * @param ttlSeconds Time-to-live for the token in seconds.
+     * @param clientIp The IP address of the client to bind the token to.
      * @return The signed playback URL.
      */
-    String generateSignedPlaybackUrl(String videoId, long ttlSeconds);
+    String generateSignedPlaybackUrl(String videoId, long ttlSeconds, String clientIp);
 }

@@ -51,8 +51,7 @@ public class AvailabilityTemplateService {
     private static final ZoneId TEMPLATE_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final List<BookingStatus> LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID);
-    private static final EnumSet<GroupSessionStatus> RESERVING_GROUP_STATUSES =
-            EnumSet.of(GroupSessionStatus.OPEN, GroupSessionStatus.IN_PROGRESS);
+
 
     private final AvailabilityTemplateRepository templateRepository;
     private final AvailabilityTemplateExceptionRepository exceptionRepository;
@@ -63,7 +62,7 @@ public class AvailabilityTemplateService {
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorServiceRepository mentorServiceRepository;
     private final BookingRepository bookingRepository;
-    private final GroupSessionRepository groupSessionRepository;
+
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final AvailabilityTemplateProperties properties;
     private final EntityManager entityManager;
@@ -80,7 +79,7 @@ public class AvailabilityTemplateService {
                                        MentorProfileRepository mentorProfileRepository,
                                        MentorServiceRepository mentorServiceRepository,
                                        BookingRepository bookingRepository,
-                                       GroupSessionRepository groupSessionRepository,
+
                                        @Lazy MentorBookingPolicyService mentorBookingPolicyService,
                                        AvailabilityTemplateProperties properties,
                                        EntityManager entityManager,
@@ -89,7 +88,7 @@ public class AvailabilityTemplateService {
                                        MeterRegistry meterRegistry) {
         this(templateRepository, exceptionRepository, reconciliationRepository, mutationLockRepository, slotRepository,
                 slotServiceRepository, mentorProfileRepository, mentorServiceRepository, bookingRepository,
-                groupSessionRepository, mentorBookingPolicyService, properties, entityManager, eventPublisher, cursorCodec);
+                mentorBookingPolicyService, properties, entityManager, eventPublisher, cursorCodec);
         Gauge.builder("availability.template.reconciliation.backlog", reconciliationRepository,
                         repo -> repo.countDue(DateTimeUtil.now()))
                 .description("Availability templates waiting for reconciliation").register(meterRegistry);
@@ -439,8 +438,7 @@ public class AvailabilityTemplateService {
     private boolean isProtected(MentorAvailabilitySlot slot) {
         if (slot == null) return false;
         if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(slot.getId(), LOCKING_STATUSES, slot.getStartTime(), slot.getEndTime())) return true;
-        return !groupSessionRepository.findActiveOverlaps(slot.getMentorProfile().getUserId(), RESERVING_GROUP_STATUSES,
-                slot.getStartTime(), slot.getEndTime()).isEmpty();
+        return false;
     }
 
     private List<Booking> pendingBookings(MentorAvailabilitySlot slot) {

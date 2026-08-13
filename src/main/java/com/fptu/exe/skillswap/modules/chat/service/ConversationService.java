@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.GroupSession;
+
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationBookingLink;
@@ -112,66 +112,7 @@ public class ConversationService {
         return conversation;
     }
 
-    /** Creates the shared group conversation at publish time; attendees are added only after confirmation. */
-    @Transactional
-    public Conversation createGroupForPublishedSession(GroupSession groupSession) {
-        if (groupSession == null || groupSession.getId() == null) {
-            throw new IllegalArgumentException("Group session must not be null");
-        }
-        Conversation conversation = conversationRepository
-                .findBySourceTypeAndSourceId(ConversationSourceType.GROUP_SESSION, groupSession.getId()).orElse(null);
-        if (conversation == null) {
-            try {
-                conversation = conversationRepository.saveAndFlush(Conversation.builder()
-                        .mentorUserId(groupSession.getMentorProfile().getUserId())
-                        .sourceType(ConversationSourceType.GROUP_SESSION)
-                        .sourceId(groupSession.getId())
-                        .type(ConversationType.GROUP)
-                        .status(ConversationStatus.ACTIVE)
-                        .build());
-            } catch (org.springframework.dao.DataIntegrityViolationException ignored) {
-                conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.GROUP_SESSION, groupSession.getId())
-                        .orElseThrow(() -> ignored);
-            }
-        }
-        addGroupParticipantIfAbsent(conversation, groupSession.getMentorProfile().getUser(),
-                com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantRole.MENTOR,
-                com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.ACTIVE);
-        return conversation;
-    }
 
-    /** Must run in the same database transaction that changes a group booking to PAID. */
-    @Transactional
-    public Conversation activateGroupAttendee(Booking booking) {
-        if (booking == null || booking.getGroupSession() == null) {
-            throw new IllegalArgumentException("Group booking required");
-        }
-        Conversation conversation = createGroupForPublishedSession(booking.getGroupSession());
-        addGroupParticipantIfAbsent(conversation, booking.getMentee(),
-                com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantRole.ATTENDEE,
-                com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.ACTIVE);
-        participantRepository.findByConversationIdAndUserId(conversation.getId(), booking.getMentee().getId())
-                .ifPresent(participant -> participant.setAccessState(
-                        com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.ACTIVE));
-        if (!conversationBookingLinkRepository.existsByBookingId(booking.getId())) {
-            conversationBookingLinkRepository.save(ConversationBookingLink.builder().conversation(conversation).booking(booking).build());
-        }
-        createBookingConfirmedSystemMessage(conversation.getId(), booking);
-        return conversation;
-    }
-
-    @Transactional
-    public void updateGroupParticipantAccess(UUID groupSessionId, UUID userId,
-                                              com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess access) {
-        conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.GROUP_SESSION, groupSessionId)
-                .flatMap(conversation -> participantRepository.findByConversationIdAndUserId(conversation.getId(), userId))
-                .ifPresent(participant -> participant.setAccessState(access));
-    }
-
-    @Transactional(readOnly = true)
-    public Conversation findGroupConversation(UUID groupSessionId) {
-        return conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.GROUP_SESSION, groupSessionId).orElse(null);
-    }
 
     @Transactional
     public void addParticipantIfAbsent(Conversation conversation, User user) {
@@ -267,7 +208,7 @@ public class ConversationService {
                     .readOnlyReason(access.readOnlyReason())
                     .messagingWindowEndsAt(access.messagingWindowEndsAt())
                     .postSessionChatPermanent(access.postSessionChatPermanent())
-                    .groupSessionId(conv.getSourceType() == ConversationSourceType.GROUP_SESSION ? conv.getSourceId() : null)
+
                     .participantCount(conv.getType() == ConversationType.GROUP ? participants.size() : null)
                     .build();
         });
@@ -630,7 +571,7 @@ public class ConversationService {
                 .readOnlyReason(resolveMessagingAccess(conv, userId).readOnlyReason())
                 .messagingWindowEndsAt(resolveMessagingAccess(conv, userId).messagingWindowEndsAt())
                 .postSessionChatPermanent(resolveMessagingAccess(conv, userId).postSessionChatPermanent())
-                .groupSessionId(conv.getSourceType() == ConversationSourceType.GROUP_SESSION ? conv.getSourceId() : null)
+
                 .participantCount(conv.getType() == ConversationType.GROUP ? participants.size() : null)
                 .build();
     }
@@ -777,7 +718,6 @@ public class ConversationService {
                 .readOnlyReason(access.readOnlyReason())
                 .messagingWindowEndsAt(access.messagingWindowEndsAt())
                 .postSessionChatPermanent(access.postSessionChatPermanent())
-                .groupSessionId(conv.getSourceType() == ConversationSourceType.GROUP_SESSION ? conv.getSourceId() : null)
                 .participantCount(conv.getType() == ConversationType.GROUP ? participants.size() : null)
                 .build();
     }
@@ -1132,25 +1072,6 @@ public class ConversationService {
     }
 
     private com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access resolveMessagingAccess(Conversation conversation, UUID userId) {
-        if (conversation.getSourceType() == ConversationSourceType.GROUP_SESSION) {
-            var participant = participantRepository.findByConversationIdAndUserId(conversation.getId(), userId).orElse(null);
-            if (participant == null || participant.getAccessState() == com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.REVOKED) {
-                return com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access
-                        .readOnly(com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason.GROUP_MEMBERSHIP_REVOKED);
-            }
-            if (conversation.getStatus() == ConversationStatus.LOCKED) {
-                return com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access
-                        .readOnly(com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason.ADMIN_LOCKED);
-            }
-            if (participant.getAccessState() == com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.READ_ONLY) {
-                return new com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access(
-                        com.fptu.exe.skillswap.modules.chat.domain.ChatMessagingAccess.READ_ONLY,
-                        false, false, false,
-                        com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason.GROUP_SESSION_ENDED,
-                        null, false);
-            }
-            return com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access.open(null, false);
-        }
         com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy.Access bookingAccess;
         if (bookingChatAccessPolicy == null) {
             // Keeps legacy unit fixtures usable; Spring always injects the booking-owned policy.

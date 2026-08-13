@@ -1,17 +1,15 @@
 package com.fptu.exe.skillswap.modules.course.domain;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Version;
@@ -21,29 +19,30 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Table(name = "courses")
+@Table(
+    name = "course_lectures",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_course_lectures_sort", columnNames = {"chapter_id", "sort_order"})
+    }
+)
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Course {
+public class CourseLecture {
 
     @Id
     @GeneratedUuidV7
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_profile_id", nullable = false, foreignKey = @ForeignKey(name = "fk_courses_mentor"))
-    private MentorProfile mentorProfile;
-
-    @Column(name = "subject_code", nullable = false, length = 32)
-    private String subjectCode;
+    @JoinColumn(name = "chapter_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_lectures_chapter"))
+    private CourseChapter chapter;
 
     @Column(nullable = false, length = 200)
     private String title;
@@ -51,40 +50,20 @@ public class Course {
     @Column(columnDefinition = "TEXT")
     private String description;
 
-    @Column(name = "price_scoin", nullable = false)
-    private int priceScoin;
+    @Column(name = "sort_order", nullable = false)
+    private int sortOrder;
 
-    @Column(name = "total_chapters", nullable = false)
+    @Column(name = "duration_seconds", nullable = false)
     @Builder.Default
-    private int totalChapters = 0;
+    private int durationSeconds = 0;
 
-    @Column(name = "total_lectures", nullable = false)
+    @Column(name = "is_previewable", nullable = false)
     @Builder.Default
-    private int totalLectures = 0;
+    private boolean isPreviewable = false;
 
-    @Column(name = "total_duration_seconds", nullable = false)
+    @Column(name = "is_published", nullable = false)
     @Builder.Default
-    private int totalDurationSeconds = 0;
-
-    @Column(name = "average_rating", precision = 3, scale = 2)
-    @Builder.Default
-    private BigDecimal averageRating = BigDecimal.ZERO;
-
-    @Column(name = "review_count", nullable = false)
-    @Builder.Default
-    private int reviewCount = 0;
-
-    @Column(name = "enrolled_count", nullable = false)
-    @Builder.Default
-    private int enrolledCount = 0;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 32)
-    @Builder.Default
-    private CourseStatus status = CourseStatus.DRAFT;
-
-    @Column(name = "published_at")
-    private Instant publishedAt;
+    private boolean isPublished = true;
 
     @Version
     @Column(nullable = false)

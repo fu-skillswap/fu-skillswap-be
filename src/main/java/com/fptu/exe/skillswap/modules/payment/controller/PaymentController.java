@@ -22,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,12 +73,13 @@ public class PaymentController {
 
     @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS vẫn là nguồn chốt chính; nếu webhook bị trễ hoặc miss, backend sẽ fallback đồng bộ từ PayOS và tự finalize khi provider đã xác nhận PAID/SUCCESS.")
     @SecurityRequirement(name = "bearerAuth")
-    @GetMapping("/me/payment-orders/{bookingId}")
-    public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByBookingId(
+    @GetMapping("/me/payment-orders/{targetType}/{targetId}")
+    public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByTarget(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID bookingId) {
+            @PathVariable PaymentTargetType targetType,
+            @PathVariable UUID targetId) {
         ensureAuthenticated(principal);
-        return ResponseEntity.ok(ApiResponse.success(paymentOrderService.getByBookingId(principal.getPublicId(), bookingId)));
+        return ResponseEntity.ok(ApiResponse.success(paymentOrderService.getByTarget(principal.getPublicId(), targetType, targetId)));
     }
 
     @Operation(summary = "Webhook payment provider", description = "Endpoint nhận webhook chuẩn từ PayOS. Backend verify chữ ký thật, xử lý idempotent và chỉ chốt PAID khi webhook hợp lệ.")

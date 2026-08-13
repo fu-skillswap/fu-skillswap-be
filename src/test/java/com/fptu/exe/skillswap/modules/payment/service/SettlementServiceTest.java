@@ -91,7 +91,7 @@ class SettlementServiceTest {
 
         paymentOrder = PaymentOrder.builder()
                 .id(UUID.randomUUID())
-                .bookingId(bookingId)
+                .targetType(com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING).targetId(bookingId)
                 .payerUserId(menteeId)
                 .mentorUserId(mentorId)
                 .grossScoin(100)

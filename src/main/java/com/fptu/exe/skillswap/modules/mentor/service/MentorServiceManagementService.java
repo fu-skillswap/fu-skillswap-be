@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceManagementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
@@ -63,7 +63,7 @@ public class MentorServiceManagementService {
     }
 
     @Transactional(readOnly = true)
-    public List<MentorServiceResponse> getMyServices(UUID mentorUserId, Boolean isActive) {
+    public List<MentorServiceManagementResponse> getMyServices(UUID mentorUserId, Boolean isActive) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         List<MentorService> services = isActive == null
                 ? mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorProfile.getUserId())
@@ -85,7 +85,7 @@ public class MentorServiceManagementService {
 
     /** Java-only compatibility bridge for the removed `active=all` query convention. */
     @Deprecated(forRemoval = true)
-    public List<MentorServiceResponse> getMyServices(UUID mentorUserId, String active) {
+    public List<MentorServiceManagementResponse> getMyServices(UUID mentorUserId, String active) {
         if (active == null || active.isBlank() || "all".equalsIgnoreCase(active)) {
             return getMyServices(mentorUserId, (Boolean) null);
         }
@@ -96,13 +96,13 @@ public class MentorServiceManagementService {
     }
 
     @Transactional(readOnly = true)
-    public MentorServiceResponse getMyServiceDetail(UUID mentorUserId, UUID serviceId) {
+    public MentorServiceManagementResponse getMyServiceDetail(UUID mentorUserId, UUID serviceId) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         return toResponse(loadOwnedService(mentorProfile.getUserId(), serviceId));
     }
 
     @Transactional
-    public MentorServiceResponse createService(UUID mentorUserId, CreateMentorServiceRequest request) {
+    public MentorServiceManagementResponse createService(UUID mentorUserId, CreateMentorServiceRequest request) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         requireRequest(request);
 
@@ -129,7 +129,7 @@ public class MentorServiceManagementService {
 
     /** Java-only bridge; the HTTP endpoint uses CreateMentorServiceRequest. */
     @Deprecated(forRemoval = true)
-    public MentorServiceResponse createService(UUID mentorUserId, MentorServiceUpsertRequest request) {
+    public MentorServiceManagementResponse createService(UUID mentorUserId, MentorServiceUpsertRequest request) {
         return createService(mentorUserId, new CreateMentorServiceRequest(
                 request.title(), request.description(), request.expectedOutcome(), request.durationMinutes(),
                 request.isFree(), request.priceScoin(), false, MentorServiceDeliveryMode.ONE_TO_ONE, request.helpTopicIds()
@@ -137,7 +137,7 @@ public class MentorServiceManagementService {
     }
 
     @Transactional
-    public MentorServiceResponse updateService(UUID mentorUserId, UUID serviceId, UpdateMentorServiceRequest request) {
+    public MentorServiceManagementResponse updateService(UUID mentorUserId, UUID serviceId, UpdateMentorServiceRequest request) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         requireRequest(request);
 
@@ -162,7 +162,7 @@ public class MentorServiceManagementService {
     }
 
     @Transactional
-    public MentorServiceResponse changeActiveStatus(UUID mentorUserId, UUID serviceId, MentorServiceActiveRequest request) {
+    public MentorServiceManagementResponse changeActiveStatus(UUID mentorUserId, UUID serviceId, MentorServiceActiveRequest request) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         if (request == null || request.isActive() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Trạng thái active không được để trống");
@@ -199,7 +199,7 @@ public class MentorServiceManagementService {
         }
         service.setActive(request.isActive());
         touchMentorActivity(mentorProfile, LocalDateTime.now());
-        MentorServiceResponse response = toResponse(mentorServiceRepository.save(service));
+        MentorServiceManagementResponse response = toResponse(mentorServiceRepository.save(service));
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
         return response;
     }
@@ -253,13 +253,17 @@ public class MentorServiceManagementService {
         service.getHelpTopics().addAll(helpTopics);
     }
 
-    private MentorServiceResponse toResponse(MentorService service) {
+    private MentorServiceManagementResponse toResponse(MentorService service) {
         List<MentorTagResponse> helpTopics = service.getHelpTopics().stream()
                 .sorted(Comparator.comparing(tag -> tag.getNameVi() == null ? "" : tag.getNameVi()))
                 .map(this::toTagResponse)
                 .toList();
 
-        return MentorServiceResponse.builder()
+        int basePrice = service.isFree() ? 0 : defaultInteger(service.getPriceScoin());
+        int publicPrice = (int) Math.round(basePrice * 1.10);
+        int payout = (int) Math.round(basePrice * 0.95);
+
+        return MentorServiceManagementResponse.builder()
                 .serviceId(service.getId())
                 .mentorUserId(service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId())
                 .title(service.getTitle())
@@ -267,7 +271,9 @@ public class MentorServiceManagementService {
                 .expectedOutcome(service.getExpectedOutcome())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
-                .priceScoin(service.isFree() ? 0 : defaultInteger(service.getPriceScoin()))
+                .basePriceScoin(basePrice)
+                .publicPriceScoin(publicPrice)
+                .estimatedMentorPayoutScoin(payout)
                 .isActive(service.isActive())
                 .maintainPostSessionChat(service.isMaintainPostSessionChat())
                 .deliveryMode(service.getDeliveryMode())

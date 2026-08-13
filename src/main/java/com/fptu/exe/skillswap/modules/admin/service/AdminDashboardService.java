@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardTimeserie
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardTimeseriesResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardUsersOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.FinancialPeriodMetricsResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminDashboardQueryRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -27,6 +28,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
+import java.time.temporal.IsoFields;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -89,8 +92,21 @@ public class AdminDashboardService {
                 adminDashboardQueryRepository.countEmailOutboxByStatus()
         );
 
-        LocalDateTime fromInclusive = snapshotAt.minusDays(30);
-        var financialStats = adminDashboardQueryRepository.fetchFinancialOverview(fromInclusive);
+        ZoneId zoneId = ZoneId.of(TIMEZONE);
+        LocalDate today = snapshotAt.atZone(zoneId).toLocalDate();
+        LocalDateTime thisMonthStart = YearMonth.from(today).atDay(1).atStartOfDay();
+        
+        int quarter = today.get(IsoFields.QUARTER_OF_YEAR);
+        int firstMonthOfQuarter = (quarter - 1) * 3 + 1;
+        LocalDateTime thisQuarterStart = LocalDate.of(today.getYear(), firstMonthOfQuarter, 1).atStartOfDay();
+        
+        LocalDateTime thisYearStart = LocalDate.of(today.getYear(), 1, 1).atStartOfDay();
+
+        var mtdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisMonthStart);
+        var qtdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisQuarterStart);
+        var ytdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisYearStart);
+        
+        var balances = adminDashboardQueryRepository.fetchTotalBalances();
         
         LocalDateTime yesterday = snapshotAt.minusDays(1);
         LocalDateTime lastMonth = snapshotAt.minusDays(30);
@@ -141,10 +157,11 @@ public class AdminDashboardService {
                 paymentOrderCounts,
                 emailOutboxCounts,
                 new AdminDashboardFinancialOverviewResponse(
-                        financialStats.gmv30dScoin(),
-                        financialStats.platformFee30dScoin(),
-                        financialStats.totalEscrowVnd(),
-                        financialStats.totalCreditLedgerScoin()
+                        new FinancialPeriodMetricsResponse(mtdStats.totalTransactions(), mtdStats.gmvScoin(), mtdStats.platformFeeScoin()),
+                        new FinancialPeriodMetricsResponse(qtdStats.totalTransactions(), qtdStats.gmvScoin(), qtdStats.platformFeeScoin()),
+                        new FinancialPeriodMetricsResponse(ytdStats.totalTransactions(), ytdStats.gmvScoin(), ytdStats.platformFeeScoin()),
+                        balances.totalEscrowVnd(),
+                        balances.totalCreditLedgerScoin()
                 ),
                 new AdminDashboardRetentionOverviewResponse(
                         retentionStats.signupToMentorConversionRate(),

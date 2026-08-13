@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntryType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -80,7 +81,7 @@ public class SettlementService {
                 && booking.getCompletionOutcome() != BookingCompletionOutcome.NO_SHOW_MENTEE) {
             return;
         }
-        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
@@ -209,7 +210,7 @@ public class SettlementService {
         if (booking == null || booking.getId() == null || booking.getMentee() == null) {
             return;
         }
-        PaymentOrder paymentOrder = paymentOrderRepository.findByBookingIdForUpdate(booking.getId()).orElse(null);
+        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }

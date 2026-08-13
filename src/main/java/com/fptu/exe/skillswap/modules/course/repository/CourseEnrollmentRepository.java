@@ -24,7 +24,6 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
     
     boolean existsByCourseIdAndStudentUserIdAndStatusIn(UUID courseId, UUID studentUserId, List<EnrollmentStatus> statuses);
     
-    List<CourseEnrollment> findByStatusAndSeatReservedUntilBefore(EnrollmentStatus status, Instant now);
     
     Optional<CourseEnrollment> findByPaymentOrderId(UUID paymentOrderId);
 

@@ -191,9 +191,10 @@ public class AdminDashboardQueryRepository {
         return LocalDate.parse(String.valueOf(value));
     }
 
-    public FinancialOverviewRow fetchFinancialOverview(LocalDateTime fromInclusive) {
+    public FinancialPeriodRow fetchFinancialPeriodMetrics(LocalDateTime fromInclusive) {
         Object[] row = (Object[]) entityManager.createNativeQuery("""
                 select
+                    count(*) as total_transactions,
                     coalesce(sum(gross_scoin), 0) as gmv,
                     coalesce(sum(commission_scoin), 0) as platform_fee
                 from payment_orders
@@ -203,6 +204,14 @@ public class AdminDashboardQueryRepository {
                 .setParameter("fromInclusive", fromInclusive)
                 .getSingleResult();
 
+        return new FinancialPeriodRow(
+                toLong(row[0]),
+                toLong(row[1]),
+                toLong(row[2])
+        );
+    }
+
+    public TotalBalancesRow fetchTotalBalances() {
         java.math.BigDecimal totalEscrow = (java.math.BigDecimal) entityManager.createNativeQuery("""
                 select coalesce(sum(balance), 0.00) from settlement_accounts
                 """).getSingleResult();
@@ -211,9 +220,7 @@ public class AdminDashboardQueryRepository {
                 select coalesce(sum(balance), 0) from credit_ledger_accounts
                 """).getSingleResult();
 
-        return new FinancialOverviewRow(
-                toLong(row[0]),
-                toLong(row[1]),
+        return new TotalBalancesRow(
                 totalEscrow,
                 totalCredit.longValue()
         );
@@ -258,9 +265,14 @@ public class AdminDashboardQueryRepository {
     ) {
     }
 
-    public record FinancialOverviewRow(
-            long gmv30dScoin,
-            long platformFee30dScoin,
+    public record FinancialPeriodRow(
+            long totalTransactions,
+            long gmvScoin,
+            long platformFeeScoin
+    ) {
+    }
+
+    public record TotalBalancesRow(
             java.math.BigDecimal totalEscrowVnd,
             long totalCreditLedgerScoin
     ) {

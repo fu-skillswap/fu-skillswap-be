@@ -29,6 +29,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
 import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequest;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -327,7 +328,7 @@ class AdminDataCenterControllerIntegrationTest {
     private void seedPaymentAndPayout() {
         PaymentOrder paymentOrder = paymentOrderRepository.save(PaymentOrder.builder()
                 .orderCode("PO-" + UUID.randomUUID())
-                .bookingId(UUID.randomUUID())
+                .targetType(PaymentTargetType.BOOKING).targetId(UUID.randomUUID())
                 .payerUserId(targetUser.getId())
                 .mentorUserId(anotherMentorUser.getId())
                 .grossScoin(100)

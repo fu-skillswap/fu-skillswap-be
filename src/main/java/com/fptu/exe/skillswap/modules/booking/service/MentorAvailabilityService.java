@@ -21,9 +21,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilit
 import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.GroupSessionRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.GroupSession;
-import com.fptu.exe.skillswap.modules.booking.domain.GroupSessionStatus;
+
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
@@ -106,7 +104,7 @@ public class MentorAvailabilityService {
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
     private final PaymentProperties paymentProperties;
     private final MentorBookingPolicyService mentorBookingPolicyService;
-    private final GroupSessionRepository groupSessionRepository;
+
     private AvailabilityTemplateService availabilityTemplateService;
 
     @Autowired(required = false)
@@ -134,7 +132,6 @@ public class MentorAvailabilityService {
                 notificationService,
                 calendarWindowCalculator,
                 paymentProperties,
-                null,
                 null);
     }
 
@@ -580,11 +577,7 @@ public class MentorAvailabilityService {
         List<Booking> acceptedBookings = SLOT_LOCKING_STATUSES.stream()
                 .flatMap(status -> bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(slot.getId(), status).stream())
                 .toList();
-        List<GroupSession> groupReservations = groupSessionRepository == null ? List.of()
-                : groupSessionRepository.findActiveOverlaps(
-                slot.getMentorProfile().getUserId(),
-                java.util.EnumSet.of(GroupSessionStatus.OPEN, GroupSessionStatus.IN_PROGRESS),
-                slot.getStartTime(), slot.getEndTime());
+
         Map<String, Integer> pendingCountBySegment = toPendingSegmentCountMap(
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
@@ -604,9 +597,7 @@ public class MentorAvailabilityService {
                     .findFirst()
                     .orElse(null);
             boolean blockedByAccepted = blockingAcceptedBooking != null;
-            boolean blockedByGroupSession = groupReservations.stream()
-                    .anyMatch(session -> overlaps(candidateStart, candidateEnd,
-                            session.getScheduledStartAt(), session.getScheduledEndAt()));
+
             UUID blockingServiceId = blockingAcceptedBooking != null && blockingAcceptedBooking.getService() != null
                     ? blockingAcceptedBooking.getService().getId()
                     : null;
@@ -625,9 +616,9 @@ public class MentorAvailabilityService {
             if (!candidateStart.isAfter(now)) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_PAST_TIME_REASON;
-            } else if (blockedByAccepted || blockedByGroupSession) {
+            } else if (blockedByAccepted) {
                 selectable = false;
-                reasonIfBlocked = blockedByGroupSession ? "GROUP_SESSION_RESERVED" : BLOCKED_BY_ACCEPTED_REASON;
+                reasonIfBlocked = BLOCKED_BY_ACCEPTED_REASON;
                 bookingConflictNote = blockedBySameService
                         ? "Segment này đã có booking ACCEPTED của cùng service"
                         : "Segment này đã có booking ACCEPTED của service khác trong cùng slot";
@@ -643,7 +634,7 @@ public class MentorAvailabilityService {
                     .remainingPendingQuota(Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount))
                     .isSelectable(selectable)
                     .reasonIfBlocked(reasonIfBlocked)
-                    .blockedByAcceptedBooking(blockedByAccepted || blockedByGroupSession)
+                    .blockedByAcceptedBooking(blockedByAccepted)
                     .blockingBookingId(blockingAcceptedBooking == null ? null : blockingAcceptedBooking.getId())
                     .blockingServiceId(blockingServiceId)
                     .blockingServiceTitle(blockingServiceTitle)

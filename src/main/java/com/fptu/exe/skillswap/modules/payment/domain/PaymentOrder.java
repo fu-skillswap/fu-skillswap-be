@@ -21,7 +21,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "payment_orders", indexes = {
         @Index(name = "idx_payment_orders_order_code", columnList = "order_code", unique = true),
-        @Index(name = "idx_payment_orders_booking_id", columnList = "booking_id", unique = true),
+        @Index(name = "idx_payment_orders_target", columnList = "target_type, target_id", unique = true),
         @Index(name = "idx_payment_orders_payer_id", columnList = "payer_user_id"),
         @Index(name = "idx_payment_orders_status", columnList = "status"),
         @Index(name = "idx_payment_orders_provider_order_code", columnList = "provider_order_code", unique = true)
@@ -40,8 +40,12 @@ public class PaymentOrder {
     @Column(name = "order_code", nullable = false, unique = true, length = 80)
     private String orderCode;
 
-    @Column(name = "booking_id", nullable = false, unique = true)
-    private UUID bookingId;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", nullable = false)
+    private PaymentTargetType targetType;
+
+    @Column(name = "target_id", nullable = false)
+    private UUID targetId;
 
     @Column(name = "payer_user_id", nullable = false)
     private UUID payerUserId;

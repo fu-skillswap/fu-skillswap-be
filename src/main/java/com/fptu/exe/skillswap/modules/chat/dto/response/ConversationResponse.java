@@ -44,8 +44,6 @@ public record ConversationResponse(
         ChatReadOnlyReason readOnlyReason,
         LocalDateTime messagingWindowEndsAt,
         boolean postSessionChatPermanent,
-        @Schema(description = "Group session backing this GROUP conversation", nullable = true)
-        UUID groupSessionId,
         @Schema(description = "Current visible participant count for GROUP conversations", nullable = true)
         Integer participantCount
 ) {

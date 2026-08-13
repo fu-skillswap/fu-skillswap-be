@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 
 import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
@@ -128,7 +129,7 @@ public class PaymentConcurrencyIntegrationTest extends com.fptu.exe.skillswap.in
             order = PaymentOrder.builder()
                     .id(UUID.randomUUID())
                     .orderCode("PAY-CONC-1")
-                    .bookingId(booking.getId())
+                    .targetType(PaymentTargetType.BOOKING).targetId(booking.getId())
                     .providerOrderCode("111")
                     .payerUserId(mentee.getId())
                     .mentorUserId(mentor.getId())

@@ -35,6 +35,9 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -125,14 +128,7 @@ public class BookingService {
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
     private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
-    private final GroupSessionCommerceService groupSessionCommerceService;
-    private GroupSessionExperienceService groupSessionExperienceService;
     private AvailabilityTemplateService availabilityTemplateService;
-
-    @Autowired(required = false)
-    void setGroupSessionExperienceService(GroupSessionExperienceService groupSessionExperienceService) {
-        this.groupSessionExperienceService = groupSessionExperienceService;
-    }
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
@@ -182,9 +178,7 @@ public class BookingService {
                         paymentOrderService,
                         settlementService,
                         eventPublisher,
-                        null,
-                        null),
-                null);
+                        null));
     }
 
     @Transactional
@@ -243,10 +237,7 @@ public class BookingService {
         }
 
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
-        if (mentorService.getDeliveryMode() == com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.GROUP_SESSION) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Group service phải được đặt seat qua group session đã publish");
-        }
+
         Instant requestedStartAt = request.startAt();
         if (requestedStartAt == null || (request.legacySelectedEndTime() == null
                 && (requestedStartAt.getEpochSecond() % 60 != 0 || requestedStartAt.getNano() != 0))) {
@@ -383,9 +374,9 @@ public class BookingService {
         java.util.Map<UUID, com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder> paymentOrdersByBookingId =
                 bookingIds.isEmpty() || paymentOrderRepository == null
                         ? java.util.Collections.emptyMap()
-                        : paymentOrderRepository.findByBookingIdIn(bookingIds).stream()
+                        : paymentOrderRepository.findByTargetTypeAndTargetIdIn(PaymentTargetType.BOOKING, bookingIds).stream()
                         .collect(Collectors.toMap(
-                                com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder::getBookingId,
+                                com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder::getTargetId,
                                 Function.identity(),
                                 (left, right) -> left,
                                 java.util.LinkedHashMap::new
@@ -420,7 +411,7 @@ public class BookingService {
 
         com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder paymentOrder = paymentOrderRepository == null
                 ? null
-                : paymentOrderRepository.findByBookingId(bookingId).orElse(null);
+                : paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId).orElse(null);
         return toBookingResponse(booking, null, null,
                 paymentOrder == null ? java.util.Collections.emptyMap()
                         : java.util.Map.of(bookingId, paymentOrder));
@@ -819,9 +810,7 @@ public class BookingService {
     @Transactional
     public BookingResponse completeBooking(UUID currentUserId, UUID bookingId, CompleteBookingRequest request) {
         Booking booking = getBookingForSessionAction(currentUserId, bookingId);
-        if (booking.getGroupSession() != null && isMentorOfBooking(booking, currentUserId)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Group session phải hoàn tất qua attendance roster");
-        }
+
         return isMentorOfBooking(booking, currentUserId)
                 ? completeBookingByMentor(currentUserId, bookingId, request)
                 : confirmBookingByParticipant(currentUserId, bookingId, new ConfirmBookingRequest(
@@ -1134,10 +1123,7 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
-        if (savedBooking.getGroupSession() != null && groupSessionExperienceService != null
-                && request.action() == com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
-            groupSessionExperienceService.revokeSeat(savedBooking, true);
-        }
+
         recordBookingEvent(savedBooking, com.fptu.exe.skillswap.modules.booking.domain.BookingEventType.ISSUE_RESOLVED,
                 oldStatus, com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType.ADMIN, adminUserId, null);
         return toBookingResponse(savedBooking);
@@ -1238,26 +1224,19 @@ public class BookingService {
             session = sessionsByBookingId.get(booking.getId());
         }
         if (session == null && sessionService != null) {
-            session = booking.getGroupSession() == null
-                    ? sessionService.findByBookingId(booking.getId())
-                    : sessionService.findByGroupSessionId(booking.getGroupSession().getId());
+            session = sessionService.findByBookingId(booking.getId());
         }
 
         MeetingPlatform platform = session != null ? session.getMeetingPlatform() : booking.getMeetingPlatform();
         String link = session != null ? session.getMeetingLink() : booking.getMeetingLink();
-        if (booking.getGroupSession() != null && !isConfirmedBookingStatus(booking.getStatus())) {
-            platform = null;
-            link = null;
-        }
+
         LocalDateTime actualStart = session != null ? session.getActualStartTime() : booking.getActualStartTime();
         LocalDateTime actualEnd = session != null ? session.getActualEndTime() : booking.getActualEndTime();
 
         UUID conversationId = null;
         if (bookingToConversationMap != null && bookingToConversationMap.containsKey(booking.getId())) {
             conversationId = bookingToConversationMap.get(booking.getId());
-        } else if (booking.getGroupSession() != null && conversationService != null) {
-            com.fptu.exe.skillswap.modules.chat.domain.Conversation conv = conversationService.findGroupConversation(booking.getGroupSession().getId());
-            conversationId = conv == null ? null : conv.getId();
+
         } else if (conversationService != null) {
             com.fptu.exe.skillswap.modules.chat.domain.Conversation conv = conversationService.findByBookingId(booking.getId());
             if (conv == null && mentee != null && mentee.getId() != null && mentorUser != null && mentorUser.getId() != null) {
@@ -1290,20 +1269,20 @@ public class BookingService {
             if (booking.getStatus() == BookingStatus.PENDING) {
                 canCancel = isMenteeUser;
             } else if (booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedBookingStatus(booking.getStatus())) {
-                canCancel = (booking.getGroupSession() == null ? (isMenteeUser || isMentorUser) : isMenteeUser)
+                canCancel = (isMenteeUser || isMentorUser)
                         && startTime != null && now.isBefore(startTime);
             }
 
-            if (booking.getGroupSession() == null && isMentorUser) {
+            if (isMentorUser) {
                 canComplete = (isConfirmedBookingStatus(booking.getStatus()) || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
                         && endTime != null && now.isAfter(endTime);
             } else if (isMenteeUser) {
                 canComplete = booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
                         && booking.getCompletedAt() != null
-                        && now.isBefore(booking.getCompletedAt().plusHours(booking.getGroupSession() == null ? POST_SESSION_REVIEW_WINDOW_HOURS : 24));
+                        && now.isBefore(booking.getCompletedAt().plusHours(POST_SESSION_REVIEW_WINDOW_HOURS));
             }
 
-            canReschedule = booking.getGroupSession() == null && (isMenteeUser || isMentorUser)
+            canReschedule = (isMenteeUser || isMentorUser)
                     && isConfirmedBookingStatus(booking.getStatus())
                     && (booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) < 1
                     && startTime != null
@@ -1396,17 +1375,7 @@ public class BookingService {
                 .displayState(displayGuidance.state())
                 .nextAction(displayGuidance.action())
                 .actionDeadlineAt(displayGuidance.deadlineAt())
-                .bookingType(booking.getGroupSession() == null
-                        ? com.fptu.exe.skillswap.modules.booking.domain.BookingType.ONE_TO_ONE
-                        : com.fptu.exe.skillswap.modules.booking.domain.BookingType.GROUP_SESSION)
-                .groupSessionId(booking.getGroupSession() == null ? null : booking.getGroupSession().getId())
-                .groupAttendanceStatus(booking.getGroupAttendanceStatus())
-                .groupAttendanceMarkedAt(booking.getGroupAttendanceMarkedAt())
-                .groupSession(booking.getGroupSession() == null ? null
-                        : new com.fptu.exe.skillswap.modules.booking.dto.response.GroupSessionBookingSummaryResponse(
-                                booking.getGroupSession().getId(), booking.getServiceTitleSnapshot(),
-                                booking.getGroupSession().getScheduledStartAt(), booking.getGroupSession().getScheduledEndAt(),
-                                booking.getGroupSession().getRegistrationClosesAt()))
+
                 .build();
     }
 
@@ -1476,7 +1445,7 @@ public class BookingService {
         if (paymentOrderRepository == null) {
             return null;
         }
-        return paymentOrderRepository.findByBookingId(booking.getId()).orElse(null);
+        return paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
     }
 
     private int calculateMenteeVisiblePrice(Boolean isFree, Integer basePriceScoin) {
@@ -1587,10 +1556,7 @@ public class BookingService {
 
     /** Group attendance, meeting and completion semantics are introduced separately in Phase 3. */
     private void requireDirectBooking(Booking booking) {
-        if (booking != null && booking.getGroupSession() != null) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Booking group session không hỗ trợ thao tác 1:1 này");
-        }
+        // No-op after GroupSession removal
     }
 
     private boolean isMentorOfBooking(Booking booking, UUID userId) {
@@ -1618,9 +1584,7 @@ public class BookingService {
         if (booking == null || now == null) {
             return;
         }
-        if (booking.getGroupSession() != null) {
-            return;
-        }
+
         if (isConfirmedBookingStatus(booking.getStatus())
                 && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION
                 && selectedEndTime(booking) != null
@@ -1634,7 +1598,7 @@ public class BookingService {
         if (reviewAnchor == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian kết thúc booking không hợp lệ");
         }
-        long windowHours = booking.getGroupSession() == null ? POST_SESSION_REVIEW_WINDOW_HOURS : 24L;
+        long windowHours = POST_SESSION_REVIEW_WINDOW_HOURS;
         if (now.isAfter(reviewAnchor.plusHours(windowHours))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn 4 giờ để phản hồi sau buổi mentoring");
         }
@@ -1769,9 +1733,7 @@ public class BookingService {
     }
 
     private void ensureSessionExistsForConfirmedBooking(Booking booking) {
-        if (booking != null && booking.getGroupSession() != null) {
-            return;
-        }
+
         if (booking == null || booking.getId() == null || sessionService == null) {
             return;
         }
@@ -1784,9 +1746,7 @@ public class BookingService {
     }
 
     private LocalDateTime resolvePaymentDeadline(Booking booking) {
-        if (booking != null && booking.getGroupSession() != null && groupSessionCommerceService != null) {
-            return groupSessionCommerceService.resolvePaymentDeadline(booking);
-        }
+
         if (booking == null) {
             return null;
         }
@@ -1850,10 +1810,7 @@ public class BookingService {
         if (!isMentorOfBooking(booking, mentorUserId)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
         }
-        if (booking.getGroupSession() != null) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Group session chỉ được hủy từ luồng quản lý group session");
-        }
+
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT && !isConfirmedBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
         }
@@ -1884,9 +1841,7 @@ public class BookingService {
 
         Booking savedBooking = bookingRepository.save(booking);
 
-        if (savedBooking.getGroupSession() == null) {
-            sessionService.cancelForBooking(bookingId);
-        }
+        sessionService.cancelForBooking(bookingId);
         paymentOrderService.handleMentorCancellation(savedBooking);
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
@@ -1962,21 +1917,15 @@ public class BookingService {
         booking.setCancelReason(requiredCancelReason(request));
 
         MentorAvailabilitySlot slot = booking.getSlot();
-        if (booking.getGroupSession() != null && groupSessionCommerceService != null) {
-            groupSessionCommerceService.releaseSeatForTerminalTransition(booking, currentStatus);
-        } else if (slot != null && currentStatus != BookingStatus.PENDING) {
+        if (slot != null && currentStatus != BookingStatus.PENDING) {
             refreshSlotBookedFlag(slot);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
 
-        if (savedBooking.getGroupSession() != null && groupSessionExperienceService != null) {
-            groupSessionExperienceService.revokeSeat(savedBooking, false);
-        }
 
-        if (savedBooking.getGroupSession() == null) {
-            sessionService.cancelForBooking(bookingId);
-        }
+
+        sessionService.cancelForBooking(bookingId);
         if (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedBookingStatus(currentStatus)) {
             paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
         }
@@ -2077,8 +2026,7 @@ public class BookingService {
         List<UUID> staleBookingIds = bookingRepository.findAwaitingPaymentExpiryCandidates(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                 acceptedAtCutoff,
-                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES),
-                now
+                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES)
         ).stream().map(Booking::getId).toList();
         if (staleBookingIds.isEmpty()) {
             return 0;
@@ -2095,9 +2043,7 @@ public class BookingService {
             booking.setRejectedAt(now);
             booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng "
                     + PAYMENT_DEADLINE_TEXT + ".");
-            if (booking.getGroupSession() != null && groupSessionCommerceService != null) {
-                groupSessionCommerceService.releaseSeatForTerminalTransition(booking, BookingStatus.ACCEPTED_AWAITING_PAYMENT);
-            } else if (booking.getSlot() != null
+            if (booking.getSlot() != null
                     && booking.getSlot().getStartTime() != null
                     && now.isBefore(booking.getSlot().getStartTime())) {
                 refreshSlotBookedFlag(booking.getSlot());

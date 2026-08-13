@@ -10,8 +10,8 @@ public record ServicePricingPreviewResponse(
         String pricingVersion,
         LocalDateTime calculatedAt,
         UUID serviceId,
-        Integer basePriceScoin,
-        Integer menteeSurchargeScoin,
+        @Schema(description = "The 110% final service price to be paid by Mentee")
+        Integer priceScoin,
         Integer priceBeforeCampaignScoin,
         Integer campaignDiscountScoin,
         Integer estimatedPayableScoin,

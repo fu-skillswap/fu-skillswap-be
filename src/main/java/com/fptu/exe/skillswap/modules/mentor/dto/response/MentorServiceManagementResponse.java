@@ -9,8 +9,8 @@ import java.util.UUID;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 
 @Builder
-@Schema(description = "Mentoring service definition that the mentor manages and the frontend can show in mentor detail or booking flows.")
-public record MentorServiceResponse(
+@Schema(description = "Mentoring service definition for mentor management view, including fee breakdown.")
+public record MentorServiceManagementResponse(
         @Schema(description = "Service ID", example = "019f3234-aaaa-bbbb-cccc-1234567890ab")
         UUID serviceId,
         @Schema(description = "Mentor user ID that owns the service", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
@@ -25,8 +25,12 @@ public record MentorServiceResponse(
         Integer durationMinutes,
         @Schema(description = "Whether the service is free", example = "true")
         boolean isFree,
-        @Schema(description = "The 110% final service price to be paid by Mentee. 0 means the service is free.", nullable = true, example = "110")
-        Integer priceScoin,
+        @Schema(description = "Base service price set by mentor in SCoin. 0 means the service is free.", nullable = true, example = "100")
+        Integer basePriceScoin,
+        @Schema(description = "The 110% final service price to be paid by Mentee", nullable = true, example = "110")
+        Integer publicPriceScoin,
+        @Schema(description = "The estimated 95% payout for the mentor after platform commission", nullable = true, example = "95")
+        Integer estimatedMentorPayoutScoin,
         @Schema(description = "Whether the service is currently active for future use", example = "true")
         boolean isActive,
         @Schema(description = "Whether a completed booking keeps direct chat open after the post-session window", example = "false")
@@ -53,12 +57,12 @@ public record MentorServiceResponse(
     }
 
     /** Keeps Java test fixtures compiling while JSON exposes only isFree/isActive. */
-    public static class MentorServiceResponseBuilder {
-        public MentorServiceResponseBuilder free(boolean value) {
+    public static class MentorServiceManagementResponseBuilder {
+        public MentorServiceManagementResponseBuilder free(boolean value) {
             return isFree(value);
         }
 
-        public MentorServiceResponseBuilder active(boolean value) {
+        public MentorServiceManagementResponseBuilder active(boolean value) {
             return isActive(value);
         }
     }

@@ -75,8 +75,7 @@ public class BookingPricingPreviewService {
                 PRICING_VERSION,
                 DateTimeUtil.now(),
                 service.getId(),
-                basePrice,
-                surcharge,
+                beforeCampaign,
                 beforeCampaign,
                 campaignDiscount,
                 Math.max(0, beforeCampaign - campaignDiscount),
@@ -114,8 +113,7 @@ public class BookingPricingPreviewService {
 
         return new PaymentCheckoutPreviewResponse(
                 booking.getId(),
-                basePrice,
-                surcharge,
+                beforeDiscount,
                 beforeDiscount,
                 couponDiscount,
                 campaignCredit,
