@@ -145,9 +145,14 @@ class SettlementServiceTest {
 
     @Test
     void handlePaidBookingCancelledByMentee_withinSixHours_shouldSplitFiftyThirtyFiveFifteen() {
-        when(settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+        UUID platformOwnerId = new UUID(0L, 1L);
+        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+                .thenReturn(true);
+        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, platformOwnerId))
+                .thenReturn(true);
+        when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
                 .thenReturn(Optional.of(mentorAccount));
-        when(settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, new UUID(0L, 1L)))
+        when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.PLATFORM_SETTLEMENT, platformOwnerId))
                 .thenReturn(Optional.of(platformAccount));
 
         settlementService.handlePaidBookingCancelledByMentee(booking, paymentOrder, true);

@@ -258,6 +258,8 @@
                 <version>3.2.5</version>
                 <configuration>
                     <forkedProcessTimeoutInSeconds>1200</forkedProcessTimeoutInSeconds>
+                    <!-- Keep Surefire's Boot manifest classpath valid when workspace and Maven cache use different drives. -->
+                    <argLine>-Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
                     <trimStackTrace>false</trimStackTrace>
                     <includes>
                         <include>**/*Test.java</include>
