@@ -35,12 +35,8 @@ public class PayoutService {
         if (mentorUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        if (request == null || request.amountScoin() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "amountScoin không được để trống");
-        }
-        int available = settlementService.getMentorAvailableSettlement(mentorUserId);
-        if (request.amountScoin() > available) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Số dư settlement không đủ để tạo payout request");
+        if (request == null || request.amountScoin() == null || request.amountScoin() <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "amountScoin phải lớn hơn 0");
         }
         MentorPayoutProfile payoutProfile = payoutProfileService.getActiveProfileForPayout(mentorUserId, request.payoutProfileId());
         PayoutRequest payoutRequest = payoutRequestRepository.save(PayoutRequest.builder()
@@ -54,6 +50,8 @@ public class PayoutService {
                 .bankAccountNumberMaskedSnapshot(MentorPayoutProfileService.maskAccountNumber(payoutProfile.getAccountNumber()))
                 .requestedAt(DateTimeUtil.now())
                 .build());
+        // A REQUESTED payout already reserves funds; otherwise concurrent requests can over-commit the ledger.
+        settlementService.holdPayout(mentorUserId, payoutRequest.getId(), payoutRequest.getAmountScoin(), request.note());
         return toResponse(payoutRequest);
     }
 
@@ -63,6 +61,7 @@ public class PayoutService {
         if (payoutRequest.getStatus() != PayoutRequestStatus.REQUESTED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể duyệt payout request đang REQUESTED");
         }
+        // Supports legacy REQUESTED records created before request-time holds. New requests already have a HOLD.
         settlementService.holdPayout(payoutRequest.getMentorUserId(), payoutRequest.getId(), payoutRequest.getAmountScoin(), note);
         payoutRequest.setStatus(PayoutRequestStatus.APPROVED);
         payoutRequest.setAdminUserId(adminUserId);
@@ -84,9 +83,7 @@ public class PayoutService {
         payoutRequest.setAdminNote(note);
         payoutRequest.setReviewedAt(DateTimeUtil.now());
         payoutRequest.setRejectedAt(DateTimeUtil.now());
-        if (currentStatus == PayoutRequestStatus.APPROVED) {
-            settlementService.voidPayoutHold(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Rollback payout request " + payoutRequest.getId());
-        }
+        settlementService.voidPayoutHold(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Rollback payout request " + payoutRequest.getId());
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
 

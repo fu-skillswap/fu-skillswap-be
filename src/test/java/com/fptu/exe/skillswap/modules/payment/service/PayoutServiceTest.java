@@ -22,9 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -44,7 +42,7 @@ class PayoutServiceTest {
     private PayoutService payoutService;
 
     @Test
-    void createRequest_shouldSnapshotPayoutProfileWithoutHoldingImmediately() {
+    void createRequest_shouldAtomicallyHoldSettlementBeforeReturningRequestedPayout() {
         UUID mentorUserId = UUID.randomUUID();
         UUID payoutProfileId = UUID.randomUUID();
         SettlementAccount account = SettlementAccount.builder().id(UUID.randomUUID()).build();
@@ -58,10 +56,13 @@ class PayoutServiceTest {
                 .isActive(true)
                 .build();
 
-        when(settlementService.getMentorAvailableSettlement(mentorUserId)).thenReturn(500);
         when(settlementService.ensureMentorAccount(mentorUserId)).thenReturn(account);
         when(payoutProfileService.getActiveProfileForPayout(mentorUserId, payoutProfileId)).thenReturn(profile);
-        when(payoutRequestRepository.save(any(PayoutRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(payoutRequestRepository.save(any(PayoutRequest.class))).thenAnswer(invocation -> {
+            PayoutRequest payoutRequest = invocation.getArgument(0);
+            payoutRequest.setId(UUID.randomUUID());
+            return payoutRequest;
+        });
 
         PayoutRequestResponse response = payoutService.createRequest(
                 mentorUserId,
@@ -71,7 +72,12 @@ class PayoutServiceTest {
         assertEquals(payoutProfileId, response.payoutProfileId());
         assertEquals("ACB", response.bankNameSnapshot());
         assertEquals("******7890", response.bankAccountNumberMaskedSnapshot());
-        verify(settlementService, never()).holdPayout(any(), any(), anyInt(), any());
+        verify(settlementService).holdPayout(
+                eq(mentorUserId),
+                eq(response.payoutRequestId()),
+                eq(200),
+                eq("Need payout")
+        );
     }
 
     @Test
@@ -110,6 +116,31 @@ class PayoutServiceTest {
                 .settlementAccountId(UUID.randomUUID())
                 .amountScoin(200)
                 .status(PayoutRequestStatus.APPROVED)
+                .bankAccountNameSnapshot("VO QUANG TAM")
+                .bankNameSnapshot("ACB")
+                .bankAccountNumberMaskedSnapshot("******7890")
+                .build();
+
+        when(payoutRequestRepository.findByIdForUpdate(payoutRequestId)).thenReturn(Optional.of(payoutRequest));
+        when(payoutRequestRepository.save(any(PayoutRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PayoutRequestResponse response = payoutService.reject(UUID.randomUUID(), payoutRequestId, "reject");
+
+        assertEquals(PayoutRequestStatus.REJECTED, response.status());
+        verify(settlementService).voidPayoutHold(eq(mentorUserId), eq(payoutRequestId), any());
+    }
+
+    @Test
+    void rejectRequested_shouldVoidRequestTimeHold() {
+        UUID payoutRequestId = UUID.randomUUID();
+        UUID mentorUserId = UUID.randomUUID();
+        PayoutRequest payoutRequest = PayoutRequest.builder()
+                .id(payoutRequestId)
+                .mentorUserId(mentorUserId)
+                .payoutProfileId(UUID.randomUUID())
+                .settlementAccountId(UUID.randomUUID())
+                .amountScoin(200)
+                .status(PayoutRequestStatus.REQUESTED)
                 .bankAccountNameSnapshot("VO QUANG TAM")
                 .bankNameSnapshot("ACB")
                 .bankAccountNumberMaskedSnapshot("******7890")

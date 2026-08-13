@@ -30,6 +30,7 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @Service
@@ -389,7 +390,7 @@ public class SettlementService {
     @Transactional(readOnly = true)
     public int getMentorAvailableSettlement(UUID mentorUserId) {
         SettlementAccount account = ensureMentorAccount(mentorUserId);
-        return settlementEntryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();
+        return settlementBalance(account);
     }
 
     @Transactional(readOnly = true)
@@ -401,14 +402,10 @@ public class SettlementService {
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
     public SettlementEntry holdPayout(UUID mentorUserId, UUID payoutRequestId, int amountScoin, String memo) {
-        if (amountScoin <= 0) {
+        if (payoutRequestId == null || amountScoin <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "amountScoin phải lớn hơn 0");
         }
         SettlementAccount account = lockMentorAccount(mentorUserId);
-        int available = settlementEntryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();
-        if (available < amountScoin) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Số dư settlement chưa đủ để tạo payout request");
-        }
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 account.getId(), LedgerSourceType.PAYOUT_REQUEST, payoutRequestId, SettlementEntryType.HOLD
         ).isPresent()) {
@@ -417,7 +414,7 @@ public class SettlementService {
             ).orElseThrow();
         }
 
-        int rows = settlementAccountRepository.deductBalanceSafely(account.getId(), java.math.BigDecimal.valueOf(amountScoin));
+        int rows = settlementAccountRepository.deductBalanceSafely(account.getId(), BigDecimal.valueOf(amountScoin));
         if (rows == 0) {
             throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE, "Số dư không đủ để thực hiện hold");
         }
@@ -497,14 +494,20 @@ public class SettlementService {
     }
 
     private SettlementAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
-        SettlementAccount existing = settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
-                .orElse(null);
-        if (existing != null) {
-            return existing;
+        if (!settlementAccountRepository.existsByOwnerTypeAndOwnerId(ownerType, ownerId)) {
+            ensureAccount(ownerType, ownerId, accountCode);
         }
-        ensureAccount(ownerType, ownerId, accountCode);
-        return settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+        return settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa settlement account"));
+    }
+
+    private int settlementBalance(SettlementAccount account) {
+        BigDecimal balance = account.getBalance() == null ? BigDecimal.ZERO : account.getBalance();
+        try {
+            return balance.intValueExact();
+        } catch (ArithmeticException exception) {
+            throw new BaseException(ErrorCode.DATABASE_ERROR, "Settlement balance không hợp lệ", exception);
+        }
     }
 
     private SettlementAccount createAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {

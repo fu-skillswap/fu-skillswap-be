@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 CREATE TABLE course_chapters (
     id UUID PRIMARY KEY,
     course_id UUID NOT NULL,

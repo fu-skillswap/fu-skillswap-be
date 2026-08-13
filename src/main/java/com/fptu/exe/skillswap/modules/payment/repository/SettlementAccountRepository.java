@@ -15,6 +15,7 @@ public interface SettlementAccountRepository extends JpaRepository<SettlementAcc
 
     Optional<SettlementAccount> findByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select account
             from SettlementAccount account
