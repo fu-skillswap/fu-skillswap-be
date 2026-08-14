@@ -60,6 +60,16 @@ class FlywayMigrationNamingTest {
         assertTrue(missingTables.isEmpty(), () -> "Entity tables missing CREATE TABLE migration: " + missingTables);
     }
 
+    @Test
+    void courseEnrollment_completedAtMapping_shouldHaveMigration() throws IOException {
+        String migrationSql = readAllMigrationSql().toLowerCase();
+
+        assertTrue(
+                migrationSql.contains("alter table course_enrollments")
+                        && migrationSql.contains("completed_at timestamp(6) with time zone"),
+                "CourseEnrollment.completedAt requires a completed_at migration on course_enrollments");
+    }
+
     private static String extractVersion(String filename) {
         Matcher matcher = VERSIONED_SQL.matcher(filename);
         if (!matcher.matches()) {
