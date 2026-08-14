@@ -530,4 +530,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
             BookingStatus status, LocalDateTime issueSubmittedAtBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
+            BookingStatus status, LocalDateTime issueSubmittedAtBefore);
 }
+

@@ -14,6 +14,12 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import org.springframework.data.domain.Pageable;
+import java.util.stream.Collectors;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,6 +51,7 @@ public class BookingLifecycleMaintenanceService {
     private final SettlementService settlementService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEventService bookingEventService;
+    private final UserRepository userRepository;
     private AvailabilityTemplateService availabilityTemplateService;
 
     @Autowired(required = false)
@@ -195,12 +202,16 @@ public class BookingLifecycleMaintenanceService {
             changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
         }
         for (Booking candidate : bookingRepository.findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
-                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(4))) {
+                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(5))) {
             changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
         }
         for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
                 BookingStatus.UNDER_REVIEW, now.minusHours(12))) {
             changed += processIssueDeadline(candidate.getId(), now) ? 1 : 0;
+        }
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
+                BookingStatus.UNDER_REVIEW, now.minusHours(48))) {
+            changed += processAdminDisputeSlaWarning(candidate.getId(), now) ? 1 : 0;
         }
         return changed;
     }
@@ -226,7 +237,7 @@ public class BookingLifecycleMaintenanceService {
                 notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Buổi mentoring đã kết thúc. Vui lòng xác nhận hoàn tất trong thời hạn cho phép.");
                 return true;
             }
-            if (booking.getMentorCompletionReminder1hAt() == null && !now.isBefore(end.plusHours(1))) {
+            if (booking.getMentorCompletionReminder1hAt() == null && !now.isBefore(end.plusHours(3))) {
                 booking.setMentorCompletionReminder1hAt(now);
                 notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Bạn vẫn chưa xác nhận hoàn tất buổi mentoring.");
                 return true;
@@ -246,13 +257,13 @@ public class BookingLifecycleMaintenanceService {
             return false;
         }
         if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION && booking.getCompletedAt() != null) {
-            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(booking.getCompletedAt().plusHours(3))) {
+            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(booking.getCompletedAt().plusHours(5))) {
                 booking.setAutoCloseWarningSentAt(now);
                 notifyMentee(booking, "Buổi mentoring sắp tự đóng", "Bạn còn một giờ để xác nhận hoặc báo vấn đề.");
                 notifyMentor(booking, "Buổi mentoring sắp tự đóng", "Nếu không có issue, settlement sẽ được release khi booking tự đóng.");
                 return true;
             }
-            if (!now.isBefore(booking.getCompletedAt().plusHours(4))) {
+            if (!now.isBefore(booking.getCompletedAt().plusHours(6))) {
                 booking.setStatus(BookingStatus.COMPLETED);
                 booking.setAutoClosedAt(now);
                 booking.setFinalizedAt(now);
@@ -294,6 +305,43 @@ public class BookingLifecycleMaintenanceService {
             return true;
         }
         return false;
+    }
+
+    private boolean processAdminDisputeSlaWarning(UUID bookingId, LocalDateTime now) {
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
+        if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW
+                || booking.getIssueSubmittedAt() == null || booking.getAdminSlaWarningSentAt() != null
+                || booking.getIssueResolvedAt() != null
+                || now.isBefore(booking.getIssueSubmittedAt().plusHours(48))) {
+            return false;
+        }
+        booking.setAdminSlaWarningSentAt(now);
+        bookingRepository.save(booking);
+        recordEvent(booking, BookingEventType.ADMIN_SLA_WARNING_SENT, booking.getStatus(), BookingEventActorType.SYSTEM);
+        notifyAdminsDisputeSlaBreach(booking);
+        return true;
+    }
+
+    private void notifyAdminsDisputeSlaBreach(Booking booking) {
+        if (userRepository == null) {
+            return;
+        }
+        List<User> admins = new ArrayList<>();
+        admins.addAll(userRepository.findUsersByRole(RoleCode.ADMIN, Pageable.unpaged()).getContent());
+        admins.addAll(userRepository.findUsersByRole(RoleCode.SYSTEM_ADMIN, Pageable.unpaged()).getContent());
+        java.util.Map<UUID, User> activeAdmins = admins.stream()
+                .filter(u -> u.getStatus() == UserStatus.ACTIVE)
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+        for (User admin : activeAdmins.values()) {
+            eventPublisher.publishEvent(new NotificationEvent(
+                    admin.getId(),
+                    NotificationType.ADMIN_DISPUTE_SLA_BREACH,
+                    "Cảnh báo SLA Khiếu nại Booking",
+                    "Booking #" + booking.getId() + " có khiếu nại chưa được Admin xử lý sau 48 giờ.",
+                    "BOOKING",
+                    booking.getId()
+            ));
+        }
     }
 
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {

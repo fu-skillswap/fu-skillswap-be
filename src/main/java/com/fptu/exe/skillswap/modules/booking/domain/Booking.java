@@ -192,6 +192,9 @@ public class Booking {
     @Column(name = "issue_escalation_sent_at")
     private LocalDateTime issueEscalationSentAt;
 
+    @Column(name = "admin_sla_warning_sent_at")
+    private LocalDateTime adminSlaWarningSentAt;
+
     @Column(name = "issue_resolved_at")
     private LocalDateTime issueResolvedAt;
 

@@ -674,12 +674,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentor_withinTwelveHours_shouldApplyPenalty() {
+    void cancelBookingByMentor_withinSixHours_shouldApplyPenalty() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setSelectedStartTime(testNow().plusHours(8));
-        booking.setSelectedEndTime(testNow().plusHours(9));
-        booking.setRequestedStartTime(testNow().plusHours(8));
-        booking.setRequestedEndTime(testNow().plusHours(9));
+        booking.setSelectedStartTime(testNow().plusHours(4));
+        booking.setSelectedEndTime(testNow().plusHours(5));
+        booking.setRequestedStartTime(testNow().plusHours(4));
+        booking.setRequestedEndTime(testNow().plusHours(5));
         mentorProfile.setLateCancellationPenaltyPoints(BigDecimal.ZERO);
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
@@ -698,12 +698,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentor_underSixHours_shouldSuspendMentor() {
+    void cancelBookingByMentor_underThreeHours_shouldSuspendMentor() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setSelectedStartTime(testNow().plusHours(3));
-        booking.setSelectedEndTime(testNow().plusHours(4));
-        booking.setRequestedStartTime(testNow().plusHours(3));
-        booking.setRequestedEndTime(testNow().plusHours(4));
+        booking.setSelectedStartTime(testNow().plusHours(2));
+        booking.setSelectedEndTime(testNow().plusHours(3));
+        booking.setRequestedStartTime(testNow().plusHours(2));
+        booking.setRequestedEndTime(testNow().plusHours(3));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -733,12 +733,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentee_acceptedBeforeSixHours_shouldReleaseSlotWithoutPenalty() {
+    void cancelBookingByMentee_acceptedBeforeFourHours_shouldReleaseSlotWithoutPenalty() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setSelectedStartTime(testNow().plusHours(7));
-        booking.setSelectedEndTime(testNow().plusHours(8));
-        booking.setRequestedStartTime(testNow().plusHours(7));
-        booking.setRequestedEndTime(testNow().plusHours(8));
+        booking.setSelectedStartTime(testNow().plusHours(5));
+        booking.setSelectedEndTime(testNow().plusHours(6));
+        booking.setRequestedStartTime(testNow().plusHours(5));
+        booking.setRequestedEndTime(testNow().plusHours(6));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -756,12 +756,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentee_acceptedWithinSixHours_shouldTriggerLateCancellationSettlement() {
+    void cancelBookingByMentee_acceptedWithinFourHours_shouldTriggerLateCancellationSettlement() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
-        booking.setSelectedStartTime(testNow().plusHours(5));
-        booking.setSelectedEndTime(testNow().plusHours(6));
-        booking.setRequestedStartTime(testNow().plusHours(5));
-        booking.setRequestedEndTime(testNow().plusHours(6));
+        booking.setSelectedStartTime(testNow().plusHours(3));
+        booking.setSelectedEndTime(testNow().plusHours(4));
+        booking.setRequestedStartTime(testNow().plusHours(3));
+        booking.setRequestedEndTime(testNow().plusHours(4));
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
