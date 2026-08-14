@@ -86,6 +86,23 @@ class FlywayMigrationNamingTest {
         }
     }
 
+    @Test
+    void paymentOrderTargetMappings_shouldHaveMigration() throws IOException {
+        String migrationSql = readAllMigrationSql().toLowerCase();
+
+        assertTrue(
+                migrationSql.contains("alter table payment_orders")
+                        && migrationSql.contains("target_type varchar(30)")
+                        && migrationSql.contains("target_id uuid"),
+                "PaymentOrder typed target mappings require target_type and target_id on payment_orders");
+        assertTrue(
+                migrationSql.contains("alter column booking_id drop not null"),
+                "Typed payment targets require the legacy booking_id column to be nullable");
+        assertTrue(
+                migrationSql.contains("on payment_orders(target_type, target_id)"),
+                "PaymentOrder typed target lookup requires its unique target index");
+    }
+
     private static String extractVersion(String filename) {
         Matcher matcher = VERSIONED_SQL.matcher(filename);
         if (!matcher.matches()) {
