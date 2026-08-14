@@ -12,7 +12,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @ExtendWith(AbstractPostgreSQLIntegrationTest.DockerAvailableCondition.class)
-@Testcontainers(disabledWithoutDocker = true)
+@Testcontainers
 public abstract class AbstractPostgreSQLIntegrationTest {
 
     @Container
@@ -44,6 +44,10 @@ public abstract class AbstractPostgreSQLIntegrationTest {
         public ConditionEvaluationResult evaluateExecutionCondition(ExtensionContext context) {
             if (isDockerAvailable()) {
                 return ConditionEvaluationResult.enabled("Docker environment is available for Testcontainers");
+            }
+            if ("true".equalsIgnoreCase(System.getenv("CI"))) {
+                return ConditionEvaluationResult.enabled(
+                        "CI must fail clearly when its PostgreSQL Testcontainers prerequisite is unavailable");
             }
             return ConditionEvaluationResult.disabled("Docker environment is not available; skipping Testcontainers integration test");
         }
