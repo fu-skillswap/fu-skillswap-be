@@ -70,6 +70,22 @@ class FlywayMigrationNamingTest {
                 "CourseEnrollment.completedAt requires a completed_at migration on course_enrollments");
     }
 
+    @Test
+    void courseSummaryMappings_shouldHaveMigration() throws IOException {
+        String migrationSql = readAllMigrationSql().toLowerCase();
+
+        assertTrue(migrationSql.contains("alter table courses"), "Course summary fields require an ALTER TABLE courses migration");
+        for (String column : List.of(
+                "total_chapters int not null default 0",
+                "total_lectures int not null default 0",
+                "total_duration_seconds int not null default 0",
+                "average_rating numeric(3, 2) not null default 0.00",
+                "review_count int not null default 0",
+                "enrolled_count int not null default 0")) {
+            assertTrue(migrationSql.contains(column), () -> "Course summary migration is missing " + column);
+        }
+    }
+
     private static String extractVersion(String filename) {
         Matcher matcher = VERSIONED_SQL.matcher(filename);
         if (!matcher.matches()) {
