@@ -40,18 +40,19 @@ public class NotificationService {
     private final RealtimeOutboxProperties realtimeOutboxProperties;
 
     @Transactional
-    public void createNotification(UUID recipientUserId, NotificationType type, String title, String message, String relatedEntityType, UUID relatedEntityId) {
+    public void createNotification(UUID recipientUserId, NotificationType type, String title, String message,
+            String relatedEntityType, UUID relatedEntityId) {
         createNotification(recipientUserId, type, title, message, relatedEntityType, relatedEntityId, null);
     }
 
     @Transactional
     public void createNotification(UUID recipientUserId,
-                                   NotificationType type,
-                                   String title,
-                                   String message,
-                                   String relatedEntityType,
-                                   UUID relatedEntityId,
-                                   String deepLink) {
+            NotificationType type,
+            String title,
+            String message,
+            String relatedEntityType,
+            UUID relatedEntityId,
+            String deepLink) {
         User recipient = userRepository.findById(recipientUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận"));
 
@@ -73,10 +74,13 @@ public class NotificationService {
 
     @Transactional
     public void upsertChatUnread(UUID recipientUserId, UUID conversationId) {
-        Notification notification = notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
-                recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId).orElse(null);
+        Notification notification = notificationRepository
+                .findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
+                        recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId)
+                .orElse(null);
         if (notification == null) {
-            createNotification(recipientUserId, NotificationType.CHAT_UNREAD, "Tin nhắn mới", "Bạn có tin nhắn mới từ mentor/mentee.", "CONVERSATION", conversationId, "/chat/" + conversationId);
+            createNotification(recipientUserId, NotificationType.CHAT_UNREAD, "Tin nhắn mới",
+                    "Bạn có tin nhắn mới từ mentor/mentee.", "CONVERSATION", conversationId, "/chat/" + conversationId);
         }
     }
 
@@ -88,14 +92,14 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<NotificationResponse> getMyNotifications(UUID currentUserId, boolean unreadOnly, Pageable pageable) {
+    public PageResponse<NotificationResponse> getMyNotifications(UUID currentUserId, boolean unreadOnly,
+            Pageable pageable) {
         // Enforce page size cap to 50 to protect weak VPS
         int pageSize = Math.min(pageable.getPageSize(), 50);
         Pageable cappedPageable = PageRequest.of(
                 pageable.getPageNumber(),
                 pageSize,
-                Sort.by(Sort.Direction.DESC, "createdAt")
-        );
+                Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<Notification> pageResult;
         if (unreadOnly) {
@@ -117,9 +121,9 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public CursorPageResponse<NotificationResponse> getMyNotifications(UUID currentUserId,
-                                                                       boolean unreadOnly,
-                                                                       String cursor,
-                                                                       Integer limit) {
+            boolean unreadOnly,
+            String cursor,
+            Integer limit) {
         int resolvedLimit = defaultLimit(limit, 20);
         String filterHash = "notifications|recipient=" + currentUserId + "|unreadOnly=" + unreadOnly;
         DecodedNotificationCursor decodedCursor = decodeCursor(cursor, filterHash);
@@ -128,8 +132,7 @@ public class NotificationService {
                 unreadOnly,
                 decodedCursor.createdAt(),
                 decodedCursor.notificationId(),
-                resolvedLimit + 1
-        );
+                resolvedLimit + 1);
         boolean hasNext = notificationWindow.size() > resolvedLimit;
         List<Notification> visibleNotifications = hasNext
                 ? notificationWindow.subList(0, resolvedLimit)
@@ -158,7 +161,8 @@ public class NotificationService {
     @Transactional
     public void markAsRead(UUID currentUserId, UUID notificationId) {
         Notification notification = notificationRepository.findByIdAndRecipientUserId(notificationId, currentUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Thông báo không tồn tại hoặc không thuộc quyền truy cập"));
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                        "Thông báo không tồn tại hoặc không thuộc quyền truy cập"));
 
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
@@ -179,9 +183,11 @@ public class NotificationService {
     }
 
     @Transactional(readOnly = true)
-    public NotificationResponse getRealtimeNotification(UUID recipientUserId, UUID notificationId, String realtimeEventKind) {
+    public NotificationResponse getRealtimeNotification(UUID recipientUserId, UUID notificationId,
+            String realtimeEventKind) {
         Notification notification = notificationRepository.findByIdAndRecipientUserId(notificationId, recipientUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Thông báo không tồn tại hoặc không thuộc quyền truy cập"));
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                        "Thông báo không tồn tại hoặc không thuộc quyền truy cập"));
         long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(recipientUserId);
         return mapToResponse(notification, unreadCount, realtimeEventKind);
     }
@@ -241,9 +247,9 @@ public class NotificationService {
             return fallbackTitle;
         }
         return switch (type) {
-            case MENTOR_VERIFICATION_APPROVED -> "Hồ sơ mentor được duyệt";
-            case MENTOR_VERIFICATION_REJECTED -> "Hồ sơ mentor bị từ chối";
-            case MENTOR_VERIFICATION_NEEDS_REVISION -> "Cần bổ sung hồ sơ mentor";
+            case MENTOR_VERIFICATION_APPROVED -> "Hồ sơ mentor của bạn đã được duyệt";
+            case MENTOR_VERIFICATION_REJECTED -> "Hồ sơ mentor của bạn đã bị từ chối";
+            case MENTOR_VERIFICATION_NEEDS_REVISION -> "Bạn cần bổ sung hồ sơ mentor";
             case BOOKING_REQUEST_CREATED -> "Có yêu cầu mentoring mới";
             case BOOKING_ACCEPTED -> "Mentor đã nhận lịch";
             case BOOKING_PAYMENT_CONFIRMED -> "Thanh toán đã xác nhận";
@@ -294,8 +300,7 @@ public class NotificationService {
         try {
             return new DecodedNotificationCursor(
                     LocalDateTime.parse(payload.sortKey()),
-                    UUID.fromString(payload.secondaryKey())
-            );
+                    UUID.fromString(payload.secondaryKey()));
         } catch (RuntimeException ex) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor chứa notification window không hợp lệ", ex);
         }
@@ -325,12 +330,14 @@ public class NotificationService {
                 "NOTIFICATION",
                 notification.getId(),
                 DomainEventOutboxEventTypes.NOTIFICATION_CREATED,
-                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUser().getId(), notification.getType().name(), eventKind, unreadCount)
-        );
-        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUser().getId(), unreadCount, eventKind);
+                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUser().getId(),
+                        notification.getType().name(), eventKind, unreadCount));
+        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUser().getId(), unreadCount,
+                eventKind);
     }
 
-    private void enqueueNotificationBadgeOutbox(UUID aggregateId, UUID recipientUserId, long unreadCount, String eventKind) {
+    private void enqueueNotificationBadgeOutbox(UUID aggregateId, UUID recipientUserId, long unreadCount,
+            String eventKind) {
         if (!realtimeOutboxProperties.isEnabled()) {
             return;
         }
@@ -338,11 +345,11 @@ public class NotificationService {
                 "NOTIFICATION",
                 aggregateId,
                 DomainEventOutboxEventTypes.NOTIFICATION_BADGE_UPDATED,
-                new NotificationBadgePayload(recipientUserId, unreadCount, eventKind)
-        );
+                new NotificationBadgePayload(recipientUserId, unreadCount, eventKind));
     }
 
-    public record NotificationCreatedPayload(UUID notificationId, UUID recipientUserId, String type, String eventKind, long unreadCount) {
+    public record NotificationCreatedPayload(UUID notificationId, UUID recipientUserId, String type, String eventKind,
+            long unreadCount) {
     }
 
     public record NotificationBadgePayload(UUID recipientUserId, long unreadCount, String eventKind) {
