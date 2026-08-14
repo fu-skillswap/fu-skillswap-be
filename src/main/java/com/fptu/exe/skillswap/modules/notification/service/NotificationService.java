@@ -270,6 +270,8 @@ public class NotificationService {
             case BLOG_POST_PUBLISHED -> "Bài blog mới từ SkillSwap";
             case CHAT_UNREAD -> "Tin nhắn mới";
             case ACCOUNT_UNLOCKED -> "Tài khoản đã được mở khóa";
+            case ADMIN_DISPUTE_SLA_BREACH -> "Cảnh báo SLA Khiếu nại";
+            default -> fallbackTitle != null && !fallbackTitle.isBlank() ? fallbackTitle : "Thông báo mới";
         };
     }
 
