@@ -233,6 +233,17 @@ application:
       bunny-webhook-retention-days: ${STORAGE_LIFECYCLE_BUNNY_WEBHOOK_RETENTION_DAYS:7}
       internal-telemetry-retention-days: ${STORAGE_LIFECYCLE_TELEMETRY_RETENTION_DAYS:14}
       audit-log-retention-days: ${STORAGE_LIFECYCLE_AUDIT_LOG_RETENTION_DAYS:90}
+      user-session-retention-days: ${STORAGE_LIFECYCLE_USER_SESSION_RETENTION_DAYS:30}
+      notification-read-archive-days: ${STORAGE_LIFECYCLE_NOTIFICATION_READ_ARCHIVE_DAYS:120}
+      notification-unread-retention-days: ${STORAGE_LIFECYCLE_NOTIFICATION_UNREAD_RETENTION_DAYS:240}
+      chat-attachment-expiry-days: ${STORAGE_LIFECYCLE_CHAT_ATTACHMENT_EXPIRY_DAYS:90}
+      chat-attachment-delete-grace-days: ${STORAGE_LIFECYCLE_CHAT_ATTACHMENT_DELETE_GRACE_DAYS:7}
+      cleanup-batch-size: ${STORAGE_LIFECYCLE_CLEANUP_BATCH_SIZE:500}
+      user-session-cleanup-cron: ${STORAGE_LIFECYCLE_USER_SESSION_CLEANUP_CRON:0 5 2 * * *}
+      notification-retention-cron: ${STORAGE_LIFECYCLE_NOTIFICATION_RETENTION_CRON:0 20 2 * * *}
+      notification-unread-cleanup-cron: ${STORAGE_LIFECYCLE_NOTIFICATION_UNREAD_CLEANUP_CRON:0 35 2 * * *}
+      chat-attachment-cleanup-cron: ${STORAGE_LIFECYCLE_CHAT_ATTACHMENT_CLEANUP_CRON:0 50 2 * * *}
+      chat-attachment-delete-cron: ${STORAGE_LIFECYCLE_CHAT_ATTACHMENT_DELETE_CRON:0 55 2 * * *}
   system-admin:
     emails: ${SYSTEM_ADMIN_EMAILS:}
   mentor-verification:

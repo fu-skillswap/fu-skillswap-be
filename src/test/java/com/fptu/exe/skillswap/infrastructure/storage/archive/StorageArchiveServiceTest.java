@@ -9,6 +9,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -40,18 +42,13 @@ class StorageArchiveServiceTest {
         // Arrange
         List<String> jsonLines = List.of("{\"id\":1}", "{\"id\":2}");
         
-        // Mock headObject to return the expected sha256 (we need to know what it is)
-        // Mock headObject to return the expected sha256 (we need to know what it is)
-        // Since we don't know the exact sha256 of "{\"id\":1}\n{\"id\":2}\n", we can use a permissive mock first,
-        // or just let it run and mock the headObject to return whatever was passed to uploadFile.
-
-        // Actually, the above doAnswer mocks headObject after uploadFile is called. But wait, `headObject` checks the file size.
-        // If we mock headObject to return sizeBytes = 0, it skips the size check!
         doAnswer(invocation -> {
             Map<String, String> metadata = invocation.getArgument(3);
+            Path uploadedFile = invocation.getArgument(1);
             String sha256 = metadata.get("sha256");
             when(storageGateway.headObject(anyString())).thenReturn(
-                new StorageGateway.ObjectMetadata("key", "application/gzip", 0L, Map.of("sha256", sha256))
+                new StorageGateway.ObjectMetadata("key", "application/gzip", Files.size(uploadedFile),
+                        Map.of("sha256", sha256, "row-count", metadata.get("row-count")))
             );
             return null;
         }).when(storageGateway).uploadFile(anyString(), any(), anyString(), any());
@@ -89,8 +86,11 @@ class StorageArchiveServiceTest {
         List<String> jsonLines = List.of("{\"id\":1}");
         
         doAnswer(invocation -> {
+            Map<String, String> metadata = invocation.getArgument(3);
+            Path uploadedFile = invocation.getArgument(1);
             when(storageGateway.headObject(anyString())).thenReturn(
-                new StorageGateway.ObjectMetadata("key", "application/gzip", 0L, Map.of("sha256", "wrong-sha-256"))
+                new StorageGateway.ObjectMetadata("key", "application/gzip", Files.size(uploadedFile),
+                        Map.of("sha256", "wrong-sha-256", "row-count", metadata.get("row-count")))
             );
             return null;
         }).when(storageGateway).uploadFile(anyString(), any(), anyString(), any());
@@ -111,9 +111,11 @@ class StorageArchiveServiceTest {
         
         doAnswer(invocation -> {
             Map<String, String> metadata = invocation.getArgument(3);
+            Path uploadedFile = invocation.getArgument(1);
             String sha256 = metadata.get("sha256");
             when(storageGateway.headObject(anyString())).thenReturn(
-                new StorageGateway.ObjectMetadata("key", "application/gzip", 0L, Map.of("sha256", sha256))
+                new StorageGateway.ObjectMetadata("key", "application/gzip", Files.size(uploadedFile),
+                        Map.of("sha256", sha256, "row-count", metadata.get("row-count")))
             );
             return null;
         }).when(storageGateway).uploadFile(anyString(), any(), anyString(), any());

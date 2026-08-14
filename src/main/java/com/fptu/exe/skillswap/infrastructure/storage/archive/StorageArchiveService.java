@@ -31,6 +31,10 @@ public class StorageArchiveService {
      * Archives a list of JSON strings to R2 as a GZIP file with deterministic identity and checksum verification.
      */
     public ArchiveBatchResult archiveJsonLines(String datasetPrefix, long firstId, long lastId, List<String> jsonLines) {
+        return archiveJsonLines(datasetPrefix, firstId + "-" + lastId, jsonLines);
+    }
+
+    public ArchiveBatchResult archiveJsonLines(String datasetPrefix, String identity, List<String> jsonLines) {
         if (jsonLines == null || jsonLines.isEmpty()) {
             return null;
         }
@@ -52,7 +56,10 @@ public class StorageArchiveService {
         String sha256Hex = calculateSha256(rawBytes);
 
         // 2. Deterministic object key (Idempotent: retry -> same filename)
-        String fileName = String.format("%d-%d-%s.jsonl.gz", firstId, lastId, sha256Hex);
+        String safeIdentity = identity == null || identity.isBlank()
+                ? "batch"
+                : identity.replaceAll("[^a-zA-Z0-9._-]", "-");
+        String fileName = String.format("%s-%s.jsonl.gz", safeIdentity, sha256Hex);
         String objectKey = datasetPrefix.endsWith("/") ? datasetPrefix + fileName : datasetPrefix + "/" + fileName;
 
         Path tempFile = null;
@@ -69,8 +76,7 @@ public class StorageArchiveService {
             Map<String, String> metadata = new HashMap<>();
             metadata.put("sha256", sha256Hex);
             metadata.put("row-count", String.valueOf(jsonLines.size()));
-            metadata.put("first-id", String.valueOf(firstId));
-            metadata.put("last-id", String.valueOf(lastId));
+            metadata.put("batch-identity", safeIdentity);
 
             storageGateway.uploadFile(objectKey, tempFile, "application/gzip", metadata);
             
@@ -80,13 +86,16 @@ public class StorageArchiveService {
             
             // Note: Our LocalFileStorageGatewayImpl might return 0 if testing fallback is active, 
             // but we implemented it to return actual size if file exists.
-            if (head.sizeBytes() > 0 && head.sizeBytes() != expectedLength) { 
+            if (head.sizeBytes() != expectedLength) {
                 throw new RuntimeException(String.format("Integrity mismatch: expected size %d but got %d for %s", expectedLength, head.sizeBytes(), objectKey));
             }
-            if (head.metadata() != null && head.metadata().containsKey("sha256")) {
-                if (!sha256Hex.equals(head.metadata().get("sha256"))) {
-                    throw new RuntimeException(String.format("Integrity mismatch: expected sha256 %s but got %s for %s", sha256Hex, head.metadata().get("sha256"), objectKey));
-                }
+            if (head.metadata() == null || !sha256Hex.equals(head.metadata().get("sha256"))) {
+                throw new RuntimeException(String.format("Integrity mismatch: expected sha256 %s but got %s for %s", sha256Hex,
+                        head.metadata() == null ? null : head.metadata().get("sha256"), objectKey));
+            }
+            if (!String.valueOf(jsonLines.size()).equals(head.metadata().get("row-count"))) {
+                throw new RuntimeException(String.format("Integrity mismatch: expected row count %d but got %s for %s",
+                        jsonLines.size(), head.metadata().get("row-count"), objectKey));
             }
 
             log.info("Successfully archived {} records to {}. SHA-256: {}", jsonLines.size(), objectKey, sha256Hex);

@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.chat.service;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageLifecycleProperties;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationBookingLink;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
@@ -62,6 +63,7 @@ public class ConversationService {
     private final com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService rateLimitService;
     private final com.fptu.exe.skillswap.modules.notification.service.NotificationService notificationService;
     private final ConversationSafetyPolicy conversationSafetyPolicy;
+    private final StorageLifecycleProperties storageLifecycleProperties;
 
     @Transactional
     public Conversation createDirectForAcceptedBooking(Booking booking) {
@@ -832,7 +834,8 @@ public class ConversationService {
             var metadata = storageGateway().headObject(intent.getStorageKey());
             if (metadata.sizeBytes() != intent.getExpectedSizeBytes() || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
             validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
-            chatAttachmentRepository.save(com.fptu.exe.skillswap.modules.chat.domain.ChatAttachment.builder().message(message).uploadIntent(intent).storageKey(intent.getStorageKey()).originalFilename(intent.getOriginalFilename()).contentType(intent.getContentType()).sizeBytes(metadata.sizeBytes()).expiresAt(message.getCreatedAt().plusDays(90)).build());
+            int retentionDays = Math.max(1, storageLifecycleProperties.getChatAttachmentExpiryDays());
+            chatAttachmentRepository.save(com.fptu.exe.skillswap.modules.chat.domain.ChatAttachment.builder().message(message).uploadIntent(intent).storageKey(intent.getStorageKey()).originalFilename(intent.getOriginalFilename()).contentType(intent.getContentType()).sizeBytes(metadata.sizeBytes()).expiresAt(message.getCreatedAt().plusDays(retentionDays)).build());
             intent.setStatus(com.fptu.exe.skillswap.modules.chat.domain.ChatUploadIntentStatus.CONFIRMED);
         }
     }

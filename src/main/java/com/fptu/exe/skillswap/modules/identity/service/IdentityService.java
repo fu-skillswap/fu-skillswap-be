@@ -250,6 +250,7 @@ public class IdentityService {
     private void markSessionRevoked(UserSession session) {
         session.setRevoked(true);
         session.setSessionState(UserSessionState.REVOKED);
+        session.setRevokedAt(DateTimeUtil.now());
         session.setGraceExpiresAt(null);
         session.setGraceReplayCiphertext(null);
         session.setGraceReplacementSessionId(null);
@@ -261,6 +262,7 @@ public class IdentityService {
         }
         session.setRevoked(true);
         session.setSessionState(terminalState);
+        session.setRevokedAt(terminalState == UserSessionState.REVOKED ? DateTimeUtil.now() : session.getRevokedAt());
         session.setGraceExpiresAt(null);
         session.setGraceReplayCiphertext(null);
         session.setGraceReplacementSessionId(null);

@@ -25,7 +25,7 @@ if [ -z "$BACKUP_BUCKET" ] || [ -z "$R2_ENDPOINT" ] || [ -z "$AWS_ACCESS_KEY_ID"
 fi
 
 if [ -z "$1" ]; then
-    echo "Usage: $0 <backup-file-name.dump>"
+    echo "Usage: $0 <backup-file-name.dump.gz>"
     exit 1
 fi
 
@@ -35,10 +35,26 @@ DB_USER=${DB_USER:-"postgres"}
 
 echo "Downloading $BACKUP_FILE from R2..."
 aws s3 cp "s3://${BACKUP_BUCKET}/db_backups/${BACKUP_FILE}" "./${BACKUP_FILE}" --endpoint-url "$R2_ENDPOINT"
+aws s3 cp "s3://${BACKUP_BUCKET}/db_backups/${BACKUP_FILE}.sha256" "./${BACKUP_FILE}.sha256" --endpoint-url "$R2_ENDPOINT"
 
 if [ $? -ne 0 ]; then
     echo "Failed to download backup."
     exit 1
+fi
+
+aws s3api head-object --bucket "$BACKUP_BUCKET" --key "db_backups/${BACKUP_FILE}" \
+    --endpoint-url "$R2_ENDPOINT" --query 'ContentLength' --output text >/tmp/skillswap-restore-remote-size
+REMOTE_SIZE=$(cat /tmp/skillswap-restore-remote-size)
+LOCAL_SIZE=$(wc -c < "./${BACKUP_FILE}" | tr -d ' ')
+if [ "$REMOTE_SIZE" != "$LOCAL_SIZE" ]; then
+    echo "Downloaded backup size does not match the R2 object" >&2
+    rm -f "./${BACKUP_FILE}" /tmp/skillswap-restore-remote-size
+    exit 1
+fi
+rm -f /tmp/skillswap-restore-remote-size
+
+if [ -f "./${BACKUP_FILE}.sha256" ]; then
+    sha256sum -c "./${BACKUP_FILE}.sha256"
 fi
 
 echo "Dropping and recreating test database: $TEST_DB"
@@ -73,4 +89,4 @@ else
 fi
 
 echo "Cleaning up local downloaded backup..."
-rm "./${BACKUP_FILE}"
+rm -f "./${BACKUP_FILE}" "./${BACKUP_FILE}.sha256"

@@ -43,4 +43,16 @@ public class StorageLifecycleProperties {
      * Thời gian lưu trữ audit log trên DB trước khi đẩy lên R2 (ngày)
      */
     private int auditLogRetentionDays = 90;
+
+    private int userSessionRetentionDays = 30;
+
+    private int notificationReadArchiveDays = 120;
+
+    private int notificationUnreadRetentionDays = 240;
+
+    private int chatAttachmentExpiryDays = 90;
+
+    private int chatAttachmentDeleteGraceDays = 7;
+
+    private int cleanupBatchSize = 500;
 }
