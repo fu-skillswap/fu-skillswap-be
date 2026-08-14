@@ -17,7 +17,12 @@ if ! git diff --check; then
 fi
 
 for script in ops/*.sh scripts/verify-migration-policy.sh; do
-  if ! sh -n "$script"; then
+  interpreter=sh
+  case "$(sed -n '1p' "$script")" in
+    '#!/bin/bash'|'#!/usr/bin/env bash') interpreter=bash ;;
+  esac
+
+  if ! "$interpreter" -n "$script"; then
     fail "Release gate failed: shell syntax is invalid in $script."
   fi
 done
