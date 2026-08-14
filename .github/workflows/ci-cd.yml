@@ -325,7 +325,7 @@ jobs:
           run_required_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
           cd "$DEPLOY_DIR"
 
-          run_required_step "preflight required tools" "command -v curl && command -v docker && docker --version && docker compose version"
+          run_required_step "preflight required tools" "command -v curl && command -v docker && command -v aws && docker --version && docker compose version && aws --version"
           run_required_step "preflight docker daemon" "docker info"
           run_required_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
 
@@ -359,6 +359,7 @@ jobs:
           export RELEASE_DIR="/opt/skillswap/releases"
 
           run_required_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
+          run_required_step "preflight R2 backup configuration" 'if { [ -n "${BACKUP_BUCKET:-}" ] && [ -n "${R2_ENDPOINT:-}" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; } || { [ -n "${STORAGE_BUCKET:-}" ] && [ -n "${STORAGE_ENDPOINT:-}" ] && [ -n "${STORAGE_ACCESS_KEY:-}" ] && [ -n "${STORAGE_SECRET_KEY:-}" ]; }; then echo "backup R2 configuration=present"; else echo "::error::missing backup R2 configuration; set BACKUP_BUCKET/R2_ENDPOINT/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or reuse STORAGE_BUCKET/STORAGE_ENDPOINT/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY"; exit 1; fi'
           run_required_step "docker compose config" "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet"
 
           run_required_sensitive_step "docker login ghcr" "echo *** | docker login ghcr.io -u ${{ github.actor }} --password-stdin" "echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin"

@@ -17,6 +17,8 @@ The database remains the source of truth for active transactional data. R2 is th
 
 `ops/backup-postgres.sh` is the canonical backup job. `pg_dump -Fc` creates a private local backup, verifies it with `pg_restore --list`, uploads it to the R2 prefix `db_backups/`, then verifies the remote object size and SHA-256 metadata.
 
+The job uses dedicated `BACKUP_BUCKET`/`R2_ENDPOINT`/`AWS_*` credentials when supplied; otherwise it reuses the application `STORAGE_BUCKET`/`STORAGE_ENDPOINT`/`STORAGE_ACCESS_KEY`/`STORAGE_SECRET_KEY` configuration. Production deployment requires one complete credential set and AWS CLI before it starts.
+
 - **R2 retention:** 30 days, enforced by the Cloudflare R2 lifecycle rule.
 - **Local retention:** latest 3 verified backups maximum, with a configurable local cap of 5 GB (`LOCAL_BACKUP_MAX_BYTES`). Older local files are removed only after the corresponding R2 object has been verified.
 - **Failure rule:** if upload or remote verification fails, the local backup is retained and the job exits non-zero.
