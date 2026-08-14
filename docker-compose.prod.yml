@@ -11,5 +11,9 @@ services:
     build: !reset null
     image: ${APP_IMAGE:?APP_IMAGE is required}
     restart: always
+    environment:
+      # Production must migrate first, then let Hibernate detect any remaining drift.
+      FLYWAY_ENABLED: "true"
+      HIBERNATE_DDL_AUTO: validate
     logging: *default-logging
 

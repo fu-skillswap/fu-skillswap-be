@@ -24,10 +24,10 @@ public class StompRelayProperties {
     @NotBlank
     private String userDestinationPrefix = "/user";
     private boolean autoStartup = true;
-    private String clientLogin = "guest";
-    private String clientPasscode = "guest";
-    private String systemLogin = "guest";
-    private String systemPasscode = "guest";
+    private String clientLogin = "";
+    private String clientPasscode = "";
+    private String systemLogin = "";
+    private String systemPasscode = "";
     @Min(0)
     private long systemHeartbeatSendIntervalMs = 10_000L;
     @Min(0)
@@ -48,9 +48,7 @@ public class StompRelayProperties {
         private String host = "localhost";
         @Min(1)
         private int port = 61613;
-        @NotBlank
-        private String username = "guest";
-        @NotBlank
-        private String password = "guest";
+        private String username = "";
+        private String password = "";
     }
 }

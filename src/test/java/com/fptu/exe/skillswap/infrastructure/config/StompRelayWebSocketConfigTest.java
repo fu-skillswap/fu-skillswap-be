@@ -102,16 +102,16 @@ class StompRelayWebSocketConfigTest {
         properties.setAppDestinationPrefix("/app");
         properties.setUserDestinationPrefix("/user");
         properties.setAutoStartup(false);
-        properties.setClientLogin("guest");
-        properties.setClientPasscode("guest");
-        properties.setSystemLogin("guest");
-        properties.setSystemPasscode("guest");
+        properties.setClientLogin("skillswap");
+        properties.setClientPasscode("test-secret");
+        properties.setSystemLogin("skillswap");
+        properties.setSystemPasscode("test-secret");
         properties.setSystemHeartbeatSendIntervalMs(10_000L);
         properties.setSystemHeartbeatReceiveIntervalMs(10_000L);
         properties.getRelay().setHost("localhost");
         properties.getRelay().setPort(61613);
-        properties.getRelay().setUsername("guest");
-        properties.getRelay().setPassword("guest");
+        properties.getRelay().setUsername("skillswap");
+        properties.getRelay().setPassword("test-secret");
         return properties;
     }
 

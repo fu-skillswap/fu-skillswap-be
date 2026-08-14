@@ -186,12 +186,12 @@ application:
       relay:
         host: ${WEBSOCKET_STOMP_RELAY_HOST:localhost}
         port: ${WEBSOCKET_STOMP_RELAY_PORT:61613}
-        username: ${WEBSOCKET_STOMP_RELAY_USERNAME:guest}
-        password: ${WEBSOCKET_STOMP_RELAY_PASSWORD:guest}
-      client-login: ${WEBSOCKET_STOMP_CLIENT_LOGIN:guest}
-      client-passcode: ${WEBSOCKET_STOMP_CLIENT_PASSCODE:guest}
-      system-login: ${WEBSOCKET_STOMP_SYSTEM_LOGIN:guest}
-      system-passcode: ${WEBSOCKET_STOMP_SYSTEM_PASSCODE:guest}
+        username: ${WEBSOCKET_STOMP_RELAY_USERNAME:${SPRING_RABBITMQ_USERNAME:}}
+        password: ${WEBSOCKET_STOMP_RELAY_PASSWORD:${SPRING_RABBITMQ_PASSWORD:}}
+      client-login: ${WEBSOCKET_STOMP_CLIENT_LOGIN:${SPRING_RABBITMQ_USERNAME:}}
+      client-passcode: ${WEBSOCKET_STOMP_CLIENT_PASSCODE:${SPRING_RABBITMQ_PASSWORD:}}
+      system-login: ${WEBSOCKET_STOMP_SYSTEM_LOGIN:${SPRING_RABBITMQ_USERNAME:}}
+      system-passcode: ${WEBSOCKET_STOMP_SYSTEM_PASSCODE:${SPRING_RABBITMQ_PASSWORD:}}
   realtime:
     outbox:
       enabled: ${REALTIME_OUTBOX_ENABLED:false}
