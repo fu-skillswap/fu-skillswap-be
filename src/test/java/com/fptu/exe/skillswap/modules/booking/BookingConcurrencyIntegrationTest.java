@@ -634,10 +634,10 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isBooked(true)
                     .build());
 
-            LocalDateTime slot2Start = DateTimeUtil.now().plusHours(5)
+            LocalDateTime slot2Start = DateTimeUtil.now().plusHours(2)
                     .withSecond(0)
                     .withNano(0);
-            LocalDateTime slot2End = DateTimeUtil.now().plusHours(6)
+            LocalDateTime slot2End = DateTimeUtil.now().plusHours(3)
                     .withSecond(0)
                     .withNano(0);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()

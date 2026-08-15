@@ -41,6 +41,11 @@ application:
     dir: ./target/uploads-test
   mail:
     enabled: false
+  scheduling:
+    enabled: false
+  realtime:
+    outbox:
+      enabled: false
   cursor:
     crypto:
       aes-key: Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=
