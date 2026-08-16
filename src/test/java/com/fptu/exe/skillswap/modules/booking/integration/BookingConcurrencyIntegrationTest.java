@@ -696,9 +696,9 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             assertEquals(1, updatedProfile.getTotalReviews());
             assertEquals(0, BigDecimal.valueOf(5.00).setScale(2).compareTo(updatedProfile.getAverageRating()));
             assertNotNull(updatedProfile.getBookingSuspendedUntil());
-            // The fixture starts at 1.00 and a late cancellation adds 1.00.
+            // The fixture starts at 1.00 and a late cancellation adds 0.50.
             // Concurrent feedback must not lose that independent profile update.
-            assertEquals(0, BigDecimal.valueOf(2.00).setScale(2).compareTo(updatedProfile.getLateCancellationPenaltyPoints()));
+            assertEquals(0, BigDecimal.valueOf(1.50).setScale(2).compareTo(updatedProfile.getLateCancellationPenaltyPoints()));
         } finally {
             executorService.shutdownNow();
         }

@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.course.scheduler;
 import com.fptu.exe.skillswap.modules.course.service.CourseVaultService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,7 @@ import java.util.UUID;
 @Component
 @RequiredArgsConstructor
 @Slf4j
+@ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class CourseOutboxWorker {
 
     private final CourseVaultService courseVaultService;
