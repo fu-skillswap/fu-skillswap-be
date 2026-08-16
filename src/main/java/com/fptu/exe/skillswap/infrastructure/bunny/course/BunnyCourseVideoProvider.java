@@ -1,10 +1,12 @@
-package com.fptu.exe.skillswap.infrastructure.bunny.client;
+package com.fptu.exe.skillswap.infrastructure.bunny.course;
 
+import com.fptu.exe.skillswap.infrastructure.bunny.client.BunnyVideoClient;
 import com.fptu.exe.skillswap.infrastructure.bunny.config.BunnyStreamProperties;
 import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+/** Bunny Stream adapter for the Course-owned video provider contract. */
 @Component
 @RequiredArgsConstructor
 public class BunnyCourseVideoProvider implements CourseVideoProvider {
