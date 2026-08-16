@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -45,81 +46,91 @@ public class TelemetryArchiveScheduler {
 
         try {
             log.info("Starting Telemetry archive job for records older than {} days", retentionDays);
-        long startTime = System.currentTimeMillis();
-        int batchSize = 1000;
-        int maxBatches = 50; // max 50k records per run
-        int totalArchived = 0;
+            long startTime = System.currentTimeMillis();
+            int batchSize = 1000;
+            int maxBatches = 50;
+            int totalArchived = 0;
 
-        String selectSql = "SELECT id, created_at, event_type, metadata_json FROM internal_telemetry_events " +
-                "WHERE created_at < NOW() - CAST(? AS INTERVAL) " +
-                "ORDER BY id ASC LIMIT ?";
+            String selectSql = "SELECT id, created_at, event_type, user_id, subject_type, subject_id, metadata_json " +
+                    "FROM internal_telemetry_events " +
+                    "WHERE created_at < NOW() - CAST(? AS INTERVAL) " +
+                    "ORDER BY created_at ASC, id ASC LIMIT ?";
 
-        String deleteSql = "DELETE FROM internal_telemetry_events WHERE id = ?";
+            String deleteSql = "DELETE FROM internal_telemetry_events WHERE id = ?";
 
-        for (int i = 0; i < maxBatches; i++) {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql, retentionDays + " days", batchSize);
-            if (rows.isEmpty()) {
-                break;
-            }
-
-            List<String> jsonLines = new ArrayList<>();
-            List<Long> idsToDelete = new ArrayList<>();
-            long firstId = -1;
-            long lastId = -1;
-
-            for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
-                Map<String, Object> row = rows.get(rowIndex);
-                long id = ((Number) row.get("id")).longValue();
-                
-                if (rowIndex == 0) firstId = id;
-                if (rowIndex == rows.size() - 1) lastId = id;
-
-                try {
-                    jsonLines.add(objectMapper.writeValueAsString(row));
-                    idsToDelete.add(id);
-                } catch (JsonProcessingException e) {
-                    log.error("Failed to serialize telemetry row id={}", id, e);
+            for (int i = 0; i < maxBatches; i++) {
+                List<Map<String, Object>> rows = jdbcTemplate.queryForList(selectSql, retentionDays + " days", batchSize);
+                if (rows.isEmpty()) {
+                    break;
                 }
-            }
 
-            if (!jsonLines.isEmpty()) {
-                LocalDateTime now = LocalDateTime.now();
-                String prefix = String.format("archives/telemetry/%04d/%02d/%02d", 
-                        now.getYear(), now.getMonthValue(), now.getDayOfMonth());
-                
-                try {
-                    StorageArchiveService.ArchiveBatchResult result = storageArchiveService.archiveJsonLines(prefix, firstId, lastId, jsonLines);
-                    if (result != null) {
+                List<String> jsonLines = new ArrayList<>();
+                List<UUID> idsToDelete = new ArrayList<>();
+
+                for (Map<String, Object> row : rows) {
+                    UUID id = readUuid(row.get("id"));
+                    if (id == null) {
+                        log.error("Skipping telemetry archive row with invalid id={}", row.get("id"));
+                        continue;
+                    }
+
+                    try {
+                        jsonLines.add(objectMapper.writeValueAsString(row));
+                        idsToDelete.add(id);
+                    } catch (JsonProcessingException e) {
+                        log.error("Failed to serialize telemetry row id={}", id, e);
+                    }
+                }
+
+                if (!jsonLines.isEmpty()) {
+                    LocalDateTime now = LocalDateTime.now();
+                    String prefix = String.format("archives/telemetry/%04d/%02d/%02d",
+                            now.getYear(), now.getMonthValue(), now.getDayOfMonth());
+
+                    try {
+                        String identity = idsToDelete.get(0) + "-" + idsToDelete.get(idsToDelete.size() - 1);
+                        StorageArchiveService.ArchiveBatchResult result = storageArchiveService.archiveJsonLines(prefix, identity, jsonLines);
+                        if (result == null) {
+                            log.warn("Archiving returned null result, skipping deletion for this batch.");
+                            break;
+                        }
+
                         List<Object[]> batchArgs = idsToDelete.stream()
                                 .map(id -> new Object[]{id})
                                 .collect(Collectors.toList());
                         int[] updateCounts = jdbcTemplate.batchUpdate(deleteSql, batchArgs);
                         int deletedCount = 0;
                         for (int count : updateCounts) {
-        // batchUpdate có thể trả SUCCESS_NO_INFO (-2). Khi đó xem như đã xử lý một bản ghi.
-                            deletedCount += (count > 0) ? count : (count == java.sql.Statement.SUCCESS_NO_INFO ? 1 : 0);
+                            deletedCount += count > 0 ? count : count == java.sql.Statement.SUCCESS_NO_INFO ? 1 : 0;
                         }
-                        
+
                         if (deletedCount != idsToDelete.size()) {
                             log.error("Integrity error: Deleted {} rows but archived {}. Halting batch to prevent data inconsistency.", deletedCount, idsToDelete.size());
                             break;
                         }
                         totalArchived += deletedCount;
-                    } else {
-                        log.warn("Archiving returned null result, skipping deletion for this batch.");
+                    } catch (Exception ex) {
+                        log.error("Archive batch failed. Aborting batch delete to prevent data loss.", ex);
                         break;
                     }
-                } catch (Exception ex) {
-                    log.error("Archive batch failed (firstId={}, lastId={}). Aborting batch delete to prevent data loss.", firstId, lastId, ex);
-                    break; // Stop further processing on failure to ensure safety
                 }
             }
-        }
 
-        long duration = System.currentTimeMillis() - startTime;
-        log.info("Finished Telemetry archive job. Archived {} records in {} ms", totalArchived, duration);
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Finished Telemetry archive job. Archived {} records in {} ms", totalArchived, duration);
         } finally {
             isRunning.set(false);
+        }
+    }
+
+    private UUID readUuid(Object value) {
+        if (value instanceof UUID id) {
+            return id;
+        }
+        try {
+            return value == null ? null : UUID.fromString(value.toString());
+        } catch (IllegalArgumentException ex) {
+            return null;
         }
     }
 }

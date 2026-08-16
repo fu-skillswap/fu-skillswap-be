@@ -34,7 +34,7 @@ public class BunnyWebhookEventsCleanupScheduler {
         String sql = "DELETE FROM bunny_webhook_events WHERE id IN ( " +
                 "SELECT id FROM bunny_webhook_events " +
                 "WHERE status IN ('SUCCEEDED', 'FAILED') " +
-                "AND created_at < NOW() - CAST(? AS INTERVAL) " +
+                "AND received_at < NOW() - CAST(? AS INTERVAL) " +
                 "LIMIT ? " +
                 ")";
 
