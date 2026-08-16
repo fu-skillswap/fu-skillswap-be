@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.infrastructure.realtime.RealtimeFanoutService;
 import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.TaskScheduler;
@@ -14,14 +13,20 @@ import java.util.List;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class GroupChatFanoutDispatcher {
 
     private final RealtimeFanoutService realtimeFanoutService;
     private final GroupChatProperties properties;
-    @Qualifier("applicationTaskScheduler")
     private final TaskScheduler taskScheduler;
+
+    public GroupChatFanoutDispatcher(RealtimeFanoutService realtimeFanoutService,
+                                     GroupChatProperties properties,
+                                     @Qualifier("applicationTaskScheduler") TaskScheduler taskScheduler) {
+        this.realtimeFanoutService = realtimeFanoutService;
+        this.properties = properties;
+        this.taskScheduler = taskScheduler;
+    }
 
     public void dispatchGroupMessage(UUID conversationId,
                                      ChatMessageEvent event,
