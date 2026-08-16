@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.admin.domain.AdminQueueKey;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminQueueQueryRepository;
+import com.fptu.exe.skillswap.modules.admin.strategy.AdminQueueDescriptorRegistry;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -30,6 +31,7 @@ public class AdminQueueWorkbenchService {
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "updatedAt", "status", "title");
 
     private final AdminQueueQueryRepository adminQueueQueryRepository;
+    private final AdminQueueDescriptorRegistry adminQueueDescriptorRegistry;
 
     public PageResponse<AdminQueueCaseItemResponse> getQueueItems(UUID adminUserId, AdminQueueCaseListRequest request) {
         AdminQueueCaseListRequest safeRequest = request == null ? new AdminQueueCaseListRequest() : request;
@@ -110,39 +112,30 @@ public class AdminQueueWorkbenchService {
     }
 
     private AdminCaseType resolveCaseType(AdminQueueKey queueKey) {
-        return switch (queueKey) {
-            case MENTOR_VERIFICATION_PENDING_REVIEW -> AdminCaseType.MENTOR_VERIFICATION_REQUEST;
-            case BOOKING_UNDER_REVIEW, BOOKINGS_ACCEPTED_AWAITING_PAYMENT -> AdminCaseType.BOOKING;
-            case FORUM_REPORTS_OPEN -> AdminCaseType.FORUM_REPORT;
-            case PAYOUT_REQUESTS_REQUESTED -> AdminCaseType.PAYOUT_REQUEST;
-            case PAYMENT_ORDERS_FAILED -> AdminCaseType.PAYMENT_ORDER;
-            case EMAIL_OUTBOX_FAILED -> AdminCaseType.EMAIL_OUTBOX;
-        };
+        if (adminQueueDescriptorRegistry != null) {
+            return adminQueueDescriptorRegistry.resolveCaseType(queueKey);
+        }
+        return null;
     }
 
     private String resolveSeverity(AdminQueueKey queueKey) {
-        return switch (queueKey) {
-            case MENTOR_VERIFICATION_PENDING_REVIEW, BOOKING_UNDER_REVIEW, FORUM_REPORTS_OPEN -> "high";
-            case PAYOUT_REQUESTS_REQUESTED, PAYMENT_ORDERS_FAILED, EMAIL_OUTBOX_FAILED -> "medium";
-            case BOOKINGS_ACCEPTED_AWAITING_PAYMENT -> "low";
-        };
+        if (adminQueueDescriptorRegistry != null) {
+            return adminQueueDescriptorRegistry.resolveSeverity(queueKey);
+        }
+        return "medium";
     }
 
     private String buildDetailPath(AdminQueueKey queueKey, AdminQueueQueryRepository.QueueCaseRow row) {
-        return switch (queueKey) {
-            case MENTOR_VERIFICATION_PENDING_REVIEW -> "/api/admin/mentor-verification/requests/" + row.detailRefId();
-            case BOOKING_UNDER_REVIEW, BOOKINGS_ACCEPTED_AWAITING_PAYMENT -> "/api/admin/bookings/" + row.detailRefId();
-            case FORUM_REPORTS_OPEN -> "/api/admin/forum/reports/" + row.detailRefId();
-            case PAYOUT_REQUESTS_REQUESTED -> "/api/admin/payout-requests/" + row.detailRefId();
-            case PAYMENT_ORDERS_FAILED -> "/api/admin/bookings/" + row.detailRefId();
-            case EMAIL_OUTBOX_FAILED -> "/api/admin/email-outbox/" + row.detailRefId();
-        };
+        if (adminQueueDescriptorRegistry != null) {
+            return adminQueueDescriptorRegistry.buildDetailPath(queueKey, row != null && row.detailRefId() != null ? String.valueOf(row.detailRefId()) : "");
+        }
+        return "";
     }
 
     private List<String> availableActions(AdminQueueKey queueKey) {
-        return switch (queueKey) {
-            case EMAIL_OUTBOX_FAILED -> List.of("VIEW_DETAIL", "ASSIGN_TO_ME", "RETRY_EMAIL");
-            default -> List.of("VIEW_DETAIL", "ASSIGN_TO_ME");
-        };
+        if (adminQueueDescriptorRegistry != null) {
+            return adminQueueDescriptorRegistry.availableActions(queueKey);
+        }
+        return List.of("VIEW_DETAIL", "ASSIGN_TO_ME");
     }
 }

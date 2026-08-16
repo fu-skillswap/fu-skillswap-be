@@ -35,6 +35,7 @@ public class CourseSettlementService {
     private final CourseEnrollmentRepository enrollmentRepository;
     private final CreditLedgerService creditLedgerService;
     private final SettlementService settlementService;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptu.exe.skillswap.modules.chat.service.ConversationService> conversationServiceProvider;
 
     @Transactional
     public void generateSettlements(CourseEnrollment enrollment) {
@@ -134,6 +135,14 @@ public class CourseSettlementService {
         allocation.setRefundOperationKey(operationKey + ":" + allocation.getId());
 
         enrollment.setStatus(EnrollmentStatus.REFUNDED);
+        var conversationService = conversationServiceProvider.getIfAvailable();
+        if (conversationService != null && enrollment.getCourse() != null) {
+            try {
+                conversationService.revokeCourseStudentParticipant(enrollment.getCourse().getId(), enrollment.getStudentUserId());
+            } catch (Exception ex) {
+                log.warn("Failed to revoke student {} from course group chat {}: {}", enrollment.getStudentUserId(), enrollment.getCourse().getId(), ex.getMessage());
+            }
+        }
         return refundable;
     }
 

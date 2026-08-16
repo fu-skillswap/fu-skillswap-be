@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.scheduler;
 
-import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
+import com.fptu.exe.skillswap.infrastructure.storage.PublicStorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageLifecycleProperties;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatAttachment;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatAttachmentState;
@@ -26,7 +26,7 @@ import java.util.List;
 public class ChatAttachmentCleanupScheduler {
 
     private final ChatAttachmentRepository attachmentRepository;
-    private final ObjectProvider<StorageGateway> storageGatewayProvider;
+    private final ObjectProvider<PublicStorageGateway> storageGatewayProvider;
     private final StorageLifecycleProperties properties;
     private final ChatAttachmentCleanupPersistenceService persistenceService;
 
@@ -45,7 +45,7 @@ public class ChatAttachmentCleanupScheduler {
 
     @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-delete-cron:0 55 2 * * *}")
     public void deleteExpiredObjects() {
-        StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+        PublicStorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
         if (storageGateway == null) {
             log.warn("Chat attachment cleanup skipped because storage gateway is unavailable");
             return;

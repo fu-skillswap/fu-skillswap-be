@@ -34,7 +34,7 @@ import java.util.UUID;
 
 /** Owns background expiry and post-session transitions, separate from interactive booking commands. */
 @Service
-@RequiredArgsConstructor
+@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class BookingLifecycleMaintenanceService {
 
     private static final long PAYMENT_WINDOW_MINUTES = BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES;
@@ -46,13 +46,37 @@ public class BookingLifecycleMaintenanceService {
     );
 
     private final BookingRepository bookingRepository;
-    private final MentorProfileRepository mentorProfileRepository;
     private final PaymentOrderService paymentOrderService;
     private final SettlementService settlementService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEventService bookingEventService;
-    private final UserRepository userRepository;
+    private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
+    private final com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplinePort mentorDisciplinePort;
     private AvailabilityTemplateService availabilityTemplateService;
+
+    public BookingLifecycleMaintenanceService(
+            BookingRepository bookingRepository,
+            PaymentOrderService paymentOrderService,
+            SettlementService settlementService,
+            ApplicationEventPublisher eventPublisher,
+            BookingEventService bookingEventService
+    ) {
+        this(bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, null, null);
+    }
+
+    public BookingLifecycleMaintenanceService(
+            BookingRepository bookingRepository,
+            com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository,
+            PaymentOrderService paymentOrderService,
+            SettlementService settlementService,
+            ApplicationEventPublisher eventPublisher,
+            BookingEventService bookingEventService,
+            com.fptu.exe.skillswap.modules.identity.repository.UserRepository userRepository
+    ) {
+        this(bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService,
+                userRepository != null ? new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, null) : null,
+                mentorProfileRepository != null ? new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, null) : null);
+    }
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
@@ -101,7 +125,7 @@ public class BookingLifecycleMaintenanceService {
     @Transactional
     public int expireStalePendingBookings() {
         LocalDateTime now = DateTimeUtil.now();
-        List<Booking> staleBookings = bookingRepository.findPendingExpiryCandidatesForUpdate(
+        List<Booking> staleBookings = bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
                 BookingStatus.PENDING, now);
         if (staleBookings.isEmpty()) {
             return 0;
@@ -323,12 +347,12 @@ public class BookingLifecycleMaintenanceService {
     }
 
     private void notifyAdminsDisputeSlaBreach(Booking booking) {
-        if (userRepository == null) {
+        if (userQueryPort == null) {
             return;
         }
         List<User> admins = new ArrayList<>();
-        admins.addAll(userRepository.findUsersByRole(RoleCode.ADMIN, Pageable.unpaged()).getContent());
-        admins.addAll(userRepository.findUsersByRole(RoleCode.SYSTEM_ADMIN, Pageable.unpaged()).getContent());
+        admins.addAll(userQueryPort.findUsersByRole(RoleCode.ADMIN, Pageable.unpaged()).getContent());
+        admins.addAll(userQueryPort.findUsersByRole(RoleCode.SYSTEM_ADMIN, Pageable.unpaged()).getContent());
         java.util.Map<UUID, User> activeAdmins = admins.stream()
                 .filter(u -> u.getStatus() == UserStatus.ACTIVE)
                 .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
@@ -365,11 +389,12 @@ public class BookingLifecycleMaintenanceService {
     private void incrementMentorCompletionOverdue(Booking booking) { incrementMentorCounter(booking, false); }
 
     private void incrementMentorCounter(Booking booking, boolean noShow) {
-        if (booking.getMentorProfile() == null) return;
-        mentorProfileRepository.findByIdForUpdate(booking.getMentorProfile().getUserId()).ifPresent(profile -> {
-            if (noShow) profile.setMentorNoShowCount(defaultInteger(profile.getMentorNoShowCount()) + 1);
-            else profile.setMentorCompletionOverdueCount(defaultInteger(profile.getMentorCompletionOverdueCount()) + 1);
-        });
+        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null || mentorDisciplinePort == null) return;
+        if (noShow) {
+            mentorDisciplinePort.incrementMentorNoShowCount(booking.getMentorProfile().getUserId());
+        } else {
+            mentorDisciplinePort.incrementMentorCompletionOverdueCount(booking.getMentorProfile().getUserId());
+        }
     }
 
     private void recordEvent(Booking booking, BookingEventType type, BookingStatus oldStatus, BookingEventActorType actor) {

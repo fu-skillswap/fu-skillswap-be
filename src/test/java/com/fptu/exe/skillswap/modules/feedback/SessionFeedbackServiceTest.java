@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.feedback;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.domain.SessionFeedback;
 import com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.SessionFeedbackResponse;
@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackReposit
 import com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -42,10 +42,10 @@ class SessionFeedbackServiceTest {
     private SessionFeedbackRepository sessionFeedbackRepository;
 
     @Mock
-    private BookingRepository bookingRepository;
+    private BookingQueryPort bookingQueryPort;
 
     @Mock
-    private MentorProfileRepository mentorProfileRepository;
+    private MentorQueryPort mentorQueryPort;
 
     @Mock
     private NotificationService notificationService;
@@ -99,7 +99,7 @@ class SessionFeedbackServiceTest {
     @Test
     void submitFeedback_bookingNotCompleted_shouldThrowConflict() {
         booking.setStatus(BookingStatus.ACCEPTED);
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request())
@@ -110,7 +110,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_mentorReviewer_shouldThrowAccessDenied() {
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(mentorId, booking.getId(), request())
@@ -121,7 +121,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_duplicateReview_shouldThrowConflict() {
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () ->
@@ -133,14 +133,14 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_success_shouldDefaultPublicAndUpdateMentorStats() {
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(false);
         when(sessionFeedbackRepository.saveAndFlush(any(SessionFeedback.class))).thenAnswer(invocation -> {
             SessionFeedback feedback = invocation.getArgument(0);
             feedback.setId(UUID.randomUUID());
             return feedback;
         });
-        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
 
         SubmitFeedbackRequest request = request();
         request.setIsPublic(null);
@@ -153,7 +153,7 @@ class SessionFeedbackServiceTest {
         assertEquals(3, mentorProfile.getTotalReviews());
         assertEquals("4.67", mentorProfile.getAverageRating().toString());
         assertEquals(true, response.isPublic());
-        verify(mentorProfileRepository).save(mentorProfile);
+        verify(mentorQueryPort).saveMentorProfile(mentorProfile);
         verify(notificationService).createNotification(
                 eq(mentorId),
                 eq(NotificationType.FEEDBACK_RECEIVED),
@@ -166,7 +166,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_nonParticipant_shouldThrowAccessDenied() {
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
                 sessionFeedbackService.submitFeedback(UUID.randomUUID(), booking.getId(), request())
@@ -178,7 +178,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_failedDuplicate_shouldNotCreateNotification() {
-        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(true);
 
         assertThrows(BaseException.class, () ->

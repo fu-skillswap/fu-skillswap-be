@@ -25,6 +25,7 @@ public class CourseEnrollmentService {
     private final CourseEnrollmentRepository enrollmentRepository;
     private final CreditLedgerService creditLedgerService;
     private final CourseSettlementService settlementService;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptu.exe.skillswap.modules.chat.service.ConversationService> conversationServiceProvider;
 
     // Hardcoded commission policy for now (Buyer 10%, Mentor 5% platform fee)
     private static final double BUYER_FEE_RATE = 0.10;
@@ -79,6 +80,16 @@ public class CourseEnrollmentService {
                 .build();
 
         enrollment = enrollmentRepository.save(enrollment);
+
+        // Auto-join student to course group chat
+        var conversationService = conversationServiceProvider.getIfAvailable();
+        if (conversationService != null) {
+            try {
+                conversationService.addCourseStudentParticipant(course.getId(), studentUserId);
+            } catch (Exception ex) {
+                log.warn("Failed to auto-join student {} to course group chat {}: {}", studentUserId, course.getId(), ex.getMessage());
+            }
+        }
 
         // Generate hold-period settlement
         settlementService.generateSettlements(enrollment);

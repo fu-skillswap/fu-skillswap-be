@@ -33,4 +33,13 @@ public final class BookingDeadlinePolicy {
         LocalDateTime preparationDeadline = selectedStartAt.minusMinutes(PAYMENT_PREPARATION_MINUTES);
         return paymentWindowDeadline.isBefore(preparationDeadline) ? paymentWindowDeadline : preparationDeadline;
     }
+
+    public static LocalDateTime resolvePaymentDeadline(com.fptu.exe.skillswap.modules.booking.domain.Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+        LocalDateTime start = booking.getSelectedStartTime() != null ? booking.getSelectedStartTime()
+                : (booking.getSlot() != null ? booking.getSlot().getStartTime() : null);
+        return resolvePaymentDeadline(booking.getAcceptedAt(), start);
+    }
 }

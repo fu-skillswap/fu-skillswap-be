@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutPreviewResponse;
@@ -35,7 +35,7 @@ public class BookingPricingPreviewService {
             CreditOriginType.MANUAL
     );
 
-    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorQueryPort mentorQueryPort;
     private final CampaignService campaignService;
     private final CouponService couponService;
     private final CreditLedgerService creditLedgerService;
@@ -47,7 +47,7 @@ public class BookingPricingPreviewService {
         if (viewerUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        MentorService service = mentorServiceRepository.findByIdForPricingPreview(serviceId)
+        MentorService service = mentorQueryPort.findByIdForPricingPreview(serviceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring"));
         validateDiscoverable(service);
         return estimateForService(viewerUserId, service);

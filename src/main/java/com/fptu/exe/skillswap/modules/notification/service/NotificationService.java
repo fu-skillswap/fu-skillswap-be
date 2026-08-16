@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.notification.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
@@ -16,6 +16,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
+import com.fptu.exe.skillswap.modules.notification.strategy.NotificationTitleRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,10 +35,11 @@ import java.util.UUID;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
-    private final UserRepository userRepository;
+    private final UserQueryPort userQueryPort;
     private final CursorCodec cursorCodec;
     private final DomainEventOutboxService domainEventOutboxService;
     private final RealtimeOutboxProperties realtimeOutboxProperties;
+    private final NotificationTitleRegistry notificationTitleRegistry;
 
     @Transactional
     public void createNotification(UUID recipientUserId, NotificationType type, String title, String message,
@@ -53,7 +55,7 @@ public class NotificationService {
             String relatedEntityType,
             UUID relatedEntityId,
             String deepLink) {
-        User recipient = userRepository.findById(recipientUserId)
+        User recipient = userQueryPort.findUserById(recipientUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận"));
 
         Notification notification = Notification.builder()
@@ -74,21 +76,12 @@ public class NotificationService {
 
     @Transactional
     public void upsertChatUnread(UUID recipientUserId, UUID conversationId) {
-        Notification notification = notificationRepository
-                .findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
-                        recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId)
-                .orElse(null);
-        if (notification == null) {
-            createNotification(recipientUserId, NotificationType.CHAT_UNREAD, "Tin nhắn mới",
-                    "Bạn có tin nhắn mới từ mentor/mentee.", "CONVERSATION", conversationId, "/chat/" + conversationId);
-        }
+        // Chat notifications are excluded from general notification center and handled via /queue/chat/unread STOMP channel.
     }
 
     @Transactional
     public void clearChatUnread(UUID recipientUserId, UUID conversationId) {
-        notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(
-                recipientUserId, NotificationType.CHAT_UNREAD, "CONVERSATION", conversationId)
-                .ifPresent(notification -> markAsRead(recipientUserId, notification.getId()));
+        // Chat notifications are excluded from general notification center and handled via /queue/chat/unread STOMP channel.
     }
 
     @Transactional(readOnly = true)
@@ -243,42 +236,10 @@ public class NotificationService {
     }
 
     private String normalizeTitle(NotificationType type, String fallbackTitle) {
-        if (type == null) {
-            return fallbackTitle;
+        if (notificationTitleRegistry != null) {
+            return notificationTitleRegistry.resolveTitle(type, fallbackTitle != null && !fallbackTitle.isBlank() ? fallbackTitle : "Thông báo mới");
         }
-        return switch (type) {
-            case MENTOR_VERIFICATION_APPROVED -> "Hồ sơ mentor của bạn đã được duyệt";
-            case MENTOR_VERIFICATION_REJECTED -> "Hồ sơ mentor của bạn đã bị từ chối";
-            case MENTOR_VERIFICATION_NEEDS_REVISION -> "Bạn cần bổ sung hồ sơ mentor";
-            case BOOKING_REQUEST_CREATED -> "Có yêu cầu mentoring mới";
-            case BOOKING_ACCEPTED -> "Mentor đã nhận lịch";
-            case BOOKING_PAYMENT_CONFIRMED -> "Thanh toán đã xác nhận";
-            case BOOKING_PAYMENT_EXPIRED -> "Hết hạn thanh toán";
-            case BOOKING_REJECTED -> "Yêu cầu mentoring bị từ chối";
-            case BOOKING_CANCELLED_BY_MENTEE -> "Mentee đã hủy lịch";
-            case BOOKING_CANCELLED_BY_MENTOR -> "Mentor đã hủy lịch";
-            case BOOKING_AUTO_REJECTED -> "Yêu cầu đã tự hủy";
-            case BOOKING_REQUEST_EXPIRED -> "Yêu cầu mentoring đã hết hạn";
-            case BOOKING_RESCHEDULE_REQUESTED -> "Có yêu cầu đổi lịch";
-            case BOOKING_RESCHEDULE_ACCEPTED -> "Đề nghị đổi lịch đã duyệt";
-            case BOOKING_RESCHEDULE_REJECTED -> "Đề nghị đổi lịch bị từ chối";
-            case BOOKING_RESCHEDULE_EXPIRED -> "Yêu cầu đổi lịch hết hạn";
-            case MEETING_LINK_UPDATED -> "Link buổi học đã cập nhật";
-            case GOOGLE_CALENDAR_SYNC_NOTICE -> "Google Calendar cần chú ý";
-            case SESSION_COMPLETED -> "Phiên mentoring đã hoàn thành";
-            case BOOKING_REMINDER -> "Nhắc lịch mentoring";
-            case FEEDBACK_PROMPT -> "Đánh giá buổi mentoring";
-            case FEEDBACK_RECEIVED -> "Bạn vừa nhận đánh giá mới";
-            case FORUM_POST_COMMENTED -> "Bài viết có bình luận mới";
-            case FORUM_COMMENT_REPLY -> "Bình luận của bạn có người trả lời";
-            case FORUM_POST_HIDDEN -> "Bài viết đã bị ẩn";
-            case FORUM_COMMENT_HIDDEN -> "Bình luận đã bị ẩn";
-            case BLOG_POST_PUBLISHED -> "Bài blog mới từ SkillSwap";
-            case CHAT_UNREAD -> "Tin nhắn mới";
-            case ACCOUNT_UNLOCKED -> "Tài khoản đã được mở khóa";
-            case ADMIN_DISPUTE_SLA_BREACH -> "Cảnh báo SLA Khiếu nại";
-            default -> fallbackTitle != null && !fallbackTitle.isBlank() ? fallbackTitle : "Thông báo mới";
-        };
+        return fallbackTitle != null && !fallbackTitle.isBlank() ? fallbackTitle : "Thông báo mới";
     }
 
     private int defaultLimit(Integer limit, int defaultValue) {

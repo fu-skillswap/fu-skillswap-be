@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
 import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
@@ -29,7 +29,6 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
@@ -70,8 +69,7 @@ public class ForumPostService {
     private final ForumCommentRepository forumCommentRepository;
     private final ForumPostReactionRepository forumPostReactionRepository;
     private final ForumCommentReactionRepository forumCommentReactionRepository;
-    private final UserRepository userRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final UserQueryPort userQueryPort;
     private final TagRepository tagRepository;
     private final NotificationService notificationService;
     private final ForumTextPolicy forumTextPolicy;
@@ -479,7 +477,7 @@ public class ForumPostService {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        User user = userRepository.findById(currentUserId)
+        User user = userQueryPort.findUserById(currentUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Chỉ tài khoản đang hoạt động mới được sử dụng forum");
@@ -686,7 +684,7 @@ public class ForumPostService {
     }
 
     private AcademicProgram resolveAuthorProgram(UUID userId) {
-        return studentProfileRepository.findWithDetailsByUserId(userId)
+        return userQueryPort.findStudentProfileWithDetailsByUserId(userId)
                 .map(StudentProfile::getProgram)
                 .orElse(null);
     }

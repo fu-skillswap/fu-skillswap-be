@@ -6,31 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 
-public interface StorageGateway {
-
-    StorageUploadResult uploadFile(MultipartFile file, String subFolder);
-
-    void uploadFile(String objectKey, java.nio.file.Path file, String contentType, java.util.Map<String, String> metadata) throws IOException;
-
-    void deleteFile(String objectKey);
-
-    PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType);
-
-    default PresignedUpload generatePresignedUploadUrl(String originalFilename, String contentType, String objectPrefix) {
-        return generatePresignedUploadUrl(originalFilename, contentType);
-    }
-
-    String resolvePublicUrl(String objectKey);
-
-    String storageProviderName();
-
-    ObjectMetadata headObject(String objectKey);
-
-    PrivatePresignedUpload generatePrivateUploadUrl(String objectKey, String contentType, Duration ttl);
-
-    PrivatePresignedDownload generatePrivateDownloadUrl(String objectKey, Duration ttl, String contentDisposition);
-
-    InputStream openObject(String objectKey) throws IOException;
+public interface StorageGateway extends PublicStorageGateway, PrivateStorageGateway, StorageObjectReader {
 
     record StorageUploadResult(String objectKey, String publicUrl) {}
 

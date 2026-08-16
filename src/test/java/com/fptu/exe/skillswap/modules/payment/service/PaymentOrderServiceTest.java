@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingQueryPortImpl;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
@@ -18,6 +19,8 @@ import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutResponse;
 import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsGateway;
+import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsPaymentGatewayProvider;
+import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -63,23 +66,37 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class PaymentOrderServiceTest {
 
-    @Mock private BookingRepository bookingRepository;
-    @Mock private PaymentOrderRepository paymentOrderRepository;
-    @Mock private PaymentAttemptRepository paymentAttemptRepository;
-    @Mock private CouponService couponService;
-    @Mock private CreditLedgerService creditLedgerService;
-    @Mock private CampaignService campaignService;
-    @Mock private PayOsGateway payOsGateway;
-    @Mock private SettlementService settlementService;
-    @Mock private SessionService sessionService;
-    @Mock private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
-    @Mock private NotificationService notificationService;
-    @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private InternalTelemetryService internalTelemetryService;
-    @Mock private TransactionTemplate transactionTemplate;
+    @Mock
+    private BookingRepository bookingRepository;
+    @Mock
+    private PaymentOrderRepository paymentOrderRepository;
+    @Mock
+    private PaymentAttemptRepository paymentAttemptRepository;
+    @Mock
+    private CouponService couponService;
+    @Mock
+    private CreditLedgerService creditLedgerService;
+    @Mock
+    private CampaignService campaignService;
+    @Mock
+    private PayOsGateway payOsGateway;
+    @Mock
+    private SettlementService settlementService;
+    @Mock
+    private SessionService sessionService;
+    @Mock
+    private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
+    @Mock
+    private NotificationService notificationService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private InternalTelemetryService internalTelemetryService;
+    @Mock
+    private TransactionTemplate transactionTemplate;
 
     private PaymentOrderService paymentOrderService;
-
+    private PaymentProperties paymentProperties;
     private UUID menteeId;
     private UUID mentorId;
     private UUID bookingId;
@@ -87,7 +104,7 @@ class PaymentOrderServiceTest {
 
     @BeforeEach
     void setUp() {
-        PaymentProperties paymentProperties = new PaymentProperties();
+        paymentProperties = new PaymentProperties();
         paymentProperties.getPayos().setReturnUrl("https://skillswap.asia/payment/return");
         paymentProperties.getPayos().setCancelUrl("https://skillswap.asia/payment/cancel");
         paymentProperties.getPayos().setChecksumKey("test-checksum-key");
@@ -105,14 +122,14 @@ class PaymentOrderServiceTest {
         }).when(transactionTemplate).executeWithoutResult(any());
 
         paymentOrderService = new PaymentOrderService(
-                bookingRepository,
+                new BookingQueryPortImpl(bookingRepository),
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 couponService,
                 creditLedgerService,
                 campaignService,
                 paymentProperties,
-                payOsGateway,
+                new PaymentGatewayProviderFactory(List.of(new PayOsPaymentGatewayProvider(payOsGateway))),
                 settlementService,
                 sessionService,
                 conversationService,
@@ -728,14 +745,14 @@ class PaymentOrderServiceTest {
         props.setMentorCommissionBps(1000); // 10%
 
         PaymentOrderService customService = new PaymentOrderService(
-                bookingRepository,
+                new BookingQueryPortImpl(bookingRepository),
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 couponService,
                 creditLedgerService,
                 campaignService,
                 props,
-                payOsGateway,
+                new PaymentGatewayProviderFactory(List.of(new PayOsPaymentGatewayProvider(payOsGateway))),
                 settlementService,
                 sessionService,
                 conversationService,

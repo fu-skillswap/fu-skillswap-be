@@ -15,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fptu.exe.skillswap.modules.payment.strategy.DiscountStrategyRegistry;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
@@ -29,6 +31,7 @@ public class CouponService {
 
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
+    private final DiscountStrategyRegistry discountStrategyRegistry;
 
     @Transactional
     public Coupon resolveCoupon(String couponCode) {
@@ -134,20 +137,13 @@ public class CouponService {
 
     @Transactional(readOnly = true)
     public int calculateCouponDiscount(Coupon coupon, int grossScoin) {
-        if (coupon == null) {
+        if (coupon == null || grossScoin <= 0) {
             return 0;
         }
-        return switch (coupon.getDiscountType()) {
-            case FIXED -> Math.min(Math.max(0, coupon.getDiscountValue() == null ? 0 : coupon.getDiscountValue()), grossScoin);
-            case PERCENT -> {
-                int percent = Math.max(0, coupon.getDiscountValue() == null ? 0 : coupon.getDiscountValue());
-                int discount = (grossScoin * percent) / 100;
-                if (coupon.getMaxDiscountScoin() != null) {
-                    discount = Math.min(discount, Math.max(0, coupon.getMaxDiscountScoin()));
-                }
-                yield Math.min(discount, grossScoin);
-            }
-        };
+        if (discountStrategyRegistry != null) {
+            return discountStrategyRegistry.calculateDiscount(coupon, grossScoin);
+        }
+        return 0;
     }
 
     private void validateQuotaAvailability(Coupon coupon, UUID userId) {

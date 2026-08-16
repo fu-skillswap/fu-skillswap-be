@@ -26,6 +26,7 @@ public class ChatOutboxRealtimeConsumer {
     private final ObjectMapper objectMapper;
     private final ConversationService conversationService;
     private final RealtimeFanoutService realtimeFanoutService;
+    private final org.springframework.beans.factory.ObjectProvider<com.fptu.exe.skillswap.modules.chat.service.GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider;
 
     @RabbitListener(
             queues = "${application.realtime.outbox.chat-queue:skillswap.chat.realtime}",
@@ -49,8 +50,20 @@ public class ChatOutboxRealtimeConsumer {
 
     private void handleChatMessageCreated(String payloadJson) throws java.io.IOException {
         Payloads.ChatMessageCreatedPayload payload = objectMapper.readValue(payloadJson, Payloads.ChatMessageCreatedPayload.class);
-        conversationService.buildChatMessageDeliveries(payload.conversationId(), payload.messageId(), payload.senderId())
-                .forEach(delivery -> realtimeFanoutService.pushChatMessage(delivery.recipientUserId(), delivery.event()));
+        var conversation = conversationService.findById(payload.conversationId());
+        if (conversation != null && conversation.getType() == com.fptu.exe.skillswap.modules.chat.domain.ConversationType.GROUP) {
+            var recipientIds = conversationService.getActiveRecipientUserIds(payload.conversationId(), payload.senderId());
+            var event = conversationService.buildGroupChatMessageEvent(payload.conversationId(), payload.messageId(), payload.senderId());
+            var dispatcher = groupChatFanoutDispatcherProvider.getIfAvailable();
+            if (dispatcher != null) {
+                dispatcher.dispatchGroupMessage(payload.conversationId(), event, recipientIds);
+            } else {
+                recipientIds.forEach(recipientId -> realtimeFanoutService.pushChatMessage(recipientId, event));
+            }
+        } else {
+            conversationService.buildChatMessageDeliveries(payload.conversationId(), payload.messageId(), payload.senderId())
+                    .forEach(delivery -> realtimeFanoutService.pushChatMessage(delivery.recipientUserId(), delivery.event()));
+        }
     }
 
     private void handleConversationUpdated(String payloadJson) throws java.io.IOException {

@@ -33,8 +33,6 @@ import java.util.UUID;
 public class ChatController {
 
     private final ConversationService conversationService;
-    private final MessageRepository messageRepository;
-    private final UserRepository userRepository;
     private final InMemoryRateLimitService rateLimitService;
     private final ConversationSafetyService conversationSafetyService;
 
@@ -171,7 +169,7 @@ public class ChatController {
                 java.time.Duration.ofMinutes(1),
                 "Bạn đang gửi tin nhắn quá nhanh, vui lòng chậm lại một chút"
         );
-        MessageResponse response = conversationService.sendMessage(conversationId, userPrincipal.getId(), request, messageRepository, userRepository);
+        MessageResponse response = conversationService.sendMessage(conversationId, userPrincipal.getId(), request);
         return ApiResponse.created(response);
     }
 

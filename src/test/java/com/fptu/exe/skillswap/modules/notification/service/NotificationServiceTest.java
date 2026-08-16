@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.notification.service;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
@@ -17,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -38,8 +39,7 @@ class NotificationServiceTest {
     private NotificationRepository notificationRepository;
 
     @Mock
-    private UserRepository userRepository;
-
+    private UserQueryPort userQueryPort;
 
     @Mock
     private CursorCodec cursorCodec;
@@ -47,6 +47,13 @@ class NotificationServiceTest {
     private DomainEventOutboxService domainEventOutboxService;
     @Mock
     private RealtimeOutboxProperties realtimeOutboxProperties;
+    @Spy
+    private com.fptu.exe.skillswap.modules.notification.strategy.NotificationTitleRegistry notificationTitleRegistry =
+            new com.fptu.exe.skillswap.modules.notification.strategy.NotificationTitleRegistry(java.util.List.of(
+                    new com.fptu.exe.skillswap.modules.notification.strategy.BookingNotificationTitleResolver(),
+                    new com.fptu.exe.skillswap.modules.notification.strategy.MentorNotificationTitleResolver(),
+                    new com.fptu.exe.skillswap.modules.notification.strategy.ForumNotificationTitleResolver()
+            ));
 
     @InjectMocks
     private NotificationService notificationService;
@@ -63,7 +70,7 @@ class NotificationServiceTest {
 
     @Test
     void createNotification_shouldPersistUnreadNotification() {
-        when(userRepository.findById(userId)).thenReturn(Optional.of(mockUser));
+        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(mockUser));
         when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 

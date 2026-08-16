@@ -72,6 +72,25 @@ class ArchitectureGuardrailTest {
                     .should().dependOnClassesThat()
                     .haveFullyQualifiedName("com.fptu.exe.skillswap.modules.notification.service.NotificationService");
 
+    @ArchTest
+    static final ArchRule course_services_must_not_depend_on_bunny_sdk_contracts =
+            noClasses()
+                    .that().resideInAPackage("..modules.course.service..")
+                    .should().dependOnClassesThat().resideInAnyPackage("..infrastructure.bunny..");
+
+    @ArchTest
+    static final ArchRule payment_services_must_not_depend_on_payos_contracts =
+            noClasses()
+                    .that().resideInAPackage("..modules.payment.service..")
+                    .should().dependOnClassesThat().resideInAnyPackage("..modules.payment.integration.payos..");
+
+    @ArchTest
+    static final ArchRule chat_attachment_service_must_use_narrow_storage_capabilities =
+            noClasses()
+                    .that().haveFullyQualifiedName("com.fptu.exe.skillswap.modules.chat.service.ChatAttachmentService")
+                    .should().dependOnClassesThat()
+                    .haveFullyQualifiedName("com.fptu.exe.skillswap.infrastructure.storage.StorageGateway");
+
     private static FreezingArchRule freeze(ArchRule rule) {
         return FreezingArchRule.freeze(rule);
     }

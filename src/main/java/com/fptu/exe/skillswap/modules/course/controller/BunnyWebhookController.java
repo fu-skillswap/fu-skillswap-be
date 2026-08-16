@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.course.controller;
 
 import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyWebhookPayload;
 import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
+import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
 import com.fptu.exe.skillswap.infrastructure.bunny.webhook.BunnyWebhookVerifier;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.modules.course.service.CourseVaultService;
@@ -48,7 +49,8 @@ public class BunnyWebhookController {
             String externalEventId = generatePayloadHash(rawPayload);
 
             // 1. Save Event Audit Log (PENDING) idempotently
-            courseVaultService.saveWebhookAuditLog(signatureHeader, externalEventId, payload);
+            courseVaultService.saveWebhookAuditLog(signatureHeader, externalEventId,
+                    new CourseVideoWebhook(payload.getVideoGuid(), payload.getVideoLibraryId(), payload.getStatus()));
 
             // 2. Process asynchronously (handled by DB worker BunnyWebhookRetryScheduler)
             // DO NOT process synchronously here

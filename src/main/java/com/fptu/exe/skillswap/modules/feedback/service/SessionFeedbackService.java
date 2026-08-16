@@ -2,14 +2,14 @@ package com.fptu.exe.skillswap.modules.feedback.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.domain.SessionFeedback;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.SessionFeedbackResponse;
 import com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -28,8 +28,8 @@ import java.util.UUID;
 public class SessionFeedbackService {
 
     private final SessionFeedbackRepository sessionFeedbackRepository;
-    private final BookingRepository bookingRepository;
-    private final MentorProfileRepository mentorProfileRepository;
+    private final BookingQueryPort bookingQueryPort;
+    private final MentorQueryPort mentorQueryPort;
     private final NotificationService notificationService;
     private final EntityManager entityManager;
 
@@ -40,7 +40,7 @@ public class SessionFeedbackService {
         }
 
         // Lock the booking and associated mentor profile early to establish lock order and avoid deadlock
-        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
+        Booking booking = bookingQueryPort.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
         if (booking.getStatus() != BookingStatus.COMPLETED
@@ -99,7 +99,7 @@ public class SessionFeedbackService {
     }
 
     private void updateMentorRatingStats(UUID mentorUserId, int newRating) {
-        MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
+        MentorProfile lockedProfile = mentorQueryPort.findMentorProfileByIdForUpdate(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
         entityManager.refresh(lockedProfile);
         
@@ -112,7 +112,7 @@ public class SessionFeedbackService {
         
         lockedProfile.setTotalReviews(currentCount + 1);
         lockedProfile.setAverageRating(newAvg);
-        mentorProfileRepository.save(lockedProfile);
+        mentorQueryPort.saveMentorProfile(lockedProfile);
     }
 
     private SessionFeedbackResponse toResponse(SessionFeedback feedback) {

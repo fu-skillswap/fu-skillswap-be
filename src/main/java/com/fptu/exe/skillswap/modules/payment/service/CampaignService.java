@@ -1,11 +1,10 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefitType;
@@ -37,8 +36,7 @@ public class CampaignService {
     private final CampaignRepository campaignRepository;
     private final CampaignBenefitRepository campaignBenefitRepository;
     private final PaymentOrderRepository paymentOrderRepository;
-    private final UserRepository userRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final UserQueryPort userQueryPort;
 
     @Transactional
     public CampaignCreditApplication resolveCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
@@ -64,9 +62,9 @@ public class CampaignService {
             return CampaignCreditApplication.none();
         }
 
-        User user = userRepository.findById(userId)
+        User user = userQueryPort.findUserById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng để áp campaign"));
-        StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(userId).orElse(null);
+        StudentProfile studentProfile = userQueryPort.findStudentProfileWithDetailsByUserId(userId).orElse(null);
 
         CampaignCreditApplication bestMatch = CampaignCreditApplication.none();
         for (UUID campaignId : campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)) {

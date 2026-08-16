@@ -1,9 +1,8 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefitType;
@@ -44,10 +43,7 @@ class CampaignServiceTest {
     private PaymentOrderRepository paymentOrderRepository;
 
     @Mock
-    private UserRepository userRepository;
-
-    @Mock
-    private StudentProfileRepository studentProfileRepository;
+    private UserQueryPort userQueryPort;
 
     @InjectMocks
     private CampaignService campaignService;
@@ -77,8 +73,8 @@ class CampaignServiceTest {
                 .active(true)
                 .build();
 
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.empty());
+        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
+        when(userQueryPort.findStudentProfileWithDetailsByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findByIdForUpdate(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));
@@ -121,8 +117,8 @@ class CampaignServiceTest {
                 .active(true)
                 .build();
 
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(studentProfileRepository.findWithDetailsByUserId(userId)).thenReturn(Optional.empty());
+        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
+        when(userQueryPort.findStudentProfileWithDetailsByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));

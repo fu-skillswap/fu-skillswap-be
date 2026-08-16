@@ -9,11 +9,11 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.payment.service.BookingPricingPreviewService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -34,10 +34,10 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class BookingQuoteService {
 
-    private final UserRepository userRepository;
+    private final UserQueryPort userQueryPort;
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorQueryPort mentorQueryPort;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final BookingSlotValidator bookingSlotValidator;
     private final MentorBookingPolicyService mentorBookingPolicyService;
@@ -53,7 +53,7 @@ public class BookingQuoteService {
         }
         validateWholeMinute(request.startAt());
 
-        User mentee = userRepository.findById(menteeUserId)
+        User mentee = userQueryPort.findUserById(menteeUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
         bookingEligibilityPolicy.validateBookerEligibility(mentee);
         if (bookingRepository.countByMenteeIdAndStatus(menteeUserId, BookingStatus.PENDING)
@@ -66,8 +66,8 @@ public class BookingQuoteService {
         MentorProfile mentor = slot.getMentorProfile();
         validateMentorAndSlot(menteeUserId, mentor, slot);
 
-        MentorService service = mentorServiceRepository
-                .findByIdAndMentorProfileUserIdAndIsActiveTrue(request.serviceId(), mentor.getUserId())
+        MentorService service = mentorQueryPort
+                .findActiveServiceByIdAndMentorUserId(request.serviceId(), mentor.getUserId())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn khả dụng"));
         LocalDateTime start = LocalDateTime.ofInstant(request.startAt(), ZoneOffset.UTC);
         LocalDateTime end = start.plusMinutes(service.getDurationMinutes());

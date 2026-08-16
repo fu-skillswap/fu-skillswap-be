@@ -1,9 +1,5 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
-import com.fptu.exe.skillswap.infrastructure.bunny.client.BunnyVideoClient;
-import com.fptu.exe.skillswap.infrastructure.bunny.config.BunnyStreamProperties;
-import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyCreateVideoResponse;
-import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyWebhookPayload;
 import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
 import com.fptu.exe.skillswap.modules.course.domain.Course;
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
@@ -14,6 +10,7 @@ import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialType;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
+import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
@@ -22,6 +19,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentReposito
 import com.fptu.exe.skillswap.modules.course.repository.CourseLectureRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.course.repository.LectureResourceRepository;
+import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
@@ -51,8 +49,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private final CourseEnrollmentRepository enrollmentRepository;
     private final LectureResourceRepository resourceRepository;
     private final BunnyWebhookEventRepository webhookEventRepository;
-    private final BunnyVideoClient bunnyVideoClient;
-    private final BunnyStreamProperties bunnyProperties;
+    private final CourseVideoProvider courseVideoProvider;
     private final com.fptu.exe.skillswap.modules.course.repository.CourseOutboxEventRepository outboxEventRepository;
     private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
@@ -108,30 +105,30 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         if (resource.getStatus() != MaterialStatus.UPLOADING_INTENT) {
             return toUploadResponse(resource);
         }
-        BunnyCreateVideoResponse bunnyResponse = bunnyVideoClient.createVideo(resource.getTitle());
+        CourseVideoProvider.CreatedVideo bunnyResponse = courseVideoProvider.createVideo(resource.getTitle());
         long expiresAt = Instant.now().plusSeconds(2 * 3600).getEpochSecond();
-        String uploadSignature = bunnyVideoClient.generateDirectUploadSignature(bunnyResponse.getGuid(), expiresAt);
+        String uploadSignature = courseVideoProvider.generateDirectUploadSignature(bunnyResponse.videoId(), expiresAt);
         try {
             return completeVideoUploadInitialization(resourceId, bunnyResponse, expiresAt, uploadSignature);
         } catch (RuntimeException completionFailure) {
             try {
-                bunnyVideoClient.deleteVideo(bunnyResponse.getGuid());
+                courseVideoProvider.deleteVideo(bunnyResponse.videoId());
             } catch (RuntimeException cleanupFailure) {
-                log.error("Unable to compensate Bunny video {} after local initialization failure", bunnyResponse.getGuid(), cleanupFailure);
+                log.error("Unable to compensate Bunny video {} after local initialization failure", bunnyResponse.videoId(), cleanupFailure);
             }
             throw completionFailure;
         }
     }
 
     private CourseVideoUploadInitResponse completeVideoUploadInitialization(UUID resourceId,
-                                                                              BunnyCreateVideoResponse bunnyResponse,
+                                                                              CourseVideoProvider.CreatedVideo bunnyResponse,
                                                                               long expiresAt,
                                                                               String uploadSignature) {
         return transactionTemplate.execute(status -> {
             LectureResource resource = resourceRepository.findById(resourceId).orElseThrow();
             if (resource.getStatus() == MaterialStatus.UPLOADING_INTENT) {
-                resource.setBunnyLibraryId(bunnyProperties.getLibraryId());
-                resource.setBunnyVideoId(bunnyResponse.getGuid());
+                resource.setBunnyLibraryId(bunnyResponse.libraryId());
+                resource.setBunnyVideoId(bunnyResponse.videoId());
                 resource.setStatus(MaterialStatus.UPLOADING);
                 resourceRepository.save(resource);
                 outboxEventRepository.findActiveByAggregateIdAndEventType(resourceId,
@@ -189,7 +186,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         }
 
         long expiresAt = Instant.now().plusSeconds(60).getEpochSecond();
-        String signedPlaybackUrl = bunnyVideoClient.generateSignedPlaybackUrl(resource.getBunnyVideoId(), 60, clientIp);
+        String signedPlaybackUrl = courseVideoProvider.generateSignedPlaybackUrl(resource.getBunnyVideoId(), 60, clientIp);
 
         return CourseVideoPlaybackResponse.builder()
                 .materialId(resource.getId())
@@ -218,14 +215,14 @@ public class CourseVaultServiceImpl implements CourseVaultService {
 
     @Override
     @Transactional
-    public BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, BunnyWebhookPayload payload) {
+    public BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, CourseVideoWebhook payload) {
         return webhookEventRepository.findByExternalEventId(externalEventId)
                 .orElseGet(() -> {
                     BunnyWebhookEvent event = BunnyWebhookEvent.builder()
                             .externalEventId(externalEventId)
-                            .eventType(String.valueOf(payload.getStatus()))
-                            .videoId(payload.getVideoGuid())
-                            .libraryId(payload.getVideoLibraryId())
+                            .eventType(String.valueOf(payload.status()))
+                            .videoId(payload.videoId())
+                            .libraryId(payload.libraryId())
                             .payloadJson(payload.toString())
                             .receivedAt(Instant.now())
                             .status("PENDING")
@@ -340,7 +337,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private void processMaterialDeletion(UUID resourceId) {
         LectureResource resource = resourceRepository.findById(resourceId).orElseThrow();
         if (resource.getStatus() != MaterialStatus.DELETED && resource.getBunnyVideoId() != null && !resource.getBunnyVideoId().isBlank()) {
-            bunnyVideoClient.deleteVideo(resource.getBunnyVideoId());
+            courseVideoProvider.deleteVideo(resource.getBunnyVideoId());
         }
         transactionTemplate.executeWithoutResult(status -> {
             LectureResource locked = resourceRepository.findById(resourceId).orElseThrow();

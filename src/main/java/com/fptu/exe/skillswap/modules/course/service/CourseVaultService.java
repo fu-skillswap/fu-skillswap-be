@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
-import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyWebhookPayload;
 import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
+import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
@@ -14,7 +14,7 @@ public interface CourseVaultService {
     
     CourseVideoPlaybackResponse getPlaybackAuthorization(UUID userId, UUID courseId, UUID materialId, String clientIp);
     
-    BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, BunnyWebhookPayload payload);
+    BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, CourseVideoWebhook payload);
     
     java.util.List<java.util.UUID> claimWebhookEvents(int limit);
 
