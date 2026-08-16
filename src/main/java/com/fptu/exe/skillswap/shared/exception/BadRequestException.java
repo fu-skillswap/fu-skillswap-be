@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.shared.exception;
 
-//400 Bad Request
+// 400 Bad Request.
 public class BadRequestException extends BaseException {
     public BadRequestException(ErrorCode errorCode) {
         super(errorCode);

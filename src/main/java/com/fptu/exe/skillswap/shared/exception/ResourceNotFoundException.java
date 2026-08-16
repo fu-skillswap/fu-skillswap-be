@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.shared.exception;
 
-//404 Not Found
+// 404 Not Found.
 public class ResourceNotFoundException extends BaseException {
     public ResourceNotFoundException(ErrorCode errorCode) {
         super(errorCode);

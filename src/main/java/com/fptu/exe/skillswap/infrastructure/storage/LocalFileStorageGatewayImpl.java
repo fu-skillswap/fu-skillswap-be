@@ -16,12 +16,11 @@ import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 /**
- * Local file-system storage gateway for development and testing.
- * Activated via {@code @Profile("local")} — no cloud credentials required.
+ * Storage bằng file local cho môi trường phát triển và test.
+ * Chỉ bật với {@code @Profile("local")}, không cần cloud credential.
  *
- * <p>Files are stored under the local upload directory (configurable via
- * {@code application.upload.dir}). Presigned URLs are simulated as direct
- * file paths served by a local endpoint.</p>
+ * <p>File được lưu trong thư mục upload local ({@code application.upload.dir}).
+ * Presigned URL được giả lập thành đường dẫn do endpoint local phục vụ.</p>
  */
 @Slf4j
 @Service
@@ -127,9 +126,8 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
             );
         }
         if (!Files.exists(target)) {
-            // Local/test profile: file may not exist because we are simulating the
-            // presigned-upload flow (client uploads to CDN; local storage cannot verify).
-            // Return sentinel metadata — sizeBytes=0 signals "unknown size" to callers.
+        // Local/test có thể chưa có file vì đang giả lập presigned upload.
+        // Trả sizeBytes=0 để báo kích thước chưa xác định.
             return new ObjectMetadata(objectKey, guessContentType(objectKey), 0L, java.util.Collections.emptyMap());
         }
         try {
@@ -155,7 +153,7 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
 
     @Override
     public PrivatePresignedDownload generatePrivateDownloadUrl(String objectKey, Duration ttl, String contentDisposition) {
-        // Local resources are served by the authorized resource controller, not by this URL.
+        // Resource local do controller có kiểm soát quyền trả về, không dùng URL này.
         return new PrivatePresignedDownload(apiBaseUrl + "/api/files/private/" + objectKey,
                 java.time.Instant.now().plus(ttl));
     }
@@ -168,8 +166,8 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
     }
 
     /**
-     * Guesses the MIME content-type from the file extension of an object key.
-     * Used in local/test mode when the file does not physically exist on disk.
+     * Đoán MIME type từ phần mở rộng của object key.
+     * Dùng ở local/test khi file chưa có thật trên ổ đĩa.
      */
     private String guessContentType(String objectKey) {
         if (objectKey == null) {

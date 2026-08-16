@@ -19,8 +19,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * CSRF boundary for the only browser-cookie authenticated mutations. Business APIs
- * use an explicit bearer token and remain stateless, so they do not need CSRF tokens.
+ * Lớp chặn CSRF cho các request thay đổi dữ liệu dùng browser cookie.
+ * Business API dùng bearer token và stateless nên không cần CSRF token.
  */
 @Component
 public class CookieAuthOriginProtectionFilter extends OncePerRequestFilter {

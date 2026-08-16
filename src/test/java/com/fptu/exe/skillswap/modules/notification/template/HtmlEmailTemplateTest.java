@@ -30,6 +30,8 @@ class HtmlEmailTemplateTest {
         assertTrue(html.contains("https://skillswap.asia"));
         assertTrue(html.contains("https://www.facebook.com/skillswap.fptedu"));
         assertTrue(html.contains("https://www.tiktok.com/@skillswap.fptu"));
+        assertTrue(html.contains("Trân trọng,"));
+        assertTrue(html.contains("Đội ngũ SkillSwap"));
         assertTrue(html.contains("Email tự động từ hệ thống"));
     }
 }

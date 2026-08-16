@@ -5,33 +5,33 @@ import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyCreateVideoResponse;
 public interface BunnyVideoClient {
 
     /**
-     * Creates a new video object in Bunny.net stream library.
-     * @param title Title of the video.
-     * @return Response containing the video ID (GUID).
+     * Tạo video mới trong thư viện Bunny.net Stream.
+     * @param title Tiêu đề video.
+     * @return Kết quả có ID video (GUID).
      */
     BunnyCreateVideoResponse createVideo(String title);
 
     /**
-     * Deletes a video from Bunny.net stream library.
-     * @param videoId The GUID of the video.
+     * Xóa video khỏi thư viện Bunny.net Stream.
+     * @param videoId GUID của video.
      */
     void deleteVideo(String videoId);
 
     /**
-     * Generates a direct upload signature for the client to upload video directly to Bunny.net.
-     * @param videoId The GUID of the video.
-     * @param expirationTimestamp The UNIX timestamp when the signature expires.
-     * @return The SHA256 hashed signature.
+     * Tạo chữ ký để client tải video thẳng lên Bunny.net.
+     * @param videoId GUID của video.
+     * @param expirationTimestamp UNIX timestamp khi chữ ký hết hạn.
+     * @return Chữ ký băm SHA-256.
      */
     String generateDirectUploadSignature(String videoId, long expirationTimestamp);
 
     /**
-     * Generates a signed playback URL using Bunny.net Token Authentication specification.
-     * Encapsulates the HMAC/SHA256 signing logic, including IP binding.
-     * @param videoId The GUID of the video.
-     * @param ttlSeconds Time-to-live for the token in seconds.
-     * @param clientIp The IP address of the client to bind the token to.
-     * @return The signed playback URL.
+     * Tạo URL xem video có chữ ký theo chuẩn Bunny.net Token Authentication.
+     * Có hỗ trợ ràng buộc token với IP.
+     * @param videoId GUID của video.
+     * @param ttlSeconds Thời gian sống của token, tính bằng giây.
+     * @param clientIp IP của client cần ràng buộc với token.
+     * @return URL xem video đã ký.
      */
     String generateSignedPlaybackUrl(String videoId, long ttlSeconds, String clientIp);
 }

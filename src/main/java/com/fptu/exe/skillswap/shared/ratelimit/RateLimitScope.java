@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.shared.ratelimit;
 
 /**
- * Isolates rate-limit buckets so high-cardinality, best-effort traffic cannot
- * evict security or business-write buckets on the single application node.
+ * Tách bucket rate limit để traffic nhiều key, không quan trọng không đẩy bucket
+ * security hoặc business-write ra khỏi cache của application node.
  */
 public enum RateLimitScope {
     SECURITY,

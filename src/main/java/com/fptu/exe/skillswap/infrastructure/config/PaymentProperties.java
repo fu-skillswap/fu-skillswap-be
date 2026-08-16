@@ -20,7 +20,7 @@ public class PaymentProperties {
     private int platformCommissionBps = 1000;
 
     /**
-     * Mentee surcharge rate in basis points.
+     * Phí cộng thêm cho mentee, tính theo basis point.
      * 1000 bps = 10%.
      */
     @Min(0)
@@ -28,7 +28,7 @@ public class PaymentProperties {
     private int menteeSurchargeBps = 1000;
 
     /**
-     * Mentor commission rate in basis points.
+     * Phí nền tảng của mentor, tính theo basis point.
      * 1000 bps = 10%.
      */
     @Min(0)
@@ -36,7 +36,7 @@ public class PaymentProperties {
     private int mentorCommissionBps = 1000;
 
     /**
-     * Payment link expiry in minutes.
+     * Thời gian hết hạn của link thanh toán, tính bằng phút.
      */
     @Min(1)
     private int paymentLinkExpiryMinutes = 30;
@@ -56,8 +56,8 @@ public class PaymentProperties {
         private String cancelUrl = "http://localhost:3000/payment/cancel";
         private String webhookUrl = "";
         /**
-         * Backward-compatible alias for older local configs.
-         * New deployments should use checksumKey.
+         * Tên cũ để tương thích cấu hình local trước đây.
+         * Bản deploy mới nên dùng checksumKey.
          */
         private String webhookSecret = "";
 

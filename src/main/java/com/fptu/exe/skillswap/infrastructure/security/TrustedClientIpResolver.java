@@ -10,8 +10,8 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Resolves a client address only when the direct peer is a configured reverse proxy.
- * Forwarded headers from direct internet clients are deliberately ignored.
+ * Chỉ lấy IP client khi peer trực tiếp là reverse proxy đã cấu hình.
+ * Bỏ qua forwarded header từ client đi thẳng từ Internet.
  */
 @Component
 public class TrustedClientIpResolver {

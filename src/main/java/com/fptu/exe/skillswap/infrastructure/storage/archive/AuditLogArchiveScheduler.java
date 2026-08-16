@@ -49,8 +49,7 @@ public class AuditLogArchiveScheduler {
         int maxBatches = 50; // max 50k records per run
         int totalArchived = 0;
 
-        // PG JSONB column cast to text implicitly in JDBC map? It usually comes as PGobject.
-        // We will just fetch everything and let Jackson serialize it.
+        // JSONB của PostgreSQL thường trả về PGobject. Để Jackson tự serialize giá trị này.
         String selectSql = "SELECT id, created_at, created_by, entity_name, entity_id, action, old_value, new_value " +
                 "FROM audit_logs " +
                 "WHERE created_at < NOW() - CAST(? AS INTERVAL) " +

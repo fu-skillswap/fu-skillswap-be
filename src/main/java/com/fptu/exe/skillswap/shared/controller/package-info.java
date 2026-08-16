@@ -1,2 +1,2 @@
-/** Minimal shared operational HTTP endpoints. */
+/** Các endpoint vận hành chung, tối giản. */
 package com.fptu.exe.skillswap.shared.controller;

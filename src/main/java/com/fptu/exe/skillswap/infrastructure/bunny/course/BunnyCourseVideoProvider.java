@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-/** Bunny Stream adapter for the Course-owned video provider contract. */
+/** Adapter Bunny Stream cho hợp đồng video do module Course sở hữu. */
 @Component
 @RequiredArgsConstructor
 public class BunnyCourseVideoProvider implements CourseVideoProvider {

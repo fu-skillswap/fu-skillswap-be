@@ -57,7 +57,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(auth -> {
                     auth
-                            // Public endpoints
+                    // Endpoint công khai.
                             .requestMatchers(
                                     "/api/auth/google",
                                     "/api/auth/google/authorization-context",
@@ -109,7 +109,7 @@ public class SecurityConfig {
                                     "/api/blog/posts/*/view"
                             ).permitAll();
 
-                    // Secure everything else
+                    // Các endpoint còn lại phải xác thực.
                     auth.anyRequest().authenticated();
                 })
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));

@@ -10,7 +10,7 @@ import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 
-/** Central configuration for all process-local Caffeine caches. */
+/** Cấu hình chung cho các cache Caffeine trong một tiến trình. */
 @Getter
 @Setter
 @Validated
@@ -58,7 +58,7 @@ public class CacheProperties {
     @Getter
     @Setter
     public static class RateLimitCache {
-        // Keep sensitive buckets isolated. These values are entry caps, not a memory budget.
+        // Tách riêng bucket nhạy cảm. Đây là giới hạn số entry, không phải giới hạn bộ nhớ.
         @Valid private SizedCache security = new SizedCache(10_000);
         @Valid private SizedCache business = new SizedCache(10_000);
         @Valid private SizedCache transfer = new SizedCache(5_000);

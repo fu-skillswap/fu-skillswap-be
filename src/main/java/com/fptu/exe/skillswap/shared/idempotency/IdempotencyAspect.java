@@ -28,14 +28,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Replays a committed successful HTTP envelope for strict command endpoints.
- * The transaction wraps both the domain command and persisted replay record so a
- * failed command leaves no unusable idempotency marker behind.
+ * Trả lại HTTP response thành công đã commit cho các command endpoint nghiêm ngặt.
+ * Transaction bao cả command và bản ghi replay, nên command lỗi không để lại key vô dụng.
  */
 @Aspect
 @Component
-// Authorization must execute first: an admin without permission must receive 403,
-// not an idempotency-header validation error.
+// Phải kiểm tra quyền trước để admin thiếu quyền nhận 403, không phải lỗi header.
 @Order(Ordered.LOWEST_PRECEDENCE)
 @RequiredArgsConstructor
 @Slf4j
@@ -100,8 +98,7 @@ public class IdempotencyAspect {
             }
             return result;
         } catch (Throwable ex) {
-            // The surrounding transaction rolls back the claim. Validation/business errors
-            // deliberately remain retryable with the same key after the state changes.
+            // Transaction bên ngoài rollback claim. Lỗi validation/nghiệp vụ vẫn cho retry cùng key sau khi state đổi.
             throw new InvocationFailure(ex);
         }
     }

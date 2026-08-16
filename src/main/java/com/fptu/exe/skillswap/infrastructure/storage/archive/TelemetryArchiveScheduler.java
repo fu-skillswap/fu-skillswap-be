@@ -96,8 +96,7 @@ public class TelemetryArchiveScheduler {
                         int[] updateCounts = jdbcTemplate.batchUpdate(deleteSql, batchArgs);
                         int deletedCount = 0;
                         for (int count : updateCounts) {
-                            // batchUpdate might return Statement.SUCCESS_NO_INFO (-2), but usually JDBC driver for PG returns row count.
-                            // If it's > 0 we add it. If it's SUCCESS_NO_INFO, we assume 1.
+        // batchUpdate có thể trả SUCCESS_NO_INFO (-2). Khi đó xem như đã xử lý một bản ghi.
                             deletedCount += (count > 0) ? count : (count == java.sql.Statement.SUCCESS_NO_INFO ? 1 : 0);
                         }
                         

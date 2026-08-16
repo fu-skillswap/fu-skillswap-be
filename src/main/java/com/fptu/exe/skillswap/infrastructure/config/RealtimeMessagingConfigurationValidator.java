@@ -5,7 +5,7 @@ import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-/** Prevents a partially enabled realtime topology from silently losing delivery. */
+/** Chặn cấu hình realtime bật dở dang làm mất message âm thầm. */
 @Component
 @RequiredArgsConstructor
 public class RealtimeMessagingConfigurationValidator implements SmartInitializingSingleton {

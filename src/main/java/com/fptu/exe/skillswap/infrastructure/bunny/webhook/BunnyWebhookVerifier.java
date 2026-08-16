@@ -19,10 +19,9 @@ public class BunnyWebhookVerifier {
     private final BunnyStreamProperties bunnyStreamProperties;
 
     /**
-     * Verifies the Bunny.net webhook signature.
-     * Bunny.net calculates the signature using SHA-256 hash of the payload appended with the webhook secret.
-     * Wait, according to Bunny.net docs, it's a SHA256 of the payload + secret, or HMAC-SHA256?
-     * The approved plan says "HMAC-SHA256, Secret config" but Bunny uses SHA256(payload + secret). Let's support SHA256 as per standard Bunny.net spec.
+     * Kiểm tra chữ ký webhook từ Bunny.net.
+     * Bunny.net dùng SHA-256 của payload nối với webhook secret.
+     * Bunny dùng SHA256(payload + secret), không phải HMAC-SHA256.
      */
     public boolean verifySignature(String rawPayload, String signatureHeader) {
         if (rawPayload == null || signatureHeader == null) {
@@ -36,12 +35,12 @@ public class BunnyWebhookVerifier {
         }
 
         try {
-            // According to Bunny.net docs for Stream Webhooks, the Signature header is the SHA256 hash of the raw POST body combined with your webhook secret.
+            // Header Signature là SHA-256 của raw POST body nối với webhook secret.
             String dataToHash = rawPayload + secret;
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] encodedhash = digest.digest(dataToHash.getBytes(StandardCharsets.UTF_8));
             
-            // Convert to hex
+            // Đổi sang chuỗi hex.
             StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
             for (byte b : encodedhash) {
                 String hex = Integer.toHexString(0xff & b);

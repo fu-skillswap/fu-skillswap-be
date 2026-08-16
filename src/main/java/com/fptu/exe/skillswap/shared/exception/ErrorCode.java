@@ -4,7 +4,7 @@ import lombok.Getter;
 
 @Getter
 public enum ErrorCode {
-    // System & General
+    // Hệ thống và chung.
     UNCATEGORIZED_EXCEPTION(500, "SYS_9999", "error.sys.unknown", "Lỗi hệ thống không xác định"),
     INVALID_KEY(400, "SYS_0001", "error.sys.invalid_key", "Khóa không hợp lệ"),
     BAD_REQUEST(400, "SYS_0002", "error.sys.bad_request", "Yêu cầu không hợp lệ"),
@@ -18,7 +18,7 @@ public enum ErrorCode {
     METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức HTTP không được hỗ trợ cho endpoint này"),
     UNPROCESSABLE_ENTITY(422, "SYS_0012", "error.sys.unprocessable_entity", "Dữ liệu đúng định dạng nhưng không thể xử lý trong ngữ cảnh hiện tại"),
 
-    // Auth
+    // Xác thực.
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),
     UNAUTHORIZED(403, "AUTH_1002", "error.auth.unauthorized", "Bạn không có quyền truy cập tài nguyên này"),
     ACCESS_DENIED(403, "AUTH_1007", "error.auth.access_denied", "Bạn không có quyền thực hiện hành động này"),
@@ -27,25 +27,25 @@ public enum ErrorCode {
     USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản của bạn chưa hoạt động"),
     OAUTH_VERIFICATION_FAILED(400, "AUTH_1006", "error.auth.oauth_failed", "Xác thực tài khoản Google thất bại"),
 
-    // Business
+    // Nghiệp vụ.
     USER_EXISTED(400, "USER_2001", "error.user.existed", "Người dùng đã tồn tại"),
     EMAIL_EXISTED(400, "USER_2002", "error.user.email_existed", "Email đã tồn tại"),
     USER_NOT_FOUND(404, "USER_2003", "error.user.not_found", "Không tìm thấy người dùng"),
     NOT_FOUND(404, "SYS_0003", "error.sys.not_found", "Không tìm thấy tài nguyên"),
 
-    // Payment
+    // Thanh toán.
     PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang có sự cố, vui lòng thử lại sau"),
     INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
 
-    // Blog
+    // Blog.
     BLOG_POST_VERSION_CONFLICT(409, "BLOG_4001", "error.blog.post_version_conflict", "Bài viết đã được quản trị viên khác cập nhật"),
     BLOG_FOLLOW_LIMIT_REACHED(409, "BLOG_4002", "error.blog.follow_limit_reached", "Đã đạt giới hạn theo dõi Blog"),
 
-    // Forum moderation
+    // Kiểm duyệt forum.
     FORUM_CONTENT_PROHIBITED(400, "FORUM_4201", "error.forum.content_prohibited", "Nội dung chứa cụm từ không được phép"),
     FORUM_PROHIBITED_PHRASE_DUPLICATE(409, "FORUM_4202", "error.forum.prohibited_phrase_duplicate", "Cụm từ cấm đã tồn tại"),
 
-    // Availability templates
+    // Mẫu lịch rảnh.
     AVAILABILITY_TEMPLATE_NOT_FOUND(404, "AVAIL_4301", "error.availability.template_not_found", "Không tìm thấy availability template"),
     AVAILABILITY_TEMPLATE_VERSION_CONFLICT(409, "AVAIL_4302", "error.availability.template_version_conflict", "Availability template đã được cập nhật"),
     AVAILABILITY_TEMPLATE_OVERLAP(409, "AVAIL_4303", "error.availability.template_overlap", "Availability template bị trùng thời gian"),
@@ -62,7 +62,7 @@ public enum ErrorCode {
     GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED(409, "AVAIL_4314", "error.availability.generated_replacement_required", "Cần xác nhận thay thế generated occurrence"),
     AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE(409, "AVAIL_4315", "error.availability.template_occurrence_unavailable", "Generated occurrence hiện không còn khả dụng"),
 
-    // Chat
+    // Chat.
     CHAT_CLIENT_MESSAGE_CONFLICT(409, "CHAT_4101", "error.chat.client_message_conflict", "Client message ID đã được dùng cho nội dung khác"),
     CHAT_MESSAGE_CURSOR_INVALID(400, "CHAT_4102", "error.chat.cursor_invalid", "Cursor tin nhắn không hợp lệ"),
     CHAT_CONVERSATION_READ_ONLY(403, "CHAT_4103", "error.chat.read_only", "Cuộc hội thoại hiện chỉ cho phép xem"),
@@ -77,7 +77,7 @@ public enum ErrorCode {
     CHAT_UPLOAD_INTENT_INVALID(400, "CHAT_4112", "error.chat.upload_intent_invalid", "Upload intent không hợp lệ"),
     CHAT_CONVERSATION_LOCKED(403, "CHAT_4113", "error.chat.conversation_locked", "Cuộc hội thoại đang bị khóa"),
 
-    // Validation
+    // Kiểm tra dữ liệu.
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
 
     private final int status;

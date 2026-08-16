@@ -70,7 +70,7 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
         try {
             restTemplate.exchange(url, HttpMethod.DELETE, entity, Void.class);
         } catch (HttpClientErrorException.NotFound ignored) {
-            // Deletion is idempotent: a previously removed Bunny object is already in the desired state.
+        // Xóa lặp lại vẫn an toàn: video đã bị xóa thì xem như đạt kết quả mong muốn.
             log.info("Bunny video {} was already deleted", videoId);
         } catch (Exception e) {
             log.error("Failed to delete video on Bunny.net for videoId: {}", videoId, e);
@@ -80,10 +80,9 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
 
     @Override
     public String generateDirectUploadSignature(String videoId, long expirationTimestamp) {
-        // Bunny API for uploading requires SHA256 of (libraryId + api_key + expirationTime + videoId)
-        // according to docs, signature is for tus/direct upload.
-        // We will generate the signature required for their API.
-        // The standard format: sha256(LibraryId + ApiKey + ExpirationTime + VideoId)
+        // Bunny yêu cầu SHA-256 của (libraryId + apiKey + expirationTime + videoId)
+        // cho luồng tus/direct upload.
+        // Dùng đúng định dạng chữ ký mà Bunny quy định.
         String rawData = properties.getLibraryId() + properties.getApiKey() + expirationTimestamp + videoId;
         return hashSha256(rawData);
     }
@@ -91,7 +90,7 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
     @Override
     public String generateSignedPlaybackUrl(String videoId, long ttlSeconds, String clientIp) {
         long expiresAt = Instant.now().plusSeconds(ttlSeconds).getEpochSecond();
-        // Bunny Token Auth for embed with IP validation: token = sha256(securityKey + videoId + expiresAt + clientIp)
+        // Token xem video kèm kiểm tra IP: sha256(securityKey + videoId + expiresAt + clientIp)
         String rawData = properties.getTokenAuthKey() + videoId + expiresAt + (clientIp != null ? clientIp : "");
         String token = hashSha256(rawData);
 

@@ -2,10 +2,10 @@ package com.fptu.exe.skillswap.shared.exception;
 
 import lombok.Getter;
 
-/** Signals that a direct-slot mutation needs explicit template-version confirmation. */
+/** Báo thao tác slot trực tiếp cần xác nhận version của template. */
 @Getter
 public class GeneratedOccurrenceReplacementException extends BaseException {
-    /** Module-owned conflict metadata serialized as ApiResponse.data by the shared handler. */
+/** Dữ liệu conflict của module, được handler chung trả qua ApiResponse.data. */
     private final Object data;
 
     public GeneratedOccurrenceReplacementException(Object data) {

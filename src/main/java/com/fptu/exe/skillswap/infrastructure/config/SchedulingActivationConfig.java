@@ -5,8 +5,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Keeps worker executors available while allowing isolated migration rehearsals
- * to boot a candidate image without executing durable scheduled jobs.
+ * Vẫn tạo executor cho worker nhưng cho phép chạy kiểm tra migration
+ * mà không kích hoạt các job nền ghi dữ liệu.
  */
 @Configuration
 @EnableScheduling

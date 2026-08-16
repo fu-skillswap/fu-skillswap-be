@@ -4,7 +4,7 @@ import lombok.Getter;
 
 import java.util.UUID;
 
-/** A resource version precondition failed without coupling shared error handling to a module. */
+/** Version của resource không khớp, nhưng không buộc handler chung phụ thuộc module nào. */
 @Getter
 public class VersionConflictException extends BaseException {
 

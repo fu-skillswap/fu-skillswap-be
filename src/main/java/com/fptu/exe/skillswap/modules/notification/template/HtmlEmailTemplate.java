@@ -63,8 +63,8 @@ public final class HtmlEmailTemplate {
                           <tr>
                             <td style="padding:20px 34px;background:#0f4c81;color:#d7eaf8;text-align:center;font-family:__FONT_STACK__;">
                               <div style="font-size:15px;line-height:1.6;color:#ffffff;font-family:__FONT_STACK__;">
-                                Best regards,<br>
-                                <strong>SkillSwap Team</strong>
+                                Trân trọng,<br>
+                                <strong>Đội ngũ SkillSwap</strong>
                               </div>
                               
                               <div style="margin-top:20px;text-align:center;font-family:__FONT_STACK__;">

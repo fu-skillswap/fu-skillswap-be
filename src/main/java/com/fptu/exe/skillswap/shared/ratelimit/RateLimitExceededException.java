@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.Getter;
 
-/** Carries the fixed-window reset time for a client-facing 429 response. */
+/** Giữ thời điểm fixed-window reset để trả response 429 cho client. */
 @Getter
 public class RateLimitExceededException extends BaseException {
 

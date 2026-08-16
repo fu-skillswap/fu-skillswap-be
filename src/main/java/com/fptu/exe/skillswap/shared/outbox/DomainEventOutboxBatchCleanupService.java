@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** Standalone Spring bean owning atomic batch deletions in isolated transactions. */
+/** Spring bean riêng xử lý xóa batch theo transaction tách biệt. */
 @Service
 @RequiredArgsConstructor
 public class DomainEventOutboxBatchCleanupService {

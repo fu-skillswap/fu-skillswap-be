@@ -19,8 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Caffeine-backed fixed-window rate limiter for one application instance.
- * Cache scopes prevent optional UI traffic from evicting authentication or booking buckets.
+ * Rate limiter fixed-window bằng Caffeine cho một application instance.
+ * Tách scope cache để traffic UI không đẩy bucket auth hoặc booking ra ngoài.
  */
 @Service
 @Slf4j
@@ -54,7 +54,7 @@ public class InMemoryRateLimitService {
         long currentWindowStart = now - (now % windowMillis);
         long expireAtEpochMilli = currentWindowStart + windowMillis;
 
-        // Unique key for the key + window window start time
+        // Key riêng theo client key và thời điểm bắt đầu cửa sổ.
         String cacheKey = key + ":" + currentWindowStart;
 
         Cache<String, RateLimitBucket> cache = caches.get(resolvedScope);

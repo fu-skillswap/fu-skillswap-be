@@ -28,7 +28,7 @@ public class StorageArchiveService {
     public record ArchiveBatchResult(String objectKey, String sha256Hex, int rowCount) {}
 
     /**
-     * Archives a list of JSON strings to R2 as a GZIP file with deterministic identity and checksum verification.
+     * Lưu danh sách JSON lên R2 dạng GZIP, có key cố định và kiểm tra checksum.
      */
     public ArchiveBatchResult archiveJsonLines(String datasetPrefix, long firstId, long lastId, List<String> jsonLines) {
         return archiveJsonLines(datasetPrefix, firstId + "-" + lastId, jsonLines);
@@ -45,7 +45,7 @@ public class StorageArchiveService {
             return null;
         }
 
-        // 1. Generate canonical JSONL and calculate SHA-256 BEFORE compression
+        // 1. Tạo JSONL chuẩn và tính SHA-256 trước khi nén.
         StringBuilder jsonlBuilder = new StringBuilder();
         for (String line : jsonLines) {
             jsonlBuilder.append(line).append("\n"); // Canonical newline
@@ -55,7 +55,7 @@ public class StorageArchiveService {
         
         String sha256Hex = calculateSha256(rawBytes);
 
-        // 2. Deterministic object key (Idempotent: retry -> same filename)
+        // 2. Key cố định để retry vẫn dùng cùng tên file.
         String safeIdentity = identity == null || identity.isBlank()
                 ? "batch"
                 : identity.replaceAll("[^a-zA-Z0-9._-]", "-");
@@ -66,13 +66,13 @@ public class StorageArchiveService {
         try {
             tempFile = Files.createTempFile("archive-", ".jsonl.gz");
             
-            // 3. Compress to GZIP
+        // 3. Nén GZIP.
             try (FileOutputStream fos = new FileOutputStream(tempFile.toFile());
                  GZIPOutputStream gzipOut = new GZIPOutputStream(fos)) {
                 gzipOut.write(rawBytes);
             }
 
-            // 4. Upload to R2 with metadata
+        // 4. Tải lên R2 kèm metadata.
             Map<String, String> metadata = new HashMap<>();
             metadata.put("sha256", sha256Hex);
             metadata.put("row-count", String.valueOf(jsonLines.size()));
@@ -80,12 +80,11 @@ public class StorageArchiveService {
 
             storageGateway.uploadFile(objectKey, tempFile, "application/gzip", metadata);
             
-            // 5. Verify Integrity via HeadObject
+        // 5. Kiểm tra lại bằng HeadObject.
             StorageGateway.ObjectMetadata head = storageGateway.headObject(objectKey);
             long expectedLength = Files.size(tempFile);
             
-            // Note: Our LocalFileStorageGatewayImpl might return 0 if testing fallback is active, 
-            // but we implemented it to return actual size if file exists.
+        // Local fallback có thể trả 0 khi giả lập upload; nếu file có thật thì vẫn trả đúng kích thước.
             if (head.sizeBytes() != expectedLength) {
                 throw new RuntimeException(String.format("Integrity mismatch: expected size %d but got %d for %s", expectedLength, head.sizeBytes(), objectKey));
             }

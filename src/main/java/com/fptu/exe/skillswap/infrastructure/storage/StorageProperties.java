@@ -11,7 +11,7 @@ import java.util.List;
 @ConfigurationProperties(prefix = "application.storage")
 public class StorageProperties {
 
-    // Default false — storage must be explicitly enabled via STORAGE_ENABLED=true in .env
+    // Mặc định tắt, chỉ bật khi .env có STORAGE_ENABLED=true.
     private boolean enabled = false;
 
     private String endpoint;

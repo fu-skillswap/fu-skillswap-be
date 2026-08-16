@@ -38,7 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 
                 UUID userId = UUID.fromString(claims.get("userId", String.class));
                 
-                // Block BANNED users immediately at the security filter layer
+        // Chặn ngay user BANNED tại security filter.
                 if (userBanStatusPort.isBanned(userId)) {
                     response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                     response.setContentType("application/json");

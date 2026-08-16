@@ -6,8 +6,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Indicates that the annotated method is idempotent.
- * Requests calling this method must provide an "Idempotency-Key" header.
+ * Đánh dấu method có hỗ trợ idempotency.
+ * Request gọi method này phải có header "Idempotency-Key".
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
