@@ -1,47 +1,58 @@
-# Frontend Guide - Mentor Discovery va Public Profile
+# Frontend Guide — Tìm Kiếm Mentor & Hồ Sơ Công Khai (Mentor Discovery & Public Profile)
 
-> **Quy tac URL:** FE chi dung URL backend tra ve. Khong tu ghep `https://cdn.skillswap.asia` voi ID, ten file, `storageKey` hoac `objectKey`. `STORAGE_PUBLIC_URL_PREFIX` la cau hinh backend, khong phai bien `.env` cua FE.
+> **Quy tắc ảnh & CDN:** Frontend chỉ sử dụng trực tiếp các URL hình ảnh nhận được từ response của backend. Tuyệt đối không tự ghép nối `https://cdn.skillswap.asia` với ID, tên file, `storageKey` hoặc `objectKey`. `STORAGE_PUBLIC_URL_PREFIX` là cấu hình nội bộ của backend, không phải biến `.env` của Frontend.
 
-> **Envelope chung:** Tat ca response nam trong `ApiResponse<T>`. Xem [identity.md](identity.md) de biet envelope, xu ly validation va `429 Retry-After`.
+> **Chuẩn Envelope:** Tất cả phản hồi từ backend đều được bọc trong `ApiResponse<T>`. Vui lòng xem [identity.md](identity.md) để biết cấu trúc envelope, cách xử lý validation và mã lỗi `429 Retry-After`.
 
-Guide nay danh cho man hinh cong khai va mentee: tim mentor, xem profile, review, blog va chon lich de bat dau booking. Xem [mentor-service.md](mentor-service.md) neu dang lam giao dien mentor quan ly service/lich; xem [mentor-verification.md](mentor-verification.md) neu dang lam onboarding va admin duyet mentor.
+> **Tài liệu liên quan:**
+> - Guide này dành cho màn hình công khai và Mentee: tìm kiếm mentor, xem profile, đánh giá (reviews), bài viết blog và chọn khung giờ để bắt đầu đặt lịch.
+> - Nếu đang làm giao diện cho Mentor quản lý dịch vụ và lịch rảnh: xem [mentor-service.md](mentor-service.md).
+> - Nếu đang làm quy trình đăng ký (onboarding) và Admin duyệt mentor: xem [mentor-verification.md](mentor-verification.md).
 
-## 1. Phan quyen va journey
+---
 
-| Viec can lam | Ai duoc goi API |
-| --- | --- |
-| Xem danh sach, profile, review va lich xem truoc | Moi nguoi, khong can dang nhap |
-| Xem candidate segment chinh xac de booking | User da dang nhap |
-| Lay recommendations ca nhan hoa | User da dang nhap |
+## 1. Phân Quyền & Luồng Trải Nghiệm Người Dùng (Journey)
+
+| Thao tác | Ai được phép gọi API |
+|---|---|
+| Xem danh sách mentor, profile chi tiết, đánh giá và lịch xem trước công khai | Mọi người (Public, không cần đăng nhập) |
+| Xem phân đoạn khung giờ chính xác (Candidate Segments) để đặt lịch | Người dùng đã đăng nhập (`MENTEE` hoặc `MENTOR`) |
+| Lấy danh sách gợi ý mentor được cá nhân hóa (Recommendations) | Người dùng đã đăng nhập (`MENTEE` hoặc `MENTOR`) |
 
 ```text
-Discovery list
--> Mentor detail
--> Public availability preview
--> Login neu can
--> Tai lai authenticated availability va candidate
--> Tao booking theo booking guide
+Danh sách Discovery (Duyệt/Tìm kiếm)
+ ➔ Chi tiết Mentor (Profile, Bio, Minh chứng, Dịch vụ)
+ ➔ Xem trước lịch rảnh công khai (Public Availability Preview)
+ ➔ Đăng nhập tài khoản (nếu chưa đăng nhập)
+ ➔ Tải lại lịch rảnh đã xác thực và danh sách Candidate chính xác
+ ➔ Tiến hành tạo Booking theo hướng dẫn trong booking_1T1.md
 ```
 
-Khong dung du lieu preview cu de tao booking. Sau khi dang nhap, FE phai tai lai slot/candidate theo authenticated API.
+> [!WARNING]
+> **Không dùng dữ liệu preview cũ để tạo booking**: Sau khi người dùng đăng nhập, Frontend bắt buộc phải gọi lại API lịch rảnh đã xác thực để lấy `slotId` và `candidate` mới nhất.
 
-## 2. Tim va loc mentor
+---
 
-`GET /api/mentors` la public. Co the gui Bearer token khi user da dang nhap de backend dung them ngu canh matching; token khong bat buoc de hien thi danh sach.
+## 2. Tìm Kiếm & Lọc Mentor (Discovery Search APIs)
 
-| Query | Kieu | Mac dinh | Ghi chu |
-| --- | --- | --- | --- |
-| `page` | number | `0` | Bat dau tu `0` |
-| `size` | number | `12` | Backend gioi han tu `1` den `30` |
-| `keyword` | string | - | Tim theo profile, service, mon hoc, project va achievement |
-| `campusId` | UUID | - | Loc co so hoc thuat |
-| `specializationId` | UUID | - | Loc chuyen nganh |
-| `sortBy` | string | `relevance` | `relevance`, `ratingAverage`, `reviewCount`, `completedSessions`, `updatedAt` |
-| `direction` | `ASC` hoac `DESC` | `DESC` | Ap dung cho sort khac `relevance` |
+API `GET /api/mentors` là **công khai (Public)**. Có thể đính kèm Bearer token nếu người dùng đã đăng nhập để backend tính toán thêm điểm phù hợp (matching context); tuy nhiên token không bắt buộc để xem danh sách.
 
-Response la `ApiResponse<PageResponse<MentorDiscoveryCardResponse>>`:
+- **Endpoint**: `GET /api/mentors`
+- **Query Parameters**:
 
-```ts
+| Tham số | Kiểu dữ liệu | Mặc định | Ghi chú |
+|---|---|---|---|
+| `page` | number | `0` | Trang bắt đầu từ `0` |
+| `size` | number | `12` | Kích thước trang (Backend giới hạn từ `1` đến `30`) |
+| `keyword` | string | - | Tìm kiếm theo họ tên, headline, bio, môn học, dự án và thành tích |
+| `campusId` | UUID | - | Lọc theo cơ sở đào tạo (FPTU Campus) |
+| `specializationId` | UUID | - | Lọc theo chuyên ngành học |
+| `sortBy` | string | `relevance` | Các tùy chọn: `relevance`, `ratingAverage`, `reviewCount`, `completedSessions`, `updatedAt` |
+| `direction` | `"ASC"` \| `"DESC"` | `DESC` | Áp dụng cho các kiểu sắp xếp khác `relevance` |
+
+- **Cấu trúc Response**: `ApiResponse<PageResponse<MentorDiscoveryCardResponse>>`
+
+```typescript
 interface PageResponse<T> {
   content: T[];
   page: number;
@@ -73,9 +84,9 @@ interface MentorDiscoveryCardResponse {
     programName: string | null;
     specializationId: string | null;
     specializationName: string | null;
-    subjectHighlights: MentorSubjectResult[]; // Toi da 2 item
-    featuredProjects: MentorFeaturedProject[]; // Toi da 2 item
-    achievements: MentorAchievement[]; // Toi da 2 item
+    subjectHighlights: MentorSubjectResult[]; // Tối đa 2 item nổi bật
+    featuredProjects: MentorFeaturedProject[]; // Tối đa 2 item nổi bật
+    achievements: MentorAchievement[];         // Tối đa 2 item nổi bật
   };
   reputation: {
     ratingState: "NO_REVIEWS" | "RATED";
@@ -83,20 +94,29 @@ interface MentorDiscoveryCardResponse {
     reviewCount: number;
     completedSessions: number;
   };
-  availability: { isAvailable: boolean };
-  match: { score: number | null };
+  availability: {
+    isAvailable: boolean;
+  };
+  match: {
+    score: number | null;
+  };
 }
 ```
 
-- `ratingState = "NO_REVIEWS"` thi `ratingAverage` luon `null`. Khong hien thi `5.0` mac dinh.
-- `match.score` co the `null`, dac biet khi sort khong theo relevance. Khong dung score lam thong tin bat buoc tren card.
-- Ket qua discovery da co verification, profile cong khai va it nhat mot service `ONE_TO_ONE` active.
+> [!NOTE]
+> - Nếu `ratingState === "NO_REVIEWS"`, trường `ratingAverage` luôn là `null`. Frontend **không tự ý hiển thị mặc định 5.0**.
+> - `match.score` có thể là `null`, đặc biệt khi người dùng chọn sort khác `relevance`. Không coi score là trường bắt buộc phải có để render card.
+> - Tất cả mentor xuất hiện trong kết quả discovery đều đã được xác thực (`isVerified = true`), có profile hợp lệ và sở hữu ít nhất một dịch vụ `ONE_TO_ONE` đang mở (`isActive = true`).
 
-## 3. Mentor detail
+---
 
-`GET /api/mentors/{mentorUserId}` la public. Response luon co sau section; collection rong la `[]`, field tuy chon la `null`.
+## 3. Xem Chi Tiết Hồ Sơ Mentor (Mentor Detail API)
 
-```ts
+- **Endpoint**: `GET /api/mentors/{mentorUserId}`
+- **Quyền hạn**: Công khai (Public)
+- **Response**: `ApiResponse<MentorDiscoveryDetailResponse>`
+
+```typescript
 interface MentorDiscoveryDetailResponse {
   identity: {
     mentorUserId: string;
@@ -110,9 +130,9 @@ interface MentorDiscoveryDetailResponse {
     bio: string | null;
     expertiseDescription: string | null;
     supportLevels: {
-      foundation: number | null;
-      outputReview: number | null;
-      direction: number | null;
+      foundation: number | null;     // Mức độ hỗ trợ kiến thức nền tảng (1-4)
+      outputReview: number | null;   // Mức độ hỗ trợ review bài tập/sản phẩm (1-4)
+      direction: number | null;      // Mức độ định hướng chuyên môn/nghề nghiệp (1-4)
     };
   };
   services: MentorServiceResponse[];
@@ -212,38 +232,61 @@ interface MentorAchievement {
 }
 ```
 
-`availability.canRequestBooking` chi noi mentor co offer cong khai san sang hay khong. Quote va create booking van kiem tra lai user, Academic Profile va candidate hien tai.
+> [!IMPORTANT]
+> - `availability.canRequestBooking`: Cho biết mentor hiện có dịch vụ sẵn sàng nhận đặt lịch hay không. Khi tạo booking thật sự, backend vẫn sẽ kiểm tra lại quota, trạng thái hồ sơ học thuật và lịch trống thực tế.
+> - **Bảo mật thông tin cá nhân**: Số điện thoại của mentor là thông tin riêng tư và không bao giờ xuất hiện trong response công khai này.
 
-So dien thoai mentor khong nam trong public detail. Khong lay `phoneNumber` tu API profile rieng de hien thi cho mentee.
+---
 
-## 4. Review va recommendations
+## 4. Đánh Giá & Gợi Ý Cá Nhân Hóa (Reviews & Recommendations)
 
-- `GET /api/mentors/{mentorUserId}/reviews?page=0&size=10&sortBy=createdAt&direction=DESC` la public, tra `PageResponse<MentorReviewResponse>`. `size` toi da `20`; `sortBy` nhan `createdAt` hoac `rating`.
-- `GET /api/mentors/recommendations?limit=12` yeu cau dang nhap. Moi item co `mentor`, `matchScore`, `matchReasons`.
+### 4.1 Danh Sách Đánh Giá của Mentor (`GET /api/mentors/{mentorUserId}/reviews`)
+- **Endpoint**: `GET /api/mentors/{mentorUserId}/reviews`
+- **Quyền hạn**: Public
+- **Query Params**:
+  - `page` (number, default: `0`)
+  - `size` (number, default: `10`, max: `20`)
+  - `sortBy` (`"createdAt"` hoặc `"rating"`, default: `"createdAt"`)
+  - `direction` (`"ASC"` hoặc `"DESC"`, default: `"DESC"`)
+- **Response**: `ApiResponse<PageResponse<MentorReviewResponse>>`
 
-```ts
+```typescript
 interface MentorReviewResponse {
   reviewId: string;
   reviewerUserId: string;
   reviewerDisplayName: string;
   reviewerAvatarUrl: string | null;
-  rating: number;
-  comment: string | null;
+  rating: number;           // Điểm sao (1 đến 5)
+  comment: string | null;   // Nhận xét chi tiết
   createdAt: string;
 }
 ```
 
-## 5. Lich truoc va sau dang nhap
+---
 
-### 5.1 Public availability preview
+### 4.2 Gợi Ý Mentor Phù Hợp (`GET /api/mentors/recommendations`)
+- **Endpoint**: `GET /api/mentors/recommendations`
+- **Header**: `Authorization: Bearer <accessToken>` (Bắt buộc đăng nhập)
+- **Query Params**: `limit` (number, default: `12`)
+- **Response**: `ApiResponse<MentorRecommendationResponse[]>`
 
-`GET /api/mentors/{mentorUserId}/availability-preview?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD`
+Mỗi phần tử trả về gồm thông tin mentor (`mentor`), điểm phù hợp (`matchScore`) và danh sách các lý do đề xuất (`matchReasons`).
 
-Endpoint public chi cho xem tu **Thu Hai tuan hien tai** den **Chu Nhat tuan sau** theo `Asia/Ho_Chi_Minh`. Khong gui khoang ngay ngoai cua so nay; backend tra `400`. Bo ca hai query de backend dung toan bo cua so mac dinh.
+---
 
-```ts
+## 5. Tra Cứu Lịch Trước & Sau Khi Đăng Nhập (Availability Flow)
+
+### 5.1 Xem Trước Lịch Rảnh Công Khai (Public Availability Preview)
+
+- **Endpoint**: `GET /api/mentors/{mentorUserId}/availability-preview`
+- **Query Params**: `fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD` (Tùy chọn)
+
+> [!NOTE]
+> Cửa sổ xem trước công khai được giới hạn từ **Thứ Hai của tuần hiện tại** đến **Chủ Nhật của tuần tiếp theo** (theo múi giờ `Asia/Ho_Chi_Minh`). Nếu không truyền query param, backend sẽ tự động áp dụng toàn bộ cửa sổ mặc định này.
+
+```typescript
 interface MentorPublicAvailabilityPreviewResponse {
-  timezone: string; // Hien tai: Asia/Ho_Chi_Minh
+  timezone: string; // "Asia/Ho_Chi_Minh"
   isPublicOfferAvailable: boolean;
   nextAvailableAt: string | null;
   slots: Array<{
@@ -260,17 +303,19 @@ interface MentorPublicAvailabilityPreviewResponse {
 }
 ```
 
-Response public khong co `slotId`, quota, request count hoac booking state. Neu user chon gio truoc login, chi luu `mentorUserId`, service muon chon va thoi gian trong state client; sau login phai tai lai du lieu authenticated.
+Response công khai **không chứa `slotId`, hạn mức quota hay trạng thái booking**. Nếu người dùng chọn giờ trước khi đăng nhập, Frontend chỉ lưu tạm thông tin vào state client; sau khi đăng nhập thành công bắt buộc phải gọi API authenticated ở mục 5.2.
 
-### 5.2 Chon slot va candidate sau login
+---
 
-1. Goi `GET /api/mentors/{mentorUserId}/availability-slots?fromDate=...&toDate=...` voi Bearer token.
-2. User chon mot service trong `slot.services`.
-3. Goi `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId={serviceId}`.
-4. Chi cho chon candidate co `isSelectable = true`.
-5. Truoc khi create booking, luon dung candidate vua tai lai; khong dung preview cu.
+### 5.2 Chọn Slot & Candidate Chính Xác Sau Khi Đăng Nhập
 
-```ts
+1. Gọi `GET /api/mentors/{mentorUserId}/availability-slots?fromDate=...&toDate=...` với Bearer token.
+2. Người dùng chọn một dịch vụ mong muốn trong `slot.services`.
+3. Gọi `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/candidates?serviceId={serviceId}`.
+4. Chỉ cho phép người dùng bấm chọn các candidate có `isSelectable === true`.
+5. Sử dụng candidate vừa tải để tiếp tục quy trình tạo booking.
+
+```typescript
 interface MentorAvailabilitySlotResponse {
   slotId: string;
   startTime: string;
@@ -299,12 +344,12 @@ interface ServiceSlotCandidatesResponse {
   serviceId: string;
   serviceDurationMinutes: number;
   candidateServiceSlots: Array<{
-    startTime: string;
+    startTime: string;                  // ISO Instant UTC dùng để tạo booking
     endTime: string;
     pendingCount: number;
     remainingPendingQuota: number;
-    isSelectable: boolean;
-    reasonIfBlocked: string | null;
+    isSelectable: boolean;              // Bắt buộc true mới được chọn
+    reasonIfBlocked: string | null;     // Lý do nếu bị khóa
     blockedByAcceptedBooking: boolean;
     blockingBookingId: string | null;
     blockingServiceId: string | null;
@@ -316,30 +361,36 @@ interface ServiceSlotCandidatesResponse {
 }
 ```
 
-`404` nghia la mentor, slot hoac service khong con hop le. `409` nghia la service/slot vua thay doi hoac bi khoa. Trong ca hai truong hop, dong lua chon cu va tai lai availability thay vi retry mu.
+> [!TIP]
+> - Mã lỗi `404 Not Found`: Mentor, slot hoặc dịch vụ không còn tồn tại.
+> - Mã lỗi `409 Conflict`: Khung giờ vừa bị người khác đặt hoặc đã bị khóa.
+> Trong cả hai trường hợp, hãy đóng lựa chọn cũ và tải lại lịch khả dụng thay vì retry tự động.
 
-## 6. Mentor Profile cua chinh minh
+---
 
-`GET /api/me/mentor-profile` va `PUT /api/me/mentor-profile` yeu cau Bearer token va role `MENTEE` hoac `MENTOR`.
+## 6. Quản Lý Hồ Sơ Mentor Của Chính Tôi (My Mentor Profile)
 
-`GET` luon tra `200`. Neu user chua tao profile, `data.exists = false`; day khong phai loi. `requiredFieldsCompleted` la co ho tro cho UI, nhung wizard verification van dung `GET /api/me/mentor-verification/progress` lam source of truth cho CTA nop ho so.
+Các endpoint `GET /api/me/mentor-profile` và `PUT /api/me/mentor-profile` yêu cầu Bearer token với Role `MENTEE` hoặc `MENTOR`.
 
-```ts
+- `GET /api/me/mentor-profile` luôn trả `200 OK`. Nếu người dùng chưa từng khởi tạo hồ sơ mentor, trường `data.exists` sẽ là `false` (đây không phải lỗi).
+- `requiredFieldsCompleted`: Cờ hỗ trợ giao diện kiểm tra xem các trường bắt buộc đã điền đủ chưa.
+
+```typescript
 interface MentorProfileUpsertRequest {
-  headline: string; // 1-200 ky tu
-  expertiseDescription: string; // 1-1000 ky tu
+  headline: string;              // 1 - 200 ký tự (Bắt buộc)
+  expertiseDescription: string;  // 1 - 1000 ký tự (Bắt buộc)
   isAvailable?: boolean;
   subjectResults: Array<{
-    subjectCode: string; // Toi da 80 ky tu, khong trung trong request
-    subjectName?: string; // Toi da 200 ky tu
-    scoreValue: number; // 0-10
-  }>; // 1-20 item
-  foundationSupportLevel: 1 | 2 | 3 | 4;
-  outputReviewSupportLevel: 1 | 2 | 3 | 4;
-  directionSupportLevel: 1 | 2 | 3 | 4;
+    subjectCode: string;         // Tối đa 80 ký tự, không trùng lặp trong cùng request
+    subjectName?: string;        // Tối đa 200 ký tự
+    scoreValue: number;          // Điểm số từ 0 đến 10
+  }>;                            // 1 đến 20 môn học
+  foundationSupportLevel: 1 | 2 | 3 | 4;   // Mức hỗ trợ kiến thức nền tảng
+  outputReviewSupportLevel: 1 | 2 | 3 | 4; // Mức hỗ trợ review sản phẩm
+  directionSupportLevel: 1 | 2 | 3 | 4;    // Mức hỗ trợ định hướng nghề nghiệp
   githubUrl?: string | null;
   portfolioUrl?: string | null;
-  phoneNumber: string; // 10 so Viet Nam: 03/05/07/08/09...
+  phoneNumber: string;           // 10 chữ số định dạng Việt Nam (03/05/07/08/09...)
   minimumBookingLeadTimeMinutes?: number;
   maximumBookingHorizonDays?: number;
   bookingTimezone?: string;
@@ -379,27 +430,31 @@ interface MentorProfileResponse {
 }
 ```
 
-`phoneNumber`, `email`, penalty va booking policy la du lieu rieng cua mentor. Khong lay response nay de hien thi trang public; dung `GET /api/mentors/{mentorUserId}` o phan 3.
+---
 
-### 6.1 Project va achievement
+### 6.1 Quản Lý Dự Án Nổi Bật & Thành Tích (Projects & Achievements)
 
-| Muc dich | Endpoint |
-| --- | --- |
-| List/create project | `GET`, `POST /api/me/mentor-projects` |
-| Update/delete project | `PUT`, `DELETE /api/me/mentor-projects/{projectId}` |
-| Upload anh project | `PUT /api/me/mentor-projects/{projectId}/picture` voi `multipart/form-data`, field `file` |
-| List/create achievement | `GET`, `POST /api/me/mentor-achievements` |
-| Update/delete achievement | `PUT`, `DELETE /api/me/mentor-achievements/{achievementId}` |
+| Mục đích | Endpoint |
+|---|---|
+| Lấy danh sách / Tạo mới dự án | `GET`, `POST /api/me/mentor-projects` |
+| Cập nhật / Xóa dự án | `PUT`, `DELETE /api/me/mentor-projects/{projectId}` |
+| Upload ảnh bìa dự án | `PUT /api/me/mentor-projects/{projectId}/picture` (Gửi `multipart/form-data` với key `file`) |
+| Lấy danh sách / Tạo mới thành tích | `GET`, `POST /api/me/mentor-achievements` |
+| Cập nhật / Xóa thành tích | `PUT`, `DELETE /api/me/mentor-achievements/{achievementId}` |
 
-Project nhan `title` bat buoc; `content`, `projectDescription`, `liveDemoUrl` tuy chon. Achievement nhan `title` bat buoc; `awardDescription`, `achievedAt`, `productHeader`, `productDescription`, `demoUrl` tuy chon. Khi upload anh project thanh cong, dung `pictureUrl` backend tra ve; khong dung URL upload noi bo.
+- **Project**: Trường `title` là bắt buộc; các trường `content`, `projectDescription`, `liveDemoUrl` là tùy chọn.
+- **Achievement**: Trường `title` là bắt buộc; các trường `awardDescription`, `achievedAt`, `productHeader`, `productDescription`, `demoUrl` là tùy chọn.
+- Khi upload ảnh dự án thành công, sử dụng URL trả về trong `pictureUrl` để hiển thị trên giao diện.
 
-## 7. Error handling
+---
 
-| HTTP | FE can lam |
-| --- | --- |
-| `400` | Hien thi validation theo field hoac message; khong retry tu dong |
-| `401` | Thuc hien refresh flow tu `identity.md`; neu refresh fail thi ve login |
-| `403` | Khong hien thi action khong dung role |
-| `404` | Mentor/slot/service khong con public; quay lai danh sach phu hop |
-| `409` | Du lieu vua doi hoac slot bi khoa; tai lai resource truoc |
-| `429` | Doc `retryAfterSeconds`, khoa nut va hien thi thoi gian cho |
+## 7. Xử Lý Lỗi (Error Handling)
+
+| HTTP Status | Hướng xử lý cho Frontend |
+|---|---|
+| `400 Bad Request` | Hiển thị thông báo lỗi hoặc lỗi validation theo từng ô nhập liệu. Không tự động retry. |
+| `401 Unauthorized` | Thực hiện quy trình Refresh Token theo [identity.md](identity.md); nếu thất bại thì chuyển về trang Đăng nhập. |
+| `403 Forbidden` | Người dùng không có quyền truy cập tính năng này. Ẩn nút thao tác. |
+| `404 Not Found` | Mentor, slot hoặc dịch vụ không còn tồn tại hoặc đã ngừng công khai. Quay lại trang danh sách. |
+| `409 Conflict` | Dữ liệu vừa bị thay đổi hoặc khung giờ đã bị khóa. Tải lại trang/dữ liệu trước khi cho người dùng thử lại. |
+| `429 Too Many Requests` | Đọc trường `retryAfterSeconds` từ response, khóa nút thao tác và hiển thị đếm ngược thời gian chờ. |

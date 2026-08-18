@@ -1,85 +1,112 @@
-# Frontend Guide - Booking Mentoring 1:1
+# Frontend Guide — Đặt Lịch Mentoring 1:1 (Booking 1:1)
 
-> Guide nay chi mo ta booking mentoring `ONE_TO_ONE`. Khong dung cho group session hay learning course.
+> **Phạm vi áp dụng:** Tài liệu này chỉ áp dụng cho hình thức mentoring 1:1 (`ONE_TO_ONE`). Không áp dụng cho khóa học (Course).
 
-> **Envelope chung:** Tat ca response nam trong `ApiResponse<T>`. Xem [identity.md](identity.md) de xu ly access token, refresh token, validation va `429 Retry-After`.
+> **Chuẩn Envelope:** Tất cả phản hồi từ backend đều được bọc trong `ApiResponse<T>`. Vui lòng xem [identity.md](identity.md) để biết cách xử lý Access Token, Refresh Token, Validation và mã lỗi `429 Retry-After`.
 
-> **Cac guide lien quan:** Tim mentor va chon candidate nam trong [mentor-discovery.md](mentor-discovery.md). Mentor quan ly service va lich ranh nam trong [mentor-service.md](mentor-service.md). Thanh toan sau khi mentor accept nam trong [payment.md](payment.md). Chat chi mo khi booking da du dieu kien, xem [realtime-chat-notification.md](realtime-chat-notification.md).
+> **Tài liệu liên quan:**
+> - Tìm kiếm mentor và chọn slot/candidate: xem [mentor-discovery.md](mentor-discovery.md).
+> - Mentor quản lý dịch vụ và lịch rảnh: xem [mentor-service.md](mentor-service.md).
+> - Thanh toán sau khi mentor chấp nhận: xem [payment.md](payment.md).
+> - Tính năng Chat phòng họp (chỉ mở khi booking đủ điều kiện): xem [realtime-chat-notification.md](realtime-chat-notification.md).
 
-## 1. Phan quyen va quy tac thoi gian
+---
 
-| Thao tac | Role duoc phep |
-| --- | --- |
-| Quote, tao booking, xem booking cua minh | `MENTEE` hoac `MENTOR` |
-| Accept, reject, huy voi tu cach mentor, cap nhat meeting, complete voi tu cach mentor | `MENTOR` va phai la mentor cua booking |
-| Cancel voi tu cach mentee, confirm, issue, feedback | Participant dung cua booking |
-| Tao booking hoac thao tac booking truc tiep | `ADMIN`, `SYSTEM_ADMIN` bi chan |
+## 1. Phân quyền và Quy tắc Thời gian (Security & Timestamps)
 
-Mentor co the dat lich voi mentor khac nhu mot mentee. Backend luon kiem tra ownership cua booking; FE khong gui `mentorUserId` de tu cap quyen.
+### 1.1 Phân quyền Thao tác
 
-### 1.1 Quy tac timestamp
+| Thao tác | Role được phép |
+|---|---|
+| Lấy báo giá (Quote), tạo booking, xem danh sách/chi tiết booking của mình | `MENTEE` hoặc `MENTOR` |
+| Chấp nhận (Accept), từ chối (Reject), hủy với tư cách mentor, cập nhật link họp, hoàn thành (Complete) với tư cách mentor | `MENTOR` (và bắt buộc phải là mentor phụ trách booking đó) |
+| Hủy với tư cách mentee, xác nhận buổi học (Confirm), báo cáo sự cố (Issue), đánh giá (Feedback) | Thành viên tham gia trực tiếp (Participant) của booking |
+| Tạo booking hoặc trực tiếp can thiệp booking của người dùng | `ADMIN` và `SYSTEM_ADMIN` **bị chặn hoàn toàn** |
 
-- `startAt` khi quote va create booking la `Instant` UTC, vi du `2026-06-30T12:00:00Z`.
-- Gia tri nay phai lay tu `candidateServiceSlots[].startTime` cua API candidate, khong tu tinh tu gio preview.
-- Cac timestamp trong `BookingResponse` va reschedule request la `LocalDateTime` theo gio nghiep vu `Asia/Ho_Chi_Minh`. Khong tu them hau to `Z` khi parse/hien thi cac gia tri nay.
+> [!NOTE]
+> Mentor vẫn có thể đặt lịch với một mentor khác như một mentee bình thường. Backend luôn tự động kiểm tra quyền sở hữu (ownership) của booking; Frontend không tự truyền `mentorUserId` để gán quyền.
 
-## 2. Luong booking 1:1
+---
+
+### 1.2 Quy tắc Xử lý Thời gian (Timestamp Guidelines)
+
+- `startAt` khi lấy báo giá (Quote) và tạo booking (`createBooking`) là chuẩn **`Instant` UTC** (ví dụ: `2026-06-30T12:00:00Z`).
+- Giá trị này **bắt buộc phải lấy từ `candidateServiceSlots[].startTime`** của API candidate, tuyệt đối không tự tính toán lại từ giờ xem trước (preview).
+- Các trường thời gian trong `BookingResponse` và yêu cầu đổi lịch (Reschedule) là **`LocalDateTime` theo múi giờ kinh doanh `Asia/Ho_Chi_Minh`** (UTC+7). Không tự động thêm hậu tố `Z` khi parse hoặc hiển thị các giá trị này.
+
+---
+
+## 2. Luồng Vận hành Booking 1:1 (Workflow)
 
 ```text
-Mentee chon mentor, service va exact candidate
--> quote (khong giu cho)
--> create booking: PENDING / REQUESTED
--> mentor accept
-   -> service free: booking da CONFIRMED
-   -> service co phi: WAITING_PAYMENT
-      -> mentee checkout va provider xac nhan thanh cong
-      -> CONFIRMED
--> buoi hoc ket thuc
--> mentor complete
--> mentee confirm hoac bao issue
--> COMPLETED hoac UNDER_REVIEW
+Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact Candidate)
+ ➔ Lấy báo giá: POST /api/bookings/quote (Chưa giữ chỗ)
+ ➔ Tạo booking: POST /api/bookings (Trạng thái: REQUESTED / PENDING)
+ ➔ Mentor phản hồi (Accept / Reject):
+    ├─ Dịch vụ miễn phí (Free): Booking chuyển ngay sang CONFIRMED
+    └─ Dịch vụ có phí (Paid): Chuyển sang WAITING_PAYMENT
+        ➔ Mentee thanh toán và cổng thanh toán xác nhận thành công
+        ➔ Booking chuyển sang CONFIRMED
+ ➔ Buổi học diễn ra và kết thúc
+ ➔ Mentor bấm hoàn thành (Complete Session)
+ ➔ Mentee xác nhận (Confirm) hoặc Báo cáo sự cố (Submit Issue)
+    ├─ Xác nhận thành công ➔ Chuyển sang COMPLETED ➔ Mở form Feedback
+    └─ Báo cáo sự cố ➔ Chuyển sang UNDER_REVIEW để Admin/Hệ thống xử lý
 ```
 
-`bookingStatus`, `paymentStatus`, `displayState`, `nextAction` va cac co `can*` trong response la source of truth cho UI. Khong tu suy dien action tu `status`, `sessionId` hay `sessionStatus`: day la field legacy.
+> [!IMPORTANT]
+> **Source of Truth cho UI**: Các trường `bookingStatus`, `paymentStatus`, `displayState`, `nextAction` và các cờ `can*` trong response là nguồn dữ liệu chuẩn để điều khiển giao diện. **Không tự suy đoán hành động từ `status`, `sessionId` hay `sessionStatus`** (đây là các trường legacy cũ).
 
-### 2.1 Trang thai de hien thi
+---
 
-| Field | Gia tri quan trong | FE can hien thi |
-| --- | --- | --- |
-| `bookingStatus` | `REQUESTED` | Dang cho mentor phan hoi |
-| `bookingStatus` | `WAITING_PAYMENT` | Mentee can thanh toan |
-| `bookingStatus` | `CONFIRMED` | Lich da duoc chot |
-| `bookingStatus` | `REJECTED_BY_MENTOR` | Mentor tu choi |
-| `bookingStatus` | `CANCELED_BY_MENTEE`, `CANCELED_BY_MENTOR`, `REQUEST_EXPIRED` | Booking da dung/het han |
-| `bookingStatus` | `UNDER_REVIEW` | Dang xu ly issue |
-| `bookingStatus` | `COMPLETED` | Booking ket thuc |
-| `paymentStatus` | `NOT_REQUIRED`, `PENDING`, `PAID`, `FAILED`, `EXPIRED`, `REFUNDED` | Trang thai thanh toan tach rieng voi booking |
-| `displayState` | `PAYMENT_REQUIRED`, `MENTOR_ACTION_REQUIRED`, `WAITING_CONFIRMATION`, `FEEDBACK_REQUIRED`, ... | Nhom UI backend da tinh theo role va thoi diem |
-| `nextAction` | `PAY_NOW`, `ACCEPT_OR_REJECT`, `COMPLETE_SESSION`, `CONFIRM_SESSION`, `LEAVE_FEEDBACK`, `VIEW_ISSUE`, `NONE` | CTA uu tien cua man hinh |
+### 2.1 Bảng Trạng thái Hiển thị (State & Action Mapping)
 
-Dung `actionDeadlineAt` khi co gia tri de hien thi countdown. Dung `canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback` de bat/tat nut. Van phai xu ly `409` vi du lieu co the thay doi giua luc render va luc user bam nut.
+| Field | Giá trị quan trọng | Ý nghĩa & Hướng xử lý cho Frontend |
+|---|---|---|
+| `bookingStatus` | `REQUESTED` | Đang chờ mentor phản hồi chấp nhận hoặc từ chối. |
+| `bookingStatus` | `WAITING_PAYMENT` | Mentor đã đồng ý; Mentee cần thanh toán trong thời hạn cho phép. |
+| `bookingStatus` | `CONFIRMED` | Lịch hẹn đã được xác nhận chính thức (đã thanh toán hoặc dịch vụ miễn phí). |
+| `bookingStatus` | `REJECTED_BY_MENTOR` | Mentor đã từ chối yêu cầu đặt lịch. |
+| `bookingStatus` | `CANCELED_BY_MENTEE`, `CANCELED_BY_MENTOR`, `REQUEST_EXPIRED` | Booking đã bị hủy hoặc hết hạn phản hồi. |
+| `bookingStatus` | `UNDER_REVIEW` | Đang có khiếu nại/sự cố cần xem xét giải quyết. |
+| `bookingStatus` | `COMPLETED` | Buổi học đã hoàn tất thành công. |
+| `paymentStatus` | `NOT_REQUIRED`, `PENDING`, `PAID`, `FAILED`, `EXPIRED`, `REFUNDED` | Trạng thái thanh toán độc lập với trạng thái buổi học. |
+| `displayState` | `PAYMENT_REQUIRED`, `MENTOR_ACTION_REQUIRED`, `WAITING_CONFIRMATION`, `FEEDBACK_REQUIRED`,... | Trạng thái tổng hợp backend đã tính sẵn theo vai trò (Role) và mốc thời gian. |
+| `nextAction` | `PAY_NOW`, `ACCEPT_OR_REJECT`, `COMPLETE_SESSION`, `CONFIRM_SESSION`, `LEAVE_FEEDBACK`, `VIEW_ISSUE`, `NONE` | Hành động ưu tiên cao nhất (Call-to-Action) trên màn hình. |
 
-## 3. Mentee tao booking
+> [!TIP]
+> - Sử dụng `actionDeadlineAt` khi có giá trị để hiển thị đồng hồ đếm ngược (Countdown).
+> - Sử dụng các cờ boolean `canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback` để bật/tắt (enable/disable) nút bấm tương ứng.
+> - Luôn phải xử lý mã lỗi `409 Conflict` vì trạng thái dữ liệu có thể thay đổi giữa lúc render và lúc người dùng nhấn nút.
 
-### 3.1 Tai lai candidate sau login
+---
 
-1. Tu public preview, chi luu `mentorUserId`, service du kien va gio du kien trong state client.
-2. Sau khi dang nhap, goi availability authenticated va candidate theo [mentor-discovery.md](mentor-discovery.md).
-3. Chon candidate co `isSelectable = true`.
-4. Goi quote ngay truoc modal xac nhan.
-5. Tao booking voi cung `slotId`, `serviceId`, `startAt` cua candidate vua tai.
+## 3. Mentee Đặt Lịch (Mentee Booking Flow)
 
-Khong dung `availability-preview` de create booking: preview khong tra `slotId`, quota hay booking conflict hien tai.
+### 3.1 Tải lại Candidate sau khi Đăng nhập
 
-### 3.2 Quote truoc khi dat
+1. Từ màn hình xem trước công khai (Public Preview), chỉ lưu `mentorUserId`, dịch vụ dự kiến và giờ dự kiến vào state của client.
+2. Sau khi người dùng đăng nhập, gọi API lấy lịch khả dụng đã xác thực (Authenticated Availability) và candidate theo hướng dẫn trong [mentor-discovery.md](mentor-discovery.md).
+3. Chọn candidate có `isSelectable = true`.
+4. Gọi API lấy báo giá (`quote`) ngay trước khi mở Modal xác nhận đặt lịch.
+5. Tạo booking với cùng bộ tham số `slotId`, `serviceId`, `startAt` của candidate vừa tải.
 
-`POST /api/bookings/quote` yeu cau Bearer token (`MENTEE` hoac `MENTOR`). Quote chi la uoc tinh, khong giu slot.
+> [!WARNING]
+> **Không sử dụng `availability-preview` để tạo booking**: Endpoint preview không trả về `slotId`, hạn mức (quota) cũng như không kiểm tra các xung đột đặt lịch hiện tại.
 
-```ts
+---
+
+### 3.2 Lấy Báo Giá Trước Khi Đặt (`POST /api/bookings/quote`)
+
+- **Endpoint**: `POST /api/bookings/quote`
+- **Header**: `Authorization: Bearer <accessToken>` (Role `MENTEE` hoặc `MENTOR`)
+- **Đặc điểm**: Báo giá chỉ là ước tính chi phí tạm thời tại thời điểm gọi, **không giữ chỗ trước**.
+
+```typescript
 interface BookingQuoteRequest {
   slotId: string;
   serviceId: string;
-  startAt: string; // ISO Instant UTC tu candidate
+  startAt: string; // Chuỗi ISO Instant UTC lấy từ candidate (vd: "2026-06-30T12:00:00Z")
 }
 
 interface BookingQuoteResponse {
@@ -87,8 +114,8 @@ interface BookingQuoteResponse {
   serviceId: string;
   serviceTitle: string;
   durationMinutes: number;
-  scheduledStartAt: string; // LocalDateTime
-  scheduledEndAt: string; // LocalDateTime
+  scheduledStartAt: string; // LocalDateTime (Asia/Ho_Chi_Minh)
+  scheduledEndAt: string;   // LocalDateTime (Asia/Ho_Chi_Minh)
   pendingExpireAt: string | null;
   paymentWindowMinutes: number;
   paymentPreparationBufferMinutes: number;
@@ -116,62 +143,85 @@ interface BookingQuoteResponse {
 }
 ```
 
-Hien thi `pricing.estimatedPayableScoin` va `disclaimer` dung nhu backend tra ve. Khong tu tinh phu phi, campaign hay refund policy o FE.
+> [!NOTE]
+> Hiển thị `pricing.estimatedPayableScoin` và `disclaimer` chính xác như backend trả về. Frontend **không tự tính phụ phí, chiết khấu chiến dịch hay chính sách hoàn tiền**.
 
-### 3.3 Create booking
+---
 
-`POST /api/bookings` yeu cau:
+### 3.3 Tạo Booking Mới (`POST /api/bookings`)
 
-- Bearer token.
-- Header **bat buoc** `Idempotency-Key: <uuid-hoac-chuoi-duy-nhat>`.
-- Cung mot key chi dung lai voi dung `POST /api/bookings` va dung payload. Key duoc luu de replay response thanh cong; dung lai voi payload khac se bi `409`.
+Yêu cầu bắt buộc khi gọi `POST /api/bookings`:
+1. Header `Authorization: Bearer <accessToken>`.
+2. Header **bắt buộc**: `Idempotency-Key: <uuid-hoac-chuoi-ngau-nhien-duy-nhat>`.
+3. Cùng một `Idempotency-Key` chỉ được dùng lại khi gọi đúng `POST /api/bookings` với đúng payload đó. Key được lưu để replay lại response thành công nếu bị timeout; nếu dùng lại cùng key nhưng đổi payload sẽ nhận lỗi `409 Conflict`.
 
-```ts
+```typescript
 interface CreateBookingRequest {
   slotId: string;
   serviceId: string;
-  startAt: string; // ISO Instant UTC, whole minute, lay tu candidate
-  learningGoalTitle: string; // 1-200 ky tu
-  learningGoalDescription?: string; // Toi da 2000 ky tu
+  startAt: string;                  // ISO Instant UTC, làm tròn phút, lấy từ candidate
+  learningGoalTitle: string;        // 1 - 200 ký tự (Bắt buộc)
+  learningGoalDescription?: string; // Tối đa 2000 ký tự (Tùy chọn)
 }
 ```
 
-Vi du:
+#### Ví dụ gọi API bằng TypeScript:
 
-```ts
+```typescript
 await apiClient.post(
   "/api/bookings",
   {
     slotId,
     serviceId,
     startAt: selectedCandidate.startTime,
-    learningGoalTitle: "Review lo trinh Spring Boot",
-    learningGoalDescription: "Can goi y project va cach chuan bi intern backend.",
+    learningGoalTitle: "Review lộ trình Spring Boot",
+    learningGoalDescription: "Cần gợi ý project và cách chuẩn bị kiến thức phỏng vấn Intern Backend.",
   },
-  { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  {
+    headers: {
+      "Idempotency-Key": crypto.randomUUID(),
+    },
+  }
 );
 ```
 
-Neu request timeout, retry bang **cung key va cung payload**. Neu user sua muc tieu hoc hoac chon candidate khac, tao key moi. Khong retry mu khi nhan `409`; tai lai availability/candidate truoc.
+> [!TIP]
+> - Nếu request bị **timeout mạng**, hãy retry lại bằng **cùng key và cùng payload**.
+> - Nếu người dùng sửa mục tiêu học tập hoặc chọn slot khác, hãy tạo một key mới (`crypto.randomUUID()`).
+> - Không tự động retry khi nhận lỗi `409 Conflict`; hãy tải lại danh sách lịch rảnh/candidate trước.
 
-## 4. Danh sach va detail booking
+---
 
-### 4.1 Danh sach cua user hien tai
+## 4. Danh Sách & Chi Tiết Booking (Listing & Detail APIs)
 
-`GET /api/me/bookings?role=MENTEE|MENTOR&status=<BookingStatus>&page=0&size=10&sortBy=selectedStartTime&direction=DESC`
+### 4.1 Danh Sách Booking của Tôi (`GET /api/me/bookings`)
 
-- `role` mac dinh `MENTEE`.
-- `status` la filter theo persisted `BookingStatus`, vi du `PENDING`, `ACCEPTED_AWAITING_PAYMENT`, `PAID`, `REJECTED`, `EXPIRED`, `CANCELLED_BY_MENTEE`, `CANCELLED_BY_MENTOR`, `AWAITING_MENTOR_COMPLETION`, `AWAITING_MENTEE_CONFIRMATION`, `COMPLETED`, `AUTO_CLOSED`, `UNDER_REVIEW`, `NO_SHOW`.
-- Khong co query `fromDate` hay `toDate` trong API hien tai.
-- Khi khong loc `status`, backend tra dashboard window tu 7 ngay truoc den 7 ngay sau va sap xep theo uu tien action. Khong dung endpoint nay de hien thi lich su toan bo theo thang.
+- **Endpoint**: `GET /api/me/bookings`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Query Parameters**:
+  - `role`: `"MENTEE"` hoặc `"MENTOR"` (Mặc định: `"MENTEE"`).
+  - `status` (Tùy chọn): Lọc theo trạng thái `BookingStatus`:
+    - `PENDING`, `ACCEPTED_AWAITING_PAYMENT`, `PAID`, `REJECTED`, `EXPIRED`, `CANCELLED_BY_MENTEE`, `CANCELLED_BY_MENTOR`, `AWAITING_MENTOR_COMPLETION`, `AWAITING_MENTEE_CONFIRMATION`, `COMPLETED`, `AUTO_CLOSED`, `UNDER_REVIEW`, `NO_SHOW`.
+  - `page`: Số trang (Bắt đầu từ `0`).
+  - `size`: Kích thước trang (Mặc định: `10`).
+  - `sortBy`: Trường sắp xếp (Mặc định: `selectedStartTime`).
+  - `direction`: `"ASC"` hoặc `"DESC"` (Mặc định: `"DESC"`).
 
-### 4.2 Detail
+> [!NOTE]
+> - API hiện tại không có query `fromDate` hay `toDate`.
+> - Khi không truyền bộ lọc `status`, backend sẽ trả về danh sách trong cửa sổ thời gian từ 7 ngày trước đến 7 ngày tới và sắp xếp ưu tiên theo các action cần xử lý ngay. Không sử dụng endpoint này cho mục đích hiển thị toàn bộ lịch sử theo tháng.
 
-`GET /api/me/bookings/{bookingId}` chi cho mentee hoac mentor cua booking. `403` nghia la booking khong thuoc user hien tai.
+---
 
-FE co the dung cung `BookingResponse` cho list va detail. Cac field can dung tren UI:
+### 4.2 Chi Tiết Booking (`GET /api/me/bookings/{bookingId}`)
 
-```ts
+- **Endpoint**: `GET /api/me/bookings/{bookingId}`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Quyền hạn**: Chỉ mentee hoặc mentor tham gia booking này mới có quyền xem. Nhận `403 Forbidden` nếu booking không thuộc về user hiện tại.
+
+#### Cấu trúc Payload đầy đủ (`BookingResponse`):
+
+```typescript
 interface BookingResponse {
   bookingId: string;
   actualSessionId: string | null;
@@ -252,78 +302,99 @@ interface BookingResponse {
 }
 ```
 
-Khong dung `sessionId`, `sessionStatus` hay `status` trong response moi. Chung la alias legacy con lai de tuong thich nguoc.
+---
 
-## 5. Thao tac mentor
+## 5. Thao Tác Dành Cho Mentor (Mentor Actions)
 
-Tat ca endpoint o phan nay can role `MENTOR` va backend tu kiem tra booking co thuoc mentor hien tai hay khong.
+Tất cả endpoint trong phần này yêu cầu Role `MENTOR`. Backend sẽ tự động xác thực xem booking có đúng do mentor hiện tại phụ trách hay không.
 
-### 5.1 Accept hoac reject request
+### 5.1 Chấp Nhận (Accept) hoặc Từ Chối (Reject) Yêu Cầu
 
-| Thao tac | Endpoint | Request |
-| --- | --- | --- |
-| Accept | `POST /api/mentor/bookings/{bookingId}/accept` | `{ mentorResponseNote?: string }`, toi da 2000 ky tu |
-| Reject | `POST /api/mentor/bookings/{bookingId}/reject` | `{ rejectReason: string, mentorResponseNote?: string }`, moi field toi da 2000 ky tu |
+| Thao tác | Endpoint | Request Body |
+|---|---|---|
+| Chấp nhận (Accept) | `POST /api/mentor/bookings/{bookingId}/accept` | `{ mentorResponseNote?: string }` (Tối đa 2000 ký tự) |
+| Từ chối (Reject) | `POST /api/mentor/bookings/{bookingId}/reject` | `{ rejectReason: string, mentorResponseNote?: string }` (Mỗi trường tối đa 2000 ký tự) |
 
-Chi hien thi accept/reject khi `nextAction = "ACCEPT_OR_REJECT"` hoac booking dang `REQUESTED` theo response moi tai lai.
+> [!IMPORTANT]
+> - Chỉ hiển thị nút Accept/Reject khi `nextAction === "ACCEPT_OR_REJECT"` hoặc booking đang ở trạng thái `REQUESTED`.
+> - Chấp nhận một booking sẽ tự động từ chối (Auto Reject) các yêu cầu pending khác bị trùng lịch.
+> - Đối với dịch vụ có phí: Sau khi Accept, booking sẽ chuyển sang `WAITING_PAYMENT`; **chưa mở chat/session cho đến khi mentee thanh toán thành công**.
+> - Đối với dịch vụ miễn phí: Booking được xác nhận (`CONFIRMED`) ngay lập tức.
 
-Accept slot se auto reject cac request pending xung dot. Voi service co phi, accept chi dua booking sang `WAITING_PAYMENT`; **khong** mo chat/session truoc khi payment thanh cong. Voi service free, booking co the duoc confirmed ngay.
+---
 
-### 5.2 Huy booking
+### 5.2 Mentor Hủy Booking (`POST /api/mentor/bookings/{bookingId}/cancel`)
 
-`POST /api/mentor/bookings/{bookingId}/cancel`
-
-```ts
+- **Endpoint**: `POST /api/mentor/bookings/{bookingId}/cancel`
+- **Request Body (`CancelBookingRequest`)**:
+```typescript
 interface CancelBookingRequest {
-  cancelReason: string; // 1-1000 ky tu
+  cancelReason: string; // 1 - 1000 ký tự (Bắt buộc)
 }
 ```
+- **Điều kiện hiển thị**: Chỉ hiển thị nút khi `canCancel === true`.
+- **Hạn mức**: Rate limit tối đa **3 request / giờ / user**.
 
-Chi hien thi nut khi `canCancel = true`. Backend ap dung refund, penalty va suspension theo thoi diem thuc te; hien thi policy tu `cancellationRefundPolicy` trong response thay vi hard-code. Endpoint bi rate limit `3 request / gio / user`.
+---
 
-### 5.3 Complete va meeting details
+### 5.3 Hoàn Thành Buổi Học & Cập Nhật Link Họp
 
-| Thao tac | Endpoint | Request |
-| --- | --- | --- |
-| Mentor complete | `POST /api/mentor/bookings/{bookingId}/complete` | `{ completionNote?: string }`, toi da 2000 ky tu |
-| Luu meeting | `PATCH /api/mentor/bookings/{bookingId}/meeting-link` | Xem schema ben duoi |
+| Thao tác | Endpoint | Request Body |
+|---|---|---|
+| Mentor hoàn thành (Complete) | `POST /api/mentor/bookings/{bookingId}/complete` | `{ completionNote?: string }` (Tối đa 2000 ký tự) |
+| Lưu link họp (Meeting Link) | `PATCH /api/mentor/bookings/{bookingId}/meeting-link` | Xem schema bên dưới |
 
-```ts
+```typescript
 interface SaveMeetingLinkRequest {
   meetingPlatform:
-    | "GOOGLE_MEET" | "ZOOM" | "MICROSOFT_TEAMS" | "DISCORD" | "OFFLINE" | "OTHER";
-  meetingLink: string; // Bat buoc, toi da 1000 ky tu
-  location?: string; // Toi da 500 ky tu
+    | "GOOGLE_MEET"
+    | "ZOOM"
+    | "MICROSOFT_TEAMS"
+    | "DISCORD"
+    | "OFFLINE"
+    | "OTHER";
+  meetingLink: string; // Bắt buộc, tối đa 1000 ký tự
+  location?: string;   // Tùy chọn (địa điểm nếu offline), tối đa 500 ký tự
 }
 ```
 
-Neu `googleCalendarManaged = true`, khong hien thi form ghi de meeting link. Calendar duoc dong bo bat dong bo; `calendarSyncStatus` va thong tin loi chi de hien thi trang thai, khong phai dieu kien de mentee tham gia booking.
+> [!NOTE]
+> Nếu `googleCalendarManaged === true`, không hiển thị form chỉnh sửa link họp thủ công vì link Google Meet được tạo và quản lý tự động. Việc đồng bộ Google Calendar diễn ra bất đồng bộ; `calendarSyncStatus` chỉ để biểu thị trạng thái kết nối, không phải là điều kiện chặn mentee tham gia buổi học.
 
-## 6. Thao tac mentee va participant
+---
 
-### 6.1 Mentee huy booking
+## 6. Thao Tác Dành Cho Mentee & Người Tham Gia (Mentee & Participant Actions)
 
-`POST /api/me/bookings/{bookingId}/cancel` dung cung `CancelBookingRequest`. Chi hien thi khi `canCancel = true`. Endpoint dung chung rate limit `3 request / gio / user`.
+### 6.1 Mentee Hủy Booking (`POST /api/me/bookings/{bookingId}/cancel`)
+- **Endpoint**: `POST /api/me/bookings/{bookingId}/cancel`
+- **Request Body**: `CancelBookingRequest` (`{ cancelReason: string }`)
+- **Điều kiện**: Chỉ hiển thị khi `canCancel === true`.
+- **Hạn mức**: Rate limit tối đa **3 request / giờ / user**.
 
-### 6.2 Reschedule
+---
 
-Chi hien thi action khi `canReschedule = true`. Hien tai moi booking co toi da mot lan reschedule va request phai duoc tao truoc gio hoc it nhat 6 gio. Participant con lai phai phan hoi truoc moc 2 gio truoc gio hoc cu.
+### 6.2 Yêu Cầu Đổi Lịch (Reschedule Flow)
 
-| Actor | Tao request | Accept/reject |
-| --- | --- | --- |
-| Mentee | `POST /api/me/bookings/{bookingId}/reschedule-requests` | `POST /api/me/bookings/reschedule-requests/{requestId}/accept` hoac `/reject` |
-| Mentor | `POST /api/mentor/bookings/{bookingId}/reschedule-requests` | `POST /api/mentor/bookings/reschedule-requests/{requestId}/accept` hoac `/reject` |
+Chỉ hiển thị nút đổi lịch khi `canReschedule === true`.
+- **Quy định đổi lịch**: Mỗi booking chỉ được đổi lịch tối đa **1 lần**.
+- **Thời hạn gửi yêu cầu**: Phải tạo yêu cầu **trước giờ học cũ ít nhất 6 tiếng**.
+- **Thời hạn phản hồi**: Người nhận yêu cầu phải bấm Đồng ý/Từ chối **trước giờ học cũ ít nhất 2 tiếng** (nếu không yêu cầu sẽ hết hạn `EXPIRED`).
 
-```ts
+| Vai trò | Gửi yêu cầu đổi lịch | Đồng ý / Từ chối yêu cầu |
+|---|---|---|
+| Mentee | `POST /api/me/bookings/{bookingId}/reschedule-requests` | `POST /api/me/bookings/reschedule-requests/{requestId}/accept` hoặc `/reject` |
+| Mentor | `POST /api/mentor/bookings/{bookingId}/reschedule-requests` | `POST /api/mentor/bookings/reschedule-requests/{requestId}/accept` hoặc `/reject` |
+
+```typescript
 interface CreateBookingRescheduleRequest {
   proposedSlotId: string;
-  proposedSelectedStartTime: string; // LocalDateTime theo Asia/Ho_Chi_Minh
-  proposedSelectedEndTime: string; // LocalDateTime theo Asia/Ho_Chi_Minh
-  reason: string; // 1-1000 ky tu
+  proposedSelectedStartTime: string; // LocalDateTime (Asia/Ho_Chi_Minh)
+  proposedSelectedEndTime: string;   // LocalDateTime (Asia/Ho_Chi_Minh)
+  reason: string;                    // 1 - 1000 ký tự
 }
 
 interface RespondBookingRescheduleRequest {
-  reason: string; // 1-1000 ky tu, bat buoc ca khi accept va reject
+  reason: string; // 1 - 1000 ký tự (Bắt buộc cho cả Accept và Reject)
 }
 
 interface BookingRescheduleRequestResponse {
@@ -349,64 +420,76 @@ interface BookingRescheduleRequestResponse {
 }
 ```
 
-Sau accept/reject, tai lai booking detail va reschedule history. Khong tu doi gio tren UI truoc khi backend accept thanh cong.
+> [!TIP]
+> Sau khi Accept/Reject thành công, hãy tải lại chi tiết booking và lịch sử đổi lịch. **Không tự động đổi giờ trên giao diện trước khi nhận được phản hồi thành công từ backend**.
 
-### 6.3 Complete, confirm, issue va feedback
+---
 
-| Thao tac | Endpoint | Khi nao dung |
-| --- | --- | --- |
-| Complete alias | `POST /api/me/bookings/{bookingId}/complete` | Chi dung khi UI chung cho participant; mentor se complete, participant con lai se confirm |
-| Confirm | `POST /api/me/bookings/{bookingId}/confirm` | Participant con lai xac nhan sau khi mentor complete |
-| Submit issue | `POST /api/me/bookings/{bookingId}/issue` | Participant bao van de trong cua so sau buoi hoc |
-| Respond issue | `POST /api/me/bookings/{bookingId}/issue/respond` | Chi counterparty, toi da mot phan hoi |
-| Feedback | `POST /api/bookings/{bookingId}/feedback` | Chi mentee, khi `canSubmitFeedback = true` |
+### 6.3 Hoàn Thành, Xác Nhận, Báo Cáo Sự Cố & Đánh Giá
 
-```ts
+| Thao tác | Endpoint | Khi nào sử dụng |
+|---|---|---|
+| Complete (Dùng chung) | `POST /api/me/bookings/{bookingId}/complete` | Dùng cho UI chung: Mentor sẽ bấm hoàn thành, Mentee sẽ bấm xác nhận |
+| Xác nhận (Confirm) | `POST /api/me/bookings/{bookingId}/confirm` | Mentee xác nhận buổi học thành công sau khi mentor đã bấm complete |
+| Báo cáo sự cố (Issue) | `POST /api/me/bookings/{bookingId}/issue` | Người tham gia báo cáo vấn đề trong khung giờ cho phép sau buổi học |
+| Phản hồi sự cố (Respond Issue) | `POST /api/me/bookings/{bookingId}/issue/respond` | Bên còn lại phản hồi khiếu nại (tối đa 1 lần phản hồi) |
+| Đánh giá (Feedback) | `POST /api/bookings/{bookingId}/feedback` | Dành riêng cho mentee khi `canSubmitFeedback === true` |
+
+```typescript
 interface CompleteBookingRequest {
-  completionNote?: string; // Toi da 2000 ky tu
+  completionNote?: string; // Tối đa 2000 ký tự
 }
 
 interface ConfirmBookingRequest {
-  confirmationNote?: string; // Toi da 2000 ky tu
+  confirmationNote?: string; // Tối đa 2000 ký tự
 }
 
 interface SubmitBookingIssueRequest {
   issueType:
-    | "MENTOR_NO_SHOW" | "MENTEE_NO_SHOW" | "QUALITY_ISSUE"
-    | "TECHNICAL_PROBLEM" | "OTHER";
-  description: string; // 1-2000 ky tu
+    | "MENTOR_NO_SHOW"      // Mentor không tham gia
+    | "MENTEE_NO_SHOW"      // Mentee không tham gia
+    | "QUALITY_ISSUE"       // Chất lượng buổi học không đảm bảo
+    | "TECHNICAL_PROBLEM"   // Sự cố kỹ thuật/đường truyền
+    | "OTHER";              // Lý do khác
+  description: string;      // 1 - 2000 ký tự
 }
 
 interface RespondBookingIssueRequest {
-  responseNote: string; // 1-2000 ky tu
+  responseNote: string;     // 1 - 2000 ký tự
 }
 
 interface SubmitFeedbackRequest {
-  rating: 1 | 2 | 3 | 4 | 5;
-  satisfactionLevel?: 1 | 2 | 3 | 4 | 5;
-  comment?: string;
-  wouldRecommend?: boolean;
-  isPublic?: boolean;
+  rating: 1 | 2 | 3 | 4 | 5;             // Điểm đánh giá (1 đến 5 sao)
+  satisfactionLevel?: 1 | 2 | 3 | 4 | 5; // Mức độ hài lòng
+  comment?: string;                      // Nhận xét chi tiết
+  wouldRecommend?: boolean;              // Có sẵn sàng giới thiệu mentor này không
+  isPublic?: boolean;                    // Công khai đánh giá lên trang cá nhân mentor
 }
 ```
 
-Issue khong tu duoc giai quyet sau khi counterparty response. Neu `bookingStatus = "UNDER_REVIEW"` hoac `nextAction = "VIEW_ISSUE"`, hien thi trang thai va thong tin issue hien co; khong tu ket luan refund cho user.
+> [!NOTE]
+> Sự cố khiếu nại không tự động được đóng sau khi bên còn lại phản hồi. Nếu `bookingStatus === "UNDER_REVIEW"` hoặc `nextAction === "VIEW_ISSUE"`, hãy hiển thị chi tiết khiếu nại để người dùng theo dõi; **không tự đưa ra kết luận hoàn tiền trước khi có quyết định chính thức**.
 
-## 7. Payment, chat va calendar
+---
 
-- Khi `nextAction = "PAY_NOW"`, chuyen user sang flow checkout trong [payment.md](payment.md). Sau khi quay lai tu PayOS, poll/truy van payment theo payment guide, sau do tai lai booking detail.
-- `conversationId` co the `null` khi booking chua confirmed. Khong tao conversation o FE; dung chat guide khi backend da tra conversation hop le.
-- `meetingLink` co the `null`. Khong tu tao Google Meet link o FE. Neu mentor co Google Calendar, backend dong bo qua flow rieng va cap nhat `calendarSyncStatus`.
+## 7. Tích Hợp Thanh Toán, Chat & Lịch (Integrations)
 
-## 8. Loi va retry an toan
+- **Thanh toán**: Khi `nextAction === "PAY_NOW"`, chuyển hướng người dùng sang luồng thanh toán trong [payment.md](payment.md). Sau khi thanh toán tại PayOS và được chuyển hướng về, tiến hành kiểm tra/truy vấn trạng thái thanh toán và tải lại chi tiết booking.
+- **Phòng Chat**: Trường `conversationId` có thể mang giá trị `null` khi booking chưa được xác nhận (`CONFIRMED`). Frontend **không tự ý tạo conversation**; chỉ mở khung chat khi backend đã trả về ID hợp lệ theo [realtime-chat-notification.md](realtime-chat-notification.md).
+- **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`.
 
-| HTTP | FE can lam |
-| --- | --- |
-| `400` | Hien validation/message. Khong retry tu dong. |
-| `401` | Theo refresh flow trong [identity.md](identity.md); neu fail thi quay ve login. |
-| `403` | User khong dung role/khong phai participant. An action va tai lai profile neu role vua doi. |
-| `404` | Booking, slot, service, candidate hoac reschedule request khong con hop le. Dong modal va tai lai du lieu lien quan. |
-| `409` | Slot/candidate vua bi xu ly, booking da doi state, reschedule het han hoac idempotency key dang dung. Tai lai detail/availability truoc khi cho user thu lai. |
-| `429` | Doc `retryAfterSeconds`, khoa nut va hien thi thoi gian cho. Create booking la `12 / 10 phut`; cancel la `3 / gio` tren moi user. |
+---
 
-Khong retry mu mutation. Rieng create booking co the retry bang cung `Idempotency-Key` va cung payload neu FE khong nhan duoc response.
+## 8. Xử Lý Lỗi & Cơ Chế Thử Lại An Toàn (Error Handling & Safe Retries)
+
+| HTTP Status | Hướng xử lý cho Frontend |
+|---|---|
+| `400 Bad Request` | Hiển thị thông báo lỗi/validation. **Không tự động retry**. |
+| `401 Unauthorized` | Thực hiện quy trình Refresh Token theo [identity.md](identity.md); nếu thất bại thì chuyển về trang Đăng nhập. |
+| `403 Forbidden` | Người dùng không đúng role hoặc không phải người tham gia buổi học. Ẩn nút thao tác và tải lại trang. |
+| `404 Not Found` | Booking, slot, dịch vụ, candidate hoặc yêu cầu đổi lịch không còn tồn tại. Đóng modal và tải lại dữ liệu mới nhất. |
+| `409 Conflict` | Slot vừa bị người khác đặt, booking đã đổi trạng thái, yêu cầu đổi lịch đã hết hạn hoặc Idempotency Key đang được xử lý. Tải lại dữ liệu trước khi cho người dùng thử lại. |
+| `429 Too Many Requests` | Đọc trường `retryAfterSeconds` từ response, khóa nút và hiển thị đếm ngược thời gian chờ. Giới hạn tạo booking là **12 lần / 10 phút**; hủy booking là **3 lần / giờ**. |
+
+> [!CAUTION]
+> **Không retry tự động đối với các thao tác thay đổi dữ liệu (Mutations)**. Riêng API tạo booking (`POST /api/bookings`) có thể thử lại bằng **cùng `Idempotency-Key` và cùng payload** nếu gặp sự cố mất kết nối mạng.

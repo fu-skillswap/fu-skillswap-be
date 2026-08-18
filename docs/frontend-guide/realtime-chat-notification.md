@@ -1,4 +1,4 @@
-# Frontend Integration Guide — Realtime WebSocket (STOMP), Chat & Notification Module
+# Frontend Integration Guide — Realtime WebSocket (STOMP), Chat & Thông Báo
 
 Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend (FE) cách tích hợp với hệ thống **Realtime WebSocket (STOMP Protocol)**, luồng **Trò chuyện trực tiếp (Direct Chat)** và luồng **Thông báo thời gian thực (Notifications & Badges)** của SkillSwap Backend.
 
@@ -6,7 +6,7 @@ Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend 
 
 ## 1. Giới Thiệu Công Nghệ: WebSocket + STOMP Relay
 
-### 1.1 Tổng quan về Công nghệ
+### 1.1 Tổng Quan Về Công Nghệ
 * **WebSocket**: Giao thức truyền thông hai chiều song công (Full-duplex) qua một kết nối TCP duy nhất kéo dài (Persistent Connection). Khác với HTTP truyền thống (Client gửi Request $\rightarrow$ Server trả Response rồi đóng kết nối), WebSocket cho phép Server chủ động đẩy dữ liệu (Server Push) xuống Client ngay tức thì với độ trễ tính bằng mili-giây.
 * **STOMP (Simple Text Oriented Messaging Protocol)**: Là giao thức tầng ứng dụng (Application Layer Protocol) chạy trên nền WebSocket (tương tự như HTTP chạy trên nền TCP). STOMP định nghĩa cấu trúc khung truyền tin chuẩn hóa bao gồm các lệnh: `CONNECT`, `SUBSCRIBE`, `SEND`, `MESSAGE`, `UNSUBSCRIBE`, `DISCONNECT` cùng với các Header và Body.
 
@@ -29,14 +29,14 @@ Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend 
 +-----------------------------------------------------------------------+
 ```
 
-### 1.2 Ý nghĩa & Lý do Áp dụng Trong SkillSwap
+### 1.2 Ý Nghĩa & Lý Do Áp Dụng Trong SkillSwap
 1. **Trải nghiệm tức thời (Instant UX)**: Người dùng nhận được tin nhắn chat, thông báo mời học, chấp nhận lịch, cập nhật thanh toán ngay lập tức mà không cần bấm F5 hoặc chờ chu kỳ Polling.
 2. **Tiết kiệm tài nguyên mạng & Server**: Loại bỏ hoàn toàn cơ chế HTTP Polling liên tục (Polling định kỳ gây lãng phí băng thông và vắt kiệt CPU Server khi có nhiều người dùng đồng thời).
 3. **Mô hình Pub/Sub bảo mật theo User**: Hệ thống sử dụng tiền tố `/user/queue/...` giúp cô lập hoàn toàn luồng tin của từng người dùng, ngăn chặn việc nghe lén tin nhắn của người khác.
 
-### 1.3 Đánh giá Ưu điểm & Thách thức (Pros & Cons)
+### 1.3 Đánh Giá Ưu Điểm & Thách Thức (Pros & Cons)
 
-| Tiêu chí | Ưu điểm (Pros) | Thách thức (Cons) | Giải pháp xử lý ở FE |
+| Tiêu chí | Ưu điểm (Pros) | Thách thức (Cons) | Giải pháp xử lý ở Frontend |
 | :--- | :--- | :--- | :--- |
 | **Độ trễ (Latency)** | Cực thấp (< 50ms), trải nghiệm mượt mà | Không có | Tối ưu render UI với animation nhẹ nhàng |
 | **Kết nối (Connection)** | Tiết kiệm băng thông, duy trì 1 socket duy nhất | Kết nối Stateful: Mạng chập chờn sẽ bị ngắt | Cấu hình Heartbeat tự phát hiện đứt mạng và tự Reconnect |
@@ -47,7 +47,7 @@ Tài liệu này hướng dẫn chi tiết cho các lập trình viên Frontend 
 
 ## 2. Cấu Hình Kết Nối Phía Frontend
 
-### 2.1 Cài đặt thư viện khuyến nghị
+### 2.1 Cài Đặt Thư Viện Khuyến Nghị
 Khuyến nghị sử dụng thư viện chính thống `@stomp/stompjs` (không cần SockJS vì các trình duyệt hiện đại đều hỗ trợ Native WebSocket):
 ```bash
 npm install @stomp/stompjs
@@ -55,7 +55,7 @@ npm install @stomp/stompjs
 yarn add @stomp/stompjs
 ```
 
-### 2.2 Thông số kết nối Backend
+### 2.2 Thông Số Kết Nối Backend
 * **WebSocket Endpoint URL**:
   - Môi trường Local / Dev: `ws://localhost:8080/ws-stomp`
   - Môi trường Production: `wss://api.skillswap.asia/ws-stomp`
@@ -63,7 +63,7 @@ yarn add @stomp/stompjs
   - Khi gửi frame `CONNECT`, bắt buộc truyền Access Token trong `connectHeaders`:
     - Header: `Authorization: Bearer <ACCESS_TOKEN>` (hoặc `X-Access-Token: <ACCESS_TOKEN>`).
 
-### 2.3 Mã nguồn mẫu khởi tạo STOMP Client (TypeScript / React)
+### 2.3 Mã Nguồn Mẫu Khởi Tạo STOMP Client (TypeScript / React)
 
 ```typescript
 import { Client, IMessage, StompSubscription } from '@stomp/stompjs';
@@ -192,7 +192,7 @@ export const realtimeService = new RealtimeService();
 
 ### Bảng Tổng Hợp Kênh STOMP
 
-| Destination | Loại | Payload Type | Mục đích sử dụng ở FE |
+| Destination | Loại | Payload Type | Mục đích sử dụng ở Frontend |
 | :--- | :---: | :--- | :--- |
 | `/user/queue/notifications/items` | `SUBSCRIBE` | `NotificationResponse` | Nhận thông báo mới $\rightarrow$ hiện Toast/Popup và chèn vào đầu danh sách thông báo. |
 | `/user/queue/notifications/badge` | `SUBSCRIBE` | `NotificationBadgePayload` | Cập nhật số đếm badge đỏ trên biểu tượng quả chuông ở Header/Navbar. |
@@ -200,7 +200,7 @@ export const realtimeService = new RealtimeService();
 | `/user/queue/chat/inbox` | `SUBSCRIBE` | `ConversationResponse` | Cập nhật danh sách cuộc hội thoại bên Sidebar (preview tin nhắn cuối, thời gian). |
 | `/user/queue/chat/unread` | `SUBSCRIBE` | `ChatUnreadPayload` | Cập nhật tổng số tin nhắn chưa đọc trên Tab Chat/Icon Chat toàn trang. |
 | `/user/queue/chat/typing` | `SUBSCRIBE` | `TypingPayload` | Nhận sự kiện đối phương đang gõ $\rightarrow$ hiển thị hiệu ứng "..." (Typing Indicator). |
-| `/app/chat/typing` | `SEND` | `ChatTypingRequest` | FE gửi lên khi người dùng đang gõ chữ vào ô nhập tin nhắn. |
+| `/app/chat/typing` | `SEND` | `ChatTypingRequest` | Frontend gửi lên khi người dùng đang gõ chữ vào ô nhập tin nhắn. |
 | `/user/queue/bookings/status` | `SUBSCRIBE` | `BookingStatusUpdatedEvent` | Nhận cập nhật trạng thái Booking tức thời $\rightarrow$ cập nhật UI không cần reload. |
 
 ---
@@ -365,7 +365,7 @@ export interface BookingStatusUpdatedEvent {
 }
 ```
 
-#### B. Cách Xử Lý Ở FE
+#### B. Cách Xử Lý Ở Frontend
 - Subscribe kênh `/user/queue/bookings/status`.
 - Khi nhận event:
   - Nếu user đang ở trang chi tiết booking có `bookingId` trùng khớp: Cập nhật state badge trạng thái và các nút action (ví dụ: nút "Tham gia phòng học", nút "Xác nhận hài lòng", nút "Báo sự cố").
@@ -375,7 +375,7 @@ export interface BookingStatusUpdatedEvent {
 
 ## 5. Xử Lý Các Tình Huống Ngoại Lệ & Best Practices
 
-### 5.1 Cơ chế Bù Tin Nhắn Khi Mất Mạng (Reconnect Gap Repair)
+### 5.1 Cơ Chế Bù Tin Nhắn Khi Mất Mạng (Reconnect Gap Repair)
 Khi thiết bị người dùng bị mất kết nối mạng (hoặc gập nắp laptop) trong vài phút rồi kết nối lại:
 1. Lưu lại `lastSequence` của tin nhắn mới nhất trong Redux / Zustand / React State.
 2. Khi STOMP `onConnect` kích hoạt lại:
@@ -391,11 +391,11 @@ Khi thiết bị người dùng bị mất kết nối mạng (hoặc gập nắ
    }
    ```
 
-### 5.2 Xử lý Hết Hạn Access Token (JWT Token Refresh)
+### 5.2 Xử Lý Hết Hạn Access Token (JWT Token Refresh)
 * Khi Access Token hết hạn, Server sẽ từ chối kết nối hoặc ngắt WebSocket kèm lỗi.
 * FE cần bắt sự kiện lỗi trong `onStompError`, gọi API Refresh Token để lấy token mới, gán lại vào `client.connectHeaders` và gọi `activate()`.
 
-### 5.3 Quản lý Vòng Đời Subscription (Tránh Memory Leak)
+### 5.3 Quản Lý Vòng Đời Subscription (Tránh Memory Leak)
 * **Kênh Global** (Cấp Layout / App level): Subscribe một lần khi đăng nhập và chỉ unsubscribe khi đăng xuất:
   - `/user/queue/notifications/badge`
   - `/user/queue/notifications/items`

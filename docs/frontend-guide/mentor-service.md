@@ -1,40 +1,48 @@
-# Frontend Guide - Mentor Service va Lich Ranh
+# Frontend Guide — Quản Lý Dịch Vụ & Lịch Rảnh Mentor (Mentor Services & Availability)
 
-> **Quy tac URL:** Chi dung URL backend tra ve. Khong tu tao URL CDN, `storageKey` hoac `objectKey`. Xem [identity.md](identity.md) cho envelope chung, refresh token va `429 Retry-After`.
+> **Quy tắc URL:** Chỉ sử dụng trực tiếp các URL hình ảnh do backend trả về. Tuyệt đối không tự ghép nối URL CDN, `storageKey` hay `objectKey`. Xem [identity.md](identity.md) để biết cấu trúc envelope chung, cơ chế refresh token và cách xử lý mã lỗi `429 Retry-After`.
 
-Guide nay danh cho giao dien mentor sau khi da co role `MENTOR`: quan ly service `ONE_TO_ONE`, booking policy va lich ranh. Xem [mentor-discovery.md](mentor-discovery.md) cho card/profile cong khai va cach mentee chon candidate; xem [mentor-verification.md](mentor-verification.md) cho dieu kien de duoc duyet mentor.
+> **Tài liệu liên quan:**
+> - Tài liệu này dành cho giao diện quản trị của Mentor (đã có Role `MENTOR`): quản lý dịch vụ 1:1 (`ONE_TO_ONE`), chính sách đặt lịch (Booking Policy), lịch rảnh trực tiếp (Direct Slots) và mẫu lịch lặp tuần (Availability Templates).
+> - Xem [mentor-discovery.md](mentor-discovery.md) để biết cách hiển thị thẻ/profile công khai và cách Mentee chọn khung giờ.
+> - Xem [mentor-verification.md](mentor-verification.md) để nắm quy trình xét duyệt hồ sơ mentor.
 
-## 1. Dieu kien va luong
+---
 
-Tat ca endpoint trong guide nay can Bearer token va role `MENTOR`.
+## 1. Điều Kiện & Luồng Vận Hành (Eligibility & Flow)
+
+Tất cả các endpoint trong tài liệu này yêu cầu Bearer token với Role `MENTOR`.
 
 ```text
-Mentor da duoc duyet
--> Tao service ONE_TO_ONE active
--> Tao direct slot hoac weekly template
--> Discovery hien mentor khi du dieu kien public
--> Mentee chon candidate va tao booking
+Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
+ ➔ Tạo Dịch vụ 1:1 đang hoạt động (Active ONE_TO_ONE Service)
+ ➔ Tạo Lịch rảnh trực tiếp (Direct Slot) hoặc Mẫu lịch lặp tuần (Weekly Template)
+ ➔ Mentor đủ điều kiện xuất hiện trên trang Tìm kiếm công khai (Discovery)
+ ➔ Mentee lựa chọn khung giờ và tiến hành Đặt lịch (Booking)
 ```
 
-Verification khong tu tao service hay slot. Service va availability khong phai dieu kien submit verification, nhung can thiet de mentor nhan booking va xuat hien trong discovery.
+> [!NOTE]
+> Việc được duyệt hồ sơ xác thực (Verification) không tự động tạo sẵn dịch vụ hay lịch rảnh. Dịch vụ và lịch rảnh không phải là điều kiện bắt buộc lúc nộp hồ sơ, nhưng là điều kiện tiên quyết để mentor có thể nhận booking và hiển thị trên trang tìm kiếm.
 
-## 2. Quan ly service mentoring
+---
 
-1. Goi `GET /api/me/mentor-services/constraints` truoc khi mo form de lay duration va khoang gia do platform quy dinh.
-2. Tao service bang `POST /api/me/mentor-services`.
-3. Dung `GET /api/me/mentor-services?isActive=true|false` de quan ly danh sach. Bo `isActive` de lay toan bo.
-4. Dung `PUT /api/me/mentor-services/{serviceId}` de sua va `PATCH /api/me/mentor-services/{serviceId}/active` de bat/tat.
+## 2. Quản Lý Dịch Vụ Mentoring (Service Management)
 
-```ts
+1. Gọi `GET /api/me/mentor-services/constraints` trước khi mở form tạo mới để lấy các ràng buộc về thời lượng (`durationMinutes`) và khoảng giá Scoin do nền tảng quy định.
+2. Tạo dịch vụ mới qua `POST /api/me/mentor-services`.
+3. Sử dụng `GET /api/me/mentor-services?isActive=true|false` để quản lý danh sách dịch vụ của mình (bỏ query `isActive` để lấy toàn bộ).
+4. Sử dụng `PUT /api/me/mentor-services/{serviceId}` để chỉnh sửa và `PATCH /api/me/mentor-services/{serviceId}/active` để bật/tắt trạng thái hoạt động.
+
+```typescript
 interface CreateMentorServiceRequest {
-  title: string; // Toi da 200 ky tu
-  description: string; // Toi da 1000 ky tu
-  expectedOutcome: string; // Toi da 1000 ky tu
-  durationMinutes: number; // Phai thuoc allowedDurationMinutes
-  isFree: boolean;
-  priceScoin: number;
-  maintainPostSessionChat?: boolean;
-  deliveryMode?: string;
+  title: string;                    // 1 - 200 ký tự (Bắt buộc)
+  description: string;              // 1 - 1000 ký tự (Bắt buộc)
+  expectedOutcome: string;          // 1 - 1000 ký tự (Bắt buộc)
+  durationMinutes: number;          // Bắt buộc, phải thuộc danh sách allowedDurationMinutes từ constraints
+  isFree: boolean;                  // true: miễn phí, false: có phí
+  priceScoin: number;               // Giá Scoin (0 nếu isFree = true)
+  maintainPostSessionChat?: boolean;// Duy trì phòng chat sau buổi học
+  deliveryMode?: string;            // Mặc định "ONE_TO_ONE"
 }
 
 interface UpdateMentorServiceRequest {
@@ -44,7 +52,7 @@ interface UpdateMentorServiceRequest {
   isFree: boolean;
   priceScoin: number;
   maintainPostSessionChat?: boolean;
-  expectedVersion: number;
+  expectedVersion: number;          // Optimistic locking version
 }
 
 interface MentorServiceActiveRequest {
@@ -72,21 +80,24 @@ interface MentorServiceManagementResponse {
 }
 ```
 
-`durationMinutes` va `deliveryMode` khong nam trong update request. Hien thi chung la field khong the sua sau khi tao. Khi response tra `409`, tai lai service roi yeu cau mentor xac nhan lai; khong gui lai `expectedVersion` cu.
+> [!IMPORTANT]
+> - `durationMinutes` và `deliveryMode` không thể chỉnh sửa sau khi dịch vụ đã được tạo. Hãy hiển thị các trường này ở dạng chỉ đọc (Read-only) trong form cập nhật.
+> - Khi nhận mã lỗi `409 Conflict`, hãy tải lại dữ liệu dịch vụ mới nhất và yêu cầu mentor xác nhận lại thay đổi; **không tự ý gửi lại `expectedVersion` cũ**.
+> - Không tự tạo chuỗi `pendingRejectionToken`. Nếu backend yêu cầu xác nhận hủy các booking đang chờ duyệt (Pending), hãy hiển thị dialog xác nhận kèm thông tin conflict mà backend trả về và gửi kèm token đó trong lần gọi tiếp theo.
 
-Khong tu tao `pendingRejectionToken`. Neu backend yeu cau xu ly pending booking, hien thi xac nhan bang thong tin conflict/preview backend tra ve va dung du lieu do cho lan goi ke tiep.
+---
 
-## 3. Booking policy va scheduling constraints
+## 3. Chính Sách Đặt Lịch & Ràng Buộc Hệ Thống (Booking Policy & Constraints)
 
-| Endpoint | Muc dich |
-| --- | --- |
-| `GET /api/me/mentor-booking-policy` | Doc lead time, horizon va timezone hien tai |
-| `PATCH /api/me/mentor-booking-policy` | Sua policy cua mentor |
-| `GET /api/me/mentor-scheduling-constraints` | Lay gioi han platform truoc khi mo form lich |
+| Endpoint | Mục đích |
+|---|---|
+| `GET /api/me/mentor-booking-policy` | Đọc thời gian báo trước tối thiểu (Lead Time), thời hạn đặt lịch tối đa (Horizon) và múi giờ hiện tại |
+| `PATCH /api/me/mentor-booking-policy` | Chỉnh sửa chính sách đặt lịch của mentor |
+| `GET /api/me/mentor-scheduling-constraints` | Lấy các giới hạn cấu hình của nền tảng trước khi mở form tạo lịch |
 
-Update policy bat buoc co `expectedVersion`. Khong hard-code gioi han platform; luon lay scheduling constraints truoc khi tao/sua lich.
+Cập nhật chính sách đặt lịch bắt buộc phải gửi kèm trường `expectedVersion`. Frontend không hard-code các giới hạn thời gian mà luôn lấy từ API scheduling constraints.
 
-```ts
+```typescript
 interface UpdateMentorBookingPolicyRequest {
   minimumBookingLeadTimeMinutes?: number;
   maximumBookingHorizonDays?: number;
@@ -95,26 +106,33 @@ interface UpdateMentorBookingPolicyRequest {
 }
 ```
 
-## 4. Direct availability slots
+---
 
-Direct slot la lich mot lan. Thoi gian request dung `Instant` UTC, vi du `2026-06-29T01:00:00Z`; UI doi gio nguoi dung nhap sang UTC truoc khi gui va hien thi theo timezone tu response/policy.
+## 4. Lịch Rảnh Trực Tiếp (Direct Availability Slots)
 
-| Endpoint | Muc dich |
-| --- | --- |
-| `POST /api/me/availability-slots` | Tao slot mot lan |
-| `GET /api/me/availability-slots?isActive=&fromDate=&toDate=` | Xem slot mentor quan ly |
-| `PUT /api/me/availability-slots/{slotId}` | Sua direct slot chua bi khoa booking |
-| `POST /api/me/availability-slots/{slotId}/deactivate` | Rut slot theo contract deactivation |
+Lịch rảnh trực tiếp (Direct Slot) là các khung giờ rảnh dùng một lần.
+- Thời gian gửi lên request bắt buộc là chuỗi **`Instant` UTC** (ví dụ: `2026-06-29T01:00:00Z`).
+- Giao diện người dùng chuyển đổi giờ địa phương mà mentor nhập sang UTC trước khi gửi, và hiển thị theo múi giờ (`Asia/Ho_Chi_Minh`) nhận được từ backend.
 
-```ts
+| Endpoint | Mục đích |
+|---|---|
+| `POST /api/me/availability-slots` | Tạo slot rảnh dùng một lần |
+| `GET /api/me/availability-slots?isActive=&fromDate=&toDate=` | Lấy danh sách slot trực tiếp do mentor quản lý |
+| `PUT /api/me/availability-slots/{slotId}` | Chỉnh sửa slot trực tiếp (khi chưa bị khóa bởi booking) |
+| `POST /api/me/availability-slots/{slotId}/deactivate` | Hủy/thu hồi slot rảnh |
+
+```typescript
 interface CreateAvailabilitySlotRequest {
-  startAt: string; // ISO Instant UTC
-  endAt: string; // ISO Instant UTC
-  note?: string; // Toi da 200 ky tu
-  serviceIds: string[];
-  replaceGeneratedOccurrences?: boolean;
+  startAt: string;                       // Chuỗi ISO Instant UTC
+  endAt: string;                         // Chuỗi ISO Instant UTC
+  note?: string;                         // Ghi chú, tối đa 200 ký tự
+  serviceIds: string[];                  // Danh sách UUID dịch vụ áp dụng cho slot này
+  replaceGeneratedOccurrences?: boolean; // Cho phép ghi đè lên slot tự động sinh từ template
   rejectPendingBookings?: boolean;
-  expectedTemplateVersions?: Array<{ templateId: string; expectedVersion: number }>;
+  expectedTemplateVersions?: Array<{
+    templateId: string;
+    expectedVersion: number;
+  }>;
 }
 
 interface UpdateAvailabilitySlotRequest extends CreateAvailabilitySlotRequest {
@@ -130,59 +148,66 @@ interface DeactivateAvailabilitySlotRequest {
 }
 ```
 
-Neu direct slot overlap occurrence tu template, backend co the tra `409 GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED`. FE hien thi xac nhan, tai lai version hien tai va chi retry voi `replaceGeneratedOccurrences = true` cung day du `expectedTemplateVersions`.
+> [!WARNING]
+> Nếu slot trực tiếp bị trùng lặp thời gian với khung giờ đã sinh từ template, backend có thể trả về lỗi `409 GENERATED_OCCURRENCE_REPLACEMENT_REQUIRED`. Frontend cần hiển thị hộp thoại xác nhận ghi đè, tải lại version template hiện tại và gửi lại request với `replaceGeneratedOccurrences = true` kèm danh sách `expectedTemplateVersions`.
 
-Generated slot do template quan ly khong duoc sua nhu direct slot. Deactivate generated slot duoc backend xu ly theo exception cua template, vi vay co the can `expectedTemplateVersion`.
+---
 
-## 5. Availability templates
+## 5. Mẫu Lịch Lặp Tuần (Availability Templates)
 
-Template la lich lap hang tuan dung mui gio `Asia/Ho_Chi_Minh`; backend materialize thanh slots cu the cho booking. Khong doc template truc tiep de tao booking.
+Template là lịch lặp cố định theo các thứ trong tuần sử dụng múi giờ `Asia/Ho_Chi_Minh`. Backend sẽ tự động sinh (materialize) thành các slot rảnh cụ thể trong tương lai. Không dùng trực tiếp template để đặt lịch.
 
-| Endpoint | Muc dich |
-| --- | --- |
-| `POST /api/me/availability-templates` | Tao template |
-| `GET /api/me/availability-templates` | List cursor pagination |
-| `GET /api/me/availability-templates/{templateId}` | Detail template |
-| `PUT /api/me/availability-templates/{templateId}` | Sua template |
-| `POST /{templateId}/pause`, `/resume`, `/archive` | Doi trang thai |
-| `PUT /{templateId}/exceptions/{occurrenceDate}` | Bo mot ngay occurrence |
-| `POST /{templateId}/exceptions/{occurrenceDate}/restore` | Khoi phuc ngay da bo |
+| Endpoint | Mục đích |
+|---|---|
+| `POST /api/me/availability-templates` | Tạo mới mẫu lịch lặp |
+| `GET /api/me/availability-templates` | Danh sách template theo phân trang Cursor |
+| `GET /api/me/availability-templates/{templateId}` | Xem chi tiết template |
+| `PUT /api/me/availability-templates/{templateId}` | Chỉnh sửa template |
+| `POST /api/me/availability-templates/{templateId}/pause` | Tạm dừng sinh lịch tự động |
+| `POST /api/me/availability-templates/{templateId}/resume` | Tiếp tục sinh lịch tự động |
+| `POST /api/me/availability-templates/{templateId}/archive` | Lưu trữ / Hủy bỏ template |
+| `PUT /api/me/availability-templates/{templateId}/exceptions/{occurrenceDate}` | Thêm ngày ngoại lệ (bỏ qua không sinh slot vào ngày cụ thể `YYYY-MM-DD`) |
+| `POST /api/me/availability-templates/{templateId}/exceptions/{occurrenceDate}/restore` | Khôi phục lại ngày đã bỏ qua |
 
-List ho tro `configuredStatus`, `effectiveStatus`, `cursor`, `limit` va tra `CursorPageResponse`. Khong decode hoac tu tao `cursor`; chi gui lai nguyen `nextCursor` backend tra ve.
-
-```ts
+```typescript
 interface AvailabilityTemplateResponse {
   templateId: string;
-  startTime: string; // LocalTime, vi du 09:00:00
-  endTime: string;
-  weekdays: string[]; // MONDAY ... SUNDAY
-  effectiveFrom: string; // LocalDate
-  effectiveTo: string | null;
-  timezone: string;
+  startTime: string;            // LocalTime định dạng HH:mm:ss (vd: "09:00:00")
+  endTime: string;              // LocalTime định dạng HH:mm:ss
+  weekdays: string[];           // ["MONDAY", "WEDNESDAY", "FRIDAY",...]
+  effectiveFrom: string;        // LocalDate định dạng YYYY-MM-DD
+  effectiveTo: string | null;   // LocalDate hoặc null nếu lặp vô thời hạn
+  timezone: string;             // "Asia/Ho_Chi_Minh"
   note: string | null;
   configuredStatus: "ACTIVE" | "PAUSED" | "ARCHIVED";
   effectiveStatus: "ACTIVE" | "PAUSED" | "EXPIRED" | "ARCHIVED";
   configVersion: number;
   services: AvailabilitySlotServiceBasicResponse[];
   generationBlockedReason: string | null;
-  skippedDates: string[];
-  blockedOccurrences: Array<{ date: string; reason: string; slotId: string | null }>;
+  skippedDates: string[];       // Danh sách ngày ngoại lệ do mentor chủ động bỏ qua
+  blockedOccurrences: Array<{
+    date: string;
+    reason: string;
+    slotId: string | null;
+  }>;
   createdAt: string;
   updatedAt: string;
 }
 ```
 
-Moi mutation sau create dung `expectedVersion` hoac `configVersion`. Neu nhan `409`, tai lai template truoc khi cho mentor sua lai. Khong tu tang version o FE.
+> [!TIP]
+> - `skippedDates`: Danh sách các ngày cụ thể mà mentor chủ động bấm nghỉ/ngoại lệ.
+> - `blockedOccurrences`: Danh sách ngày mà hệ thống không thể tự sinh slot do bị trùng với một slot trực tiếp (manual slot) đã tồn tại từ trước.
 
-`skippedDates` la ngay mentor chu dong bo qua. `blockedOccurrences` la ngay backend chua the tao slot, vi du dang bi manual slot overlap; khong tu coi day la exception cua mentor.
+---
 
-## 6. Loi can xu ly
+## 6. Xử Lý Lỗi Thường Gặp (Error Handling)
 
-| HTTP | FE can lam |
-| --- | --- |
-| `400` | Hien validation theo field/message; khong retry tu dong |
-| `401` | Theo refresh flow trong [identity.md](identity.md) |
-| `403` | Day la API chi cho `MENTOR`; an action neu user chua duoc duyet |
-| `404` | Service/slot/template khong con ton tai hoac khong thuoc mentor hien tai |
-| `409` | Tai lai resource va dung version moi; khong ghi de thay doi cua mentor khac/booking |
-| `429` | Doc `retryAfterSeconds`, khoa nut va hien thi thoi gian cho |
+| HTTP Status | Hướng xử lý cho Frontend |
+|---|---|
+| `400 Bad Request` | Hiển thị thông báo lỗi validation theo từng ô nhập liệu. Không retry tự động. |
+| `401 Unauthorized` | Thực hiện quy trình Refresh Token theo [identity.md](identity.md). |
+| `403 Forbidden` | API này chỉ dành cho tài khoản có Role `MENTOR`. Ẩn các thao tác nếu user chưa được duyệt. |
+| `404 Not Found` | Dịch vụ, slot rảnh hoặc template không còn tồn tại hoặc không thuộc quyền sở hữu của mentor hiện tại. |
+| `409 Conflict` | Xung đột phiên bản (Optimistic Locking) hoặc slot bị khóa bởi booking đang xử lý. Tải lại dữ liệu và dùng version mới nhất. |
+| `429 Too Many Requests` | Đọc `retryAfterSeconds`, khóa nút thao tác và hiển thị đếm ngược thời gian chờ. |

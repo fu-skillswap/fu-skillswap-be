@@ -1,175 +1,238 @@
 # Frontend Integration Guide — Forum Module
 
-> **Quy tắc ảnh:** FE chỉ render URL có trong response. Không tự ghép URL CDN từ tên file, ID, `storageKey` hoặc `objectKey`. `STORAGE_PUBLIC_URL_PREFIX` là cấu hình backend, không phải biến `.env` của FE.
+> **Quy tắc ảnh & CDN**: Frontend sử dụng trực tiếp các URL hình ảnh nhận được từ backend trong `imageUrls` hoặc `authorAvatarUrl`. Tuyệt đối không tự ghép nối prefix CDN, không tự trích xuất key/ID và không cần bất kỳ biến môi trường `.env` nào về CDN.
 
 ---
 
-## 1. Nguyên tắc Chung & Quy tắc Phân quyền (Security & General Rules)
+## 1. Chuẩn Envelope & Phân quyền Truy cập (Architecture & Security)
 
-### 1.1 Phân quyền Truy cập (Access Control)
-- **Public đọc**: `GET /api/forum/topics`, `GET /api/forum/posts`, `GET /api/forum/posts/{postId}` và comments là public để người chưa onboarding xem cộng đồng.
-- **Role `MENTEE` & `MENTOR`**: Cần đăng nhập để tạo/sửa/xóa bài viết của mình, bình luận, thả reaction và báo cáo nội dung vi phạm.
-- **Role `ADMIN` & `SYSTEM_ADMIN`**: **Bị chặn hoàn toàn** ở nhóm API client `/api/forum/*` (`!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')`). Quản trị viên chỉ làm việc ở các API quản trị riêng thuộc `/api/admin/forum/*`.
-
-### 1.2 Nguyên tắc Phân trang Cursor (`CursorPageResponse<T>`)
-Dữ liệu danh sách bài viết và bình luận được trả về theo dạng **Cursor-Based Pagination** tối ưu cho trải nghiệm cuộn vô tận (Infinite Scroll):
+### 1.1 Chuẩn Response Envelope (`ApiResponse<T>`)
+Tất cả các API của hệ thống đều trả về theo cấu trúc bọc chuẩn:
 
 ```typescript
-interface CursorPageResponse<T> {
-  items: T[];              // Danh sách các bản ghi trong window hiện tại
-  nextCursor: string | null; // Chuỗi opaque cursor để lấy trang tiếp theo (null = đã hết dữ liệu)
-  prevCursor: string | null; // Chuỗi opaque cursor để lấy trang trước đó
-  hasNext: boolean;        // true nếu còn dữ liệu ở trang tiếp theo
-  hasPrev: boolean;        // true nếu còn dữ liệu ở trang trước
-  limit: number;           // Kích thước trang thực tế được backend resolve (Mặc định 20, max 50)
+interface ApiResponse<T> {
+  timestamp: string;  // Thời gian server xử lý (ISO string)
+  status: number;     // HTTP Status Code (200, 201, 400, 401, 403, 404, 429, 500)
+  code: string;       // Mã nghiệp vụ (vd: "SUCCESS_0200", "FORUM_4201", "VAL_3001")
+  message: string;    // Thông điệp thân thiện từ server
+  data: T;            // Dữ liệu payload thực tế
 }
 ```
 
-> [!IMPORTANT]
-> **QUY TẮC BẮT BUỘC DÀNH CHO FRONTEND**:
-> 1. Chuỗi `cursor` là một chuỗi mã hóa an toàn (Opaque Base64Url Token). **FE tuyệt đối KHÔNG decode, KHÔNG chỉnh sửa và KHÔNG tự tạo chuỗi cursor**.
-> 2. Khi gọi trang tiếp theo, FE chỉ cần lấy nguyên văn chuỗi `nextCursor` nhận được từ response trước đó và truyền vào query param `?cursor=...`.
-> 3. Khi `nextCursor = null` hoặc `hasNext = false`, FE dừng gửi request lấy thêm dữ liệu.
-
-### 1.3 Kiểm duyệt Từ ngữ Vi phạm (Prohibited Phrase Moderation)
-Backend tích hợp sẵn engine kiểm tra từ cấm. Nếu nội dung bài viết (`title`, `content`) hoặc bình luận chứa cụm từ vi phạm tiêu chuẩn cộng đồng, backend sẽ từ chối tạo/cập nhật và trả về HTTP `400 Bad Request` kèm mã lỗi:
-- `status`: `400`
-- `code`: `"FORUM_4201"` (`FORUM_CONTENT_PROHIBITED`)
-- `message`: `"Nội dung chứa cụm từ không được phép"`
+> [!TIP]
+> **Lưu ý bóc tách dữ liệu cho FE**:
+> Nếu dùng `axios` mặc định: Payload dữ liệu thực tế sẽ nằm ở `response.data.data`.
+> Nếu dự án đã có `apiClient` cài sẵn interceptor `return res.data`: Bạn truy cập trực tiếp qua `res.data`.
 
 ---
 
-## 2. Bảng tin & Quản lý Bài viết (Newsfeed & Posts APIs)
+### 1.2 Phân quyền Người dùng (Access Control Matrix)
 
-### 2.1 Lấy Newsfeed Ưu tiên Ngành học (`GET /api/forum/feed`)
-Trả về danh sách bài viết trên Forum được thuật toán sắp xếp ưu tiên theo ngành học (Academic Program) của sinh viên hiện tại.
+| Nhóm API | Khách chưa đăng nhập | Role `MENTEE` / `MENTOR` | Role `ADMIN` / `SYSTEM_ADMIN` |
+|---|---|---|---|
+| `GET /api/forum/topics` |  Cho phép |  Cho phép |  Cho phép |
+| `GET /api/forum/posts` (Duyệt chung) |  Cho phép |  Cho phép |  Cho phép |
+| `GET /api/forum/posts?mine=true` | ❌ 401 Unauthorized |  Cho phép | ❌ 403 Forbidden |
+| `GET /api/forum/feed` (Newsfeed ngành) | ❌ 401 Unauthorized |  Cho phép | ❌ 403 Forbidden |
+| `GET /api/forum/posts/{postId}` |  Cho phép |  Cho phép |  Cho phép |
+| `GET /api/forum/posts/{postId}/comments` |  Cho phép |  Cho phép |  Cho phép |
+| Tạo / Sửa / Xóa bài viết | ❌ 401 Unauthorized |  Cho phép (Chính chủ) | ❌ 403 Forbidden |
+| Tạo / Sửa / Xóa bình luận | ❌ 401 Unauthorized |  Cho phép (Chính chủ) | ❌ 403 Forbidden |
+| Thả / Bỏ Reaction (Like) | ❌ 401 Unauthorized |  Cho phép | ❌ 403 Forbidden |
+| Gửi Báo cáo vi phạm (Report) | ❌ 401 Unauthorized |  Cho phép | ❌ 403 Forbidden |
 
-- **Endpoint**: `GET /api/forum/feed`
-- **Header**: `Authorization: Bearer <accessToken>`
-- **Query Parameters**:
-  - `cursor` (string, optional): Chuỗi `nextCursor` từ response trước
-  - `limit` (number, optional): Số bài viết mỗi trang (Default: `20`, Max: `50`)
-- **Response**: `ApiResponse<CursorPageResponse<ForumPostResponse>>`
+> [!IMPORTANT]
+> **Lưu ý đặc biệt cho Role ADMIN / SYSTEM_ADMIN**:
+> Backend chặn hoàn toàn quyền tương tác cộng đồng của Admin tại nhóm client `/api/forum/*` (`!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')`). Quản trị viên chỉ xem và xử lý báo cáo tại `/api/admin/forum/*`.
 
-### 2.2 Tìm kiếm & Lọc Bài viết Forum (`GET /api/forum/posts`)
-Dùng cho màn hình Duyệt / Tìm kiếm bài viết theo chủ đề hoặc từ khóa.
+---
 
-- **Endpoint**: `GET /api/forum/posts`
-- **Header**: `Authorization: Bearer <accessToken>`
-- **Query Parameters**:
-  - `cursor` (string, optional): Chuỗi `nextCursor` từ response trước
-  - `limit` (number, optional): Mặc định `20`
-  - `keyword` (string, optional): Từ khóa tìm kiếm trong tiêu đề hoặc nội dung
-  - `forumTopicId` (string, optional): UUID của Forum Topic
-  - `mine` (boolean, optional): Đặt `true` nếu chỉ muốn lấy danh sách bài viết của chính tôi (Mặc định: `false`)
+### 1.3 Cơ chế Phân trang Cursor (`CursorPageResponse<T>`)
 
-**Response Payload (`ForumPostResponse`)**:
+Danh sách bài viết, newsfeed và bình luận sử dụng **Cursor-Based Pagination** tối ưu cho Infinity Scroll:
+
+```typescript
+interface CursorPageResponse<T> {
+  items: T[];                // Mảng các item của trang hiện tại
+  nextCursor: string | null; // Chuỗi token opaque dùng để gọi trang tiếp (null = đã hết dữ liệu)
+  prevCursor: string | null; // Chuỗi token trang trước (nếu có)
+  hasNext: boolean;          // true nếu còn dữ liệu ở trang sau
+  hasPrev: boolean;          // true nếu có dữ liệu ở trang trước
+  limit: number;             // Số lượng item trên mỗi trang (Default: 20, Max: 50)
+}
+```
+
+#### 📌 3 Quy tắc bắt buộc khi xử lý Cursor:
+1. `cursor` là một chuỗi mã hóa an toàn (Opaque Base64Url Token). **FE KHÔNG decode, KHÔNG parse và KHÔNG tự tạo chuỗi này**.
+2. Để tải trang tiếp theo: Lấy nguyên văn `nextCursor` nhận được từ response và truyền vào query param `?cursor=${nextCursor}`.
+3. Khi `hasNext === false` hoặc `nextCursor === null`: FE **dừng gọi API** và ẩn nút "Tải thêm" hoặc hủy trigger Infinite Scroll.
+
+---
+
+## 2. Danh mục Chủ đề Thảo luận (Forum Topics)
+
+Trước khi hiển thị bộ lọc hoặc form đăng bài, FE gọi API này để lấy danh sách topic hợp lệ.
+
+### 2.1 Lấy danh sách Topics công khai (`GET /api/forum/topics`)
+- **Endpoint**: `GET /api/forum/topics`
+- **Quyền truy cập**: Public (Không cần token)
+- **Response**: `ApiResponse<ForumTopicResponse[]>`
+
+```typescript
+interface ForumTopicResponse {
+  id: string;                                          // UUID của topic (Dùng để truyền vào forumTopicId khi tạo post/lọc)
+  code: "QUESTION" | "SHARING" | "SEARCH" | "REVIEW"; // Mã định danh topic
+  nameVi: string;                                      // Tên tiếng Việt (vd: "Hỏi đáp kiến thức")
+  nameEn: string;                                      // Tên tiếng Anh (vd: "Q&A")
+  displayOrder: number;                                // Thứ tự hiển thị tăng dần
+}
+```
+
+---
+
+## 3. Bảng tin & Quản lý Bài viết (Posts & Feed APIs)
+
+### 3.1 TypeScript Type: `ForumPostResponse`
+
 ```typescript
 interface ForumPostResponse {
   postId: string;                     // UUID của bài viết
-  authorUserId: string;               // UUID tác giả
-  authorFullName: string;             // Tên hiển thị tác giả
+  authorUserId: string;               // UUID của tác giả
+  authorFullName: string;             // Họ tên tác giả
   authorAvatarUrl: string;            // Avatar tác giả
-  authorProgram?: {                   // Ngành học của tác giả
+  authorProgram?: {                   // Ngành học của tác giả (nếu có)
     id: string;
     code: string;
     nameVi: string;
     nameEn: string;
   } | null;
-  forumTopic: {                       // Chủ đề của bài viết
-    id: string;
-    code: string;
-    nameVi: string;
-    nameEn: string;
-    displayOrder: number;
-  };
+  forumTopic: ForumTopicResponse;     // Chủ đề bài viết
   title: string;                      // Tiêu đề bài viết
   content: string;                    // Nội dung chi tiết
-  status: "PUBLISHED" | "HIDDEN" | "DELETED"; // Trạng thái bài viết
-  commentCount: number;               // Tổng số bình luận
-  reactionCount: number;              // Tổng số lượt thả Like
-  reportCount: number;                // Số lượt báo cáo (dùng cho quản trị)
-  lastActivityAt: string;             // Thời điểm có bình luận / tương tác mới nhất (ISO format)
-  reactedByCurrentUser: boolean;     // true nếu user hiện tại đã thả Like bài viết này
-  myReactionType: "LIKE" | null;      // Loại reaction của user hiện tại (hoặc null)
-  createdAt: string;
-  updatedAt: string;
-  imageUrls: string[];                // Mảng chứa tối đa 4 URL hình ảnh đính kèm
+  status: "PUBLISHED" | "HIDDEN" | "DELETED"; // Trạng thái
+  commentCount: number;               // Tổng số bình luận (gồm cả comment gốc & reply)
+  reactionCount: number;              // Tổng số lượt Like
+  reportCount: number;                // Số lượt báo cáo (FE người dùng không cần quan tâm)
+  lastActivityAt: string;             // Thời điểm có tương tác mới nhất (ISO format)
+  reactedByCurrentUser: boolean;     // true nếu user hiện tại đã bấm Like
+  myReactionType: "LIKE" | null;      // "LIKE" hoặc null
+  createdAt: string;                  // Thời gian tạo (ISO string)
+  updatedAt: string;                  // Thời gian cập nhật (ISO string)
+  imageUrls: string[];                // Mảng tối đa 4 URL ảnh đính kèm
 }
 ```
 
-### 2.3 Xem Chi tiết Bài viết (`GET /api/forum/posts/{postId}`)
-- **Endpoint**: `GET /api/forum/posts/{postId}`
+---
+
+### 3.2 Lấy Newsfeed ưu tiên theo ngành học (`GET /api/forum/feed`)
+Thuật toán backend sẽ ưu tiên hiển thị bài viết thuộc cùng ngành học (Academic Program) của người dùng lên đầu, sau đó đến các bài viết chung.
+
+- **Endpoint**: `GET /api/forum/feed`
 - **Header**: `Authorization: Bearer <accessToken>`
+- **Query Params**:
+  - `cursor` (string, optional): `nextCursor` từ response trước
+  - `limit` (number, optional): Mặc định `20`, tối đa `50`
+- **Response**: `ApiResponse<CursorPageResponse<ForumPostResponse>>`
+
+---
+
+### 3.3 Tìm kiếm & Lọc bài viết (`GET /api/forum/posts`)
+Dùng cho màn hình Tìm kiếm / Lọc bài viết theo Topic, từ khóa, hoặc xem bài viết của chính tôi.
+
+- **Endpoint**: `GET /api/forum/posts`
+- **Header**: `Authorization: Bearer <accessToken>` (Bắt buộc nếu `mine=true`, optional nếu duyệt public)
+- **Query Params**:
+  - `cursor` (string, optional): `nextCursor` từ response trước
+  - `limit` (number, optional): Mặc định `20`, tối đa `50`
+  - `keyword` (string, optional): Từ khóa tìm kiếm trong tiêu đề hoặc nội dung
+  - `forumTopicId` (string, optional): UUID của topic
+  - `mine` (boolean, optional): `true` để chỉ lấy bài viết do chính tôi đăng (Mặc định `false`)
+- **Response**: `ApiResponse<CursorPageResponse<ForumPostResponse>>`
+
+---
+
+### 3.4 Xem chi tiết bài viết (`GET /api/forum/posts/{postId}`)
+- **Endpoint**: `GET /api/forum/posts/{postId}`
+- **Header**: `Authorization: Bearer <accessToken>` (Optional)
 - **Response**: `ApiResponse<ForumPostResponse>`
 
-### 2.4 Tạo Bài viết mới (`POST /api/forum/posts`)
+---
+
+### 3.5 Tạo bài viết mới (`POST /api/forum/posts`)
 - **Endpoint**: `POST /api/forum/posts`
 - **Header**: `Authorization: Bearer <accessToken>`
 - **Request Body (`ForumPostUpsertRequest`)**:
 
 ```typescript
 interface ForumPostUpsertRequest {
-  title: string;        // Bắt buộc. Tối đa 200 ký tự
-  content: string;      // Bắt buộc. Tối đa 5000 ký tự
-  forumTopicId: string; // Bắt buộc. UUID của Forum Topic
-  imageUrls?: string[]; // Optional. Tối đa 4 ảnh, mỗi URL tối đa 2000 ký tự
+  title: string;        // Bắt buộc. Không quá 200 ký tự
+  content: string;      // Bắt buộc. Không quá 5000 ký tự
+  forumTopicId: string; // Bắt buộc. UUID topic lấy từ GET /api/forum/topics
+  imageUrls?: string[]; // Tùy chọn. Tối đa 4 URL ảnh, mỗi URL không quá 2000 ký tự
 }
 ```
 
-#### Quy tắc Validation cho FE:
-- `title`: Không được để trống, không quá 200 ký tự.
-- `content`: Không được để trống, không quá 5000 ký tự.
-- `forumTopicId`: Không được null. FE lấy danh sách bằng `GET /api/forum/topics`.
-- `imageUrls`: Tối đa 4 phần tử trong mảng.
-- Khi hiển thị `imageUrls`, dùng trực tiếp từng URL backend trả về. URL có thể là CDN SkillSwap hoặc domain khác; không thay thế domain và không tự tạo URL mới.
-
-### 2.5 Cập nhật Bài viết của tôi (`PUT /api/forum/posts/{postId}`)
-- **Endpoint**: `PUT /api/forum/posts/{postId}`
-- **Header**: `Authorization: Bearer <accessToken>`
-- **Request Body**: `ForumPostUpsertRequest` (Chỉ chính tác giả mới được cập nhật).
-
-### 2.6 Xóa Bài viết của tôi (`DELETE /api/forum/posts/{postId}`)
-- **Endpoint**: `DELETE /api/forum/posts/{postId}`
-- **Header**: `Authorization: Bearer <accessToken>`
-- Thực hiện xóa mềm (Soft delete) bài viết khỏi forum.
+#### ⚠️ Quy định kiểm duyệt & Chống spam khi tạo bài:
+1. **Kiểm tra từ ngữ cấm**: Nếu tiêu đề/nội dung chứa từ cấm, backend trả `400 Bad Request` (`code: "FORUM_4201"`).
+2. **Chặn bài viết trùng lặp**: Người dùng không được đăng bài viết có cùng tiêu đề và nội dung trong vòng 15 phút (`429 TOO_MANY_REQUESTS`).
+3. **Giới hạn tốc độ (Rate Limit)**: Tối đa **5 bài viết / 10 phút**. Nếu vượt quá sẽ nhận lỗi `429 TOO_MANY_REQUESTS`.
 
 ---
 
-## 3. Quản lý Bình luận & Phản hồi lồng nhau (Comments & Replies)
+### 3.6 Cập nhật bài viết (`PUT /api/forum/posts/{postId}`)
+- **Endpoint**: `PUT /api/forum/posts/{postId}`
+- **Header**: `Authorization: Bearer <accessToken>` (Chỉ chính tác giả)
+- **Request Body**: `ForumPostUpsertRequest`
+- **Response**: `ApiResponse<ForumPostResponse>`
 
-### 3.1 Lấy danh sách Bình luận của Bài viết (`GET /api/forum/posts/{postId}/comments`)
-Trả về danh sách các bình luận xếp theo thứ tự thời gian **từ cũ nhất đến mới nhất** (Oldest First).
+---
 
-- **Endpoint**: `GET /api/forum/posts/{postId}/comments`
-- **Header**: `Authorization: Bearer <accessToken>`
-- **Query Params**: `cursor`, `limit` (Default: 20)
-- **Response**: `ApiResponse<CursorPageResponse<ForumCommentResponse>>`
+### 3.7 Xóa bài viết (`DELETE /api/forum/posts/{postId}`)
+- **Endpoint**: `DELETE /api/forum/posts/{postId}`
+- **Header**: `Authorization: Bearer <accessToken>` (Chỉ chính tác giả)
+- **Response**: `ApiResponse<ForumPostResponse>` (Bài viết được xóa mềm khỏi hệ thống)
 
-**Response Payload (`ForumCommentResponse`)**:
+---
+
+## 4. Quản lý Bình luận & Phản hồi (Comments & 1-Level Threads)
+
+### 4.1 TypeScript Type: `ForumCommentResponse`
+
 ```typescript
 interface ForumCommentResponse {
   commentId: string;                  // UUID của bình luận
-  postId: string;                     // UUID của bài viết cha
+  postId: string;                     // UUID bài viết cha
   authorUserId: string;               // UUID tác giả bình luận
   authorFullName: string;             // Tên tác giả
   authorAvatarUrl: string;            // Avatar tác giả
   authorRole: "MENTEE" | "MENTOR";    // Vai trò tác giả
   content: string;                    // Nội dung bình luận
-  status: "PUBLISHED" | "HIDDEN" | "DELETED";
+  status: "VISIBLE" | "HIDDEN" | "DELETED";
   reportCount: number;
   reactionCount: number;              // Số lượt Like của bình luận
   reactedByCurrentUser: boolean;     // true nếu user hiện tại đã Like bình luận này
-  replyToCommentId?: string | null;   // UUID bình luận được phản hồi (null nếu là comment gốc)
-  replyToUserId?: string | null;      // UUID người được trả lời
-  replyToUserName?: string | null;    // Tên người được trả lời
-  createdAt: string;
-  updatedAt: string;
-  imageUrls: string[];                // Tối đa 1 ảnh đính kèm
+  replyToCommentId?: string | null;   // UUID bình luận gốc nếu đây là reply (null nếu là comment gốc)
+  replyToUserId?: string | null;      // UUID người được trả lời (Backend tự tính)
+  replyToUserName?: string | null;    // Tên người được trả lời (Backend tự tính)
+  createdAt: string;                  // Thời gian tạo (ISO string)
+  updatedAt: string;                  // Thời gian cập nhật (ISO string)
+  imageUrls: string[];                // Mảng tối đa 1 URL ảnh đính kèm
 }
 ```
 
-### 3.2 Tạo Bình luận / Phản hồi mới (`POST /api/forum/posts/{postId}/comments`)
+---
+
+### 4.2 Lấy danh sách bình luận (`GET /api/forum/posts/{postId}/comments`)
+Backend trả về danh sách toàn bộ bình luận xếp theo thứ tự **từ cũ nhất đến mới nhất** (Oldest First).
+
+- **Endpoint**: `GET /api/forum/posts/{postId}/comments`
+- **Header**: `Authorization: Bearer <accessToken>` (Optional)
+- **Query Params**: `cursor`, `limit` (Default: 20, Max: 50)
+- **Response**: `ApiResponse<CursorPageResponse<ForumCommentResponse>>`
+
+---
+
+### 4.3 Tạo bình luận / Trả lời bình luận (`POST /api/forum/posts/{postId}/comments`)
 - **Endpoint**: `POST /api/forum/posts/{postId}/comments`
 - **Header**: `Authorization: Bearer <accessToken>`
 - **Request Body (`ForumCommentUpsertRequest`)**:
@@ -177,188 +240,381 @@ interface ForumCommentResponse {
 ```typescript
 interface ForumCommentUpsertRequest {
   content: string;            // Bắt buộc. Tối đa 2000 ký tự
-  imageUrls?: string[];       // Optional. Tối đa 1 ảnh
-  replyToCommentId?: string;  // Optional. Truyền UUID của comment gốc nếu là reply, truyền null nếu là comment mới
+  imageUrls?: string[];       // Tùy chọn. Tối đa 1 URL ảnh
+  replyToCommentId?: string;  // Tùy chọn. UUID của bình luận GỐC nếu là trả lời (truyền null nếu comment mới)
 }
 ```
 
-### 3.3 Cập nhật Bình luận (`PUT /api/forum/comments/{commentId}`)
+> [!IMPORTANT]
+> **QUY TẮC BÌNH LUẬN 1 CẤP (1-LEVEL THREADING)**:
+> - Backend SkillSwap áp dụng cấu trúc luồng thảo luận **1 cấp**: `Bình luận gốc ➔ Các câu trả lời (Replies)`.
+> - **Tuyệt đối KHÔNG reply lồng trong reply**: Nếu người dùng bấm trả lời một bình luận con (reply), Frontend vẫn phải truyền `replyToCommentId` là **ID của bình luận gốc cha (Root Comment)**. Nếu truyền ID của một reply, backend sẽ từ chối với lỗi `400 Bad Request` (`"Chỉ hỗ trợ trả lời bình luận 1 cấp"`).
+
+#### ⚠️ Quy định kiểm duyệt & Chống spam khi bình luận:
+1. **Kiểm tra từ ngữ cấm**: Trả về `400 Bad Request` (`code: "FORUM_4201"`) nếu chứa từ cấm.
+2. **Chặn bình luận trùng lặp**: Người dùng không được gửi 2 bình luận có nội dung y hệt nhau vào cùng 1 bài viết trong vòng 5 phút (`429 TOO_MANY_REQUESTS`).
+3. **Giới hạn tốc độ (Rate Limit)**: Tối đa **20 bình luận / 10 phút**.
+
+---
+
+### 4.4 Cập nhật bình luận (`PUT /api/forum/comments/{commentId}`)
 - **Endpoint**: `PUT /api/forum/comments/{commentId}`
+- **Header**: `Authorization: Bearer <accessToken>` (Chỉ chính tác giả)
 - **Request Body**: `ForumCommentUpsertRequest`
+- **Response**: `ApiResponse<ForumCommentResponse>`
 
-### 3.4 Xóa Bình luận (`DELETE /api/forum/comments/{commentId}`)
+---
+
+### 4.5 Xóa bình luận (`DELETE /api/forum/comments/{commentId}`)
 - **Endpoint**: `DELETE /api/forum/comments/{commentId}`
+- **Header**: `Authorization: Bearer <accessToken>` (Chỉ chính tác giả)
+- **Response**: `ApiResponse<ForumCommentResponse>`
+- **Cơ chế Cascade**: Nếu xóa bình luận gốc, backend sẽ tự động xóa tất cả các câu trả lời con trực thuộc và trừ tương ứng vào `commentCount` của bài viết.
 
 ---
 
-## 4. Thả Cảm xúc / Reactions (Like APIs)
+## 5. Thả Cảm xúc / Reaction (Like APIs)
 
-### 4.1 Thả / Cập nhật Reaction cho Bài viết (`PUT /api/forum/posts/{postId}/reaction`)
+Hệ thống hỗ trợ cơ chế thả và thu hồi Like tức thì.
+
+### 5.1 Thả Like cho bài viết (`PUT /api/forum/posts/{postId}/reaction`)
 - **Endpoint**: `PUT /api/forum/posts/{postId}/reaction`
-- **Request Body**:
-```typescript
-interface ForumReactionRequest {
-  reactionType: "LIKE"; // Bắt buộc
-}
-```
-- **Response**: Trả về `ForumPostResponse` đã cập nhật lại `reactionCount` và `reactedByCurrentUser = true`.
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Request Body**: `{ "reactionType": "LIKE" }`
+- **Response**: `ApiResponse<ForumPostResponse>` (Trả về post với `reactedByCurrentUser = true` và `reactionCount` tăng 1).
 
-### 4.2 Bỏ Reaction khỏi Bài viết (`DELETE /api/forum/posts/{postId}/reaction`)
+### 5.2 Bỏ Like bài viết (`DELETE /api/forum/posts/{postId}/reaction`)
 - **Endpoint**: `DELETE /api/forum/posts/{postId}/reaction`
-- **Response**: Trả về `ForumPostResponse` với `reactedByCurrentUser = false`.
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Response**: `ApiResponse<ForumPostResponse>` (Trả về post với `reactedByCurrentUser = false` và `reactionCount` giảm 1).
 
-### 4.3 Thả / Cập nhật Reaction cho Bình luận (`PUT /api/forum/comments/{commentId}/reaction`)
+### 5.3 Thả Like cho bình luận (`PUT /api/forum/comments/{commentId}/reaction`)
 - **Endpoint**: `PUT /api/forum/comments/{commentId}/reaction`
-- **Request Body**: `{ reactionType: "LIKE" }`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Request Body**: `{ "reactionType": "LIKE" }`
+- **Response**: `ApiResponse<ForumCommentResponse>`
 
-### 4.4 Bỏ Reaction khỏi Bình luận (`DELETE /api/forum/comments/{commentId}/reaction`)
+### 5.4 Bỏ Like bình luận (`DELETE /api/forum/comments/{commentId}/reaction`)
 - **Endpoint**: `DELETE /api/forum/comments/{commentId}/reaction`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Response**: `ApiResponse<ForumCommentResponse>`
+
+> [!NOTE]
+> **Rate limit reaction**: Tối đa **60 lượt Like/Bỏ like trong vòng 10 phút**.
 
 ---
 
-## 5. Báo cáo Vi phạm (Reporting System)
+## 6. Báo cáo Vi phạm (Reporting System)
 
-Cho phép người dùng báo cáo bài viết hoặc bình luận có nội dung rác, quấy rối hoặc thông tin sai lệch.
-
-### 5.1 Tạo Báo cáo Vi phạm (`POST /api/forum/reports`)
+### 6.1 Gửi báo cáo bài viết hoặc bình luận (`POST /api/forum/reports`)
 - **Endpoint**: `POST /api/forum/reports`
 - **Header**: `Authorization: Bearer <accessToken>`
 - **Request Body (`ForumReportCreateRequest`)**:
 
 ```typescript
 interface ForumReportCreateRequest {
-  targetType: "POST" | "COMMENT";     // Bắt buộc. Đối tượng bị báo cáo
+  targetType: "POST" | "COMMENT";     // Bắt buộc. Loại đối tượng báo cáo
   targetId: string;                   // Bắt buộc. UUID của Post hoặc Comment
-  reasonType:                         // Bắt buộc. Lý do báo cáo
-    | "SPAM" 
-    | "OFF_TOPIC" 
-    | "HARASSMENT" 
-    | "MISLEADING" 
-    | "OTHER";
-  description?: string;               // Mô tả chi tiết (Tối đa 1000 ký tự)
+  reasonType:                         // Bắt buộc. Lý do vi phạm
+    | "SPAM"                          // Spam, quảng cáo rác
+    | "OFF_TOPIC"                      // Lạc đề, không liên quan
+    | "HARASSMENT"                     // Quấy rối, công kích cá nhân
+    | "MISLEADING"                     // Thông tin sai lệch, lừa đảo
+    | "OTHER";                         // Lý do khác
+  description?: string;               // Tùy chọn. Mô tả chi tiết (Tối đa 1000 ký tự)
+}
+```
+
+- **Response**: `ApiResponse<ForumReportResponse>`
+- **Rate limit**: Tối đa **10 lượt báo cáo / 30 phút**.
+
+---
+
+## 7. Bảng Mã Lỗi Chi Tiết & Hướng dẫn Xử lý UX (Error Codes Reference)
+
+| HTTP Status | Error Code | Key i18n | Ý nghĩa & Hướng xử lý cho Frontend |
+|---|---|---|---|
+| `400` | `FORUM_4201` | `error.forum.content_prohibited` | **Nội dung chứa từ ngữ vi phạm tiêu chuẩn cộng đồng**. Hiển thị Modal/Toast nhắc nhở người dùng chỉnh sửa từ ngữ lịch sự. |
+| `400` | `VAL_3001` | `error.val.invalid_input` | **Dữ liệu không hợp lệ** (Tiêu đề > 200 ký tự, nội dung > 5000 ký tự, quá 4 ảnh, topicId rỗng,...). Hiển thị lỗi đỏ dưới input. |
+| `400` | `BAD_REQUEST` | `error.sys.bad_request` | **Thao tác không hợp lệ** (Ví dụ: reply lồng trong reply, tương tác với post đã xóa,...). Hiển thị thông báo `message` từ response. |
+| `401` | `AUTH_1001` | `error.auth.unauthenticated` | **Chưa đăng nhập**. Mở modal đăng nhập hoặc chuyển hướng sang trang Login. |
+| `403` | `AUTH_1002` | `error.auth.unauthorized` | **Không có quyền**. (Ví dụ: sửa/xóa bài viết của người khác, hoặc tài khoản Admin cố tình gọi API forum client). |
+| `404` | `SYS_0003` | `error.sys.not_found` | **Không tìm thấy dữ liệu** (Bài viết hoặc bình luận đã bị tác giả xóa). Hiển thị giao diện 404 / Quay về feed. |
+| `409` | `SYS_0007` | `error.sys.conflict` | **Xung đột dữ liệu** (Bài viết đang ở trạng thái ẩn nên không thể sửa). |
+| `429` | `TOO_MANY_REQUESTS` | `error.sys.rate_limit` | **Spam lặp lại hoặc thao tác quá nhanh**. Hiển thị toast thông báo người dùng tạm nghỉ vài phút. |
+
+---
+
+## 8. Hướng dẫn Dựng Tree Bình luận 1 Cấp (Frontend Utility Helper)
+
+Vì API trả về mảng phẳng các bình luận theo thời gian (`createdAt ASC`), FE sử dụng hàm tiện ích sau để nhóm thành danh sách `Root Comment ➔ Replies`:
+
+```typescript
+export interface ThreadedComment extends ForumCommentResponse {
+  replies: ForumCommentResponse[];
+}
+
+/**
+ * Gom nhóm mảng comment phẳng thành cây 1 cấp (Root Comments + Replies)
+ */
+export function buildCommentTree(comments: ForumCommentResponse[]): ThreadedComment[] {
+  const rootComments: ThreadedComment[] = [];
+  const replyMap = new Map<string, ForumCommentResponse[]>();
+
+  // Bước 1: Phân loại root comment và reply
+  for (const c of comments) {
+    if (c.replyToCommentId) {
+      const existing = replyMap.get(c.replyToCommentId) || [];
+      existing.push(c);
+      replyMap.set(c.replyToCommentId, existing);
+    } else {
+      rootComments.push({ ...c, replies: [] });
+    }
+  }
+
+  // Bước 2: Gán replies vào root comment tương ứng
+  for (const root of rootComments) {
+    root.replies = replyMap.get(root.commentId) || [];
+  }
+
+  return rootComments;
 }
 ```
 
 ---
 
-## 6. Bảng Mã Lỗi Chi Tiết (Error Codes Reference)
+## 9. Code Mẫu Thực Chiến Next.js (React Component Hoàn Chỉnh)
 
-| HTTP Status | Error Code | Key | Hướng xử lý cho Frontend |
-|---|---|---|---|
-| `400` | `FORUM_4201` | `error.forum.content_prohibited` | Content/Title chứa cụm từ vi phạm. Hiển thị thông báo yêu cầu người dùng chỉnh sửa từ ngữ. |
-| `400` | `VAL_3001` | `error.val.invalid_input` | Tiêu đề quá 200 ký tự, nội dung quá 5000 ký tự, hoặc đính kèm quá số lượng ảnh cho phép. |
-| `401` | `AUTH_1001` | `error.auth.unauthenticated` | Chưa đăng nhập. Redirect sang trang Login. |
-| `403` | `AUTH_1002` | `error.auth.unauthorized` | Không phải tác giả của bài viết/bình luận nên không có quyền sửa/xóa. |
-| `404` | `SYS_0003` | `error.sys.not_found` | Không tìm thấy bài viết, bình luận hoặc forum topic tương ứng. |
-| `409` | `SYS_0007` | `error.sys.conflict` | Xung đột dữ liệu trạng thái. |
+Dưới đây là component mẫu tích hợp đầy đủ: Lọc theo Topic, Infinite Scroll Feed với Cursor Pagination, Optimistic Like Update và Comment Form 1-Level.
 
----
-
-## 7. Ví dụ Code Tích hợp Next.js (Infinite Scroll Feed Component)
-
-Component React sử dụng `apiClient` và Cursor Pagination để tải thêm bài viết khi cuộn trang:
-
-```typescript
+```tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/lib/api-client';
 
-interface Post {
+// 1. Interfaces
+interface ForumTopic {
+  id: string;
+  code: string;
+  nameVi: string;
+  nameEn: string;
+}
+
+interface ForumPost {
   postId: string;
   title: string;
   content: string;
   authorFullName: string;
   authorAvatarUrl: string;
+  forumTopic: ForumTopic;
   reactionCount: number;
   commentCount: number;
   reactedByCurrentUser: boolean;
+  imageUrls: string[];
+  createdAt: string;
 }
 
-export const ForumInfiniteFeed: React.FC = () => {
-  const [posts, setPosts] = useState<Post[]>([]);
+interface CursorPageResponse<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasNext: boolean;
+}
+
+export const ForumFeedPage: React.FC = () => {
+  const [topics, setTopics] = useState<ForumTopic[]>([]);
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [posts, setPosts] = useState<ForumPost[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasNext, setHasNext] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
 
-  const fetchPosts = useCallback(async (cursorParam?: string | null) => {
-    if (loading) return;
-    setLoading(true);
-
-    try {
-      const res: any = await apiClient.get('/api/forum/feed', {
-        params: {
-          limit: 10,
-          cursor: cursorParam || undefined,
-        },
-      });
-
-      const cursorData = res.data; // CursorPageResponse<ForumPostResponse>
-      setPosts((prev) => (cursorParam ? [...prev, ...cursorData.items] : cursorData.items));
-      setNextCursor(cursorData.nextCursor);
-      setHasNext(cursorData.hasNext);
-    } catch (err) {
-      console.error('Lỗi khi tải bảng tin forum:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading]);
-
+  // 2. Tải danh sách Topics
   useEffect(() => {
-    fetchPosts(null); // Load lần đầu
+    async function loadTopics() {
+      try {
+        const res: any = await apiClient.get('/api/forum/topics');
+        // Unpack: res.data.data hoặc res.data tùy cấu hình axios
+        const topicList: ForumTopic[] = res.data?.data || res.data;
+        setTopics(topicList);
+      } catch (err) {
+        console.error('Không thể tải danh sách topic:', err);
+      }
+    }
+    loadTopics();
   }, []);
 
+  // 3. Tải danh sách bài viết theo Cursor
+  const fetchPosts = useCallback(
+    async (cursorParam?: string | null, topicId?: string | null, isRefresh = false) => {
+      if (loading) return;
+      setLoading(true);
+
+      try {
+        const res: any = await apiClient.get('/api/forum/posts', {
+          params: {
+            limit: 10,
+            cursor: cursorParam || undefined,
+            forumTopicId: topicId || undefined,
+          },
+        });
+
+        const cursorData: CursorPageResponse<ForumPost> = res.data?.data || res.data;
+
+        setPosts((prev) => (isRefresh || !cursorParam ? cursorData.items : [...prev, ...cursorData.items]));
+        setNextCursor(cursorData.nextCursor);
+        setHasNext(cursorData.hasNext);
+      } catch (err) {
+        console.error('Lỗi khi tải bài viết:', err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading]
+  );
+
+  // Load lại khi thay đổi Topic
+  useEffect(() => {
+    fetchPosts(null, selectedTopicId, true);
+  }, [selectedTopicId]);
+
+  // 4. Xử lý Tải thêm (Infinite Scroll / Load More)
   const handleLoadMore = () => {
-    if (hasNext && nextCursor) {
-      fetchPosts(nextCursor);
+    if (hasNext && nextCursor && !loading) {
+      fetchPosts(nextCursor, selectedTopicId, false);
     }
   };
 
-  const handleToggleLike = async (postId: string, isLiked: boolean) => {
+  // 5. Xử lý Thả / Bỏ Like (Optimistic UI Update)
+  const handleToggleLike = async (postId: string, currentLiked: boolean) => {
+    // Cập nhật UI ngay lập tức
+    setPosts((prev) =>
+      prev.map((p) =>
+        p.postId === postId
+          ? {
+              ...p,
+              reactedByCurrentUser: !currentLiked,
+              reactionCount: currentLiked ? p.reactionCount - 1 : p.reactionCount + 1,
+            }
+          : p
+      )
+    );
+
     try {
-      if (isLiked) {
+      if (currentLiked) {
         await apiClient.delete(`/api/forum/posts/${postId}/reaction`);
       } else {
         await apiClient.put(`/api/forum/posts/${postId}/reaction`, { reactionType: 'LIKE' });
       }
-
+    } catch (err: any) {
+      // Revert lại trạng thái nếu gọi API lỗi
+      console.error('Lỗi thả reaction:', err);
       setPosts((prev) =>
         prev.map((p) =>
           p.postId === postId
             ? {
                 ...p,
-                reactedByCurrentUser: !isLiked,
-                reactionCount: isLiked ? p.reactionCount - 1 : p.reactionCount + 1,
+                reactedByCurrentUser: currentLiked,
+                reactionCount: currentLiked ? p.reactionCount : p.reactionCount,
               }
             : p
         )
       );
-    } catch (err) {
-      console.error('Lỗi khi thả reaction:', err);
     }
   };
 
   return (
-    <div className="forum-feed-container">
-      {posts.map((post) => (
-        <article key={post.postId} className="post-card">
-          <div className="author-info">
-            <img src={post.authorAvatarUrl} alt={post.authorFullName} />
-            <span>{post.authorFullName}</span>
-          </div>
-          <h3>{post.title}</h3>
-          <p>{post.content}</p>
-          <div className="post-actions">
-            <button onClick={() => handleToggleLike(post.postId, post.reactedByCurrentUser)}>
-              {post.reactedByCurrentUser ? '❤️ Thích' : '🤍 Thích'} ({post.reactionCount})
-            </button>
-            <span>💬 {post.commentCount} bình luận</span>
-          </div>
-        </article>
-      ))}
-
-      {hasNext && (
-        <button onClick={handleLoadMore} disabled={loading}>
-          {loading ? 'Đang tải thêm...' : 'Tải thêm bài viết'}
+    <div className="max-w-4xl mx-auto p-4 space-y-6">
+      {/* Topic Filter Tabs */}
+      <div className="flex gap-2 overflow-x-auto pb-2 border-b">
+        <button
+          onClick={() => setSelectedTopicId(null)}
+          className={`px-4 py-2 rounded-full text-sm font-medium ${
+            selectedTopicId === null ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700'
+          }`}
+        >
+          Tất cả chủ đề
         </button>
+        {topics.map((topic) => (
+          <button
+            key={topic.id}
+            onClick={() => setSelectedTopicId(topic.id)}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
+              selectedTopicId === topic.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            {topic.nameVi}
+          </button>
+        ))}
+      </div>
+
+      {/* Feed List */}
+      <div className="space-y-4">
+        {posts.map((post) => (
+          <article key={post.postId} className="bg-white border rounded-xl p-5 shadow-sm space-y-3">
+            {/* Header tác giả */}
+            <div className="flex items-center gap-3">
+              <img
+                src={post.authorAvatarUrl || '/default-avatar.png'}
+                alt={post.authorFullName}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+              <div>
+                <h4 className="font-semibold text-gray-900">{post.authorFullName}</h4>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>{post.forumTopic.nameVi}</span>
+                  <span>•</span>
+                  <span>{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Nội dung bài viết */}
+            <h3 className="text-lg font-bold text-gray-900">{post.title}</h3>
+            <p className="text-gray-700 whitespace-pre-line">{post.content}</p>
+
+            {/* Ảnh đính kèm (nếu có) */}
+            {post.imageUrls && post.imageUrls.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                {post.imageUrls.map((url, idx) => (
+                  <img
+                    key={idx}
+                    src={url}
+                    alt={`Attachment ${idx + 1}`}
+                    className="rounded-lg object-cover w-full h-48 border"
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Thao tác Post */}
+            <div className="flex items-center gap-6 pt-3 border-t text-sm font-medium text-gray-600">
+              <button
+                onClick={() => handleToggleLike(post.postId, post.reactedByCurrentUser)}
+                className={`flex items-center gap-1.5 transition ${
+                  post.reactedByCurrentUser ? 'text-red-500 font-bold' : 'hover:text-gray-900'
+                }`}
+              >
+                {post.reactedByCurrentUser ? '❤️ Đã thích' : '🤍 Thích'} ({post.reactionCount})
+              </button>
+
+              <button className="flex items-center gap-1.5 hover:text-gray-900">
+                💬 {post.commentCount} bình luận
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      {/* Nút tải thêm */}
+      {hasNext && (
+        <div className="text-center pt-4">
+          <button
+            onClick={handleLoadMore}
+            disabled={loading}
+            className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium rounded-lg disabled:opacity-50"
+          >
+            {loading ? 'Đang tải thêm...' : 'Tải thêm bài viết'}
+          </button>
+        </div>
       )}
     </div>
   );
