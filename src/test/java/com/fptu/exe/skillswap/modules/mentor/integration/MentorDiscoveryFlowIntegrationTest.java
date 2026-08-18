@@ -20,12 +20,15 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +67,9 @@ class MentorDiscoveryFlowIntegrationTest {
 
     @Autowired
     private MentorProfileRepository mentorProfileRepository;
+
+    @Autowired
+    private MentorServiceRepository mentorServiceRepository;
 
     @Autowired
     private MentorTagRepository mentorTagRepository;
@@ -141,6 +147,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .mentorProfile(profile1)
                 .tag(helpTopicTag)
                 .build());
+        mentorServiceRepository.save(activeOneToOneService(profile1, "Java va Spring Boot 1:1"));
 
         // Setup Mentor 2 (Matches Program but different Specialization & Campus)
         mentor2User = userRepository.save(User.builder()
@@ -172,6 +179,21 @@ class MentorDiscoveryFlowIntegrationTest {
                 .mentorProfile(profile2)
                 .tag(helpTopicTag)
                 .build());
+        mentorServiceRepository.save(activeOneToOneService(profile2, "Tu van ky thuat 1:1"));
+    }
+
+    private MentorService activeOneToOneService(MentorProfile profile, String title) {
+        return MentorService.builder()
+                .mentorProfile(profile)
+                .title(title)
+                .description("Dich vu mentoring 1:1 dang mo")
+                .expectedOutcome("Nguoi hoc co huong giai quyet ro rang")
+                .durationMinutes(60)
+                .isFree(true)
+                .priceScoin(0)
+                .isActive(true)
+                .deliveryMode(MentorServiceDeliveryMode.ONE_TO_ONE)
+                .build();
     }
 
     @Test
