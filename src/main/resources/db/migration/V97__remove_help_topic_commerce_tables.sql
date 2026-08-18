@@ -11,6 +11,53 @@ DROP FUNCTION IF EXISTS refresh_mentor_profile_search_index(UUID);
 DROP TRIGGER IF EXISTS trg_mentor_service_help_topics_search_refresh ON mentor_service_help_topics;
 DROP TABLE IF EXISTS mentor_service_help_topics;
 
+-- Clean up obsolete tag associations and tag rows before applying constraints
+DELETE FROM mentor_tags
+WHERE tag_type NOT IN ('EXPERTISE');
+
+DELETE FROM user_learning_goals
+WHERE tag_id IN (
+    SELECT id FROM tags
+    WHERE type NOT IN (
+        'MAJOR', 'SPECIALIZATION', 'TECH_SKILL', 'BUSINESS_SKILL',
+        'LANGUAGE', 'CAREER', 'SOFT_SKILL', 'TOOL', 'INDUSTRY'
+    )
+);
+
+DELETE FROM specialization_tags
+WHERE tag_id IN (
+    SELECT id FROM tags
+    WHERE type NOT IN (
+        'MAJOR', 'SPECIALIZATION', 'TECH_SKILL', 'BUSINESS_SKILL',
+        'LANGUAGE', 'CAREER', 'SOFT_SKILL', 'TOOL', 'INDUSTRY'
+    )
+);
+
+DELETE FROM mentor_tags
+WHERE tag_id IN (
+    SELECT id FROM tags
+    WHERE type NOT IN (
+        'MAJOR', 'SPECIALIZATION', 'TECH_SKILL', 'BUSINESS_SKILL',
+        'LANGUAGE', 'CAREER', 'SOFT_SKILL', 'TOOL', 'INDUSTRY'
+    )
+);
+
+UPDATE tags
+SET parent_tag_id = NULL
+WHERE parent_tag_id IN (
+    SELECT id FROM tags
+    WHERE type NOT IN (
+        'MAJOR', 'SPECIALIZATION', 'TECH_SKILL', 'BUSINESS_SKILL',
+        'LANGUAGE', 'CAREER', 'SOFT_SKILL', 'TOOL', 'INDUSTRY'
+    )
+);
+
+DELETE FROM tags
+WHERE type NOT IN (
+    'MAJOR', 'SPECIALIZATION', 'TECH_SKILL', 'BUSINESS_SKILL',
+    'LANGUAGE', 'CAREER', 'SOFT_SKILL', 'TOOL', 'INDUSTRY'
+);
+
 ALTER TABLE mentor_tags DROP CONSTRAINT IF EXISTS mentor_tags_tag_type_check;
 ALTER TABLE mentor_tags
     ADD CONSTRAINT mentor_tags_tag_type_check CHECK (tag_type IN ('EXPERTISE'));
