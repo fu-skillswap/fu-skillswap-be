@@ -108,7 +108,6 @@ application:
   google:
     client-id: ${GOOGLE_CLIENT_ID:test-google-client-id}
     client-secret: ${GOOGLE_CLIENT_SECRET:}
-    login-redirect-uris: ${GOOGLE_LOGIN_REDIRECT_URIS:http://localhost:3000/vi/auth/google/callback,http://127.0.0.1:3000/vi/auth/google/callback}
     calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
     token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:Q3Vyc29yUGhhc2UxQWVzS2V5Rm9yU2tpbGxTd2FwMDE=}
     token-encryption-key-version: ${GOOGLE_TOKEN_ENCRYPTION_KEY_VERSION:1}

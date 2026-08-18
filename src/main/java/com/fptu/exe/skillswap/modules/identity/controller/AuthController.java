@@ -3,10 +3,10 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
-import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
+import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleLoginNonceResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
-import com.fptu.exe.skillswap.modules.identity.service.GoogleLoginOAuthService;
+import com.fptu.exe.skillswap.modules.identity.service.GoogleLoginNonceService;
 import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -35,27 +35,23 @@ import org.springframework.util.StringUtils;
 public class AuthController {
 
     private final IdentityService identityService;
-    private final GoogleLoginOAuthService googleLoginOAuthService;
+    private final GoogleLoginNonceService googleLoginNonceService;
     private final InMemoryRateLimitService rateLimitService;
     private final TrustedClientIpResolver trustedClientIpResolver;
 
-    @Operation(summary = "Khởi tạo Google OAuth", description = "Phát hành state dùng một lần, ràng buộc với redirect URI và PKCE code challenge. FE phải gọi endpoint này trước khi chuyển user sang Google OAuth.")
-    @GetMapping("/google/authorization-context")
-    public ApiResponse<GoogleAuthorizationContextResponse> createGoogleAuthorizationContext(
-            @RequestParam String redirectUri,
-            @RequestParam String codeChallenge,
-            HttpServletRequest request
-    ) {
+    @Operation(summary = "Cấp nonce đăng nhập Google", description = "Phát hành nonce dùng một lần cho Google Identity Services. FE phải truyền nonce này vào GIS trước khi nhận credential.")
+    @GetMapping("/google/nonce")
+    public ApiResponse<GoogleLoginNonceResponse> createGoogleLoginNonce(HttpServletRequest request) {
         rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
-                "auth:google-context:" + resolveClientKey(request),
+                "auth:google-nonce:" + resolveClientKey(request),
                 60,
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang khởi tạo đăng nhập quá nhanh, vui lòng thử lại sau"
         );
-        return ApiResponse.success(googleLoginOAuthService.issueAuthorizationContext(redirectUri, codeChallenge));
+        return ApiResponse.success(googleLoginNonceService.issue());
     }
 
-    @Operation(summary = "Đăng nhập bằng Google", description = "Đổi Google authorization code bằng PKCE sau khi xác minh state dùng một lần. Refresh token chỉ được trả qua HttpOnly cookie; response body chỉ chứa access token.")
+    @Operation(summary = "Đăng nhập bằng Google GIS", description = "Xác minh Google ID Token, audience, issuer, email_verified và nonce dùng một lần. Refresh token SkillSwap chỉ được trả qua HttpOnly cookie.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -66,7 +62,7 @@ public class AuthController {
                             schema = @Schema(type = "string", example = "refresh_token=<redacted>; Path=/api/auth; HttpOnly; SameSite=Lax")
                     )
             ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Authorization code, PKCE hoặc OAuth state không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Google credential hoặc nonce không hợp lệ, đã dùng hoặc hết hạn"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Tài khoản bị khóa hoặc chưa kích hoạt")
     })
     @PostMapping("/google")

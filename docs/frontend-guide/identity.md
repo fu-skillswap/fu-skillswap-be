@@ -62,7 +62,7 @@ Hệ thống sử dụng cơ chế bảo mật kết hợp hai thành phần:
 
 | Endpoint | Giới hạn hiện tại |
 |---|---|
-| `GET /api/auth/google/authorization-context` | 60 lần / 10 phút |
+| `GET /api/auth/google/nonce` | 60 lần / 10 phút |
 | `POST /api/auth/google` | 60 lần / 10 phút |
 | `POST /api/auth/refresh` | 40 lần / 10 phút |
 | `POST /api/auth/logout` | Không giới hạn riêng |
@@ -71,76 +71,95 @@ Khi nhận lỗi `429 Too Many Requests`, đọc trường `retryAfterSeconds` �
 
 ---
 
-## 2. Luồng Đăng Nhập Google OAuth 2.0 + PKCE (Next.js Compatible)
+## 2. Luồng Đăng Nhập Google Identity Services (GIS)
 
-SkillSwap áp dụng chuẩn **OAuth 2.0 Authorization Code Flow kết hợp PKCE** để bảo mật luồng đăng nhập phía client. Luồng này chỉ xin scope `openid email profile`; đăng nhập **không kết nối Google Calendar**.
+Đăng nhập dùng **GIS ID Token** để hỗ trợ popup, nút Google và One Tap. Luồng này không dùng authorization code, callback route, `state`, PKCE hoặc Google Client Secret ở Frontend.
 
 ```text
-FE Next.js (Browser)            Spring Boot Backend          Google OAuth
-    │                                │                            │
-    ├── 1. GET /authorization-context ───────────────────────────►│ (Khởi tạo state dùng 1 lần)
-    │◄── State & ExpiresAt ──────────┤                            │
-    │                                │                            │
-    ├── 2. Chuyển hướng sang Google Consent ─────────────────────►│ (User chọn tài khoản Google)
-    │◄── 3. Google điều hướng về /vi/auth/google/callback ───────┤ (Kèm code & state)
-    │                                │                            │
-    ├── 4. POST /api/auth/google ────────────────────────────►│ (Đổi code + PKCE verifier)
-    │    { code, state, verifier }   │                            │
-    │◄── 200 OK + AccessToken ───────┤                            │
-    │    Set-Cookie: refresh         │                            │
+FE Next.js (Browser)             Spring Boot Backend               Google GIS
+    │                                  │                               │
+    ├── 1. GET /api/auth/google/nonce ►│                               │
+    │◄── nonce + expiresAt ────────────┤                               │
+    │                                  │                               │
+    ├── 2. Khởi tạo GIS với nonce ────────────────────────────────────►│
+    │◄── 3. credential (Google ID Token) ─────────────────────────────┤
+    │                                  │                               │
+    ├── 4. POST /api/auth/google ─────►│                               │
+    │      { credential, nonce }       │ xác minh token + dùng nonce   │
+    │◄── accessToken + refresh cookie ┤                               │
 ```
 
-### Bước 1: Tạo PKCE & Khởi Tạo OAuth Context
-Trước khi chuyển hướng người dùng:
-1. Sinh `codeVerifier` ngẫu nhiên (43–128 ký tự). Lưu tạm vào `sessionStorage` để đối chiếu ở Bước 3.
-2. Tạo `codeChallenge = BASE64URL(SHA256(codeVerifier))`.
-3. Gọi API lấy `state` hợp lệ từ backend:
-   - **Endpoint**: `GET /api/auth/google/authorization-context`
-   - **Query Parameters**:
-     - `redirectUri` (string, required): URI callback của Next.js (ví dụ: `https://skillswap.asia/vi/auth/google/callback`).
-     - `codeChallenge` (string, required): Chuỗi PKCE challenge vừa tạo.
+### Bước 1: Lấy nonce dùng một lần
 
-**Response mẫu (`200 OK`)**:
-```json
-{
-  "timestamp": "2026-08-12 23:05:00",
-  "status": 200,
-  "code": "SUCCESS_0200",
-  "message": "Thành công",
-  "data": {
-    "state": "f83a91bc-341e-4501-89ab-123456789abc",
-    "expiresAt": "2026-08-12T16:10:00Z"
-  }
+- **Endpoint**: `GET /api/auth/google/nonce`
+- **Authentication**: không cần Bearer token.
+- Không có query parameter.
+- Nonce chỉ dùng cho một lần đăng nhập và hết hạn sau thời gian ngắn.
+
+```typescript
+interface GoogleLoginNonceResponse {
+  nonce: string;
+  expiresAt: string; // ISO-8601 UTC
 }
 ```
 
-### Bước 2: Chuyển Hướng Người Dùng Sang Google Consent Page
-Next.js điều hướng trang bằng `window.location.href`:
-```text
-https://accounts.google.com/o/oauth2/v2/auth?
-  client_id=NEXT_PUBLIC_GOOGLE_CLIENT_ID&
-  redirect_uri=https://skillswap.asia/vi/auth/google/callback&
-  response_type=code&
-  scope=openid%20email%20profile&
-  state=f83a91bc-341e-4501-89ab-123456789abc&
-  code_challenge=<codeChallenge>&
-  code_challenge_method=S256
+### Bước 2: Khởi tạo GIS bằng đúng nonce
+
+Load thư viện GIS từ `https://accounts.google.com/gsi/client`, sau đó truyền nguyên nonce Backend vừa cấp vào `google.accounts.id.initialize`.
+
+```typescript
+const nonceResponse = await apiClient.get('/api/auth/google/nonce');
+const { nonce } = nonceResponse.data;
+
+google.accounts.id.initialize({
+  client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
+  nonce,
+  callback: async ({ credential }) => {
+    await completeGoogleLogin(credential, nonce);
+  },
+});
+
+// Dùng một trong hai cách tùy UI:
+google.accounts.id.renderButton(buttonElement, {
+  theme: 'outline',
+  size: 'large',
+});
+// Hoặc gọi google.accounts.id.prompt() cho One Tap.
 ```
 
-### Bước 3: Nhận Callback Tại Route Next.js (`app/[locale]/auth/google/callback/page.tsx`)
-Khi Google chuyển hướng về kèm query: `?code=4/0AQST...&state=f83a91bc...`
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` phải đúng cùng OAuth Web Client ID với `GOOGLE_CLIENT_ID` của Backend. Frontend không được chứa `GOOGLE_CLIENT_SECRET`.
 
-Page Component gửi request đổi mã lấy token:
+### Bước 3: Gửi credential về Backend
+
 - **Endpoint**: `POST /api/auth/google`
 - **Request Body**:
+
 ```typescript
 interface GoogleLoginRequest {
-  authorizationCode: string; // "4/0AQSTgQF..." (từ query params)
-  redirectUri: string;       // "https://skillswap.asia/vi/auth/google/callback" (khớp với Bước 1)
-  codeVerifier: string;      // Chuỗi PKCE codeVerifier đã lưu ở Bước 1
-  state: string;             // State nhận từ query params
+  credential: string; // Google ID Token do callback GIS trả về
+  nonce: string;      // Đúng nonce đã dùng khi initialize GIS
 }
 ```
+
+```typescript
+async function completeGoogleLogin(credential: string, nonce: string) {
+  const response = await apiClient.post('/api/auth/google', {
+    credential,
+    nonce,
+  });
+
+  setAccessToken(response.data.accessToken);
+  // Xóa credential và nonce khỏi state tạm ngay sau request.
+}
+```
+
+Backend xác minh chữ ký, thời hạn, audience, issuer, `email_verified` và nonce trong ID Token. Nonce được tiêu thụ nguyên tử sau khi token hợp lệ; gửi lại cùng credential/nonce sẽ bị từ chối.
+
+> [!WARNING]
+> - Không decode ID Token ở Frontend rồi tự tin dữ liệu bên trong là hợp lệ. Backend là nơi duy nhất quyết định token có hợp lệ hay không.
+> - Không lưu `credential` hoặc nonce vào `localStorage`, cookie hay database Frontend. Chỉ giữ tạm trong memory cho request hiện tại.
+> - Khi request thất bại do nonce hết hạn hoặc đã dùng, lấy nonce mới và khởi tạo lại GIS. Không retry lại cặp cũ.
+> - ID Token này chỉ dùng để đăng nhập SkillSwap. Tuyệt đối không gửi nó vào API kết nối Google Calendar.
 
 ---
 
@@ -324,9 +343,10 @@ interface OnboardingStatusResponse {
 
 ## 6. Google Calendar Không Thuộc Luồng Đăng Nhập
 
-- Không thêm scope Calendar vào URL đăng nhập.
+- Login dùng GIS ID Token; không thêm scope Calendar vào cấu hình GIS.
 - Không gọi API Calendar sau khi user đăng nhập hoặc hoàn thành onboarding.
 - Chỉ mentor đã được Admin duyệt mới kết nối Calendar khi chuẩn bị tạo service.
+- Calendar dùng một Authorization Code flow riêng với `state` + PKCE để Backend nhận refresh token. Không tái sử dụng ID Token đăng nhập.
 - Toàn bộ flow Calendar dành cho FE nằm trong [mentor-service.md](mentor-service.md).
 - `googleCalendarConnected` trong `GET /api/auth/me` chỉ là trạng thái hiển thị; không dùng nó thay cho bước kiểm tra mới trước khi tạo service.
 
@@ -337,7 +357,7 @@ interface OnboardingStatusResponse {
 | HTTP Status | Error Code | Ý nghĩa & Hướng xử lý cho Frontend |
 |---|---|---|
 | `400` | `VAL_3001` | Form dữ liệu không hợp lệ. Hiển thị thông báo lỗi dưới từng trường. |
-| `400` | `AUTH_1006` | Đăng nhập Google thất bại (OAuth code hỏng hoặc hết hạn). Hiển thị Toast thông báo đăng nhập lại. |
+| `400` | `AUTH_1006` | Google ID Token hoặc nonce không hợp lệ, đã dùng hay hết hạn. Lấy nonce mới rồi mở lại GIS; không retry credential cũ. |
 | `401` | `AUTH_1001` | Chưa xác thực hoặc Access Token không hợp lệ. Tự động gọi API `/refresh`. |
 | `401` | `AUTH_1003` | Refresh Cookie hết hạn. Xóa in-memory token và chuyển hướng tới `/login`. |
 | `403` | `AUTH_1002` / `AUTH_1007` | Không có quyền hạn truy cập tài nguyên. |

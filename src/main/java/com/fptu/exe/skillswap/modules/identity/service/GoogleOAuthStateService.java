@@ -52,10 +52,6 @@ public class GoogleOAuthStateService {
         }
     }
 
-    public GoogleAuthorizationContextResponse issueLogin(String redirectUri, String codeChallenge) {
-        return issue(GoogleOAuthPurpose.LOGIN, null, redirectUri, codeChallenge);
-    }
-
     public GoogleAuthorizationContextResponse issueCalendarConnect(
             UUID userId,
             String redirectUri,
@@ -65,10 +61,6 @@ public class GoogleOAuthStateService {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
         return issue(GoogleOAuthPurpose.CALENDAR_CONNECT, userId, redirectUri, codeChallenge);
-    }
-
-    public void consumeLogin(String state, String redirectUri, String codeVerifier) {
-        consume(GoogleOAuthPurpose.LOGIN, null, state, redirectUri, codeVerifier);
     }
 
     public void consumeCalendarConnect(

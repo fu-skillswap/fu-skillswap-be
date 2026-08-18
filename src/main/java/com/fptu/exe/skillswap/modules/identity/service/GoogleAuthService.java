@@ -15,7 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.Set;
 
@@ -28,9 +30,12 @@ public class GoogleAuthService {
     private volatile GoogleIdTokenVerifier verifier;
     private static final Set<String> ALLOWED_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
-    public GoogleUserInfo verifyToken(String idToken) {
+    public GoogleUserInfo verifyToken(String idToken, String expectedNonce) {
         if (!StringUtils.hasText(idToken)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã xác thực Google không được để trống");
+        }
+        if (!StringUtils.hasText(expectedNonce)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Nonce đăng nhập Google không được để trống");
         }
 
         try {
@@ -38,7 +43,7 @@ public class GoogleAuthService {
             if (googleIdToken == null || googleIdToken.getPayload() == null) {
                 throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
             }
-            return verifyPayload(googleIdToken.getPayload());
+            return verifyPayload(googleIdToken.getPayload(), expectedNonce);
         } catch (BaseException e) {
             throw e;
         } catch (GeneralSecurityException | IOException e) {
@@ -74,6 +79,10 @@ public class GoogleAuthService {
     }
 
     GoogleUserInfo verifyPayload(GoogleIdToken.Payload payload) {
+        return verifyPayload(payload, null);
+    }
+
+    GoogleUserInfo verifyPayload(GoogleIdToken.Payload payload, String expectedNonce) {
         String expectedClientId = googleApiProperties.getClientId();
         if (!StringUtils.hasText(expectedClientId)) {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
@@ -96,6 +105,20 @@ public class GoogleAuthService {
         }
         if (!StringUtils.hasText(payload.getSubject()) || !StringUtils.hasText(payload.getEmail())) {
             throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Thông tin tài khoản Google không đầy đủ");
+        }
+        if (expectedNonce != null) {
+            Object rawNonce = payload.get("nonce");
+            String tokenNonce = rawNonce == null ? null : String.valueOf(rawNonce);
+            if (!StringUtils.hasText(tokenNonce)
+                    || !MessageDigest.isEqual(
+                    expectedNonce.getBytes(StandardCharsets.UTF_8),
+                    tokenNonce.getBytes(StandardCharsets.UTF_8)
+            )) {
+                throw new BaseException(
+                        ErrorCode.OAUTH_VERIFICATION_FAILED,
+                        "Nonce trong Google ID Token không hợp lệ"
+                );
+            }
         }
         return fromOpenIdProfile(
                 payload.getSubject(),

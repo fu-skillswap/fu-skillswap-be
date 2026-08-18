@@ -234,9 +234,8 @@ Kết quả phản hồi kỳ vọng: `{"status":"UP"}`
 | `JWT_AUDIENCE` | Yes | `skillswap-api` | Tên đối tượng nhận JWT (audience) |
 | `JWT_EXPIRATION` | No | `3600000` | Thời gian hết hạn của access token tính bằng miligiây (1 giờ) |
 | `JWT_REFRESH_EXPIRATION` | No | `604800000` | Thời gian hết hạn của refresh token tính bằng miligiây (7 ngày) |
-| `GOOGLE_CLIENT_ID` | Yes | - | OAuth client dùng chung tại Google; login và Calendar dùng flow/state tách biệt |
-| `GOOGLE_CLIENT_SECRET` | Yes | - | OAuth client secret, chỉ cấu hình ở backend |
-| `GOOGLE_LOGIN_REDIRECT_URIS` | Yes | - | Danh sách callback đăng nhập được phép, phân cách bằng dấu phẩy |
+| `GOOGLE_CLIENT_ID` | Yes | - | OAuth Web Client ID dùng cho GIS login và Calendar; hai flow tách biệt |
+| `GOOGLE_CLIENT_SECRET` | Yes | - | Chỉ backend dùng khi đổi authorization code của Calendar; không dùng ở FE hoặc GIS login |
 | `GOOGLE_CALENDAR_REDIRECT_URI` | Yes | - | Callback riêng để mentor đã duyệt kết nối Calendar trước khi tạo service |
 | `GOOGLE_TOKEN_ENCRYPTION_KEY` | Yes | - | AES key dùng mã hóa token Calendar trong database |
 | `CURSOR_AES_KEY` | Yes | - | Key AES 32-byte (base64) để mã hóa cursor pagination |
@@ -467,7 +466,7 @@ Production Rollout (docker-compose.prod.yml)
 
 - **JWT Authentication**: Access token dạng JWT ngắn hạn được truyền qua HTTP Authorization header.
 - **Refresh Token Cookie**: Refresh token dài hạn được lưu trữ an toàn trong Cookie HttpOnly, SameSite (`skillswap_refresh_token`).
-- **Google OAuth 2.0**: Login chỉ xin danh tính (`openid email profile`). Google Calendar là OAuth flow riêng có state + PKCE gắn với mentor đã duyệt; backend yêu cầu connection `ACTIVE` khi tạo hoặc bật lại service và mã hóa token Calendar bằng AES.
+- **Google Identity / OAuth**: Login dùng GIS ID Token với nonce một lần; backend xác minh chữ ký, thời hạn, audience, issuer, email verified và chống replay. Google Calendar là Authorization Code flow riêng có state + PKCE để nhận refresh token; backend yêu cầu connection `ACTIVE` khi tạo hoặc bật lại service và mã hóa token Calendar bằng AES.
 
 ### Bảo vệ dữ liệu & Quản lý Secret
 

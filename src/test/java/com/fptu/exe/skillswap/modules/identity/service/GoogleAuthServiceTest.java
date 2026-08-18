@@ -42,6 +42,25 @@ class GoogleAuthServiceTest {
         assertEquals(ErrorCode.OAUTH_VERIFICATION_FAILED, exception.getErrorCode());
     }
 
+    @Test
+    void verifyPayload_shouldRequireMatchingNonceForGisLogin() {
+        GoogleAuthService service = buildService();
+        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+        payload.setIssuer("https://accounts.google.com");
+        payload.setAudience("google-client-id");
+        payload.setSubject("google-sub");
+        payload.setEmail("user@test.com");
+        payload.setEmailVerified(true);
+        payload.set("nonce", "expected-nonce");
+
+        assertDoesNotThrow(() -> service.verifyPayload(payload, "expected-nonce"));
+        BaseException exception = assertThrows(
+                BaseException.class,
+                () -> service.verifyPayload(payload, "other-nonce")
+        );
+        assertEquals(ErrorCode.OAUTH_VERIFICATION_FAILED, exception.getErrorCode());
+    }
+
     private GoogleAuthService buildService() {
         GoogleApiProperties properties = new GoogleApiProperties();
         properties.setClientId("google-client-id");

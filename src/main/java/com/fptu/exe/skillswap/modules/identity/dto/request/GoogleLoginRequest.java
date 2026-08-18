@@ -14,27 +14,16 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Thông tin đăng nhập bằng tài khoản Google")
 public class GoogleLoginRequest {
     @Schema(
-            description = "Authorization code do Google trả về nếu client dùng OAuth authorization code flow + PKCE.",
-            example = "4/0AQSTgQF..."
+            description = "Google ID Token nằm trong trường credential do GIS trả về.",
+            example = "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
     )
     @NotBlank
-    private String authorizationCode;
+    private String credential;
 
     @Schema(
-            description = "Redirect URI đúng với URI đã dùng để nhận authorization code.",
-            example = "https://skillswap.asia/auth/google/callback"
+            description = "Nonce một lần do GET /api/auth/google/nonce cấp và đã truyền vào GIS.",
+            example = "pBt_T5mF..."
     )
     @NotBlank
-    private String redirectUri;
-
-    @Schema(
-            description = "PKCE code verifier tương ứng với authorization code flow.",
-            example = "f93GhKJ0..."
-    )
-    @NotBlank
-    private String codeVerifier;
-
-    @Schema(description = "Opaque one-time state issued by GET /api/auth/google/authorization-context.")
-    @NotBlank
-    private String state;
+    private String nonce;
 }

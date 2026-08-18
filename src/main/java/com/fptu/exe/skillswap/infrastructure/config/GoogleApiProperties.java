@@ -12,7 +12,6 @@ import org.springframework.context.annotation.Configuration;
 public class GoogleApiProperties {
     private String clientId;
     private String clientSecret;
-    private String loginRedirectUris;
     private String calendarRedirectUri;
     private String tokenEncryptionKey;
     private Integer tokenEncryptionKeyVersion = 1;
