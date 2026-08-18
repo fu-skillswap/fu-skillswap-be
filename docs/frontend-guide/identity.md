@@ -73,7 +73,7 @@ Khi nhận lỗi `429 Too Many Requests`, đọc trường `retryAfterSeconds` �
 
 ## 2. Luồng Đăng Nhập Google OAuth 2.0 + PKCE (Next.js Compatible)
 
-SkillSwap áp dụng chuẩn **OAuth 2.0 Authorization Code Flow kết hợp PKCE** để bảo mật luồng đăng nhập phía client.
+SkillSwap áp dụng chuẩn **OAuth 2.0 Authorization Code Flow kết hợp PKCE** để bảo mật luồng đăng nhập phía client. Luồng này chỉ xin scope `openid email profile`; đăng nhập **không kết nối Google Calendar**.
 
 ```text
 FE Next.js (Browser)            Spring Boot Backend          Google OAuth
@@ -82,7 +82,7 @@ FE Next.js (Browser)            Spring Boot Backend          Google OAuth
     │◄── State & ExpiresAt ──────────┤                            │
     │                                │                            │
     ├── 2. Chuyển hướng sang Google Consent ─────────────────────►│ (User chọn tài khoản Google)
-    │◄── 3. Google điều hướng về /auth/google/callback ──────────┤ (Kèm code & state)
+    │◄── 3. Google điều hướng về /vi/auth/google/callback ───────┤ (Kèm code & state)
     │                                │                            │
     ├── 4. POST /api/auth/google ────────────────────────────►│ (Đổi code + PKCE verifier)
     │    { code, state, verifier }   │                            │
@@ -97,7 +97,7 @@ Trước khi chuyển hướng người dùng:
 3. Gọi API lấy `state` hợp lệ từ backend:
    - **Endpoint**: `GET /api/auth/google/authorization-context`
    - **Query Parameters**:
-     - `redirectUri` (string, required): URI callback của Next.js (ví dụ: `https://skillswap.asia/auth/google/callback`).
+     - `redirectUri` (string, required): URI callback của Next.js (ví dụ: `https://skillswap.asia/vi/auth/google/callback`).
      - `codeChallenge` (string, required): Chuỗi PKCE challenge vừa tạo.
 
 **Response mẫu (`200 OK`)**:
@@ -119,7 +119,7 @@ Next.js điều hướng trang bằng `window.location.href`:
 ```text
 https://accounts.google.com/o/oauth2/v2/auth?
   client_id=NEXT_PUBLIC_GOOGLE_CLIENT_ID&
-  redirect_uri=https://skillswap.asia/auth/google/callback&
+  redirect_uri=https://skillswap.asia/vi/auth/google/callback&
   response_type=code&
   scope=openid%20email%20profile&
   state=f83a91bc-341e-4501-89ab-123456789abc&
@@ -127,7 +127,7 @@ https://accounts.google.com/o/oauth2/v2/auth?
   code_challenge_method=S256
 ```
 
-### Bước 3: Nhận Callback Tại Route Next.js (`app/auth/google/callback/page.tsx`)
+### Bước 3: Nhận Callback Tại Route Next.js (`app/[locale]/auth/google/callback/page.tsx`)
 Khi Google chuyển hướng về kèm query: `?code=4/0AQST...&state=f83a91bc...`
 
 Page Component gửi request đổi mã lấy token:
@@ -136,7 +136,7 @@ Page Component gửi request đổi mã lấy token:
 ```typescript
 interface GoogleLoginRequest {
   authorizationCode: string; // "4/0AQSTgQF..." (từ query params)
-  redirectUri: string;       // "https://skillswap.asia/auth/google/callback" (khớp với Bước 1)
+  redirectUri: string;       // "https://skillswap.asia/vi/auth/google/callback" (khớp với Bước 1)
   codeVerifier: string;      // Chuỗi PKCE codeVerifier đã lưu ở Bước 1
   state: string;             // State nhận từ query params
 }
@@ -322,27 +322,13 @@ interface OnboardingStatusResponse {
 
 ---
 
-## 6. Tích Hợp Google Calendar (Calendar Integration)
+## 6. Google Calendar Không Thuộc Luồng Đăng Nhập
 
-| Endpoint | Mục đích |
-|---|---|
-| `GET /api/me/google-calendar/status` | Lấy trạng thái đồng bộ Google Calendar |
-| `POST /api/me/google-calendar/connect` | Gửi mã OAuth để liên kết tài khoản Calendar |
-| `POST /api/me/google-calendar/disconnect` | Hủy liên kết Google Calendar |
-
-```typescript
-interface GoogleCalendarStatusResponse {
-  connected: boolean;
-  syncEnabled: boolean;
-  email: string | null;
-  grantedScopes: string[] | null;
-  needsReconnect: boolean;
-  lastSyncStatus: string | null;
-  lastSyncAt: string | null;
-  lastSyncErrorCode: string | null;
-  lastSyncErrorMessage: string | null;
-}
-```
+- Không thêm scope Calendar vào URL đăng nhập.
+- Không gọi API Calendar sau khi user đăng nhập hoặc hoàn thành onboarding.
+- Chỉ mentor đã được Admin duyệt mới kết nối Calendar khi chuẩn bị tạo service.
+- Toàn bộ flow Calendar dành cho FE nằm trong [mentor-service.md](mentor-service.md).
+- `googleCalendarConnected` trong `GET /api/auth/me` chỉ là trạng thái hiển thị; không dùng nó thay cho bước kiểm tra mới trước khi tạo service.
 
 ---
 

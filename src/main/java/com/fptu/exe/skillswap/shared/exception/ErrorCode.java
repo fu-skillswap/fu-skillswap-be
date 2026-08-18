@@ -27,6 +27,11 @@ public enum ErrorCode {
     USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản của bạn chưa hoạt động"),
     OAUTH_VERIFICATION_FAILED(400, "AUTH_1006", "error.auth.oauth_failed", "Xác thực tài khoản Google thất bại"),
 
+    // Google Calendar.
+    GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước khi tạo dịch vụ mentoring"),
+    GOOGLE_CALENDAR_MENTOR_VERIFICATION_REQUIRED(409, "CAL_4402", "error.calendar.mentor_verification_required", "Chỉ mentor đã được duyệt mới được kết nối Google Calendar"),
+    GOOGLE_CALENDAR_DISCONNECT_BLOCKED(409, "CAL_4403", "error.calendar.disconnect_blocked", "Cần tắt toàn bộ dịch vụ mentoring trước khi ngắt Google Calendar"),
+
     // Nghiệp vụ.
     USER_EXISTED(400, "USER_2001", "error.user.existed", "Người dùng đã tồn tại"),
     EMAIL_EXISTED(400, "USER_2002", "error.user.email_existed", "Email đã tồn tại"),

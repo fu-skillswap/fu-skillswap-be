@@ -34,7 +34,7 @@ public class IdentityService {
 
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
-    private final GoogleAuthService googleAuthService;
+    private final GoogleLoginOAuthService googleLoginOAuthService;
     private final GoogleCalendarConnectionService googleCalendarConnectionService;
     private final IdentityLoginTransactionService identityLoginTransactionService;
     private final RefreshTokenReplayCryptoService refreshTokenReplayCryptoService;
@@ -44,7 +44,7 @@ public class IdentityService {
     private final RefreshTokenCookieProperties refreshTokenCookieProperties;
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
-        GoogleAuthService.GoogleUserInfo googleUser = googleCalendarConnectionService.resolveUserInfoForLogin(request);
+        GoogleAuthService.GoogleUserInfo googleUser = googleLoginOAuthService.resolveUserInfo(request);
         return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
     }
 

@@ -45,7 +45,7 @@ class IdentityServiceTest {
     private UserSessionRepository userSessionRepository;
 
     @Mock
-    private GoogleAuthService googleAuthService;
+    private GoogleLoginOAuthService googleLoginOAuthService;
 
     @Mock
     private GoogleCalendarConnectionService googleCalendarConnectionService;
@@ -91,7 +91,7 @@ class IdentityServiceTest {
         identityService = new IdentityService(
                 userRepository,
                 userSessionRepository,
-                googleAuthService,
+                googleLoginOAuthService,
                 googleCalendarConnectionService,
                 identityLoginTransactionService,
                 refreshTokenReplayCryptoService,

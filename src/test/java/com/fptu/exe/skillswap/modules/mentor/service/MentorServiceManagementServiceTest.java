@@ -2,11 +2,14 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceUpsertRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
@@ -30,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,6 +51,9 @@ class MentorServiceManagementServiceTest {
 
     @Mock
     private MentorProfileService mentorProfileService;
+
+    @Mock
+    private GoogleCalendarConnectionPort googleCalendarConnectionPort;
 
     @InjectMocks
     private MentorServiceManagementService mentorServiceManagementService;
@@ -162,6 +169,7 @@ class MentorServiceManagementServiceTest {
         );
 
         assertEquals("Dịch vụ có phí phải có giá tối thiểu 72000 SCoin cho 60 phút", exception.getMessage());
+        verify(googleCalendarConnectionPort, never()).requireActiveConnectionForServiceCreation(mentorUserId);
         verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
@@ -182,6 +190,7 @@ class MentorServiceManagementServiceTest {
         );
 
         assertEquals("Dịch vụ có phí chỉ được đặt tối đa 30000000 SCoin cho 60 phút", exception.getMessage());
+        verify(googleCalendarConnectionPort, never()).requireActiveConnectionForServiceCreation(mentorUserId);
         verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
@@ -207,5 +216,35 @@ class MentorServiceManagementServiceTest {
 
         assertEquals(true, response.free());
         assertEquals(0, response.basePriceScoin());
+        verify(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
+    }
+
+    @Test
+    void createService_withoutActiveCalendar_shouldNotPersistService() {
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
+                "Review project",
+                "Mo ta",
+                "Ket qua",
+                60,
+                false,
+                72_000,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
+        );
+        doThrow(new BaseException(
+                com.fptu.exe.skillswap.shared.exception.ErrorCode.GOOGLE_CALENDAR_CONNECTION_REQUIRED,
+                "Cần kết nối Google Calendar"
+        )).when(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
+
+        BaseException exception = assertThrows(
+                BaseException.class,
+                () -> mentorServiceManagementService.createService(mentorUserId, request)
+        );
+
+        assertEquals(
+                com.fptu.exe.skillswap.shared.exception.ErrorCode.GOOGLE_CALENDAR_CONNECTION_REQUIRED,
+                exception.getErrorCode()
+        );
+        verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 }

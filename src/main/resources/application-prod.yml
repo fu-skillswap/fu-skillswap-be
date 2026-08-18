@@ -26,6 +26,8 @@ logging:
     org.hibernate.orm.jdbc.bind: WARN
 
 application:
+  google:
+    login-redirect-uris: ${GOOGLE_LOGIN_REDIRECT_URIS:}
   security:
     jwt:
       issuer: ${JWT_ISSUER}

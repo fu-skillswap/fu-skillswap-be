@@ -19,6 +19,7 @@ Tất cả API trong luồng Wizard yêu cầu Bearer token và chỉ chấp nh�
 - Role `ADMIN` và `SYSTEM_ADMIN` **bị chặn hoàn toàn** khỏi luồng này. Nếu quản trị viên muốn làm mentor, cần sử dụng tài khoản cá nhân riêng.
 - Việc tạo Mentor Profile hoặc nộp hồ sơ xác thực **không tự động cấp Role `MENTOR`**.
 - Dịch vụ (Service) và lịch rảnh không bắt buộc khi nộp hồ sơ, nhưng cần thiết lập sau đó để nhận đặt lịch và xuất hiện trên trang tìm kiếm sau khi được phê duyệt.
+- Google Calendar **không phải trường hoặc bước của đơn xác thực mentor**. Không yêu cầu người nộp đơn cấp quyền Calendar trong wizard này.
 
 ```text
 Hồ sơ học thuật (Academic Profile)
@@ -28,8 +29,12 @@ Hồ sơ học thuật (Academic Profile)
  ➔ Đồng ý điều khoản & Nộp hồ sơ (Submit Verification)
  ➔ Quản trị viên xét duyệt (Admin Review)
  ➔ APPROVED: Hệ thống tự động cấp Role MENTOR
+ ➔ Kết nối Google Calendar
  ➔ Thiết lập Dịch vụ và Lịch rảnh để nhận booking
 ```
+
+> [!IMPORTANT]
+> Sau khi trạng thái thành `APPROVED`, CTA tiếp theo nên là **“Kết nối Google Calendar để tạo dịch vụ”**. FE chuyển mentor sang flow trong [mentor-service.md](mentor-service.md); không đưa bước Calendar vào lại wizard xác thực.
 
 ---
 

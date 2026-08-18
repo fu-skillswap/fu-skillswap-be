@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
-import com.fptu.exe.skillswap.modules.identity.service.GoogleOAuthStateService;
+import com.fptu.exe.skillswap.modules.identity.service.GoogleLoginOAuthService;
 import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -35,7 +35,7 @@ import org.springframework.util.StringUtils;
 public class AuthController {
 
     private final IdentityService identityService;
-    private final GoogleOAuthStateService googleOAuthStateService;
+    private final GoogleLoginOAuthService googleLoginOAuthService;
     private final InMemoryRateLimitService rateLimitService;
     private final TrustedClientIpResolver trustedClientIpResolver;
 
@@ -52,7 +52,7 @@ public class AuthController {
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang khởi tạo đăng nhập quá nhanh, vui lòng thử lại sau"
         );
-        return ApiResponse.success(googleOAuthStateService.issue(redirectUri, codeChallenge));
+        return ApiResponse.success(googleLoginOAuthService.issueAuthorizationContext(redirectUri, codeChallenge));
     }
 
     @Operation(summary = "Đăng nhập bằng Google", description = "Đổi Google authorization code bằng PKCE sau khi xác minh state dùng một lần. Refresh token chỉ được trả qua HttpOnly cookie; response body chỉ chứa access token.")

@@ -19,6 +19,8 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.Objects;
+import java.util.UUID;
 
 @Service
 public class GoogleOAuthStateService {
@@ -50,23 +52,72 @@ public class GoogleOAuthStateService {
         }
     }
 
-    public GoogleAuthorizationContextResponse issue(String redirectUri, String codeChallenge) {
+    public GoogleAuthorizationContextResponse issueLogin(String redirectUri, String codeChallenge) {
+        return issue(GoogleOAuthPurpose.LOGIN, null, redirectUri, codeChallenge);
+    }
+
+    public GoogleAuthorizationContextResponse issueCalendarConnect(
+            UUID userId,
+            String redirectUri,
+            String codeChallenge
+    ) {
+        if (userId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        return issue(GoogleOAuthPurpose.CALENDAR_CONNECT, userId, redirectUri, codeChallenge);
+    }
+
+    public void consumeLogin(String state, String redirectUri, String codeVerifier) {
+        consume(GoogleOAuthPurpose.LOGIN, null, state, redirectUri, codeVerifier);
+    }
+
+    public void consumeCalendarConnect(
+            UUID userId,
+            String state,
+            String redirectUri,
+            String codeVerifier
+    ) {
+        if (userId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        consume(GoogleOAuthPurpose.CALENDAR_CONNECT, userId, state, redirectUri, codeVerifier);
+    }
+
+    private GoogleAuthorizationContextResponse issue(
+            GoogleOAuthPurpose purpose,
+            UUID userId,
+            String redirectUri,
+            String codeChallenge
+    ) {
         requireText(redirectUri, "redirectUri");
         requireText(codeChallenge, "codeChallenge");
         byte[] stateBytes = new byte[32];
         SECURE_RANDOM.nextBytes(stateBytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(stateBytes);
         Instant expiresAt = Instant.now().plus(stateTtl);
-        pendingAuthorizations.put(state, new PendingAuthorization(redirectUri.trim(), codeChallenge.trim()));
+        pendingAuthorizations.put(state, new PendingAuthorization(
+                purpose,
+                userId,
+                redirectUri.trim(),
+                codeChallenge.trim()
+        ));
         return new GoogleAuthorizationContextResponse(state, expiresAt);
     }
 
-    public void consume(String state, String redirectUri, String codeVerifier) {
+    private void consume(
+            GoogleOAuthPurpose purpose,
+            UUID userId,
+            String state,
+            String redirectUri,
+            String codeVerifier
+    ) {
         requireText(state, "state");
         requireText(redirectUri, "redirectUri");
         requireText(codeVerifier, "codeVerifier");
         PendingAuthorization pending = pendingAuthorizations.asMap().remove(state);
         if (pending == null
+                || pending.purpose() != purpose
+                || !Objects.equals(pending.userId(), userId)
                 || !MessageDigest.isEqual(pending.redirectUri().getBytes(StandardCharsets.UTF_8), redirectUri.trim().getBytes(StandardCharsets.UTF_8))
                 || !MessageDigest.isEqual(pending.codeChallenge().getBytes(StandardCharsets.US_ASCII), challenge(codeVerifier).getBytes(StandardCharsets.US_ASCII))) {
             throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "OAuth state hoặc PKCE verifier không hợp lệ hoặc đã hết hạn");
@@ -88,6 +139,11 @@ public class GoogleOAuthStateService {
         }
     }
 
-    private record PendingAuthorization(String redirectUri, String codeChallenge) {
+    private record PendingAuthorization(
+            GoogleOAuthPurpose purpose,
+            UUID userId,
+            String redirectUri,
+            String codeChallenge
+    ) {
     }
 }

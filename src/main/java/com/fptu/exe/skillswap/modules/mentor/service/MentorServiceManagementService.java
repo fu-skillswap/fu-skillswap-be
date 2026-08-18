@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
@@ -46,6 +47,7 @@ public class MentorServiceManagementService {
     private final MentorProfileRepository mentorProfileRepository;
     private final UserRepository userRepository;
     private final MentorProfileService mentorProfileService;
+    private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
     private final BookingRepository bookingRepository;
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
@@ -102,17 +104,26 @@ public class MentorServiceManagementService {
 
         int durationMinutes = validateDuration(request.durationMinutes());
         boolean isFree = Boolean.TRUE.equals(request.isFree());
+        String title = cleanRequired(request.title(), "Tiêu đề dịch vụ");
+        String description = cleanRequired(request.description(), "Mô tả dịch vụ");
+        String expectedOutcome = cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng");
+        Integer priceScoin = normalizePriceScoin(isFree, request.priceScoin(), durationMinutes);
+        MentorServiceDeliveryMode deliveryMode = request.deliveryMode() == null
+                ? MentorServiceDeliveryMode.ONE_TO_ONE
+                : request.deliveryMode();
+        googleCalendarConnectionPort.requireActiveConnectionForServiceCreation(mentorUserId);
+
         MentorService service = MentorService.builder()
                 .mentorProfile(mentorProfile)
-                .title(cleanRequired(request.title(), "Tiêu đề dịch vụ"))
-                .description(cleanRequired(request.description(), "Mô tả dịch vụ"))
-                .expectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"))
+                .title(title)
+                .description(description)
+                .expectedOutcome(expectedOutcome)
                 .durationMinutes(durationMinutes)
                 .isFree(isFree)
-                .priceScoin(normalizePriceScoin(isFree, request.priceScoin(), durationMinutes))
+                .priceScoin(priceScoin)
                 .isActive(true)
                 .maintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()))
-                .deliveryMode(request.deliveryMode() == null ? MentorServiceDeliveryMode.ONE_TO_ONE : request.deliveryMode())
+                .deliveryMode(deliveryMode)
                 .build();
 
         touchMentorActivity(mentorProfile, LocalDateTime.now());
@@ -164,6 +175,9 @@ public class MentorServiceManagementService {
         }
         if (Boolean.TRUE.equals(request.isActive()) && Boolean.TRUE.equals(request.rejectPendingBookings())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "rejectPendingBookings chỉ hợp lệ khi deactivate service");
+        }
+        if (Boolean.TRUE.equals(request.isActive()) && !service.isActive()) {
+            googleCalendarConnectionPort.requireActiveConnectionForServiceCreation(mentorUserId);
         }
         if (!Boolean.TRUE.equals(request.isActive())) {
             LocalDateTime now = LocalDateTime.now();

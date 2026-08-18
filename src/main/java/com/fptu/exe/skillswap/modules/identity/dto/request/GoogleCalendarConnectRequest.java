@@ -15,6 +15,10 @@ public record GoogleCalendarConnectRequest(
 
         @NotBlank(message = "codeVerifier không được để trống")
         @Schema(description = "PKCE code verifier", example = "f93GhKJ0...")
-        String codeVerifier
+        String codeVerifier,
+
+        @NotBlank(message = "state không được để trống")
+        @Schema(description = "OAuth state do API authorization-context của Calendar cấp", example = "F6fY...")
+        String state
 ) {
 }

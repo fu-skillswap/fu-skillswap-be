@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleCalendarConnectRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleCalendarStatusResponse;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarConnectionService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -33,6 +35,21 @@ public class GoogleCalendarController {
     public ApiResponse<GoogleCalendarStatusResponse> getStatus(@AuthenticationPrincipal UserPrincipal principal) {
         ensurePrincipal(principal);
         return ApiResponse.success(googleCalendarConnectionService.getStatus(principal.getPublicId()));
+    }
+
+    @GetMapping("/authorization-context")
+    @Operation(summary = "Tạo state và PKCE context để mentor kết nối Google Calendar")
+    public ApiResponse<GoogleAuthorizationContextResponse> issueAuthorizationContext(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam String redirectUri,
+            @RequestParam String codeChallenge
+    ) {
+        ensurePrincipal(principal);
+        return ApiResponse.success(googleCalendarConnectionService.issueAuthorizationContext(
+                principal.getPublicId(),
+                redirectUri,
+                codeChallenge
+        ));
     }
 
     @PostMapping("/connect")

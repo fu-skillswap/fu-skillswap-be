@@ -15,6 +15,7 @@ Tất cả các endpoint trong tài liệu này yêu cầu Bearer token với Ro
 
 ```text
 Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
+ ➔ Kết nối Google Calendar bằng OAuth state + PKCE riêng
  ➔ Tạo Dịch vụ 1:1 đang hoạt động (Active ONE_TO_ONE Service)
  ➔ Tạo Lịch rảnh trực tiếp (Direct Slot) hoặc Mẫu lịch lặp tuần (Weekly Template)
  ➔ Mentor đủ điều kiện xuất hiện trên trang Tìm kiếm công khai (Discovery)
@@ -22,11 +23,73 @@ Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
 ```
 
 > [!NOTE]
-> Việc được duyệt hồ sơ xác thực (Verification) không tự động tạo sẵn dịch vụ hay lịch rảnh. Dịch vụ và lịch rảnh không phải là điều kiện bắt buộc lúc nộp hồ sơ, nhưng là điều kiện tiên quyết để mentor có thể nhận booking và hiển thị trên trang tìm kiếm.
+> Việc được duyệt hồ sơ xác thực (Verification) không tự động tạo sẵn dịch vụ hay lịch rảnh. Google Calendar không thuộc đơn verification, nhưng phải được kết nối trước khi mentor tạo hoặc bật lại service.
 
 ---
 
-## 2. Quản Lý Dịch Vụ Mentoring (Service Management)
+## 2. Kết Nối Google Calendar Trước Khi Tạo Service
+
+### 2.1 Các endpoint FE cần dùng
+
+| Endpoint | Khi nào gọi |
+|---|---|
+| `GET /api/me/google-calendar/status` | Khi mở trang quản lý service để quyết định hiển thị CTA kết nối |
+| `GET /api/me/google-calendar/authorization-context?redirectUri=...&codeChallenge=...` | Sau khi mentor bấm “Kết nối Google Calendar” |
+| `POST /api/me/google-calendar/connect` | Tại trang callback sau khi Google trả `code` và `state` |
+| `POST /api/me/google-calendar/disconnect` | Khi mentor chủ động ngắt kết nối và không còn service active |
+
+Tất cả endpoint trên yêu cầu Bearer token. Endpoint tạo context và connect chỉ chấp nhận mentor đã được Admin duyệt.
+
+```typescript
+interface GoogleCalendarStatusResponse {
+  connected: boolean;
+  syncEnabled: boolean;
+  email: string | null;
+  grantedScopes: string[];
+  needsReconnect: boolean;
+  lastSyncStatus: string | null;
+  lastSyncAt: string | null;
+  lastSyncErrorCode: string | null;
+  lastSyncErrorMessage: string | null;
+}
+```
+
+### 2.2 Flow OAuth Calendar riêng
+
+1. FE sinh `codeVerifier` và `codeChallenge = BASE64URL(SHA256(codeVerifier))`.
+2. Lưu `codeVerifier` vào `sessionStorage`; không lưu access token Google.
+3. Gọi `GET /api/me/google-calendar/authorization-context` với callback đúng cấu hình, ví dụ `https://skillswap.asia/vi/mentor/google-calendar/callback`.
+4. Chuyển mentor sang Google với scope `openid email profile https://www.googleapis.com/auth/calendar`, kèm `state` và PKCE challenge.
+5. Ở callback, so sánh `state` nhận về với state đang chờ, rồi gọi:
+
+```typescript
+interface GoogleCalendarConnectRequest {
+  authorizationCode: string;
+  redirectUri: string;
+  codeVerifier: string;
+  state: string;
+}
+```
+
+6. Khi connect thành công, xóa `codeVerifier` và state tạm, gọi lại `GET /status`, sau đó mới mở form tạo service.
+
+> [!WARNING]
+> State của đăng nhập và state của Calendar không dùng chung. Mỗi state chỉ dùng một lần, gắn với đúng mentor, callback và PKCE verifier. Nếu callback bị refresh sau khi đã connect, FE không tự retry code cũ mà bắt đầu flow kết nối mới.
+
+### 2.3 Trạng thái UI và lỗi nghiệp vụ
+
+| HTTP / code | FE cần làm |
+|---|---|
+| `409 / CAL_4401` | Calendar chưa kết nối hoặc cần kết nối lại. Giữ dữ liệu form service ở state tạm và mở CTA kết nối Calendar. |
+| `409 / CAL_4402` | Hồ sơ mentor chưa được duyệt. Điều hướng về trang trạng thái verification. |
+| `409 / CAL_4403` | Không thể disconnect vì còn service active. Hiển thị danh sách service và yêu cầu tắt chúng trước. |
+| `400 / AUTH_1006` | State, PKCE, callback hoặc authorization code không hợp lệ/hết hạn. Bắt đầu flow mới. |
+
+Không chỉ dựa vào trạng thái cũ trong `GET /api/auth/me`: backend luôn kiểm tra và khóa connection trong transaction khi tạo hoặc bật lại service để tránh race condition với disconnect.
+
+---
+
+## 3. Quản Lý Dịch Vụ Mentoring (Service Management)
 
 1. Gọi `GET /api/me/mentor-services/constraints` trước khi mở form tạo mới để lấy các ràng buộc về thời lượng (`durationMinutes`) và khoảng giá Scoin do nền tảng quy định.
 2. Tạo dịch vụ mới qua `POST /api/me/mentor-services`.
@@ -70,7 +133,9 @@ interface MentorServiceManagementResponse {
   expectedOutcome: string;
   durationMinutes: number;
   isFree: boolean;
-  priceScoin: number;
+  basePriceScoin: number;             // Giá mentor đặt
+  publicPriceScoin: number;           // Giá mentee nhìn thấy
+  estimatedMentorPayoutScoin: number; // Payout dự kiến
   isActive: boolean;
   maintainPostSessionChat: boolean;
   deliveryMode: string;
@@ -81,13 +146,14 @@ interface MentorServiceManagementResponse {
 ```
 
 > [!IMPORTANT]
+> - `POST /api/me/mentor-services` và thao tác bật lại service sẽ trả `CAL_4401` nếu Calendar không còn `ACTIVE`.
 > - `durationMinutes` và `deliveryMode` không thể chỉnh sửa sau khi dịch vụ đã được tạo. Hãy hiển thị các trường này ở dạng chỉ đọc (Read-only) trong form cập nhật.
 > - Khi nhận mã lỗi `409 Conflict`, hãy tải lại dữ liệu dịch vụ mới nhất và yêu cầu mentor xác nhận lại thay đổi; **không tự ý gửi lại `expectedVersion` cũ**.
 > - Không tự tạo chuỗi `pendingRejectionToken`. Nếu backend yêu cầu xác nhận hủy các booking đang chờ duyệt (Pending), hãy hiển thị dialog xác nhận kèm thông tin conflict mà backend trả về và gửi kèm token đó trong lần gọi tiếp theo.
 
 ---
 
-## 3. Chính Sách Đặt Lịch & Ràng Buộc Hệ Thống (Booking Policy & Constraints)
+## 4. Chính Sách Đặt Lịch & Ràng Buộc Hệ Thống (Booking Policy & Constraints)
 
 | Endpoint | Mục đích |
 |---|---|
@@ -108,7 +174,7 @@ interface UpdateMentorBookingPolicyRequest {
 
 ---
 
-## 4. Lịch Rảnh Trực Tiếp (Direct Availability Slots)
+## 5. Lịch Rảnh Trực Tiếp (Direct Availability Slots)
 
 Lịch rảnh trực tiếp (Direct Slot) là các khung giờ rảnh dùng một lần.
 - Thời gian gửi lên request bắt buộc là chuỗi **`Instant` UTC** (ví dụ: `2026-06-29T01:00:00Z`).
@@ -153,7 +219,7 @@ interface DeactivateAvailabilitySlotRequest {
 
 ---
 
-## 5. Mẫu Lịch Lặp Tuần (Availability Templates)
+## 6. Mẫu Lịch Lặp Tuần (Availability Templates)
 
 Template là lịch lặp cố định theo các thứ trong tuần sử dụng múi giờ `Asia/Ho_Chi_Minh`. Backend sẽ tự động sinh (materialize) thành các slot rảnh cụ thể trong tương lai. Không dùng trực tiếp template để đặt lịch.
 
@@ -201,7 +267,7 @@ interface AvailabilityTemplateResponse {
 
 ---
 
-## 6. Xử Lý Lỗi Thường Gặp (Error Handling)
+## 7. Xử Lý Lỗi Thường Gặp (Error Handling)
 
 | HTTP Status | Hướng xử lý cho Frontend |
 |---|---|
