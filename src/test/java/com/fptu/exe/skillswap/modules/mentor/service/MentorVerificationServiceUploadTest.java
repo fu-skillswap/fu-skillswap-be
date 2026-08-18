@@ -217,6 +217,7 @@ class MentorVerificationServiceUploadTest {
         )).thenReturn(1L);
 
         MentorVerificationUploadIntent intent = validIntent();
+        when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
                 intent.getId()

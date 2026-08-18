@@ -62,22 +62,23 @@ class ForumControllerSecurityTest {
     }
 
     @Test
-    void forumPosts_adminShouldBeForbidden() throws Exception {
+    void forumPosts_adminShouldBeAllowedToReadPublicPosts() throws Exception {
         UserPrincipal principal = UserPrincipal.create(UUID.randomUUID(), "admin@test.com", List.of(RoleCode.ADMIN));
+        when(forumPostService.getPosts(any(), any(), any(), any(), any(), any()))
+                .thenReturn(CursorPageResponse.<ForumPostResponse>builder().items(List.of()).nextCursor(null).prevCursor(null).hasNext(false).hasPrev(false).limit(20).build());
 
         mockMvc.perform(get("/api/forum/posts")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
-                .andExpect(status().isForbidden());
-
-        verifyNoInteractions(forumPostService);
+                .andExpect(status().isOk());
     }
 
     @Test
-    void forumPosts_anonymousShouldBeUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/forum/posts"))
-                .andExpect(status().isUnauthorized());
+    void forumPosts_anonymousShouldBeAllowedToReadPublicPosts() throws Exception {
+        when(forumPostService.getPosts(any(), any(), any(), any(), any(), any()))
+                .thenReturn(CursorPageResponse.<ForumPostResponse>builder().items(List.of()).nextCursor(null).prevCursor(null).hasNext(false).hasPrev(false).limit(20).build());
 
-        verifyNoInteractions(forumPostService);
+        mockMvc.perform(get("/api/forum/posts"))
+                .andExpect(status().isOk());
     }
 
     @Test
