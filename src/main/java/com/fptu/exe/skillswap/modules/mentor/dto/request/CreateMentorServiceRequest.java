@@ -3,12 +3,9 @@ package com.fptu.exe.skillswap.modules.mentor.dto.request;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
-import java.util.UUID;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 
 public record CreateMentorServiceRequest(
@@ -19,6 +16,5 @@ public record CreateMentorServiceRequest(
         @NotNull Boolean isFree,
         @NotNull @Min(0) @Max(45_000_000) Integer priceScoin,
         Boolean maintainPostSessionChat,
-        MentorServiceDeliveryMode deliveryMode,
-        @NotEmpty @Size(max = 20) List<@NotNull UUID> helpTopicIds
+        MentorServiceDeliveryMode deliveryMode
 ) {}

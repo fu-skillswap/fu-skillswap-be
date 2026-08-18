@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
@@ -12,15 +11,12 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationRe
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
@@ -51,7 +47,6 @@ public class DiscoveryMapper {
     ) {
         return toCardResponse(
                 row,
-                enrichedData.helpTopics(),
                 matchScore,
                 enrichedData.subjectResults(),
                 enrichedData.featuredProjects(),
@@ -61,7 +56,6 @@ public class DiscoveryMapper {
 
     public MentorDiscoveryCardResponse toCardResponse(
             MentorDiscoveryQueryRow row,
-            List<MentorTagResponse> helpTopicTags,
             BigDecimal matchScore,
             List<MentorSubjectResultResponse> subjectResults,
             List<MentorFeaturedProjectResponse> featuredProjects,
@@ -69,47 +63,55 @@ public class DiscoveryMapper {
     ) {
         int reviews = defaultInteger(row.reviewCount());
         return MentorDiscoveryCardResponse.builder()
+                .identity(new MentorDiscoveryCardResponse.Identity(
+                        row.mentorUserId(), row.displayName(), row.avatarUrl(), row.headline(),
+                        row.verifiedAt() != null, row.verifiedAt()))
+                .mentoring(new MentorDiscoveryCardResponse.Mentoring(
+                        row.expertiseDescription(), row.foundationSupportLevel(),
+                        row.outputReviewSupportLevel(), row.directionSupportLevel()))
+                .evidence(new MentorDiscoveryCardResponse.Evidence(
+                        row.campusId(), row.campusName(), row.programId(), row.programName(),
+                        row.specializationId(), row.specializationName(),
+                        subjectResults == null ? List.of() : subjectResults.stream().limit(2).toList(),
+                        featuredProjects == null ? List.of() : featuredProjects.stream().limit(2).toList(),
+                        achievements == null ? List.of() : achievements.stream().limit(2).toList()))
+                .reputation(new MentorDiscoveryCardResponse.Reputation(
+                        reviews == 0 ? MentorRatingState.NO_REVIEWS : MentorRatingState.RATED,
+                        reviews == 0 ? null : row.ratingAverage(), reviews, defaultInteger(row.completedSessions())))
+                .availability(new MentorDiscoveryCardResponse.Availability(Boolean.TRUE.equals(row.isAvailable())))
+                .match(new MentorDiscoveryCardResponse.Match(matchScore))
                 .mentorUserId(row.mentorUserId())
                 .displayName(row.displayName())
-                .avatarUrl(row.avatarUrl())
-                .headline(row.headline())
-                .expertiseDescription(row.expertiseDescription())
-                .subjectResults(subjectResults)
-                .foundationSupportLevel(row.foundationSupportLevel())
-                .outputReviewSupportLevel(row.outputReviewSupportLevel())
-                .directionSupportLevel(row.directionSupportLevel())
-                .featuredProjects(featuredProjects.stream().limit(2).toList())
-                .achievements(achievements.stream().limit(2).toList())
-                .isAvailable(row.isAvailable())
                 .ratingState(reviews == 0 ? MentorRatingState.NO_REVIEWS : MentorRatingState.RATED)
                 .ratingAverage(reviews == 0 ? null : row.ratingAverage())
-                .reviewCount(reviews)
                 .completedSessions(defaultInteger(row.completedSessions()))
-                .verifiedAt(row.verifiedAt())
-                .campusId(row.campusId())
-                .campusName(row.campusName())
-                .programId(row.programId())
-                .programName(row.programName())
-                .specializationId(row.specializationId())
-                .specializationName(row.specializationName())
                 .matchScore(matchScore)
-                .helpTopicTags(helpTopicTags.stream().limit(5).toList())
                 .build();
     }
 
-    public MentorServiceResponse toServiceResponse(MentorService mentorService) {
-        List<MentorTagResponse> helpTopics = mentorService.getHelpTopics().stream()
-                .sorted(Comparator.comparing(tag -> tag.getNameVi() == null ? "" : tag.getNameVi()))
-                .map(tag -> MentorTagResponse.builder()
-                        .id(tag.getId())
-                        .code(tag.getCode())
-                        .nameVi(tag.getNameVi())
-                        .nameEn(tag.getNameEn())
-                        .type(tag.getType())
-                        .primary(false)
-                        .build())
-                .toList();
+    /**
+     * Temporary Java compatibility for callers compiled against the removed HelpTopic argument.
+     * The argument is intentionally ignored; the public JSON contract has no help-topic field.
+     */
+    @Deprecated(forRemoval = true)
+    public MentorDiscoveryCardResponse toCardResponse(
+            MentorDiscoveryQueryRow row,
+            List<?> ignoredHelpTopics,
+            BigDecimal matchScore,
+            List<?> subjectResults,
+            List<?> featuredProjects,
+            List<?> achievements
+    ) {
+        return toCardResponse(
+                row,
+                matchScore,
+                typedItems(subjectResults, MentorSubjectResultResponse.class),
+                typedItems(featuredProjects, MentorFeaturedProjectResponse.class),
+                typedItems(achievements, MentorAchievementResponse.class)
+        );
+    }
 
+    public MentorServiceResponse toServiceResponse(MentorService mentorService) {
         return MentorServiceResponse.builder()
                 .serviceId(mentorService.getId())
                 .mentorUserId(mentorService.getMentorProfile() == null ? null : mentorService.getMentorProfile().getUserId())
@@ -123,7 +125,6 @@ public class DiscoveryMapper {
                 .maintainPostSessionChat(mentorService.isMaintainPostSessionChat())
                 .deliveryMode(mentorService.getDeliveryMode())
                 .version(mentorService.getVersion())
-                .helpTopics(helpTopics)
                 .createdAt(mentorService.getCreatedAt())
                 .updatedAt(mentorService.getUpdatedAt())
                 .build();
@@ -141,24 +142,18 @@ public class DiscoveryMapper {
                 .build();
     }
 
-    public List<MentorTagResponse> filterTagsByType(List<MentorTagResponse> tags, MentorTagType tagType) {
-        if (tags == null || tags.isEmpty()) {
-            return List.of();
-        }
-        Set<com.fptu.exe.skillswap.modules.catalog.domain.TagType> acceptedTypes = switch (tagType) {
-            case EXPERTISE -> EnumSet.noneOf(com.fptu.exe.skillswap.modules.catalog.domain.TagType.class);
-            case HELP_TOPIC -> EnumSet.of(com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC);
-        };
-        return tags.stream()
-                .filter(tag -> tag.type() != null && acceptedTypes.contains(tag.type()))
-                .toList();
-    }
-
     public static BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? ZERO : value;
     }
 
     public static Integer defaultInteger(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private static <T> List<T> typedItems(List<?> source, Class<T> type) {
+        if (source == null || source.isEmpty()) {
+            return List.of();
+        }
+        return source.stream().filter(type::isInstance).map(type::cast).toList();
     }
 }

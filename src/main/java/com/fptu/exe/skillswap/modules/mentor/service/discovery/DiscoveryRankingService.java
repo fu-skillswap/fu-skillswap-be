@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
@@ -261,7 +260,7 @@ public class DiscoveryRankingService {
             addReason(reasons, RecommendationReasonCode.RECENT_ACTIVITY);
         }
         BigDecimal qualityScore = calculateSearchQualityScore(candidate, evaluatedAt);
-        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), reasons, evaluatedAt);
+        BigDecimal capabilityScore = calculateCapabilityScore(candidate, menteeProfile, enrichedData.subjectResults(), reasons, evaluatedAt);
         BigDecimal serviceScore = enrichedData.services().isEmpty()
                 ? ZERO
                 : serviceBonusScore(enrichedData.services().size());
@@ -321,7 +320,7 @@ public class DiscoveryRankingService {
         if (tokens.isEmpty()) {
             return calculatePersonalizationScore(row, menteeProfile)
                     .add(calculateSearchQualityScore(row, evaluatedAt))
-                    .add(calculateCapabilityScore(row, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt))
+                    .add(calculateCapabilityScore(row, menteeProfile, enrichedData.subjectResults(), null, evaluatedAt))
                     .add(extraBonus)
                     .setScale(2, RoundingMode.HALF_UP);
         }
@@ -343,10 +342,6 @@ public class DiscoveryRankingService {
                         row.programName(),
                         row.specializationName()
                 })
-                .filter(value -> value != null && !value.isBlank())
-                .toList();
-        List<String> tagFields = enrichedData.helpTopics().stream()
-                .flatMap(tag -> Arrays.stream(new String[]{tag.nameVi(), tag.nameEn(), tag.code()}))
                 .filter(value -> value != null && !value.isBlank())
                 .toList();
         List<String> subjectFields = enrichedData.subjectResults().stream()
@@ -382,7 +377,6 @@ public class DiscoveryRankingService {
                 .toList();
 
         if (containsPhrase(profileFields, exactKeyword)
-                || containsPhrase(tagFields, exactKeyword)
                 || containsPhrase(subjectFields, exactKeyword)
                 || containsPhrase(projectFields, exactKeyword)
                 || containsPhrase(achievementFields, exactKeyword)
@@ -391,15 +385,13 @@ public class DiscoveryRankingService {
         }
 
         int profileMatches = countTokenMatches(profileFields, tokens);
-        int tagMatches = countTokenMatches(tagFields, tokens);
         int subjectMatches = countTokenMatches(subjectFields, tokens);
         int projectMatches = countTokenMatches(projectFields, tokens);
         int achievementMatches = countTokenMatches(achievementFields, tokens);
         int serviceMatches = countTokenMatches(serviceFields, tokens);
-        int totalMatches = profileMatches + tagMatches + subjectMatches + projectMatches + achievementMatches + serviceMatches;
+        int totalMatches = profileMatches + subjectMatches + projectMatches + achievementMatches + serviceMatches;
 
         score = score.add(decimal(profileMatches * 8));
-        score = score.add(decimal(tagMatches * 10));
         score = score.add(decimal(subjectMatches * 12));
         score = score.add(decimal(projectMatches * 10));
         score = score.add(decimal(achievementMatches * 8));
@@ -429,7 +421,7 @@ public class DiscoveryRankingService {
 
         score = score.add(calculatePersonalizationScore(row, menteeProfile));
         score = score.add(calculateSearchQualityScore(row, evaluatedAt));
-        score = score.add(calculateCapabilityScore(row, menteeProfile, enrichedData.helpTopics(), enrichedData.subjectResults(), null, evaluatedAt));
+        score = score.add(calculateCapabilityScore(row, menteeProfile, enrichedData.subjectResults(), null, evaluatedAt));
         score = score.add(extraBonus);
         return score.setScale(2, RoundingMode.HALF_UP);
     }
@@ -437,7 +429,6 @@ public class DiscoveryRankingService {
     private BigDecimal calculateCapabilityScore(
             MentorDiscoveryQueryRow candidate,
             StudentProfile menteeProfile,
-            List<MentorTagResponse> helpTopics,
             List<MentorSubjectResultResponse> subjectResults,
             List<RecommendationReason> reasons,
             LocalDateTime evaluatedAt
@@ -641,7 +632,6 @@ public class DiscoveryRankingService {
     private boolean hasSubjectMatchSignal(
             MentorDiscoveryQueryRow candidate,
             StudentProfile menteeProfile,
-            List<MentorTagResponse> helpTopics,
             List<MentorSubjectResultResponse> subjectResults
     ) {
         boolean sameSpecialization = menteeProfile != null
@@ -653,7 +643,7 @@ public class DiscoveryRankingService {
         boolean sameProgram = menteeProfile != null
                 && sameUuid(menteeProfile.getProgram() == null ? null : menteeProfile.getProgram().getId(), candidate.programId());
         return sameProgram
-                && ((helpTopics != null && !helpTopics.isEmpty()) || (subjectResults != null && !subjectResults.isEmpty()));
+                && subjectResults != null && !subjectResults.isEmpty();
     }
 
     private BigDecimal levelAlignmentScore(Integer needLevel, Integer supportLevel) {

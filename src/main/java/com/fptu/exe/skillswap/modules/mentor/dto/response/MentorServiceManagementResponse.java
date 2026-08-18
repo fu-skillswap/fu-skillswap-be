@@ -39,8 +39,6 @@ public record MentorServiceManagementResponse(
         MentorServiceDeliveryMode deliveryMode,
         @Schema(description = "Optimistic-lock version for management mutations", example = "4")
         Integer version,
-        @Schema(description = "Help topics covered by this service")
-        List<MentorTagResponse> helpTopics,
         @Schema(description = "Service creation time", example = "2026-06-20T09:00:00")
         LocalDateTime createdAt,
         @Schema(description = "Latest service update time", example = "2026-06-24T10:00:00")

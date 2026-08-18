@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/forum/reports")
 @RequiredArgsConstructor
-@Tag(name = "Forum", description = "Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và đọc thảo luận theo help topic.")
+@Tag(name = "Forum", description = "Nhóm API report và moderation cho Forum.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
 public class ForumReportController {

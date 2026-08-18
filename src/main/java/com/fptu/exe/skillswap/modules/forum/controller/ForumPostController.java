@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.forum.dto.request.ForumPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
+import com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.service.ForumPostService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -36,9 +37,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/forum")
 @RequiredArgsConstructor
-@Tag(name = "Forum", description = "Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và đọc thảo luận theo help topic.")
+@Tag(name = "Forum", description = "Nhóm API cộng đồng cho người dùng đọc và tham gia thảo luận theo Forum Topic.")
 @SecurityRequirement(name = "bearerAuth")
-@PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
 public class ForumPostController {
 
     private final ForumPostService forumPostService;
@@ -77,7 +77,7 @@ public class ForumPostController {
                                                     "authorUserId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a2001",
                                                     "authorFullName": "Nguyen Van A",
                                                     "authorAvatarUrl": "https://cdn.skillswap.asia/avatar/a.jpg",
-                                                    "helpTopic": {
+                                                    "forumTopic": {
                                                       "id": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a3001",
                                                       "code": "HELP_PROJECT_REVIEW",
                                                       "nameVi": "Góp ý dự án/case study",
@@ -119,11 +119,14 @@ public class ForumPostController {
             @Parameter(description = "Số lượng item mong muốn cho một lần lấy dữ liệu. Mặc định 20, tối đa 50.", example = "20")
             @RequestParam(defaultValue = "20") Integer limit,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) UUID helpTopicId,
+            @RequestParam(required = false) UUID forumTopicId,
             @RequestParam(required = false, defaultValue = "false") Boolean mine
     ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(forumPostService.getPosts(principal.getPublicId(), cursor, limit, keyword, helpTopicId, mine));
+        UUID currentUserId = principal == null ? null : principal.getPublicId();
+        if (Boolean.TRUE.equals(mine)) {
+            ensureAuthenticated(principal);
+        }
+        return ApiResponse.success(forumPostService.getPosts(currentUserId, cursor, limit, keyword, forumTopicId, mine));
     }
 
     @GetMapping("/feed")
@@ -143,11 +146,11 @@ public class ForumPostController {
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId
     ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(forumPostService.getPostDetail(principal.getPublicId(), postId));
+        return ApiResponse.success(forumPostService.getPostDetail(principal == null ? null : principal.getPublicId(), postId));
     }
 
     @PostMapping("/posts")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Tạo bài viết forum")
     public ApiResponse<ForumPostResponse> createPost(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -158,6 +161,7 @@ public class ForumPostController {
     }
 
     @PutMapping("/posts/{postId}")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Cập nhật bài viết forum của tôi")
     public ApiResponse<ForumPostResponse> updatePost(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -169,6 +173,7 @@ public class ForumPostController {
     }
 
     @DeleteMapping("/posts/{postId}")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Xóa mềm bài viết forum của tôi")
     public ApiResponse<ForumPostResponse> deletePost(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -191,11 +196,11 @@ public class ForumPostController {
             @Parameter(description = "Số lượng item mong muốn cho một lần lấy dữ liệu. Mặc định 20, tối đa 50.", example = "20")
             @RequestParam(defaultValue = "20") Integer limit
     ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(forumPostService.getComments(principal.getPublicId(), postId, cursor, limit));
+        return ApiResponse.success(forumPostService.getComments(principal == null ? null : principal.getPublicId(), postId, cursor, limit));
     }
 
     @PostMapping("/posts/{postId}/comments")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Tạo comment mới cho bài viết forum")
     public ApiResponse<ForumCommentResponse> createComment(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -207,6 +212,7 @@ public class ForumPostController {
     }
 
     @PutMapping("/comments/{commentId}")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Cập nhật comment forum của tôi")
     public ApiResponse<ForumCommentResponse> updateComment(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -218,6 +224,7 @@ public class ForumPostController {
     }
 
     @DeleteMapping("/comments/{commentId}")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Xóa mềm comment forum của tôi")
     public ApiResponse<ForumCommentResponse> deleteComment(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -228,6 +235,7 @@ public class ForumPostController {
     }
 
     @PutMapping("/posts/{postId}/reaction")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Thả reaction cho bài viết forum")
     public ApiResponse<ForumPostResponse> upsertReaction(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -239,6 +247,7 @@ public class ForumPostController {
     }
 
     @DeleteMapping("/posts/{postId}/reaction")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Bỏ reaction của tôi khỏi bài viết forum")
     public ApiResponse<ForumPostResponse> removeReaction(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -249,6 +258,7 @@ public class ForumPostController {
     }
 
     @PutMapping("/comments/{commentId}/reaction")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Thả reaction cho bình luận forum")
     public ApiResponse<ForumCommentResponse> upsertCommentReaction(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -260,6 +270,7 @@ public class ForumPostController {
     }
 
     @DeleteMapping("/comments/{commentId}/reaction")
+    @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
     @Operation(summary = "Bỏ reaction của tôi khỏi bình luận forum")
     public ApiResponse<ForumCommentResponse> removeCommentReaction(
             @AuthenticationPrincipal UserPrincipal principal,
@@ -267,6 +278,12 @@ public class ForumPostController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(forumPostService.removeCommentReaction(principal.getPublicId(), commentId));
+    }
+
+    @GetMapping("/topics")
+    @Operation(summary = "Lấy danh sách Forum Topic công khai")
+    public ApiResponse<java.util.List<ForumTopicResponse>> getTopics() {
+        return ApiResponse.success(forumPostService.getTopics());
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

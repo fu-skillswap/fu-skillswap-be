@@ -24,16 +24,15 @@ class PublicApiGrowthGateSecurityTest {
     private MockMvc mockMvc;
 
     @Test
-    void anonymousShouldAccessPublicCatalogWithCacheHeaders() throws Exception {
+    void anonymousShouldAccessPublicCatalogAndForumTopics() throws Exception {
         mockMvc.perform(get("/api/campuses"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "public, max-age=86400"))
                 .andExpect(header().string("ETag", "\"academic-catalog-v1\""));
 
-        mockMvc.perform(get("/api/catalog/help-topics"))
+        mockMvc.perform(get("/api/forum/topics"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "public, max-age=86400"))
-                .andExpect(header().string("ETag", "\"catalog-v1\""));
+                .andExpect(header().doesNotExist("WWW-Authenticate"));
     }
 
     @Test
@@ -64,6 +63,10 @@ class PublicApiGrowthGateSecurityTest {
 
         mockMvc.perform(get("/api/mentors/018f3abf-0a22-7112-9748-6cf000c47b6e/availability-slots"))
                 .andExpect(status().isUnauthorized());
+
+        // Route may return 404 when this fixture mentor does not exist, but it must not hit the login wall.
+        mockMvc.perform(get("/api/mentors/018f3abf-0a22-7112-9748-6cf000c47b6e/availability-preview"))
+                .andExpect(status().isNotFound());
     }
 
     @Test

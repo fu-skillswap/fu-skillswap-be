@@ -17,8 +17,8 @@ public record ForumPostUpsertRequest(
         @Size(max = 5000, message = "Nội dung bài viết không được quá 5000 ký tự")
         String content,
 
-        @NotNull(message = "helpTopicId là bắt buộc")
-        UUID helpTopicId,
+        @NotNull(message = "forumTopicId là bắt buộc")
+        UUID forumTopicId,
 
         @Size(max = 4, message = "Mỗi bài viết chỉ được đính kèm tối đa 4 ảnh")
         java.util.List<@Size(max = 2000, message = "URL ảnh quá dài") String> imageUrls

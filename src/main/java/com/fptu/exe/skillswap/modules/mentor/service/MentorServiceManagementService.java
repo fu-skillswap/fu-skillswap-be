@@ -1,9 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
@@ -22,7 +18,6 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequ
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceUpsertRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -49,7 +44,6 @@ public class MentorServiceManagementService {
 
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final MentorProfileService mentorProfileService;
     private final BookingRepository bookingRepository;
@@ -106,7 +100,6 @@ public class MentorServiceManagementService {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         requireRequest(request);
 
-        List<Tag> helpTopics = loadHelpTopics(request.helpTopicIds());
         int durationMinutes = validateDuration(request.durationMinutes());
         boolean isFree = Boolean.TRUE.equals(request.isFree());
         MentorService service = MentorService.builder()
@@ -120,7 +113,6 @@ public class MentorServiceManagementService {
                 .isActive(true)
                 .maintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()))
                 .deliveryMode(request.deliveryMode() == null ? MentorServiceDeliveryMode.ONE_TO_ONE : request.deliveryMode())
-                .helpTopics(new LinkedHashSet<>(helpTopics))
                 .build();
 
         touchMentorActivity(mentorProfile, LocalDateTime.now());
@@ -132,7 +124,7 @@ public class MentorServiceManagementService {
     public MentorServiceManagementResponse createService(UUID mentorUserId, MentorServiceUpsertRequest request) {
         return createService(mentorUserId, new CreateMentorServiceRequest(
                 request.title(), request.description(), request.expectedOutcome(), request.durationMinutes(),
-                request.isFree(), request.priceScoin(), false, MentorServiceDeliveryMode.ONE_TO_ONE, request.helpTopicIds()
+                request.isFree(), request.priceScoin(), false, MentorServiceDeliveryMode.ONE_TO_ONE
         ));
     }
 
@@ -142,7 +134,6 @@ public class MentorServiceManagementService {
         requireRequest(request);
 
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
-        List<Tag> helpTopics = loadHelpTopics(request.helpTopicIds());
         boolean isFree = Boolean.TRUE.equals(request.isFree());
 
         if (!java.util.Objects.equals(request.expectedVersion(), service.getVersion())) {
@@ -155,7 +146,6 @@ public class MentorServiceManagementService {
         service.setFree(isFree);
         service.setPriceScoin(normalizePriceScoin(isFree, request.priceScoin(), service.getDurationMinutes()));
         service.setMaintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()));
-        replaceHelpTopics(service, helpTopics);
         touchMentorActivity(mentorProfile, LocalDateTime.now());
 
         return toResponse(mentorServiceRepository.save(service));
@@ -226,39 +216,7 @@ public class MentorServiceManagementService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy dịch vụ mentoring"));
     }
 
-    private List<Tag> loadHelpTopics(List<UUID> helpTopicIds) {
-        if (helpTopicIds == null || helpTopicIds.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách chủ đề hỗ trợ không được để trống");
-        }
-
-        Set<UUID> uniqueIds = new LinkedHashSet<>(helpTopicIds);
-        if (uniqueIds.size() != helpTopicIds.size()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách chủ đề hỗ trợ không được trùng lặp");
-        }
-
-        List<Tag> tags = tagRepository.findByIdInAndStatus(uniqueIds, TagStatus.ACTIVE);
-        if (tags.size() != uniqueIds.size()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều chủ đề hỗ trợ không tồn tại hoặc chưa được duyệt");
-        }
-
-        boolean invalidType = tags.stream().anyMatch(tag -> tag.getType() != TagType.HELP_TOPIC);
-        if (invalidType) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều chủ đề hỗ trợ không đúng loại HELP_TOPIC");
-        }
-        return tags;
-    }
-
-    private void replaceHelpTopics(MentorService service, List<Tag> helpTopics) {
-        service.getHelpTopics().clear();
-        service.getHelpTopics().addAll(helpTopics);
-    }
-
     private MentorServiceManagementResponse toResponse(MentorService service) {
-        List<MentorTagResponse> helpTopics = service.getHelpTopics().stream()
-                .sorted(Comparator.comparing(tag -> tag.getNameVi() == null ? "" : tag.getNameVi()))
-                .map(this::toTagResponse)
-                .toList();
-
         int basePrice = service.isFree() ? 0 : defaultInteger(service.getPriceScoin());
         int publicPrice = (int) Math.round(basePrice * 1.10);
         int payout = (int) Math.round(basePrice * 0.95);
@@ -278,20 +236,8 @@ public class MentorServiceManagementService {
                 .maintainPostSessionChat(service.isMaintainPostSessionChat())
                 .deliveryMode(service.getDeliveryMode())
                 .version(service.getVersion())
-                .helpTopics(helpTopics)
                 .createdAt(service.getCreatedAt())
                 .updatedAt(service.getUpdatedAt())
-                .build();
-    }
-
-    private MentorTagResponse toTagResponse(Tag tag) {
-        return MentorTagResponse.builder()
-                .id(tag.getId())
-                .code(tag.getCode())
-                .nameVi(tag.getNameVi())
-                .nameEn(tag.getNameEn())
-                .type(tag.getType())
-                .primary(false)
                 .build();
     }
 

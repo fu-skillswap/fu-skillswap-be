@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicAvailabilityPreviewResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
@@ -59,7 +60,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Tìm kiếm mentor",
-            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng cùng keyword, help topics, campus, specialization và các sort/filter options đúng theo request schema hiện tại để dựng trải nghiệm browse/filter mentor."
+            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng keyword, campus, specialization và các sort/filter options đúng theo request schema hiện tại để dựng trải nghiệm browse/filter mentor."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),
@@ -98,6 +99,18 @@ public class MentorDiscoveryController {
             @PathVariable UUID mentorUserId
     ) {
         return ApiResponse.success(mentorDiscoveryService.getMentorDetail(mentorUserId));
+    }
+
+    @Operation(
+            summary = "Xem trước lịch rảnh công khai của mentor",
+            description = "Cho phép người chưa đăng nhập xem lịch rảnh sơ bộ trong tối đa hai tuần trước khi quyết định đăng nhập. Response không trả quota, request, booking state hoặc candidate segments."
+    )
+    @GetMapping("/{mentorUserId}/availability-preview")
+    public ApiResponse<MentorPublicAvailabilityPreviewResponse> getPublicAvailabilityPreview(
+            @PathVariable UUID mentorUserId,
+            @ParameterObject @ModelAttribute AvailabilityQueryRequest request
+    ) {
+        return ApiResponse.success(mentorDiscoveryService.getPublicAvailabilityPreview(mentorUserId, request));
     }
 
     @Operation(

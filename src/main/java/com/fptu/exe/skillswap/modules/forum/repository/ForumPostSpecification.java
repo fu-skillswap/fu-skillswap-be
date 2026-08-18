@@ -23,10 +23,10 @@ public final class ForumPostSpecification {
                 : cb.equal(root.get("status"), status);
     }
 
-    public static Specification<ForumPost> hasHelpTopic(UUID topicId) {
+    public static Specification<ForumPost> hasForumTopic(UUID topicId) {
         return (root, query, cb) -> topicId == null
                 ? cb.conjunction()
-                : cb.equal(root.get("helpTopic").get("id"), topicId);
+                : cb.equal(root.get("forumTopic").get("id"), topicId);
     }
 
     public static Specification<ForumPost> hasAuthor(UUID authorId) {

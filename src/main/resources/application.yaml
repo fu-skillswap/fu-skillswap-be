@@ -252,6 +252,8 @@ application:
     emails: ${SYSTEM_ADMIN_EMAILS:}
   mentor-verification:
     terms-version: ${MENTOR_TERMS_VERSION:SKILLSWAP_MENTOR_TERMS_V1}
+    # Thời gian dự kiến theo giờ lịch, không phải cam kết duyệt tự động.
+    review-target-hours: ${MENTOR_VERIFICATION_REVIEW_TARGET_HOURS:48}
     submit-requirements:
       student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}

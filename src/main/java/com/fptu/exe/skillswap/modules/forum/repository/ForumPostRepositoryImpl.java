@@ -31,7 +31,7 @@ public class ForumPostRepositoryImpl implements ForumPostRepositoryCustom {
         CriteriaQuery<ForumPost> cq = cb.createQuery(ForumPost.class);
         Root<ForumPost> root = cq.from(ForumPost.class);
         root.fetch("authorUser", JoinType.INNER);
-        root.fetch("helpTopic", JoinType.INNER);
+        root.fetch("forumTopic", JoinType.INNER);
         root.fetch("authorProgram", JoinType.LEFT);
         cq.select(root).distinct(true);
 
@@ -59,7 +59,7 @@ public class ForumPostRepositoryImpl implements ForumPostRepositoryCustom {
         CriteriaQuery<ForumPost> cq = cb.createQuery(ForumPost.class);
         Root<ForumPost> root = cq.from(ForumPost.class);
         root.fetch("authorUser", JoinType.INNER);
-        root.fetch("helpTopic", JoinType.INNER);
+        root.fetch("forumTopic", JoinType.INNER);
         root.fetch("authorProgram", JoinType.LEFT);
         Join<ForumPost, AcademicProgram> authorProgram = root.join("authorProgram", JoinType.LEFT);
 

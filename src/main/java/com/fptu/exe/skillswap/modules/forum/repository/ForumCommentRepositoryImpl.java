@@ -29,7 +29,7 @@ public class ForumCommentRepositoryImpl implements ForumCommentRepositoryCustom 
                 from ForumComment c
                 join fetch c.authorUser author
                 join fetch c.post post
-                join fetch post.helpTopic helpTopic
+                join fetch post.forumTopic forumTopic
                 where post.id = :postId
                   and c.status = :status
                 """);
@@ -67,7 +67,7 @@ public class ForumCommentRepositoryImpl implements ForumCommentRepositoryCustom 
                 from ForumComment c
                 join fetch c.authorUser author
                 join fetch c.post post
-                join fetch post.helpTopic helpTopic
+                join fetch post.forumTopic forumTopic
                 where 1 = 1
                 """);
         List<ParameterBinder> binders = new ArrayList<>();

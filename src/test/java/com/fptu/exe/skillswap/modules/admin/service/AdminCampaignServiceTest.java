@@ -66,7 +66,6 @@ class AdminCampaignServiceTest {
                     Set.of("STUDENT"),
                     Collections.emptySet(),
                     Collections.emptySet(),
-                    Collections.emptySet(),
                     Collections.emptySet()
             );
 
@@ -102,7 +101,7 @@ class AdminCampaignServiceTest {
                     start,
                     end,
                     50000,
-                    null, null, null, null, null
+                    null, null, null, null
             );
 
             assertThatThrownBy(() -> adminCampaignService.create(adminId, request))

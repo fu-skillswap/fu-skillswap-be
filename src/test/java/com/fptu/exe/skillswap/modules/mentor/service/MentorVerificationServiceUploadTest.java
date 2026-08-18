@@ -7,6 +7,9 @@ import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepositor
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationUploadIntent;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationUploadIntentStatus;
@@ -70,6 +73,12 @@ class MentorVerificationServiceUploadTest {
     private ObjectProvider<StorageGateway> r2StorageProvider;
     @Mock
     private StorageGateway storageGateway;
+    @Mock
+    private MentorServiceRepository mentorServiceRepository;
+    @Mock
+    private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    @Mock
+    private BookingEligibilityPolicy bookingEligibilityPolicy;
 
     private MentorVerificationService service;
     private UUID userId;
@@ -136,7 +145,10 @@ class MentorVerificationServiceUploadTest {
                 userRepository,
                 storedFileRepository,
                 r2StorageProvider,
-                uploadIntentRepository
+                uploadIntentRepository,
+                mentorServiceRepository,
+                mentorAvailabilitySlotRepository,
+                bookingEligibilityPolicy
         );
         ReflectionTestUtils.setField(service, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(service, "requireCompletedStudentProfile", false);

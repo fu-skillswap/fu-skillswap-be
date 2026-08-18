@@ -1,8 +1,5 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
@@ -14,10 +11,8 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorDetailRespon
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
@@ -31,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -45,7 +39,6 @@ public class AdminMentorModerationService {
 
     private final MentorProfileRepository mentorProfileRepository;
     private final StudentProfileRepository studentProfileRepository;
-    private final MentorTagRepository mentorTagRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
@@ -85,13 +78,6 @@ public class AdminMentorModerationService {
         String primaryLabel = studentProfileRepository.findWithDetailsByUserId(mentorUserId)
                 .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
                 .orElse(null);
-        List<MentorTagResponse> helpTopics = mentorTagRepository == null
-                ? List.of()
-                : mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(mentorUserId, List.of(MentorTagType.HELP_TOPIC))
-                        .stream()
-                        .sorted(Comparator.comparing(mentorTag -> mentorTag.getTag().getNameVi() == null ? "" : mentorTag.getTag().getNameVi()))
-                        .map(this::toTagResponse)
-                        .toList();
         List<MentorSubjectResultResponse> subjectResults = mentorSubjectResultRepository == null
                 ? List.of()
                 : mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
@@ -127,7 +113,6 @@ public class AdminMentorModerationService {
                 .foundationSupportLevel(profile.getFoundationSupportLevel())
                 .outputReviewSupportLevel(profile.getOutputReviewSupportLevel())
                 .directionSupportLevel(profile.getDirectionSupportLevel())
-                .helpTopics(helpTopics)
                 .featuredProjects(featuredProjects)
                 .achievements(achievements)
                 .supportingSubjects(profile.getSupportingSubjects())
@@ -145,18 +130,6 @@ public class AdminMentorModerationService {
                 .verifiedAt(profile.getVerifiedAt())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
-                .build();
-    }
-
-    private MentorTagResponse toTagResponse(MentorTag mentorTag) {
-        Tag tag = mentorTag.getTag();
-        return MentorTagResponse.builder()
-                .id(tag.getId())
-                .code(tag.getCode())
-                .nameVi(tag.getNameVi())
-                .nameEn(tag.getNameEn())
-                .type(tag.getType())
-                .primary(mentorTag.isPrimary())
                 .build();
     }
 

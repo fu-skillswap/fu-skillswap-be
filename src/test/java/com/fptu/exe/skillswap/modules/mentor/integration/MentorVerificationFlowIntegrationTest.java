@@ -159,7 +159,7 @@ class MentorVerificationFlowIntegrationTest {
         Tag activeTag = tagRepository.save(Tag.builder()
                 .code("TEST_HELP_TOPIC")
                 .nameVi("Chủ đề test")
-                .type(TagType.HELP_TOPIC)
+                .type(TagType.TECH_SKILL)
                 .status(TagStatus.ACTIVE)
                 .build());
 
@@ -167,7 +167,6 @@ class MentorVerificationFlowIntegrationTest {
                 "Super Mentor headline",
                 "I am an expert in java",
                 true,
-                List.of(activeTag.getId()),
                 List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,
@@ -256,11 +255,11 @@ class MentorVerificationFlowIntegrationTest {
         Tag activeTag = tagRepository.save(Tag.builder()
                 .code("TEST_LEGACY_HELP_TOPIC_" + Math.abs(mentorId.hashCode()))
                 .nameVi("Chủ đề legacy")
-                .type(TagType.HELP_TOPIC)
+                .type(TagType.TECH_SKILL)
                 .status(TagStatus.ACTIVE)
                 .build());
         mentorTagRepository.save(MentorTag.builder()
-                .id(new MentorTagId(mentorId, activeTag.getId(), MentorTagType.HELP_TOPIC))
+                .id(new MentorTagId(mentorId, activeTag.getId(), MentorTagType.EXPERTISE))
                 .mentorProfile(savedProfile)
                 .tag(activeTag)
                 .build());
@@ -556,7 +555,7 @@ class MentorVerificationFlowIntegrationTest {
         Tag activeTag = tagRepository.save(Tag.builder()
                 .code("TEST_HELP_TOPIC_" + Math.abs(mentorId.hashCode()))
                 .nameVi("Chủ đề test " + mentorId)
-                .type(TagType.HELP_TOPIC)
+                .type(TagType.TECH_SKILL)
                 .status(TagStatus.ACTIVE)
                 .build());
 
@@ -564,7 +563,6 @@ class MentorVerificationFlowIntegrationTest {
                 "Super Mentor headline",
                 "I am an expert in java",
                 true,
-                List.of(activeTag.getId()),
                 List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,

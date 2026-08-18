@@ -12,7 +12,7 @@ public record ForumPostResponse(
         String authorFullName,
         String authorAvatarUrl,
         ForumProgramResponse authorProgram,
-        ForumHelpTopicResponse helpTopic,
+        ForumTopicResponse forumTopic,
         String title,
         String content,
         String status,

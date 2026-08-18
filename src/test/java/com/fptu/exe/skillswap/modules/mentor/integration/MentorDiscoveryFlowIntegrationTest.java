@@ -90,7 +90,7 @@ class MentorDiscoveryFlowIntegrationTest {
         helpTopicTag = tagRepository.save(Tag.builder()
                 .code("DISC_SPRING")
                 .nameVi("Spring Boot")
-                .type(TagType.HELP_TOPIC)
+                .type(TagType.TECH_SKILL)
                 .status(TagStatus.ACTIVE)
                 .build());
 
@@ -137,7 +137,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .verifiedAt(LocalDateTime.now().minusDays(10))
                 .build());
         mentorTagRepository.save(MentorTag.builder()
-                .id(new MentorTagId(mentor1User.getId(), helpTopicTag.getId(), MentorTagType.HELP_TOPIC))
+                .id(new MentorTagId(mentor1User.getId(), helpTopicTag.getId(), MentorTagType.EXPERTISE))
                 .mentorProfile(profile1)
                 .tag(helpTopicTag)
                 .build());
@@ -168,7 +168,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .verifiedAt(LocalDateTime.now().minusDays(5))
                 .build());
         mentorTagRepository.save(MentorTag.builder()
-                .id(new MentorTagId(mentor2User.getId(), helpTopicTag.getId(), MentorTagType.HELP_TOPIC))
+                .id(new MentorTagId(mentor2User.getId(), helpTopicTag.getId(), MentorTagType.EXPERTISE))
                 .mentorProfile(profile2)
                 .tag(helpTopicTag)
                 .build());

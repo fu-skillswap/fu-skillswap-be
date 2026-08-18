@@ -1,9 +1,5 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
@@ -15,18 +11,20 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentReaction;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostReaction;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReactionType;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumCommentUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumHelpTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProgramResponse;
+import com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
@@ -70,7 +68,7 @@ public class ForumPostService {
     private final ForumPostReactionRepository forumPostReactionRepository;
     private final ForumCommentReactionRepository forumCommentReactionRepository;
     private final UserQueryPort userQueryPort;
-    private final TagRepository tagRepository;
+    private final ForumTopicRepository forumTopicRepository;
     private final NotificationService notificationService;
     private final ForumTextPolicy forumTextPolicy;
     private final ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
@@ -78,18 +76,20 @@ public class ForumPostService {
     private final CursorCodec cursorCodec;
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID helpTopicId, Boolean mine) {
-        User currentUser = requireForumUser(currentUserId);
+    public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID forumTopicId, Boolean mine) {
+        if (Boolean.TRUE.equals(mine)) {
+            requireForumUser(currentUserId);
+        }
         int resolvedLimit = defaultLimit(limit);
         String keywordPattern = toKeywordPattern(keyword);
-        String filterHash = buildUserPostFilterHash(keyword, helpTopicId, mine);
+        String filterHash = buildUserPostFilterHash(keyword, forumTopicId, mine);
         DecodedPostCursor decodedCursor = decodePostCursor(cursor, filterHash);
-        Specification<ForumPost> specification = buildUserPostSpecification(currentUser.getId(), keywordPattern, helpTopicId, mine, decodedCursor);
+        Specification<ForumPost> specification = buildUserPostSpecification(currentUserId, keywordPattern, forumTopicId, mine, decodedCursor);
         List<ForumPost> postWindow = forumPostRepository.findWindow(specification, resolvedLimit + 1);
         boolean hasNext = postWindow.size() > resolvedLimit;
         List<ForumPost> visiblePosts = hasNext ? new ArrayList<>(postWindow.subList(0, resolvedLimit)) : postWindow;
         Set<UUID> reactedPostIds = loadReactedPostIds(
-                currentUser.getId(),
+                currentUserId,
                 visiblePosts.stream().map(ForumPost::getId).toList()
         );
         List<ForumPostResponse> items = visiblePosts.stream()
@@ -156,17 +156,24 @@ public class ForumPostService {
 
     @Transactional(readOnly = true)
     public ForumPostResponse getPostDetail(UUID currentUserId, UUID postId) {
-        User currentUser = requireForumUser(currentUserId);
+        findForumUser(currentUserId);
         ForumPost post = forumPostRepository.findByIdAndStatus(postId, ForumPostStatus.PUBLISHED)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        return toPostResponse(post, currentUser.getId());
+        return toPostResponse(post, currentUserId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ForumTopicResponse> getTopics() {
+        return forumTopicRepository.findByActiveTrueOrderByDisplayOrderAscCodeAsc().stream()
+                .map(topic -> toForumTopicResponse(topic))
+                .toList();
     }
 
     @Transactional
     public ForumPostResponse createPost(UUID currentUserId, ForumPostUpsertRequest request) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.CREATE_POST);
-        Tag helpTopic = requireHelpTopic(request.helpTopicId());
+        ForumTopic forumTopic = requireForumTopic(request.forumTopicId());
         String normalizedTitle = forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết");
         String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết");
         forumProhibitedPhrasePolicy.rejectPost(normalizedTitle, normalizedContent);
@@ -182,7 +189,7 @@ public class ForumPostService {
         ForumPost post = ForumPost.builder()
                 .authorUser(currentUser)
                 .authorProgram(resolveAuthorProgram(currentUser.getId()))
-                .helpTopic(helpTopic)
+                .forumTopic(forumTopic)
                 .title(normalizedTitle)
                 .content(normalizedContent)
                 .imageUrls(cleanedImages)
@@ -199,14 +206,14 @@ public class ForumPostService {
     public ForumPostResponse updatePost(UUID currentUserId, UUID postId, ForumPostUpsertRequest request) {
         User currentUser = requireForumUser(currentUserId);
         ForumPost post = loadOwnedEditablePost(postId, currentUser.getId());
-        Tag helpTopic = requireHelpTopic(request.helpTopicId());
+        ForumTopic forumTopic = requireForumTopic(request.forumTopicId());
         String normalizedTitle = forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết");
         String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết");
         forumProhibitedPhrasePolicy.rejectPost(normalizedTitle, normalizedContent);
         post.setTitle(normalizedTitle);
         post.setContent(normalizedContent);
         post.setImageUrls(cleanImageUrls(request.imageUrls()));
-        post.setHelpTopic(helpTopic);
+        post.setForumTopic(forumTopic);
         return toPostResponse(forumPostRepository.save(post), currentUser.getId());
     }
 
@@ -224,7 +231,7 @@ public class ForumPostService {
 
     @Transactional(readOnly = true)
     public CursorPageResponse<ForumCommentResponse> getComments(UUID currentUserId, UUID postId, String cursor, Integer limit) {
-        requireForumUser(currentUserId);
+        findForumUser(currentUserId);
         ForumPost post = forumPostRepository.findByIdAndStatus(postId, ForumPostStatus.PUBLISHED)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         int resolvedLimit = defaultLimit(limit);
@@ -490,6 +497,18 @@ public class ForumPostService {
         return user;
     }
 
+    private User findForumUser(UUID currentUserId) {
+        if (currentUserId == null) {
+            return null;
+        }
+        User user = userQueryPort.findUserById(currentUserId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động");
+        }
+        return user;
+    }
+
     ForumPost requireVisiblePost(UUID postId) {
         ForumPost post = forumPostRepository.findByIdForUpdate(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
@@ -532,16 +551,13 @@ public class ForumPostService {
         return comment;
     }
 
-    private Tag requireHelpTopic(UUID helpTopicId) {
-        if (helpTopicId == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "helpTopicId là bắt buộc");
+    private ForumTopic requireForumTopic(UUID forumTopicId) {
+        if (forumTopicId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "forumTopicId là bắt buộc");
         }
-        Tag tag = tagRepository.findById(helpTopicId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy help topic"));
-        if (tag.getType() != TagType.HELP_TOPIC || tag.getStatus() != TagStatus.ACTIVE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Help topic không hợp lệ hoặc chưa hoạt động");
-        }
-        return tag;
+        return forumTopicRepository.findById(forumTopicId)
+                .filter(ForumTopic::isActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy Forum Topic đang hoạt động"));
     }
 
     private void ensurePostVisible(ForumPost post) {
@@ -568,7 +584,7 @@ public class ForumPostService {
                 .authorFullName(post.getAuthorUser().getFullName())
                 .authorAvatarUrl(post.getAuthorUser().getAvatarUrl())
                 .authorProgram(toProgramResponse(post.getAuthorProgram()))
-                .helpTopic(toHelpTopicResponse(post.getHelpTopic()))
+                .forumTopic(toForumTopicResponse(post.getForumTopic()))
                 .title(post.getTitle())
                 .content(post.getContent())
                 .status(post.getStatus().name())
@@ -662,12 +678,13 @@ public class ForumPostService {
                 .collect(Collectors.toMap(ForumComment::getId, Function.identity()));
     }
 
-    private ForumHelpTopicResponse toHelpTopicResponse(Tag tag) {
-        return ForumHelpTopicResponse.builder()
-                .id(tag.getId())
-                .code(tag.getCode())
-                .nameVi(tag.getNameVi())
-                .nameEn(tag.getNameEn())
+    private ForumTopicResponse toForumTopicResponse(ForumTopic topic) {
+        return ForumTopicResponse.builder()
+                .id(topic.getId())
+                .code(topic.getCode())
+                .nameVi(topic.getNameVi())
+                .nameEn(topic.getNameEn())
+                .displayOrder(topic.getDisplayOrder())
                 .build();
     }
 
@@ -706,9 +723,9 @@ public class ForumPostService {
         return "%" + keyword.trim().toLowerCase() + "%";
     }
 
-    private String buildUserPostFilterHash(String keyword, UUID helpTopicId, Boolean mine) {
+    private String buildUserPostFilterHash(String keyword, UUID forumTopicId, Boolean mine) {
         return "forum-posts:user|keyword=" + normalizeKeywordFilterValue(keyword)
-                + "|helpTopicId=" + normalizeFilterValue(helpTopicId)
+                + "|forumTopicId=" + normalizeFilterValue(forumTopicId)
                 + "|mine=" + Boolean.TRUE.equals(mine)
                 + "|status=" + ForumPostStatus.PUBLISHED.name();
     }
@@ -757,11 +774,11 @@ public class ForumPostService {
 
     private Specification<ForumPost> buildUserPostSpecification(UUID currentUserId,
                                                                 String keywordPattern,
-                                                                UUID helpTopicId,
+                                                                 UUID forumTopicId,
                                                                 Boolean mine,
                                                                 DecodedPostCursor decodedCursor) {
         Specification<ForumPost> specification = Specification.where(ForumPostSpecification.hasStatus(ForumPostStatus.PUBLISHED))
-                .and(ForumPostSpecification.hasHelpTopic(helpTopicId))
+                .and(ForumPostSpecification.hasForumTopic(forumTopicId))
                 .and(ForumPostSpecification.hasKeyword(keywordPattern));
         if (Boolean.TRUE.equals(mine)) {
             specification = specification.and(ForumPostSpecification.mineOnly(currentUserId));

@@ -19,10 +19,10 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface AvailabilitySlotServiceRepository extends JpaRepository<AvailabilitySlotService, AvailabilitySlotServiceId> {
 
-    @EntityGraph(attributePaths = {"service", "service.helpTopics"})
+    @EntityGraph(attributePaths = {"service"})
     List<AvailabilitySlotService> findBySlotIdOrderByCreatedAtAsc(UUID slotId);
 
-    @EntityGraph(attributePaths = {"service", "service.helpTopics", "slot", "slot.mentorProfile"})
+    @EntityGraph(attributePaths = {"service", "slot", "slot.mentorProfile"})
     @Query("""
             select slotService
             from AvailabilitySlotService slotService
@@ -34,7 +34,7 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
             @Param("serviceId") UUID serviceId
     );
 
-    @EntityGraph(attributePaths = {"service", "service.helpTopics"})
+    @EntityGraph(attributePaths = {"service"})
     @Query("""
             select slotService
             from AvailabilitySlotService slotService

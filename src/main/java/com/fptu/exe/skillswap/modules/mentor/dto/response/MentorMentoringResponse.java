@@ -8,7 +8,6 @@ import java.util.List;
 public record MentorMentoringResponse(
         String bio,
         String expertiseDescription,
-        List<MentorTagResponse> helpTopics,
         MentorSupportLevelsResponse supportLevels
 ) {
 }

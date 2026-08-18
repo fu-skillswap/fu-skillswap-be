@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
@@ -27,8 +26,6 @@ public class DiscoveryCandidateProvider {
 
     private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
-    private static final UUID EMPTY_TAG_ID = UUID.fromString("00000000-0000-0000-0000-000000000000");
-
     private final MentorProfileRepository mentorProfileRepository;
     private final DataSource dataSource;
     private volatile Boolean postgresDetected = null;
@@ -47,11 +44,10 @@ public class DiscoveryCandidateProvider {
         int requestedPage = Math.max(request.getPage(), 0);
         int requestedSize = Math.min(Math.max(request.getSize(), 1), 30);
         int recallWindowSize = recallWindowSize(requestedPage, requestedSize, relevanceSort, defaultRecallWindowSize);
-        List<UUID> tagIds = normalizedTagIds(request.getTagIds());
         boolean hasKeyword = normalizedKeyword != null && !normalizedKeyword.isBlank();
 
         if (hasKeyword && isPostgresDataSource()) {
-            return findCandidatesByFts(normalizedKeyword, request, tagIds, now, recallWindowSize);
+            return findCandidatesByFts(normalizedKeyword, request, now, recallWindowSize);
         }
 
         Pageable pageable = PageRequest.of(0, recallWindowSize, Sort.by(orders));
@@ -59,11 +55,8 @@ public class DiscoveryCandidateProvider {
         if (hasKeyword) {
             candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
                     MentorStatus.ACTIVE,
-                    MentorTagType.HELP_TOPIC,
                     request.getCampusId(),
                     request.getSpecializationId(),
-                    hasTagFilter(request.getTagIds()),
-                    tagIds,
                     keywordPattern,
                     normalizedKeywordPattern,
                     ACCENTED_CHARACTERS,
@@ -74,11 +67,8 @@ public class DiscoveryCandidateProvider {
         } else {
             candidatePage = mentorProfileRepository.findDiscoverableCandidateIds(
                     MentorStatus.ACTIVE,
-                    MentorTagType.HELP_TOPIC,
                     request.getCampusId(),
                     request.getSpecializationId(),
-                    hasTagFilter(request.getTagIds()),
-                    tagIds,
                     now,
                     pageable
             );
@@ -99,7 +89,6 @@ public class DiscoveryCandidateProvider {
 
         return mentorProfileRepository.findRecommendationCandidatesSortedByRelevance(
                 MentorStatus.ACTIVE,
-                MentorTagType.HELP_TOPIC,
                 currentUserId,
                 now,
                 PageRequest.of(0, candidateFetchSize)
@@ -117,21 +106,13 @@ public class DiscoveryCandidateProvider {
     private CandidateWindow findCandidatesByFts(
             String normalizedKeyword,
             MentorDiscoverySearchRequest request,
-            List<UUID> tagIds,
             LocalDateTime now,
             int recallWindowSize
     ) {
-        boolean hasTagFilter = hasTagFilter(request.getTagIds());
-        String tagIdsArray = tagIds.isEmpty()
-                ? "{00000000-0000-0000-0000-000000000000}"
-                : "{" + tagIds.stream().map(UUID::toString).collect(Collectors.joining(",")) + "}";
-
         List<UUID> ids = mentorProfileRepository.findDiscoverableCandidateIdsByFts(
                 normalizedKeyword,
                 request.getCampusId(),
                 request.getSpecializationId(),
-                hasTagFilter,
-                tagIdsArray,
                 now,
                 recallWindowSize,
                 0
@@ -141,23 +122,10 @@ public class DiscoveryCandidateProvider {
                 normalizedKeyword,
                 request.getCampusId(),
                 request.getSpecializationId(),
-                hasTagFilter,
-                tagIdsArray,
                 now
         );
 
         return new CandidateWindow(ids, totalCount);
-    }
-
-    private List<UUID> normalizedTagIds(List<UUID> tagIds) {
-        if (!hasTagFilter(tagIds)) {
-            return List.of(EMPTY_TAG_ID);
-        }
-        return tagIds.stream().distinct().toList();
-    }
-
-    private boolean hasTagFilter(List<UUID> tagIds) {
-        return tagIds != null && !tagIds.isEmpty();
     }
 
     public boolean isPostgresDataSource() {

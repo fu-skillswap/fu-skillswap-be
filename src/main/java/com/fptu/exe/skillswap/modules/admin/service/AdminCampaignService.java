@@ -98,7 +98,6 @@ public class AdminCampaignService {
                 .audienceCampusIds(request.audienceCampusIds() == null ? new HashSet<>() : new HashSet<>(request.audienceCampusIds()))
                 .audienceProgramIds(request.audienceProgramIds() == null ? new HashSet<>() : new HashSet<>(request.audienceProgramIds()))
                 .audienceSpecializationIds(request.audienceSpecializationIds() == null ? new HashSet<>() : new HashSet<>(request.audienceSpecializationIds()))
-                .audienceHelpTopicIds(request.audienceHelpTopicIds() == null ? new HashSet<>() : new HashSet<>(request.audienceHelpTopicIds()))
                 .build();
 
         Campaign saved = campaignRepository.save(campaign);
@@ -145,7 +144,6 @@ public class AdminCampaignService {
         if (request.audienceCampusIds() != null) campaign.setAudienceCampusIds(new HashSet<>(request.audienceCampusIds()));
         if (request.audienceProgramIds() != null) campaign.setAudienceProgramIds(new HashSet<>(request.audienceProgramIds()));
         if (request.audienceSpecializationIds() != null) campaign.setAudienceSpecializationIds(new HashSet<>(request.audienceSpecializationIds()));
-        if (request.audienceHelpTopicIds() != null) campaign.setAudienceHelpTopicIds(new HashSet<>(request.audienceHelpTopicIds()));
 
         Campaign saved = campaignRepository.save(campaign);
         log.info("Admin {} updated campaign {}", adminUserId, saved.getId());
@@ -344,7 +342,6 @@ public class AdminCampaignService {
                 c.getAudienceCampusIds(),
                 c.getAudienceProgramIds(),
                 c.getAudienceSpecializationIds(),
-                c.getAudienceHelpTopicIds(),
                 benefitCount,
                 totalBookings,
                 c.getCreatedAt(),

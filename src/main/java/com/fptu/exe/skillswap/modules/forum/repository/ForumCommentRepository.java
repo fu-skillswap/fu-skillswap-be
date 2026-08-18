@@ -19,13 +19,13 @@ import java.util.List;
 @Repository
 public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID>, ForumCommentRepositoryCustom {
 
-    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.forumTopic"})
     Optional<ForumComment> findById(UUID id);
 
-    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.forumTopic"})
     List<ForumComment> findByIdIn(Collection<UUID> ids);
 
-    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.helpTopic"})
+    @EntityGraph(attributePaths = {"authorUser", "post", "post.authorUser", "post.forumTopic"})
     List<ForumComment> findByReplyToCommentIdAndStatus(UUID replyToCommentId, ForumCommentStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

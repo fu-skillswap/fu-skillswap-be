@@ -20,13 +20,13 @@ import java.util.List;
 @Repository
 public interface ForumPostRepository extends JpaRepository<ForumPost, UUID>, JpaSpecificationExecutor<ForumPost>, ForumPostRepositoryCustom {
 
-    @EntityGraph(attributePaths = {"authorUser", "helpTopic", "authorProgram"})
+    @EntityGraph(attributePaths = {"authorUser", "forumTopic", "authorProgram"})
     Optional<ForumPost> findByIdAndStatus(UUID id, ForumPostStatus status);
 
-    @EntityGraph(attributePaths = {"authorUser", "helpTopic", "authorProgram"})
+    @EntityGraph(attributePaths = {"authorUser", "forumTopic", "authorProgram"})
     Optional<ForumPost> findById(UUID id);
 
-    @EntityGraph(attributePaths = {"authorUser", "helpTopic", "authorProgram"})
+    @EntityGraph(attributePaths = {"authorUser", "forumTopic", "authorProgram"})
     List<ForumPost> findByIdIn(Collection<UUID> ids);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

@@ -1,0 +1,3 @@
+# Exact Flyway basenames approved for the current pre-launch contract release.
+V96__remove_forum_help_topic_legacy_column.sql
+V97__remove_help_topic_commerce_tables.sql

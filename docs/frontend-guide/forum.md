@@ -1,11 +1,14 @@
 # Frontend Integration Guide — Forum Module
 
+> **Quy tắc ảnh:** FE chỉ render URL có trong response. Không tự ghép URL CDN từ tên file, ID, `storageKey` hoặc `objectKey`. `STORAGE_PUBLIC_URL_PREFIX` là cấu hình backend, không phải biến `.env` của FE.
+
 ---
 
 ## 1. Nguyên tắc Chung & Quy tắc Phân quyền (Security & General Rules)
 
 ### 1.1 Phân quyền Truy cập (Access Control)
-- **Role `MENTEE` & `MENTOR`**: Đều có quyền đọc newsfeed, tạo bài viết, sửa/xóa bài viết của mình, bình luận, thả reaction và báo cáo nội dung vi phạm.
+- **Public đọc**: `GET /api/forum/topics`, `GET /api/forum/posts`, `GET /api/forum/posts/{postId}` và comments là public để người chưa onboarding xem cộng đồng.
+- **Role `MENTEE` & `MENTOR`**: Cần đăng nhập để tạo/sửa/xóa bài viết của mình, bình luận, thả reaction và báo cáo nội dung vi phạm.
 - **Role `ADMIN` & `SYSTEM_ADMIN`**: **Bị chặn hoàn toàn** ở nhóm API client `/api/forum/*` (`!hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')`). Quản trị viên chỉ làm việc ở các API quản trị riêng thuộc `/api/admin/forum/*`.
 
 ### 1.2 Nguyên tắc Phân trang Cursor (`CursorPageResponse<T>`)
@@ -57,7 +60,7 @@ Dùng cho màn hình Duyệt / Tìm kiếm bài viết theo chủ đề hoặc t
   - `cursor` (string, optional): Chuỗi `nextCursor` từ response trước
   - `limit` (number, optional): Mặc định `20`
   - `keyword` (string, optional): Từ khóa tìm kiếm trong tiêu đề hoặc nội dung
-  - `helpTopicId` (string, optional): UUID của chủ đề hỗ trợ (Help Topic)
+  - `forumTopicId` (string, optional): UUID của Forum Topic
   - `mine` (boolean, optional): Đặt `true` nếu chỉ muốn lấy danh sách bài viết của chính tôi (Mặc định: `false`)
 
 **Response Payload (`ForumPostResponse`)**:
@@ -73,11 +76,12 @@ interface ForumPostResponse {
     nameVi: string;
     nameEn: string;
   } | null;
-  helpTopic: {                        // Chủ đề hỗ trợ của bài viết
+  forumTopic: {                       // Chủ đề của bài viết
     id: string;
     code: string;
     nameVi: string;
     nameEn: string;
+    displayOrder: number;
   };
   title: string;                      // Tiêu đề bài viết
   content: string;                    // Nội dung chi tiết
@@ -108,7 +112,7 @@ interface ForumPostResponse {
 interface ForumPostUpsertRequest {
   title: string;        // Bắt buộc. Tối đa 200 ký tự
   content: string;      // Bắt buộc. Tối đa 5000 ký tự
-  helpTopicId: string;  // Bắt buộc. UUID của Help Topic
+  forumTopicId: string; // Bắt buộc. UUID của Forum Topic
   imageUrls?: string[]; // Optional. Tối đa 4 ảnh, mỗi URL tối đa 2000 ký tự
 }
 ```
@@ -116,8 +120,9 @@ interface ForumPostUpsertRequest {
 #### Quy tắc Validation cho FE:
 - `title`: Không được để trống, không quá 200 ký tự.
 - `content`: Không được để trống, không quá 5000 ký tự.
-- `helpTopicId`: Không được null.
+- `forumTopicId`: Không được null. FE lấy danh sách bằng `GET /api/forum/topics`.
 - `imageUrls`: Tối đa 4 phần tử trong mảng.
+- Khi hiển thị `imageUrls`, dùng trực tiếp từng URL backend trả về. URL có thể là CDN SkillSwap hoặc domain khác; không thay thế domain và không tự tạo URL mới.
 
 ### 2.5 Cập nhật Bài viết của tôi (`PUT /api/forum/posts/{postId}`)
 - **Endpoint**: `PUT /api/forum/posts/{postId}`
@@ -244,7 +249,7 @@ interface ForumReportCreateRequest {
 | `400` | `VAL_3001` | `error.val.invalid_input` | Tiêu đề quá 200 ký tự, nội dung quá 5000 ký tự, hoặc đính kèm quá số lượng ảnh cho phép. |
 | `401` | `AUTH_1001` | `error.auth.unauthenticated` | Chưa đăng nhập. Redirect sang trang Login. |
 | `403` | `AUTH_1002` | `error.auth.unauthorized` | Không phải tác giả của bài viết/bình luận nên không có quyền sửa/xóa. |
-| `404` | `SYS_0003` | `error.sys.not_found` | Không tìm thấy bài viết, bình luận hoặc help topic tương ứng. |
+| `404` | `SYS_0003` | `error.sys.not_found` | Không tìm thấy bài viết, bình luận hoặc forum topic tương ứng. |
 | `409` | `SYS_0007` | `error.sys.conflict` | Xung đột dữ liệu trạng thái. |
 
 ---

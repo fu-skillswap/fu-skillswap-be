@@ -25,7 +25,6 @@ public record AdminCouponResponse(
         Integer minOrderValueScoin,
         Set<UUID> applicableServiceIds,
         Set<UUID> applicableMentorIds,
-        Set<UUID> applicableHelpTopicIds,
         long totalRedemptions,
         long activeRedemptions,
         LocalDateTime createdAt,

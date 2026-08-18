@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.controller;
 
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
-import com.fptu.exe.skillswap.modules.catalog.dto.response.HelpTopicResponse;
 import com.fptu.exe.skillswap.modules.catalog.service.CatalogService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileOptionsResponse;
 import org.junit.jupiter.api.Test;
@@ -59,17 +58,12 @@ class MasterDataControllerCacheHeaderTest {
     }
 
     @Test
-    void catalogEndpoints_shouldReturnLongLivedCacheHeader() throws Exception {
-        when(catalogService.getHelpTopics()).thenReturn(List.<HelpTopicResponse>of());
+    void mentorProfileOptions_shouldReturnLongLivedCacheHeader() throws Exception {
         when(catalogService.getMentorProfileOptions()).thenReturn(MentorProfileOptionsResponse.builder()
                 .foundationSupportLevels(List.of())
                 .outputReviewSupportLevels(List.of())
                 .directionSupportLevels(List.of())
                 .build());
-
-        mockMvc.perform(get("/api/catalog/help-topics"))
-                .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "public, max-age=86400"));
 
         mockMvc.perform(get("/api/catalog/mentor-profile-options"))
                 .andExpect(status().isOk())

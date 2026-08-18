@@ -2,14 +2,10 @@ package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -22,7 +18,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,7 +29,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DiscoveryEnrichmentService {
 
-    private final MentorTagRepository mentorTagRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
@@ -50,7 +44,6 @@ public class DiscoveryEnrichmentService {
             return Map.of();
         }
 
-        Map<UUID, List<MentorTagResponse>> helpTopicsByMentor = loadTagsByMentor(mentorUserIds, Set.of(MentorTagType.HELP_TOPIC));
         Map<UUID, List<MentorSubjectResultResponse>> subjectResultsByMentor = loadSubjectResultsByMentor(mentorUserIds);
         Map<UUID, List<MentorFeaturedProjectResponse>> featuredProjectsByMentor = loadFeaturedProjectsByMentor(mentorUserIds);
         Map<UUID, List<MentorAchievementResponse>> achievementsByMentor = loadAchievementsByMentor(mentorUserIds);
@@ -61,7 +54,6 @@ public class DiscoveryEnrichmentService {
         Map<UUID, MentorEnrichedData> result = new HashMap<>();
         for (UUID mentorUserId : mentorUserIds) {
             result.put(mentorUserId, new MentorEnrichedData(
-                    helpTopicsByMentor.getOrDefault(mentorUserId, List.of()),
                     subjectResultsByMentor.getOrDefault(mentorUserId, List.of()),
                     featuredProjectsByMentor.getOrDefault(mentorUserId, List.of()),
                     achievementsByMentor.getOrDefault(mentorUserId, List.of()),
@@ -70,31 +62,6 @@ public class DiscoveryEnrichmentService {
                     mentorsWithPreferredDurationAvailability.contains(mentorUserId)
             ));
         }
-        return result;
-    }
-
-    public List<MentorTagResponse> loadHelpTopicTags(UUID mentorUserId) {
-        return loadTagsByMentor(List.of(mentorUserId), Set.of(MentorTagType.HELP_TOPIC))
-                .getOrDefault(mentorUserId, List.of());
-    }
-
-    private Map<UUID, List<MentorTagResponse>> loadTagsByMentor(Collection<UUID> mentorUserIds, Set<MentorTagType> tagTypes) {
-        Map<UUID, List<MentorTagResponse>> result = new HashMap<>();
-        List<MentorTag> mentorTags = Optional.ofNullable(mentorTagRepository.findByIdMentorUserIdInAndIdTagTypeIn(mentorUserIds, tagTypes))
-                .orElse(List.of());
-        mentorTags.stream()
-                .sorted(Comparator
-                        .comparing((MentorTag mentorTag) -> mentorTag.getId().getMentorUserId())
-                        .thenComparing(mentorTag -> mentorTag.getTag().getNameVi()))
-                .forEach(mentorTag -> result.computeIfAbsent(mentorTag.getId().getMentorUserId(), ignored -> new ArrayList<>())
-                        .add(MentorTagResponse.builder()
-                                .id(mentorTag.getTag().getId())
-                                .code(mentorTag.getTag().getCode())
-                                .nameVi(mentorTag.getTag().getNameVi())
-                                .nameEn(mentorTag.getTag().getNameEn())
-                                .type(mentorTag.getTag().getType())
-                                .primary(mentorTag.isPrimary())
-                                .build()));
         return result;
     }
 

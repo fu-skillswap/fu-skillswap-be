@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.repository;
 
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -17,7 +16,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -69,20 +67,15 @@ public class MentorDiscoveryRepositoryTest {
                 .build();
         MentorProfile savedProfile = entityManager.persist(profile);
 
-        com.fptu.exe.skillswap.modules.catalog.domain.Tag tag = com.fptu.exe.skillswap.modules.catalog.domain.Tag.builder()
-                .code("T" + UUID.randomUUID().toString().substring(0, 5))
-                .nameVi("Test Tag")
-                .type(com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
-                .status(com.fptu.exe.skillswap.modules.catalog.domain.TagStatus.ACTIVE)
-                .build();
-        entityManager.persist(tag);
-
-        com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mentorTag = com.fptu.exe.skillswap.modules.catalog.domain.MentorTag.builder()
-                .id(new com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId(user.getId(), tag.getId(), MentorTagType.HELP_TOPIC))
+        entityManager.persist(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
                 .mentorProfile(savedProfile)
-                .tag(tag)
-                .build();
-        entityManager.persist(mentorTag);
+                .title("Test mentoring service")
+                .description("Test service description")
+                .expectedOutcome("Test outcome")
+                .durationMinutes(60)
+                .isFree(true)
+                .isActive(true)
+                .build());
 
         return savedProfile;
     }
@@ -94,8 +87,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -107,8 +99,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertEquals(1, result.getContent().size());
         assertEquals(user.getId(), result.getContent().get(0));
@@ -121,8 +112,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -134,8 +124,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -147,8 +136,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                null, null, "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -160,8 +148,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, LocalDateTime.now(), PageRequest.of(0, 10)
         );
 
         assertTrue(result.getContent().isEmpty());
@@ -174,8 +161,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
-                LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, null, null, LocalDateTime.now(), PageRequest.of(0, 10)
         );
 
         assertTrue(result.getContent().isEmpty());
@@ -188,7 +174,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
+                MentorStatus.ACTIVE, null, null,
                 "%huong dan mon hoc%", "%huong dan mon hoc%",
                 "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
                 "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",
@@ -216,7 +202,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, MentorTagType.HELP_TOPIC, null, null, false, List.of(),
+                MentorStatus.ACTIVE, null, null,
                 "%swp391%", "%swp391%",
                 "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
                 "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",

@@ -41,9 +41,6 @@ public record AdminCampaignUpdateRequest(
         Set<UUID> audienceProgramIds,
 
         @Schema(description = "Tập hợp specialization ID áp dụng")
-        Set<UUID> audienceSpecializationIds,
-
-        @Schema(description = "Tập hợp help topic ID áp dụng")
-        Set<UUID> audienceHelpTopicIds
+        Set<UUID> audienceSpecializationIds
 ) {
 }

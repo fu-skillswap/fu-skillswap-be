@@ -76,7 +76,6 @@ class DiscoveryRankingServiceTest {
         MentorDiscoveryQueryRow strong = row(MENTOR_A, "Spring Boot mentor", true, false, 4.8, 12);
         MentorDiscoveryQueryRow weak = row(MENTOR_B, "General mentor", true, false, 4.2, 4);
         MentorEnrichedData strongData = new MentorEnrichedData(
-                List.of(),
                 List.of(MentorSubjectResultResponse.builder().subjectCode("PRJ301").subjectName("Spring").build()),
                 List.of(),
                 List.of(),

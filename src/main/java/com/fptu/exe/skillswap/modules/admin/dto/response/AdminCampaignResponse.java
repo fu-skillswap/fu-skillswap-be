@@ -24,7 +24,6 @@ public record AdminCampaignResponse(
         Set<UUID> audienceCampusIds,
         Set<UUID> audienceProgramIds,
         Set<UUID> audienceSpecializationIds,
-        Set<UUID> audienceHelpTopicIds,
         long benefitCount,
         long totalBookingsCreated,
         LocalDateTime createdAt,

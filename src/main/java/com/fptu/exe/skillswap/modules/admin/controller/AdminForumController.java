@@ -131,7 +131,7 @@ public class AdminForumController {
                     - `cursor` là opaque string, chỉ được lấy từ `nextCursor` của response trước đó.
                     - Không được decode, chỉnh sửa hoặc tự tạo cursor mới.
                     - Response là `ApiResponse<CursorPageResponse<ForumPostResponse>>`.
-                    - Bộ lọc hỗ trợ `keyword`, `helpTopicId`, `authorId`, `status`.
+                    - Bộ lọc hỗ trợ `keyword`, `forumTopicId`, `authorId`, `status`.
                     """
     )
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
@@ -155,7 +155,7 @@ public class AdminForumController {
                                                     "authorUserId": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a2001",
                                                     "authorFullName": "Nguyen Van A",
                                                     "authorAvatarUrl": "https://cdn.skillswap.asia/avatar/a.jpg",
-                                                    "helpTopic": {
+                                                    "forumTopic": {
                                                       "id": "0197e6b1-2d1a-7f0f-bc7a-9bc2e31a3001",
                                                       "code": "HELP_PROJECT_REVIEW",
                                                       "nameVi": "Góp ý dự án/case study",

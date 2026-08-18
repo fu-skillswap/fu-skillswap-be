@@ -61,7 +61,6 @@ class MentorProfileUpsertRequestValidationTest {
                 "Backend Developer | Spring Boot Mentor",
                 "Mình có kinh nghiệm xây dựng REST API với Spring Boot.",
                 true,
-                List.of(UUID.randomUUID()),
                 List.of(new MentorSubjectResultRequest("PRJ301", "Java Web Application Development", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,

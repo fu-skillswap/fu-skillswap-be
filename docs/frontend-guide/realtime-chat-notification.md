@@ -347,6 +347,8 @@ export interface TypingPayload {
    - **Bước 1**: Gọi `POST /api/me/conversations/{conversationId}/attachment-upload-intents` để lấy intent ID và URL upload tạm thời.
    - **Bước 2**: Upload binary file lên URL nhận được.
    - **Bước 3**: Gọi `POST /api/me/conversations/{conversationId}/messages` với `attachmentIntentId: "<INTENT_ID>"`.
+   - `uploadUrl` chỉ dùng để upload, không dùng để mở file hoặc render ảnh. URL này tạm thời; không lưu vào local storage và không tự dùng lại khi đã hết hạn.
+   - Attachment chat là private. Khi user bấm xem/tải, gọi `POST /api/me/chat-attachments/{attachmentId}/download-url`, rồi dùng `downloadUrl` trước `expiresAt`. Không tự ghép CDN URL từ tên file, `storageKey` hoặc `objectKey`; không lưu `downloadUrl` lâu dài.
 
 ---
 

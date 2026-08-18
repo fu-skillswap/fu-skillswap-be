@@ -17,8 +17,8 @@ public record AdminForumPostListRequest(
         Integer limit,
         @Schema(description = "Keyword tìm theo title, content hoặc tên tác giả", nullable = true)
         String keyword,
-        @Schema(description = "Lọc theo help topic", nullable = true)
-        UUID helpTopicId,
+        @Schema(description = "Lọc theo Forum Topic", nullable = true)
+        UUID forumTopicId,
         @Schema(description = "Lọc theo author user id", nullable = true)
         UUID authorId,
         @Schema(description = "Lọc theo trạng thái forum post", nullable = true)

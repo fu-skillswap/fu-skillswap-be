@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import lombok.Builder;
@@ -63,9 +62,6 @@ public record AdminMentorDetailResponse(
 
         @Schema(description = "Mức mentor có thể hỗ trợ định hướng/OJT/career, 1-4", example = "2")
         Integer directionSupportLevel,
-
-        @Schema(description = "Các help topic mentor đang chọn")
-        List<MentorTagResponse> helpTopics,
 
         @Schema(description = "Dự án tiêu biểu optional của mentor")
         List<MentorFeaturedProjectResponse> featuredProjects,

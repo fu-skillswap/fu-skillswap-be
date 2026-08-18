@@ -1,13 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
@@ -21,7 +13,6 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequ
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorTagResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -40,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -56,8 +46,6 @@ public class MentorProfileService {
     private static final Set<Integer> SUPPORT_LEVELS = Set.of(1, 2, 3, 4);
 
     private final MentorProfileRepository mentorProfileRepository;
-    private final MentorTagRepository mentorTagRepository;
-    private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
@@ -67,8 +55,6 @@ public class MentorProfileService {
 
     public MentorProfileService(
             MentorProfileRepository mentorProfileRepository,
-            MentorTagRepository mentorTagRepository,
-            TagRepository tagRepository,
             UserRepository userRepository,
             MentorSubjectResultRepository mentorSubjectResultRepository,
             MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
@@ -76,8 +62,6 @@ public class MentorProfileService {
             ApplicationEventPublisher eventPublisher
     ) {
         this(mentorProfileRepository,
-                mentorTagRepository,
-                tagRepository,
                 userRepository,
                 mentorSubjectResultRepository,
                 mentorFeaturedProjectRepository,
@@ -98,13 +82,7 @@ public class MentorProfileService {
     public boolean hasCompletedMentorProfile(UUID userId) {
         requireUserId(userId);
         return mentorProfileRepository.findWithUserByUserId(userId)
-                .map(profile -> isRequiredFieldsCompleted(
-                        profile,
-                        mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC))
-                                .stream()
-                                .map(this::mapToTagResponse)
-                                .toList()
-                ))
+                .map(this::isRequiredFieldsCompleted)
                 .orElse(false);
     }
 
@@ -113,7 +91,6 @@ public class MentorProfileService {
         requireUserId(userId);
         requireProfileRequest(request);
         MentorProfile profile = getOrCreateProfile(userId);
-        List<Tag> helpTopics = loadAndValidateTags(request.helpTopicIds(), Set.of(TagType.HELP_TOPIC), "chủ đề hỗ trợ");
         Boolean previousAvailability = null;
         Boolean currentAvailability = null;
 
@@ -142,10 +119,9 @@ public class MentorProfileService {
                     request.bookingTimezone()
             );
         }
-        replaceHelpTopics(savedProfile, helpTopics);
         replaceSubjectResults(savedProfile, request.subjectResults());
         publishAvailabilityChangedEventIfNeeded(savedProfile, previousAvailability, currentAvailability);
-        return mapToResponseFromTags(savedProfile, helpTopics);
+        return mapToResponse(savedProfile);
     }
 
     private MentorProfile getOrCreateProfile(UUID userId) {
@@ -161,65 +137,7 @@ public class MentorProfileService {
                 });
     }
 
-    private List<Tag> loadAndValidateTags(List<UUID> tagIds, Set<TagType> allowedTypes, String label) {
-        if (tagIds == null || tagIds.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách " + label + " không được để trống");
-        }
-        Set<UUID> uniqueIds = new LinkedHashSet<>(tagIds);
-        if (uniqueIds.size() != tagIds.size()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách " + label + " không được trùng lặp");
-        }
-
-        Map<UUID, Tag> tagsById = tagRepository.findByIdInAndStatus(uniqueIds, TagStatus.ACTIVE)
-                .stream()
-                .collect(Collectors.toMap(Tag::getId, Function.identity()));
-
-        if (tagsById.size() != uniqueIds.size()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều " + label + " không tồn tại hoặc chưa được duyệt");
-        }
-
-        List<Tag> tags = uniqueIds.stream()
-                .map(tagsById::get)
-                .toList();
-        boolean hasInvalidType = tags.stream().anyMatch(tag -> !allowedTypes.contains(tag.getType()));
-        if (hasInvalidType) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều " + label + " không đúng loại dữ liệu");
-        }
-        return tags;
-    }
-
-    private void replaceHelpTopics(MentorProfile profile, List<Tag> helpTopics) {
-        mentorTagRepository.deleteByIdMentorUserId(profile.getUserId());
-
-        List<MentorTag> mentorTags = helpTopics.stream()
-                .map(tag -> MentorTag.builder()
-                        .id(new MentorTagId(profile.getUserId(), tag.getId(), MentorTagType.HELP_TOPIC))
-                        .mentorProfile(profile)
-                        .tag(tag)
-                        .build())
-                .toList();
-        mentorTagRepository.saveAll(mentorTags);
-    }
-
     private MentorProfileResponse mapToResponse(MentorProfile profile) {
-        List<MentorTagResponse> helpTopics = mentorTagRepository
-                .findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC))
-                .stream()
-                .sorted(Comparator.comparing(mentorTag -> mentorTag.getTag().getNameVi()))
-                .map(this::mapToTagResponse)
-                .toList();
-        return mapToResponse(profile, helpTopics);
-    }
-
-    private MentorProfileResponse mapToResponseFromTags(MentorProfile profile, List<Tag> helpTopicsOverride) {
-        List<MentorTagResponse> helpTopics = helpTopicsOverride.stream()
-                .map(this::mapToTagResponseFromTag)
-                .sorted(Comparator.comparing(MentorTagResponse::nameVi))
-                .toList();
-        return mapToResponse(profile, helpTopics);
-    }
-
-    private MentorProfileResponse mapToResponse(MentorProfile profile, List<MentorTagResponse> helpTopics) {
         User user = profile.getUser();
         List<MentorSubjectResultResponse> subjectResults = loadSubjectResults(profile.getUserId());
         List<MentorFeaturedProjectResponse> featuredProjects = loadFeaturedProjects(profile.getUserId());
@@ -229,7 +147,7 @@ public class MentorProfileService {
                 : mentorBookingPolicyService.getEffectivePolicy(profile.getUserId());
         return MentorProfileResponse.builder()
                 .exists(true)
-                .requiredFieldsCompleted(isRequiredFieldsCompleted(profile, helpTopics))
+                .requiredFieldsCompleted(isRequiredFieldsCompleted(profile))
                 .userId(profile.getUserId())
                 .email(user.getEmail())
                 .displayName(user.getFullName())
@@ -244,7 +162,6 @@ public class MentorProfileService {
                 .minimumBookingLeadTimeMinutes(policy.minimumBookingLeadTimeMinutes())
                 .maximumBookingHorizonDays(policy.maximumBookingHorizonDays())
                 .bookingTimezone(policy.timezone())
-                .helpTopics(helpTopics)
                 .subjectResults(subjectResults)
                 .foundationSupportLevel(profile.getFoundationSupportLevel())
                 .outputReviewSupportLevel(profile.getOutputReviewSupportLevel())
@@ -262,34 +179,10 @@ public class MentorProfileService {
                 .build();
     }
 
-    private MentorTagResponse mapToTagResponseFromTag(Tag tag) {
-        return MentorTagResponse.builder()
-                .id(tag.getId())
-                .code(tag.getCode())
-                .nameVi(tag.getNameVi())
-                .nameEn(tag.getNameEn())
-                .type(tag.getType())
-                .primary(false)
-                .build();
-    }
-
-    private MentorTagResponse mapToTagResponse(MentorTag mentorTag) {
-        Tag tag = mentorTag.getTag();
-        return MentorTagResponse.builder()
-                .id(tag.getId())
-                .code(tag.getCode())
-                .nameVi(tag.getNameVi())
-                .nameEn(tag.getNameEn())
-                .type(tag.getType())
-                .primary(mentorTag.isPrimary())
-                .build();
-    }
-
-    private boolean isRequiredFieldsCompleted(MentorProfile profile, List<MentorTagResponse> helpTopics) {
+    private boolean isRequiredFieldsCompleted(MentorProfile profile) {
         return hasText(profile.getHeadline())
                 && hasText(profile.getExpertiseDescription())
                 && hasText(profile.getPhoneNumber())
-                && !helpTopics.isEmpty()
                 && isValidSupportLevel(profile.getFoundationSupportLevel())
                 && isValidSupportLevel(profile.getOutputReviewSupportLevel())
                 && isValidSupportLevel(profile.getDirectionSupportLevel())

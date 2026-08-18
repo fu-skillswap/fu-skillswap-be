@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumModerationAction;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReport;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReportStatus;
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumCommentListRequest;
@@ -13,7 +14,6 @@ import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumPostListReques
 import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumReportListRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReportResolveRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumHelpTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
@@ -429,11 +429,12 @@ public class AdminForumModerationService {
                 .authorUserId(post.getAuthorUser().getId())
                 .authorFullName(post.getAuthorUser().getFullName())
                 .authorAvatarUrl(post.getAuthorUser().getAvatarUrl())
-                .helpTopic(ForumHelpTopicResponse.builder()
-                        .id(post.getHelpTopic().getId())
-                        .code(post.getHelpTopic().getCode())
-                        .nameVi(post.getHelpTopic().getNameVi())
-                        .nameEn(post.getHelpTopic().getNameEn())
+                .forumTopic(com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse.builder()
+                        .id(post.getForumTopic().getId())
+                        .code(post.getForumTopic().getCode())
+                        .nameVi(post.getForumTopic().getNameVi())
+                        .nameEn(post.getForumTopic().getNameEn())
+                        .displayOrder(post.getForumTopic().getDisplayOrder())
                         .build())
                 .title(post.getTitle())
                 .content(post.getContent())
@@ -606,7 +607,7 @@ public class AdminForumModerationService {
 
     private String buildAdminPostFilterHash(AdminForumPostListRequest request) {
         return "forum-posts:admin|keyword=" + normalizeKeywordFilterValue(request.keyword())
-                + "|helpTopicId=" + normalizeFilterValue(request.helpTopicId())
+                + "|forumTopicId=" + normalizeFilterValue(request.forumTopicId())
                 + "|authorId=" + normalizeFilterValue(request.authorId())
                 + "|status=" + normalizeFilterValue(request.status());
     }
@@ -621,7 +622,7 @@ public class AdminForumModerationService {
     private Specification<ForumPost> buildAdminPostSpecification(AdminForumPostListRequest request,
                                                                  DecodedPostCursor decodedCursor) {
         return Specification.where(ForumPostSpecification.hasStatus(request.status()))
-                .and(ForumPostSpecification.hasHelpTopic(request.helpTopicId()))
+                .and(ForumPostSpecification.hasForumTopic(request.forumTopicId()))
                 .and(ForumPostSpecification.hasAuthor(request.authorId()))
                 .and(ForumPostSpecification.hasKeyword(toKeywordPattern(request.keyword())))
                 .and(ForumPostSpecification.isBeforeCursor(decodedCursor.lastActivityAt(), decodedCursor.postId()));

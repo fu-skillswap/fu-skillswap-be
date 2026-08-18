@@ -3,12 +3,9 @@ package com.fptu.exe.skillswap.modules.mentor.dto.request;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
-import java.util.UUID;
 
 @Schema(description = "Thông tin dịch vụ mentoring do mentor tạo")
 public record MentorServiceUpsertRequest(
@@ -39,11 +36,6 @@ public record MentorServiceUpsertRequest(
         @NotNull(message = "Giá dịch vụ không được để trống")
         @Min(value = 0, message = "Giá dịch vụ không được nhỏ hơn 0")
         @jakarta.validation.constraints.Max(value = 45000000, message = "Giá dịch vụ không được vượt quá 45.000.000 SCoin")
-        Integer priceScoin,
-
-        @Schema(description = "Danh sách help topic mentor service có thể hỗ trợ")
-        @NotEmpty(message = "Danh sách chủ đề hỗ trợ của dịch vụ không được để trống")
-        @Size(max = 20, message = "Dịch vụ không được có quá 20 chủ đề hỗ trợ")
-        List<@NotNull(message = "Chủ đề hỗ trợ không hợp lệ") UUID> helpTopicIds
+        Integer priceScoin
 ) {
 }

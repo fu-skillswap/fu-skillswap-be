@@ -379,7 +379,6 @@ class MentorDiscoveryServiceTest {
         when(studentProfileRepository.findWithDetailsByUserId(MENTOR_USER_ID)).thenReturn(Optional.empty());
         when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
                 .thenReturn(Map.of(MENTOR_USER_ID, new MentorEnrichedData(
-                        List.of(MentorTagResponse.builder().id(UUID.fromString("018f3abf-0a22-7fb2-9748-6cf000c47b6e")).code("HELP_QA").nameVi("Q&A").build()),
                         List.of(),
                         List.of(),
                         List.of(),
@@ -401,7 +400,6 @@ class MentorDiscoveryServiceTest {
                 .title("CV Review")
                 .active(true)
                 .build());
-        when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
         when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(true), any(LocalDateTime.class)))
                 .thenReturn(true);
 
@@ -425,7 +423,6 @@ class MentorDiscoveryServiceTest {
         when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
                 .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
         when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(MENTOR_USER_ID)).thenReturn(List.of());
-        when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
         when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(false), any(LocalDateTime.class)))
                 .thenReturn(false);
 
@@ -449,7 +446,6 @@ class MentorDiscoveryServiceTest {
         when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
                 .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
         when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(MENTOR_USER_ID)).thenReturn(List.of());
-        when(discoveryMapper.filterTagsByType(anyList(), any())).thenReturn(List.of());
         when(bookingEligibilityPolicy.isPublicBookingOfferAvailable(eq(mentorProfile), eq(false), any(LocalDateTime.class)))
                 .thenReturn(false);
         when(blogPostRepository.findMentorPublicProfilePreviews(

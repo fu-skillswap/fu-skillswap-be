@@ -78,7 +78,7 @@ class DiscoveryKeywordSupportTest {
                 .id(UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e"))
                 .code("JAVA")
                 .nameVi("Java")
-                .type(TagType.HELP_TOPIC)
+                .type(TagType.TECH_SKILL)
                 .build();
         MentorSubjectResult subject = MentorSubjectResult.builder()
                 .id(UUID.fromString("018f3abf-0a22-7132-9748-6cf000c47b6e"))

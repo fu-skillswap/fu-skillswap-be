@@ -92,12 +92,6 @@ public class Coupon {
     @Column(name = "mentor_user_id", nullable = false)
     private Set<UUID> applicableMentorIds = new HashSet<>();
 
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "coupon_applicable_help_topic_ids", joinColumns = @JoinColumn(name = "coupon_id"))
-    @Column(name = "help_topic_id", nullable = false)
-    private Set<UUID> applicableHelpTopicIds = new HashSet<>();
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

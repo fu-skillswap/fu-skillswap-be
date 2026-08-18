@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.forum.repository;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -33,12 +33,15 @@ class ForumPostSpecificationRepositoryTest {
     @Autowired
     private ForumPostRepository forumPostRepository;
 
+    @Autowired
+    private ForumTopicRepository forumTopicRepository;
+
     @Test
     void hasStatusHasHelpTopicHasAuthorHasKeyword_shouldFilterCorrectly() {
         User author = persistUser("author-filter@test.com", "Mentor Reviewer");
         User anotherAuthor = persistUser("another-filter@test.com", "Another Writer");
-        Tag helpTopic = persistHelpTopic("FILTER_TOPIC_1", "Góp ý dự án/case study");
-        Tag otherTopic = persistHelpTopic("FILTER_TOPIC_2", "Giải đáp thắc mắc");
+        ForumTopic helpTopic = persistHelpTopic("FILTER_TOPIC_1", "Góp ý dự án/case study");
+        ForumTopic otherTopic = persistHelpTopic("FILTER_TOPIC_2", "Giải đáp thắc mắc");
 
         ForumPost matched = persistPost(uuidV7(1_700_000_000_100L, 0x101, 0x111L), author, helpTopic,
                 "Need project feedback", "Please mentor review this project", LocalDateTime.of(2026, 7, 8, 10, 0));
@@ -52,7 +55,7 @@ class ForumPostSpecificationRepositoryTest {
         entityManager.flush();
 
         Specification<ForumPost> specification = Specification.where(ForumPostSpecification.hasStatus(ForumPostStatus.PUBLISHED))
-                .and(ForumPostSpecification.hasHelpTopic(helpTopic.getId()))
+                .and(ForumPostSpecification.hasForumTopic(helpTopic.getId()))
                 .and(ForumPostSpecification.hasAuthor(author.getId()))
                 .and(ForumPostSpecification.hasKeyword("%project%"));
 
@@ -66,7 +69,7 @@ class ForumPostSpecificationRepositoryTest {
     void mineOnly_shouldFilterByCurrentUser() {
         User author = persistUser("mine-author@test.com", "Mine Author");
         User otherAuthor = persistUser("mine-other@test.com", "Other Author");
-        Tag helpTopic = persistHelpTopic("FILTER_TOPIC_3", "Định hướng ngành/chuyên ngành");
+        ForumTopic helpTopic = persistHelpTopic("FILTER_TOPIC_3", "Định hướng ngành/chuyên ngành");
 
         ForumPost minePost = persistPost(uuidV7(1_700_000_001_000L, 0x201, 0x111L), author, helpTopic,
                 "Mine post", "Mine content", LocalDateTime.of(2026, 7, 8, 10, 0));
@@ -88,7 +91,7 @@ class ForumPostSpecificationRepositoryTest {
     @Test
     void isBeforeCursor_shouldApplyTupleComparison() {
         User author = persistUser("cursor-author@test.com", "Cursor Author");
-        Tag helpTopic = persistHelpTopic("FILTER_TOPIC_4", "Thích nghi FPTU & campus life");
+        ForumTopic helpTopic = persistHelpTopic("FILTER_TOPIC_4", "Thích nghi FPTU & campus life");
 
         UUID cursorId = UUID.fromString("00000000-0000-7000-8000-000000000003");
         UUID smallerSameTimeId = UUID.fromString("00000000-0000-7000-8000-000000000002");
@@ -124,21 +127,29 @@ class ForumPostSpecificationRepositoryTest {
         return entityManager.persist(user);
     }
 
-    private Tag persistHelpTopic(String code, String nameVi) {
-        Tag tag = Tag.builder()
-                .code(code)
-                .nameVi(nameVi)
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
-                .build();
-        return entityManager.persist(tag);
+    private ForumTopic persistHelpTopic(String code, String nameVi) {
+        ForumTopicCode topicCode = switch (code) {
+            case "FILTER_TOPIC_1" -> ForumTopicCode.QUESTION;
+            case "FILTER_TOPIC_2" -> ForumTopicCode.SHARING;
+            case "FILTER_TOPIC_3" -> ForumTopicCode.SEARCH;
+            default -> ForumTopicCode.REVIEW;
+        };
+        return forumTopicRepository.findByCodeAndActiveTrue(topicCode)
+                .orElseGet(() -> entityManager.persist(ForumTopic.builder()
+                        .id(UUID.randomUUID())
+                        .code(topicCode)
+                        .nameVi(nameVi)
+                        .nameEn(topicCode.name())
+                        .displayOrder(topicCode.ordinal() + 1)
+                        .active(true)
+                        .build()));
     }
 
-    private ForumPost persistPost(UUID id, User author, Tag helpTopic, String title, String content, LocalDateTime lastActivityAt) {
+    private ForumPost persistPost(UUID id, User author, ForumTopic helpTopic, String title, String content, LocalDateTime lastActivityAt) {
         ForumPost post = ForumPost.builder()
                 .id(id)
                 .authorUser(author)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title(title)
                 .content(content)
                 .status(ForumPostStatus.PUBLISHED)

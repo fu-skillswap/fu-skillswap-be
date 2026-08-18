@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.repository;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
@@ -43,21 +42,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-              )
-              and (:campusId is null or campus.id = :campusId)
-              and (:specializationId is null or specialization.id = :specializationId)
-              and (:hasTagFilter = false or exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-                      and mt.id.tagId in :tagIds
-              ))
+              and exists (select 1 from MentorService service where service.mentorProfile.userId = mp.userId
+                          and service.isActive = true
+                          and service.deliveryMode = com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE)
+               and (:campusId is null or campus.id = :campusId)
+               and (:specializationId is null or specialization.id = :specializationId)
             order by mp.averageRating desc nulls last, mp.totalCompletedSessions desc nulls last,
                      mp.totalAcceptedBookings desc nulls last, mp.lastActiveAt desc nulls last,
                      mp.updatedAt desc nulls last, mp.userId asc
@@ -80,29 +69,16 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-              )
-              and (:campusId is null or campus.id = :campusId)
-              and (:specializationId is null or specialization.id = :specializationId)
-              and (:hasTagFilter = false or exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-                      and mt.id.tagId in :tagIds
-              ))
+              and exists (select 1 from MentorService service where service.mentorProfile.userId = mp.userId
+                          and service.isActive = true
+                          and service.deliveryMode = com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE)
+               and (:campusId is null or campus.id = :campusId)
+               and (:specializationId is null or specialization.id = :specializationId)
             """)
     Page<UUID> findDiscoverableCandidateIds(
             @Param("mentorStatus") MentorStatus mentorStatus,
-            @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("hasTagFilter") boolean hasTagFilter,
-            @Param("tagIds") List<UUID> tagIds,
             @Param("now") LocalDateTime now,
             Pageable pageable);
 
@@ -124,21 +100,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-              )
-              and (:campusId is null or campus.id = :campusId)
-              and (:specializationId is null or specialization.id = :specializationId)
-              and (:hasTagFilter = false or exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-                      and mt.id.tagId in :tagIds
-              ))
+              and exists (select 1 from MentorService service where service.mentorProfile.userId = mp.userId
+                          and service.isActive = true
+                          and service.deliveryMode = com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE)
+               and (:campusId is null or campus.id = :campusId)
+               and (:specializationId is null or specialization.id = :specializationId)
               and (:keywordPattern is null or :normalizedKeywordPattern is null or (
                    lower(coalesce(u.fullName, '')) like :keywordPattern or
                    function('translate', lower(coalesce(u.fullName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
@@ -237,21 +203,11 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-              )
-              and (:campusId is null or campus.id = :campusId)
-              and (:specializationId is null or specialization.id = :specializationId)
-              and (:hasTagFilter = false or exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-                      and mt.id.tagId in :tagIds
-              ))
+              and exists (select 1 from MentorService service where service.mentorProfile.userId = mp.userId
+                          and service.isActive = true
+                          and service.deliveryMode = com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE)
+               and (:campusId is null or campus.id = :campusId)
+               and (:specializationId is null or specialization.id = :specializationId)
               and (:keywordPattern is null or :normalizedKeywordPattern is null or (
                    lower(coalesce(u.fullName, '')) like :keywordPattern or
                    function('translate', lower(coalesce(u.fullName, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern or
@@ -334,11 +290,8 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             """)
     Page<UUID> findDiscoverableCandidateIdsWithKeyword(
             @Param("mentorStatus") MentorStatus mentorStatus,
-            @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("hasTagFilter") boolean hasTagFilter,
-            @Param("tagIds") List<UUID> tagIds,
             @Param("keywordPattern") String keywordPattern,
             @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
             @Param("accentedCharacters") String accentedCharacters,
@@ -373,17 +326,10 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND EXISTS (
-                  SELECT 1 FROM mentor_tags mt0
-                  WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
-              )
-              AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
-              AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
-              AND (:hasTagFilter = false OR EXISTS (
-                  SELECT 1 FROM mentor_tags mt1
-                  WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
-                    AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
-              ))
+              AND EXISTS (SELECT 1 FROM mentor_services service WHERE service.mentor_user_id = mp.user_id
+                          AND service.is_active = true AND service.delivery_mode = 'ONE_TO_ONE')
+               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
+               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
               AND mp.search_vector @@ plainto_tsquery('simple', :keyword)
             ORDER BY (
                         COALESCE(ts_rank_cd(mp.search_vector, plainto_tsquery('simple', :keyword)), 0) * 100
@@ -408,9 +354,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             @Param("keyword") String keyword,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("hasTagFilter") boolean hasTagFilter,
-            @Param("tagIds") String tagIds,
-            @Param("now") LocalDateTime now,
+             @Param("now") LocalDateTime now,
             @Param("limitSize") int limitSize,
             @Param("offsetVal") int offsetVal);
 
@@ -434,26 +378,17 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               AND mp.verified_at IS NOT NULL
               AND mp.headline IS NOT NULL AND trim(mp.headline) <> ''
               AND mp.expertise_description IS NOT NULL AND trim(mp.expertise_description) <> ''
-              AND EXISTS (
-                  SELECT 1 FROM mentor_tags mt0
-                  WHERE mt0.mentor_user_id = mp.user_id AND mt0.tag_type = 'HELP_TOPIC'
-              )
-              AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
-              AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
-              AND (:hasTagFilter = false OR EXISTS (
-                  SELECT 1 FROM mentor_tags mt1
-                  WHERE mt1.mentor_user_id = mp.user_id AND mt1.tag_type = 'HELP_TOPIC'
-                    AND mt1.tag_id = ANY(CAST(:tagIds AS uuid[]))
-              ))
+              AND EXISTS (SELECT 1 FROM mentor_services service WHERE service.mentor_user_id = mp.user_id
+                          AND service.is_active = true AND service.delivery_mode = 'ONE_TO_ONE')
+               AND (:campusId IS NULL OR sp.campus_id = CAST(:campusId AS uuid))
+               AND (:specializationId IS NULL OR sp.specialization_id = CAST(:specializationId AS uuid))
               AND mp.search_vector @@ plainto_tsquery('simple', :keyword)
             """, nativeQuery = true)
     long countDiscoverableCandidatesByFts(
             @Param("keyword") String keyword,
             @Param("campusId") UUID campusId,
             @Param("specializationId") UUID specializationId,
-            @Param("hasTagFilter") boolean hasTagFilter,
-            @Param("tagIds") String tagIds,
-            @Param("now") LocalDateTime now);
+             @Param("now") LocalDateTime now);
 
 
     @Query("""
@@ -522,12 +457,9 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
               and mp.verifiedAt is not null
               and mp.headline is not null and trim(mp.headline) <> ''
               and mp.expertiseDescription is not null and trim(mp.expertiseDescription) <> ''
-              and exists (
-                    select 1
-                    from com.fptu.exe.skillswap.modules.catalog.domain.MentorTag mt
-                    where mt.id.mentorUserId = mp.userId
-                      and mt.id.tagType = :helpTopicTagType
-              )
+              and exists (select 1 from MentorService service where service.mentorProfile.userId = mp.userId
+                          and service.isActive = true
+                          and service.deliveryMode = com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE)
             order by mp.totalAcceptedBookings desc nulls last,
                      mp.lastActiveAt desc nulls last,
                      mp.verifiedAt desc nulls last,
@@ -537,7 +469,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             """)
     List<MentorDiscoveryQueryRow> findRecommendationCandidatesSortedByRelevance(
             @Param("mentorStatus") MentorStatus mentorStatus,
-            @Param("helpTopicTagType") MentorTagType helpTopicTagType,
             @Param("excludedUserId") UUID excludedUserId,
             @Param("now") LocalDateTime now,
             Pageable pageable);

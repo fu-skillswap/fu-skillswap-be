@@ -1,5 +1,7 @@
 # Frontend Integration Guide — Identity & Authentication Module
 
+> Với `avatarUrl`, dùng nguyên URL backend trả về. URL có thể đến từ Google hoặc CDN SkillSwap; FE không tự ghép CDN URL từ ID, tên file, `storageKey` hoặc `objectKey`. `STORAGE_PUBLIC_URL_PREFIX` là cấu hình backend, không phải biến `.env` của FE.
+
 ---
 
 ## 1. Kiến trúc Bảo mật & Nguyên tắc Chung (Security Architecture & Principles)
@@ -13,10 +15,20 @@ interface ApiResponse<T> {
   status: number;             // HTTP status code (ví dụ: 200, 400, 401, 403, 429)
   code: string;               // Mã nghiệp vụ riêng (ví dụ: "SUCCESS_0200", "AUTH_1001", "VAL_3001")
   message: string;            // Thông điệp an toàn có thể hiển thị trực tiếp lên UI
-  data: T | null;             // Payload dữ liệu trả về (null nếu có lỗi)
+  data: T | ValidationError[] | null;
   retryAfterSeconds?: number; // Số giây cần chờ khi gặp lỗi 429 Too Many Requests
 }
+
+interface ValidationError {
+  field: string | null;       // Tên field cần hiển thị lỗi, có thể null
+  message: string;            // Thông báo có thể hiển thị cho người dùng
+  rejectedValue: unknown;     // Giá trị backend từ chối, có thể null
+}
 ```
+
+- Với response thành công, `data` là payload đúng kiểu `T`.
+- Với lỗi validate `400`, `data` thường là mảng `ValidationError`. FE nên gắn `message` vào đúng field nếu `field` có giá trị; nếu không có field thì hiển thị lỗi chung của form.
+- Với các lỗi khác, `data` có thể là `null`. Luôn ưu tiên HTTP status và `code` để quyết định xử lý, không chỉ dựa vào `message`.
 
 ### 1.2 Cơ chế Token & Cookie (JWT + HttpOnly Cookie)
 Hệ thống sử dụng cơ chế bảo mật kết hợp hai thành phần:
@@ -35,14 +47,22 @@ Hệ thống sử dụng cơ chế bảo mật kết hợp hai thành phần:
    - Tên cookie: `skillswap_refresh_token`
    - Thời gian sống dài (7 ngày).
    - Được backend tự động đính kèm qua HTTP Header `Set-Cookie` khi đăng nhập hoặc refresh thành công.
-   - Cấu hình cookie: `HttpOnly; Path=/api/auth; SameSite=Lax` (hoặc `Secure` trên production).
+   - Cookie do backend cấu hình. Cấu hình hiện tại là `HttpOnly; Secure; Path=/api/auth; SameSite=Lax`.
+   - FE không tự tạo, tự xóa hoặc cố thay đổi các thuộc tính cookie này.
    - **FE tuyệt đối không thể truy cập Cookie này bằng JavaScript (`document.cookie`)**.
    - **Lưu ý quan trọng cho Next.js**:
      - **Ở Client Component (Browser)**: Tự động gửi cookie này khi gọi `/api/auth/refresh` hoặc `/api/auth/logout` với tùy chọn `credentials: 'include'` (fetch) hoặc `withCredentials: true` (axios).
-     - **Ở Server Component / Server Action / Route Handler (Node.js)**: Node.js không tự đính kèm cookie của browser. Nếu gọi API từ Next.js Server, bạn phải đọc cookie từ `next/headers` và forward header `Cookie: skillswap_refresh_token=...` sang Spring Boot Backend.
+     - **Ở Server Component / Server Action / Route Handler (Node.js)**: Không dùng refresh cookie cho các API protected như `GET /api/auth/me`; endpoint này vẫn bắt buộc Bearer access token.
 
 ### 1.3 Giới hạn tần suất gọi API (Rate Limiting)
-Các API bảo mật (`/api/auth/*`) áp dụng Rate Limiting. Nếu gọi quá số lần cho phép (20 lần / 10 phút), backend trả về **HTTP 429 Too Many Requests**:
+Backend giới hạn một số endpoint xác thực theo IP. Không dùng các số này để tự chặn user trước khi gọi API; FE chỉ dùng chúng để giải thích khi backend trả `429`.
+
+| Endpoint | Giới hạn hiện tại |
+| --- | --- |
+| `GET /api/auth/google/authorization-context` | 60 lần / 10 phút |
+| `POST /api/auth/google` | 60 lần / 10 phút |
+| `POST /api/auth/refresh` | 40 lần / 10 phút |
+| `POST /api/auth/logout` | Không có rate limit riêng trong controller hiện tại |
 
 ```json
 {
@@ -185,6 +205,18 @@ interface UserMeResponse {
 }
 ```
 
+### 3.4 Trình tự khi người dùng mở lại trang
+Đây là luồng FE nên dùng để khôi phục phiên. Không gọi `GET /api/auth/me` chỉ với refresh cookie.
+
+1. App khởi động ở browser, chưa có access token trong bộ nhớ.
+2. Gọi `POST /api/auth/refresh` với `withCredentials: true`.
+3. Nếu thành công, lưu `response.data.accessToken` vào state bộ nhớ.
+4. Gọi `GET /api/auth/me` với Bearer token vừa nhận.
+5. Gọi `GET /api/me/onboarding-status` để chọn màn hình tiếp theo.
+6. Nếu refresh trả `401`, xóa state đăng nhập và đưa user về `/login`.
+
+Không gọi refresh lặp vô hạn. Mỗi request thất bại chỉ được retry một lần sau khi refresh thành công.
+
 ---
 
 ## 4. Tra cứu Danh mục Học thuật (Academic Catalog APIs)
@@ -244,6 +276,28 @@ interface SpecializationResponse {
 - **Header**: `Authorization: Bearer <accessToken>`
 - **Response**: `ApiResponse<StudentProfileResponse>`
 
+```typescript
+interface StudentProfileResponse {
+  userId: string;
+  email: string;
+  studentCode: string;
+  displayName: string;
+  avatarUrl: string | null;
+  campus: CampusResponse | null;
+  program: AcademicProgramResponse | null;
+  specialization: SpecializationResponse | null;
+  semester: number | null;
+  intakeYear: number | null;
+  isAlumni: boolean;
+  graduationYear: number | null;
+  bio: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+Nếu profile chưa được tạo, backend trả `404`. Đây là trạng thái bình thường ngay sau lần đăng nhập đầu tiên; chuyển user tới form onboarding thay vì hiện thông báo lỗi hệ thống.
+
 ### 5.2 Lưu / Cập nhật Hồ sơ Học thuật (`PUT /api/me/student-profile`)
 - **Endpoint**: `PUT /api/me/student-profile`
 - **Header**: `Authorization: Bearer <accessToken>`
@@ -251,7 +305,7 @@ interface SpecializationResponse {
 
 ```typescript
 interface StudentProfileRequest {
-  studentCode: string;      // Required. Regex: ^(?i)[HSDQC][ESA](0[1-9]|1[0-9]|2[0-2])\d{4}$
+  studentCode: string;      // Required. Regex không phân biệt hoa/thường: ^[HSDQC][ESA](0[1-9]|1[0-9]|2[0-2])\d{4}$
   displayName?: string;     // Max 150 chars
   avatarUrl?: string;
   campusId: string;         // UUID Campus
@@ -265,13 +319,20 @@ interface StudentProfileRequest {
 }
 ```
 
+Quy tắc backend cần phản ánh trên form:
+
+- `specializationId` phải thuộc `programId` đang chọn. Khi đổi ngành, xóa lựa chọn chuyên ngành cũ và tải lại bằng endpoint theo `programId`.
+- `intakeYear` và `graduationYear` phải từ năm `2000` đến năm hiện tại.
+- Nếu `isAlumni = true`, `graduationYear` là bắt buộc và phải lớn hơn hoặc bằng `intakeYear + 2`.
+- Backend luôn lưu `semester = 9` cho cựu sinh viên. FE vẫn phải gửi `semester` hợp lệ từ `0` đến `9`; nên khóa ô chọn học kỳ và gửi `9` khi bật trạng thái cựu sinh viên.
+
 #### Quy tắc Validation dành cho Next.js Form (React Hook Form / Zod):
 ```typescript
 import { z } from 'zod';
 
 export const studentProfileSchema = z.object({
   studentCode: z.string().regex(
-    /^(?i)[HSDQC][ESA](0[1-9]|1[0-9]|2[0-2])\d{4}$/,
+    /^[HSDQC][ESA](0[1-9]|1[0-9]|2[0-2])\d{4}$/i,
     'Mã số sinh viên không đúng định dạng (Ví dụ: SE192621)'
   ),
   displayName: z.string().max(150, 'Tên hiển thị không được quá 150 ký tự').optional(),
@@ -284,9 +345,21 @@ export const studentProfileSchema = z.object({
   isAlumni: z.boolean(),
   graduationYear: z.number().optional(),
   bio: z.string().optional(),
-}).refine((data) => !data.isAlumni || (data.isAlumni && data.graduationYear !== undefined), {
-  message: 'Vui lòng điền năm tốt nghiệp nếu bạn là cựu sinh viên',
-  path: ['graduationYear'],
+}).superRefine((data, ctx) => {
+  if (data.isAlumni && data.graduationYear === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Vui lòng điền năm tốt nghiệp nếu bạn là cựu sinh viên',
+      path: ['graduationYear'],
+    });
+  }
+  if (data.graduationYear !== undefined && data.graduationYear < data.intakeYear + 2) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Năm tốt nghiệp phải sau năm nhập học ít nhất 2 năm',
+      path: ['graduationYear'],
+    });
+  }
 });
 ```
 
@@ -315,17 +388,47 @@ interface OnboardingStatusResponse {
 
 ---
 
-## 6. Tích hợp Google Calendar (Cho Mentor)
+## 6. Tích hợp Google Calendar
+
+Ba endpoint dưới đây yêu cầu `Authorization: Bearer <accessToken>`. Controller hiện kiểm tra user đã đăng nhập; FE chỉ nên hiển thị tính năng này ở khu vực mentor theo UX của sản phẩm, nhưng không tự coi đó là một API chỉ-mentor nếu backend chưa trả `403` cho role khác.
 
 ### 6.1 Trạng thái kết nối Google Calendar (`GET /api/me/google-calendar/status`)
 - **Endpoint**: `GET /api/me/google-calendar/status`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Response**: `ApiResponse<GoogleCalendarStatusResponse>`
 
 ### 6.2 Kết nối Google Calendar (`POST /api/me/google-calendar/connect`)
 - **Endpoint**: `POST /api/me/google-calendar/connect`
-- **Body**: `{ authorizationCode, redirectUri, codeVerifier }`
+- **Header**: `Authorization: Bearer <accessToken>`
+- **Body**:
+
+```typescript
+interface GoogleCalendarConnectRequest {
+  authorizationCode: string;
+  redirectUri: string;
+  codeVerifier: string;
+}
+```
 
 ### 6.3 Ngắt kết nối Google Calendar (`POST /api/me/google-calendar/disconnect`)
 - **Endpoint**: `POST /api/me/google-calendar/disconnect`
+- **Header**: `Authorization: Bearer <accessToken>`
+
+```typescript
+interface GoogleCalendarStatusResponse {
+  connected: boolean;
+  syncEnabled: boolean;
+  email: string | null;
+  grantedScopes: string[] | null;
+  needsReconnect: boolean;
+  lastSyncStatus: string | null;
+  lastSyncAt: string | null;
+  lastSyncErrorCode: string | null;
+  lastSyncErrorMessage: string | null;
+}
+```
+
+Khi `needsReconnect = true`, hiển thị nút kết nối lại. Không tự gọi `connect` vì user phải hoàn thành Google consent screen.
 
 ---
 
@@ -404,32 +507,15 @@ apiClient.interceptors.response.use(
 );
 ```
 
-### 8.2 Đọc Cookie & Forward Request từ Next.js Server Components / Route Handlers (`lib/server-api.ts`)
+### 8.2 Lưu ý khi dùng Next.js Server Components
 
-Trong Next.js App Router, Server Components và Route Handlers chạy trong môi trường Node.js. Để gửi Refresh Cookie sang Spring Boot Backend từ phía Server:
+Luồng xác thực hiện tại được thiết kế cho browser gọi trực tiếp backend: browser nhận và gửi refresh cookie, còn access token chỉ giữ trong bộ nhớ client.
 
-```typescript
-import { cookies } from 'next/headers';
+- Không gọi `POST /api/auth/refresh` từ Server Component rồi kỳ vọng cookie mới tự quay về browser.
+- Không forward refresh cookie rồi dùng nó để gọi `GET /api/auth/me`; endpoint này cần Bearer access token.
+- Nếu FE muốn dùng BFF/SSR cho các API cần đăng nhập, cần một contract BFF riêng về cookie domain, cách truyền `Set-Cookie` và lifecycle access token. Contract đó chưa có trong backend hiện tại.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.skillswap.asia';
-
-export async function fetchFromBackendServer(endpoint: string, options: RequestInit = {}) {
-  const cookieStore = await cookies();
-  const refreshCookie = cookieStore.get('skillswap_refresh_token');
-
-  const headers = new Headers(options.headers);
-  if (refreshCookie) {
-    headers.set('Cookie', `skillswap_refresh_token=${refreshCookie.value}`);
-  }
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
-
-  return response.json();
-}
-```
+Vì vậy, với FE mới hãy dùng `apiClient` ở mục 8.1 để bootstrap phiên và tải user/onboarding sau khi client đã mount.
 
 ### 8.3 Điều hướng Onboarding theo Trạng thái Backend (`hooks/useAuthNavigation.ts`)
 

@@ -80,13 +80,13 @@ class ForumPostSpecificationTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void hasHelpTopic_shouldReturnHelpTopicPredicate() {
+    void hasForumTopic_shouldReturnForumTopicPredicate() {
         UUID topicId = UUID.fromString("00000000-0000-7000-8000-000000000001");
-        when(root.get("helpTopic")).thenReturn((Path) helpTopicPath);
+        when(root.get("forumTopic")).thenReturn((Path) helpTopicPath);
         when(helpTopicPath.get("id")).thenReturn((Path) helpTopicIdPath);
         when(cb.equal(helpTopicIdPath, topicId)).thenReturn(predicate);
 
-        Predicate result = ForumPostSpecification.hasHelpTopic(topicId).toPredicate(root, query, cb);
+        Predicate result = ForumPostSpecification.hasForumTopic(topicId).toPredicate(root, query, cb);
 
         assertSame(predicate, result);
         verify(cb).equal(helpTopicIdPath, topicId);

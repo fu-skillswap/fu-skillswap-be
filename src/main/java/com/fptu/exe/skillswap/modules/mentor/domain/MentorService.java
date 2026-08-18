@@ -2,14 +2,11 @@ package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -76,15 +73,6 @@ public class MentorService {
     @Column(nullable = false)
     @Builder.Default
     private Integer version = 0;
-
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(
-            name = "mentor_service_help_topics",
-            joinColumns = @JoinColumn(name = "service_id", foreignKey = @ForeignKey(name = "fk_service_help_topics_service")),
-            inverseJoinColumns = @JoinColumn(name = "tag_id", foreignKey = @ForeignKey(name = "fk_service_help_topics_tag"))
-    )
-    @Builder.Default
-    private Set<Tag> helpTopics = new LinkedHashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -102,7 +102,6 @@ public class AdminCouponService {
                 .minOrderValueScoin(request.minOrderValueScoin())
                 .applicableServiceIds(request.applicableServiceIds() == null ? new HashSet<>() : new HashSet<>(request.applicableServiceIds()))
                 .applicableMentorIds(request.applicableMentorIds() == null ? new HashSet<>() : new HashSet<>(request.applicableMentorIds()))
-                .applicableHelpTopicIds(request.applicableHelpTopicIds() == null ? new HashSet<>() : new HashSet<>(request.applicableHelpTopicIds()))
                 .build();
 
         Coupon saved = couponRepository.save(coupon);
@@ -147,7 +146,6 @@ public class AdminCouponService {
 
         if (request.applicableServiceIds() != null) coupon.setApplicableServiceIds(new HashSet<>(request.applicableServiceIds()));
         if (request.applicableMentorIds() != null) coupon.setApplicableMentorIds(new HashSet<>(request.applicableMentorIds()));
-        if (request.applicableHelpTopicIds() != null) coupon.setApplicableHelpTopicIds(new HashSet<>(request.applicableHelpTopicIds()));
 
         Coupon saved = couponRepository.save(coupon);
         log.info("Admin {} updated coupon {}", adminUserId, saved.getId());
@@ -250,7 +248,6 @@ public class AdminCouponService {
                 c.getMinOrderValueScoin(),
                 c.getApplicableServiceIds(),
                 c.getApplicableMentorIds(),
-                c.getApplicableHelpTopicIds(),
                 totalRedemptions,
                 activeRedemptions,
                 c.getCreatedAt(),

@@ -46,9 +46,6 @@ public record AdminCampaignCreateRequest(
         Set<UUID> audienceProgramIds,
 
         @Schema(description = "Tập hợp specialization ID áp dụng. Để trống = tất cả")
-        Set<UUID> audienceSpecializationIds,
-
-        @Schema(description = "Tập hợp help topic ID áp dụng. Để trống = tất cả")
-        Set<UUID> audienceHelpTopicIds
+        Set<UUID> audienceSpecializationIds
 ) {
 }

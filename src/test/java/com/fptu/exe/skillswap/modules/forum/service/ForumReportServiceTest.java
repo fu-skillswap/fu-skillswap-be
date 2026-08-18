@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
@@ -58,7 +58,7 @@ class ForumReportServiceTest {
     @Mock
     private StudentProfileRepository studentProfileRepository;
     @Mock
-    private TagRepository tagRepository;
+    private ForumTopicRepository forumTopicRepository;
     @Mock
     private NotificationService notificationService;
     @Mock
@@ -87,7 +87,7 @@ class ForumReportServiceTest {
                 forumPostReactionRepository,
                 forumCommentReactionRepository,
                 new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, studentProfileRepository, null),
-                tagRepository,
+                forumTopicRepository,
                 notificationService,
                 forumTextPolicy,
                 forumProhibitedPhrasePolicy,
@@ -117,17 +117,17 @@ class ForumReportServiceTest {
                 .status(UserStatus.ACTIVE)
                 .roles(Set.of(RoleCode.MENTEE))
                 .build();
-        Tag helpTopic = Tag.builder()
+        ForumTopic helpTopic = ForumTopic.builder()
                 .id(UUID.randomUUID())
-                .code("HELP_QA")
+                .code(ForumTopicCode.QUESTION)
                 .nameVi("Giải đáp thắc mắc")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
+                .nameEn("Forum topic").displayOrder(1).active(true)
+                .active(true)
                 .build();
         post = ForumPost.builder()
                 .id(UUID.randomUUID())
                 .authorUser(author)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Need help")
                 .content("content")
                 .status(ForumPostStatus.PUBLISHED)

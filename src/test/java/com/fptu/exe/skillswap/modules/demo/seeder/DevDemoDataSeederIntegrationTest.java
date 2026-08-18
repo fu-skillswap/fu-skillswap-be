@@ -74,10 +74,6 @@ class DevDemoDataSeederIntegrationTest {
     @Autowired
     private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     @Autowired
-    private TagRepository tagRepository;
-    @Autowired
-    private MentorTagRepository mentorTagRepository;
-    @Autowired
     private MentorDiscoveryService mentorDiscoveryService;
 
     private DevDemoDataSeeder seeder;
@@ -98,9 +94,7 @@ class DevDemoDataSeederIntegrationTest {
                 storedFileRepository,
                 mentorServiceRepository,
                 mentorAvailabilityRuleRepository,
-                mentorAvailabilitySlotRepository,
-                tagRepository,
-                mentorTagRepository
+                mentorAvailabilitySlotRepository
         );
         seeder.setSeederEnabled(true);
     }
@@ -154,10 +148,7 @@ class DevDemoDataSeederIntegrationTest {
                             && studentProfile.getCampus() != null
                             && studentProfile.getCampus().getCode() == CampusCode.HCM;
                 })
-                .filter(profile -> !mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(
-                        profile.getUserId(),
-                        List.of(com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType.HELP_TOPIC)
-                ).isEmpty())
+                .filter(profile -> mentorServiceRepository.existsByMentorProfileUserIdAndIsActiveTrue(profile.getUserId()))
                 .count();
     }
 

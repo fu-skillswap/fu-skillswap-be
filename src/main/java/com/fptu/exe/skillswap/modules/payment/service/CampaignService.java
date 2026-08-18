@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
@@ -23,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -130,14 +128,6 @@ public class CampaignService {
                 && (studentProfile == null || studentProfile.getSpecialization() == null
                 || !campaign.getAudienceSpecializationIds().contains(studentProfile.getSpecialization().getId()))) {
             return false;
-        }
-        if (!campaign.getAudienceHelpTopicIds().isEmpty()) {
-            Set<UUID> bookingHelpTopicIds = booking.getService() == null
-                    ? Set.of()
-                    : booking.getService().getHelpTopics().stream().map(Tag::getId).collect(java.util.stream.Collectors.toSet());
-            if (bookingHelpTopicIds.stream().noneMatch(campaign.getAudienceHelpTopicIds()::contains)) {
-                return false;
-            }
         }
         return true;
     }

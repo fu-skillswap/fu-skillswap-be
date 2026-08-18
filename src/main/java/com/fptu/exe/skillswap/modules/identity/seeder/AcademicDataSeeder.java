@@ -7,10 +7,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -18,9 +14,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -31,7 +25,6 @@ public class AcademicDataSeeder implements CommandLineRunner {
     private final CampusRepository campusRepository;
     private final AcademicProgramRepository academicProgramRepository;
     private final SpecializationRepository specializationRepository;
-    private final TagRepository tagRepository;
 
     @Override
     @Transactional
@@ -40,7 +33,6 @@ public class AcademicDataSeeder implements CommandLineRunner {
 
         seedCampuses();
         seedAcademicProgramsAndSpecializations();
-        seedMentorSelectionTags();
 
         log.info("FPTU Academic Data Seeding completed successfully!");
     }
@@ -215,95 +207,4 @@ public class AcademicDataSeeder implements CommandLineRunner {
         }
     }
 
-    private void seedMentorSelectionTags() {
-        Set<String> activeHelpTopics = Set.of(
-                "HELP_STUDY_PLAN",
-                "HELP_MAJOR_ORIENTATION",
-                "HELP_CAREER_PATH",
-                "HELP_INTERNSHIP",
-                "HELP_CV_REVIEW",
-                "HELP_INTERVIEW",
-                "HELP_GRADUATION_THESIS",
-                "HELP_FOREIGN_LANGUAGE",
-                "HELP_CAMPUS_LIFE",
-                "HELP_INFORMATION",
-                "HELP_QA",
-                "HELP_PROJECT_REVIEW"
-        );
-
-        retireActiveTags(TagType.TECH_SKILL, Set.of());
-        retireActiveTags(TagType.HELP_TOPIC, activeHelpTopics);
-
-        seedTag("HELP_STUDY_PLAN", "Hỗ trợ môn học", "Subject Support", TagType.HELP_TOPIC, 100);
-        seedTag("HELP_MAJOR_ORIENTATION", "Định hướng ngành/chuyên ngành", "Major and Specialization Guidance", TagType.HELP_TOPIC, 98);
-        seedTag("HELP_CAREER_PATH", "Định hướng nghề nghiệp", "Career Guidance", TagType.HELP_TOPIC, 96);
-        seedTag("HELP_INTERNSHIP", "Giải đáp OJT/thực tập", "OJT and Internship Guidance", TagType.HELP_TOPIC, 94);
-        seedTag("HELP_CV_REVIEW", "Đánh giá CV", "CV Review", TagType.HELP_TOPIC, 92);
-        seedTag("HELP_INTERVIEW", "Luyện phỏng vấn", "Mock Interview", TagType.HELP_TOPIC, 90);
-        seedTag("HELP_GRADUATION_THESIS", "Hỗ trợ đồ án/khóa luận", "Capstone and Thesis Support", TagType.HELP_TOPIC, 88);
-        seedTag("HELP_FOREIGN_LANGUAGE", "Hỗ trợ ngoại ngữ", "Foreign Language Support", TagType.HELP_TOPIC, 86);
-        seedTag("HELP_CAMPUS_LIFE", "Thích nghi FPTU & campus life", "FPTU and Campus Life Support", TagType.HELP_TOPIC, 84);
-        seedTag("HELP_INFORMATION", "Cung cấp thông tin", "Information Support", TagType.HELP_TOPIC, 82);
-        seedTag("HELP_QA", "Giải đáp thắc mắc", "Q&A Support", TagType.HELP_TOPIC, 80);
-        seedTag("HELP_PROJECT_REVIEW", "Góp ý dự án/case study", "Project and Case Study Feedback", TagType.HELP_TOPIC, 78);
-    }
-
-    private void retireActiveTags(TagType type, Set<String> retainedCodes) {
-        tagRepository.findByTypeAndStatusOrderByWeightDescNameViAsc(type, TagStatus.ACTIVE).stream()
-                .filter(tag -> !retainedCodes.contains(tag.getCode()))
-                .forEach(tag -> {
-                    tag.setStatus(TagStatus.INACTIVE);
-                    tagRepository.save(tag);
-                    log.info("Retired Tag: {} ({})", tag.getCode(), type);
-                });
-    }
-
-    private void seedTag(String code, String nameVi, String nameEn, TagType type, int weight) {
-        Optional<Tag> existing = tagRepository.findByCode(code);
-        if (existing.isPresent()) {
-            Tag tag = existing.get();
-            boolean changed = false;
-            if (!nameVi.equals(tag.getNameVi())) {
-                tag.setNameVi(nameVi);
-                changed = true;
-            }
-            if (nameEn != null && !nameEn.equals(tag.getNameEn())) {
-                tag.setNameEn(nameEn);
-                changed = true;
-            }
-            if (tag.getType() != type) {
-                tag.setType(type);
-                changed = true;
-            }
-            if (tag.getWeight() == null || tag.getWeight() != weight) {
-                tag.setWeight(weight);
-                changed = true;
-            }
-            if (!tag.isFixed()) {
-                tag.setFixed(true);
-                changed = true;
-            }
-            if (tag.getStatus() != TagStatus.ACTIVE) {
-                tag.setStatus(TagStatus.ACTIVE);
-                changed = true;
-            }
-            if (changed) {
-                tagRepository.save(tag);
-                log.info("Updated Tag: {} ({})", code, type);
-            }
-            return;
-        }
-
-        Tag tag = Tag.builder()
-                .code(code)
-                .nameVi(nameVi)
-                .nameEn(nameEn)
-                .type(type)
-                .status(TagStatus.ACTIVE)
-                .weight(weight)
-                .isFixed(true)
-                .build();
-        tagRepository.save(tag);
-        log.info("Seeded Tag: {} ({})", code, type);
-    }
 }

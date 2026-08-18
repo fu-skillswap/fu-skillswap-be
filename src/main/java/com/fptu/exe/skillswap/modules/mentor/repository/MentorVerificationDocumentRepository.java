@@ -25,6 +25,8 @@ public interface MentorVerificationDocumentRepository extends JpaRepository<Ment
     @EntityGraph(attributePaths = {"storedFile", "uploadedBy"})
     Optional<MentorVerificationDocument> findByIdAndRequestId(UUID id, UUID requestId);
 
+    Optional<MentorVerificationDocument> findByStoredFileId(UUID storedFileId);
+
     long countByRequestIdAndDocumentTypeAndIsActiveTrue(UUID requestId, VerificationDocumentType documentType);
 
     List<MentorVerificationDocument> findByRequestIdAndDocumentTypeInAndIsActiveTrue(UUID requestId, java.util.Collection<VerificationDocumentType> types);

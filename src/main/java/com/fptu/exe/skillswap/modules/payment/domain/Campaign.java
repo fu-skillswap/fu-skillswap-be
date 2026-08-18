@@ -89,12 +89,6 @@ public class Campaign {
     @Column(name = "specialization_id", nullable = false)
     private Set<UUID> audienceSpecializationIds = new HashSet<>();
 
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "campaign_audience_help_topic_ids", joinColumns = @JoinColumn(name = "campaign_id"))
-    @Column(name = "help_topic_id", nullable = false)
-    private Set<UUID> audienceHelpTopicIds = new HashSet<>();
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

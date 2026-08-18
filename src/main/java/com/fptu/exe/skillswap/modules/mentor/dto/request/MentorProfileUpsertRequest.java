@@ -11,7 +11,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
-import java.util.UUID;
 
 @Schema(description = "Thong tin ho so mentor dung de onboarding va hien thi discovery")
 public record MentorProfileUpsertRequest(
@@ -27,11 +26,6 @@ public record MentorProfileUpsertRequest(
 
         @Schema(description = "Mentor co dang san sang nhan mentee khong. Neu null khi tao moi se mac dinh true.")
         Boolean isAvailable,
-
-        @Schema(description = "Danh sách chủ đề mentor có thể hỗ trợ", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotEmpty(message = "Danh sách chủ đề hỗ trợ không được để trống")
-        @Size(max = 20, message = "Không được chọn quá 20 chủ đề hỗ trợ")
-        List<@NotNull(message = "Chủ đề hỗ trợ không hợp lệ") UUID> helpTopicIds,
 
         @Schema(description = "Danh sách môn - điểm mentor dùng làm tín hiệu matching", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotEmpty(message = "Danh sách môn - điểm không được để trống")
@@ -84,7 +78,6 @@ public record MentorProfileUpsertRequest(
             String headline,
             String expertiseDescription,
             Boolean isAvailable,
-            List<UUID> helpTopicIds,
             List<@Valid MentorSubjectResultRequest> subjectResults,
             Integer foundationSupportLevel,
             Integer outputReviewSupportLevel,
@@ -96,7 +89,6 @@ public record MentorProfileUpsertRequest(
         this(headline,
                 expertiseDescription,
                 isAvailable,
-                helpTopicIds,
                 subjectResults,
                 foundationSupportLevel,
                 outputReviewSupportLevel,

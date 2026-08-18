@@ -155,7 +155,6 @@ class DiscoveryMapperTest {
                 .isFree(false)
                 .priceScoin(100)
                 .maintainPostSessionChat(true)
-                .helpTopics(Set.of())
                 .build();
 
         MentorServiceResponse response = discoveryMapper.toServiceResponse(service);
@@ -168,20 +167,4 @@ class DiscoveryMapperTest {
         assertTrue(response.maintainPostSessionChat());
     }
 
-    @Test
-    void filterTagsByType_shouldOnlyReturnMatchingTypes() {
-        MentorTagResponse tag1 = MentorTagResponse.builder()
-                .type(TagType.HELP_TOPIC)
-                .nameVi("Topic")
-                .build();
-        MentorTagResponse tag2 = MentorTagResponse.builder()
-                .type(TagType.SOFT_SKILL)
-                .nameVi("Skill")
-                .build();
-
-        List<MentorTagResponse> result = discoveryMapper.filterTagsByType(List.of(tag1, tag2), MentorTagType.HELP_TOPIC);
-
-        assertEquals(1, result.size());
-        assertEquals(TagType.HELP_TOPIC, result.getFirst().type());
-    }
 }

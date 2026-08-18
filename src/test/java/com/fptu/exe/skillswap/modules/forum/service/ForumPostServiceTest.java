@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
@@ -73,7 +73,7 @@ class ForumPostServiceTest {
     @Mock
     private StudentProfileRepository studentProfileRepository;
     @Mock
-    private TagRepository tagRepository;
+    private ForumTopicRepository forumTopicRepository;
     @Mock
     private NotificationService notificationService;
     @Mock
@@ -89,7 +89,7 @@ class ForumPostServiceTest {
 
     private ForumPostService forumPostService;
     private User mentee;
-    private Tag helpTopic;
+    private ForumTopic helpTopic;
 
     @BeforeEach
     void setUp() {
@@ -99,7 +99,7 @@ class ForumPostServiceTest {
                 forumPostReactionRepository,
                 forumCommentReactionRepository,
                 new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, studentProfileRepository, null),
-                tagRepository,
+                forumTopicRepository,
                 notificationService,
                 forumTextPolicy,
                 forumProhibitedPhrasePolicy,
@@ -115,12 +115,12 @@ class ForumPostServiceTest {
                 .roles(Set.of(RoleCode.MENTEE))
                 .build();
 
-        helpTopic = Tag.builder()
+        helpTopic = ForumTopic.builder()
                 .id(UuidUtil.generateUuidV7())
-                .code("HELP_QA")
+                .code(ForumTopicCode.QUESTION)
                 .nameVi("Giải đáp thắc mắc")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
+                .nameEn("Forum topic").displayOrder(1).active(true)
+                .active(true)
                 .build();
 
         lenient().when(forumTextPolicy.requirePlainText(any(), any())).thenAnswer(inv -> inv.getArgument(0));
@@ -129,7 +129,7 @@ class ForumPostServiceTest {
     @Test
     void createPost_validRequest_shouldPersist() {
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        when(forumTopicRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
         when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(inv -> {
             ForumPost post = inv.getArgument(0);
             post.setId(UuidUtil.generateUuidV7());
@@ -158,7 +158,7 @@ class ForumPostServiceTest {
                 .isActive(true)
                 .build();
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        when(forumTopicRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
         when(studentProfileRepository.findWithDetailsByUserId(mentee.getId()))
                 .thenReturn(Optional.of(StudentProfile.builder().program(program).build()));
         when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(invocation -> {
@@ -186,7 +186,7 @@ class ForumPostServiceTest {
                 .id(UUID.randomUUID())
                 .authorUser(mentee)
                 .authorProgram(program)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Cùng ngành")
                 .content("Nội dung")
                 .status(ForumPostStatus.PUBLISHED)
@@ -210,7 +210,7 @@ class ForumPostServiceTest {
     @Test
     void createPost_prohibitedPhrase_shouldNotPersist() {
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        when(forumTopicRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
         doThrow(new BaseException(ErrorCode.FORUM_CONTENT_PROHIBITED))
                 .when(forumProhibitedPhrasePolicy)
                 .rejectPost("forbidden title", "content");
@@ -231,7 +231,7 @@ class ForumPostServiceTest {
         ForumPost firstPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("First")
                 .content("First content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -240,7 +240,7 @@ class ForumPostServiceTest {
         ForumPost secondPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Second")
                 .content("Second content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -249,14 +249,13 @@ class ForumPostServiceTest {
         ForumPost overflowPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Overflow")
                 .content("Overflow content")
                 .status(ForumPostStatus.PUBLISHED)
                 .lastActivityAt(LocalDateTime.of(2026, 7, 8, 7, 0))
                 .build();
 
-        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
         when(forumPostRepository.findWindow(any(), eq(3))).thenReturn(List.of(firstPost, secondPost, overflowPost));
         when(forumPostReactionRepository.findReactedPostIdsByUserIdAndPostIdIn(eq(mentee.getId()), any()))
                 .thenReturn(List.of(firstPost.getId()));
@@ -272,12 +271,11 @@ class ForumPostServiceTest {
 
     @Test
     void getPosts_filterMismatchCursor_shouldThrowBadRequest() {
-        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
         when(cursorCodec.decode("bad-filter-cursor")).thenReturn(CursorTokenPayload.builder()
                 .sortKey("2026-07-08T09:00:00")
                 .secondaryKey(UuidUtil.generateUuidV7().toString())
                 .direction("NEXT")
-                .filterHash("forum-posts:user|keyword=java|helpTopicId=_|mine=false|status=PUBLISHED")
+                .filterHash("forum-posts:user|keyword=java|forumTopicId=_|mine=false|status=PUBLISHED")
                 .build());
 
         BaseException ex = assertThrows(BaseException.class, () -> forumPostService.getPosts(
@@ -304,7 +302,7 @@ class ForumPostServiceTest {
         ForumPost post = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(other)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Old")
                 .content("Old content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -327,7 +325,7 @@ class ForumPostServiceTest {
         ForumPost post = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Hidden post")
                 .content("Hidden")
                 .status(ForumPostStatus.HIDDEN)
@@ -357,7 +355,7 @@ class ForumPostServiceTest {
                         .status(UserStatus.ACTIVE)
                         .roles(Set.of(RoleCode.MENTEE))
                         .build())
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Need help")
                 .content("content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -385,7 +383,7 @@ class ForumPostServiceTest {
     @Test
     void createPost_htmlInput_shouldThrowBadRequest() {
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(tagRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
+        when(forumTopicRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
         when(forumTextPolicy.requirePlainText(eq("<b>Hello</b>"), eq("Tiêu đề bài viết")))
                 .thenThrow(new BaseException(ErrorCode.BAD_REQUEST, "Tiêu đề bài viết chỉ hỗ trợ plain text, không chấp nhận HTML"));
 
@@ -402,7 +400,7 @@ class ForumPostServiceTest {
         ForumPost post = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Need help")
                 .content("content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -445,7 +443,7 @@ class ForumPostServiceTest {
         ForumPost post = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(mentee)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Need help")
                 .content("content")
                 .status(ForumPostStatus.PUBLISHED)

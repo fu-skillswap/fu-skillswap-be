@@ -1,10 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -42,8 +37,6 @@ import static org.mockito.Mockito.when;
 class MentorProfileServiceTest {
 
     @Mock private MentorProfileRepository mentorProfileRepository;
-    @Mock private MentorTagRepository mentorTagRepository;
-    @Mock private TagRepository tagRepository;
     @Mock private UserRepository userRepository;
     @Mock private MentorSubjectResultRepository mentorSubjectResultRepository;
     @Mock private MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
@@ -53,15 +46,12 @@ class MentorProfileServiceTest {
     private MentorProfileService mentorProfileService;
 
     private UUID mentorUserId;
-    private UUID helpTopicId;
     private MentorProfile profile;
 
     @BeforeEach
     void setUp() {
         mentorProfileService = new MentorProfileService(
                 mentorProfileRepository,
-                mentorTagRepository,
-                tagRepository,
                 userRepository,
                 mentorSubjectResultRepository,
                 mentorFeaturedProjectRepository,
@@ -70,7 +60,6 @@ class MentorProfileServiceTest {
         );
 
         mentorUserId = UuidUtil.generateUuidV7();
-        helpTopicId = UuidUtil.generateUuidV7();
 
         User mentorUser = User.builder()
                 .id(mentorUserId)
@@ -86,7 +75,6 @@ class MentorProfileServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserIdForUpdate(mentorUserId)).thenReturn(Optional.of(profile));
         when(mentorProfileRepository.save(any(MentorProfile.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(tagRepository.findByIdInAndStatus(any(), any())).thenReturn(List.of(helpTopic()));
         when(mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId))
                 .thenReturn(List.of(savedSubjectResult()));
         when(mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId))
@@ -120,7 +108,6 @@ class MentorProfileServiceTest {
                 "Backend Mentor",
                 "Support peer mentoring for Spring Boot",
                 isAvailable,
-                List.of(helpTopicId),
                 List.of(new MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
                 3,
                 3,
@@ -129,17 +116,6 @@ class MentorProfileServiceTest {
                 "https://portfolio.test",
                 "0912345678"
         );
-    }
-
-    private Tag helpTopic() {
-        return Tag.builder()
-                .id(helpTopicId)
-                .code("HELP_ACADEMIC_SUPPORT")
-                .nameVi("Hỗ trợ môn học")
-                .nameEn("Academic Support")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
-                .build();
     }
 
     private MentorSubjectResult savedSubjectResult() {

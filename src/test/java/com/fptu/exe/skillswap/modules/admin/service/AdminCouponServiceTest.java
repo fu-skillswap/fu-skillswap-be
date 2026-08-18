@@ -53,7 +53,6 @@ class AdminCouponServiceTest {
                     30000,
                     null, null, 100, 1, 0,
                     Collections.emptySet(),
-                    Collections.emptySet(),
                     Collections.emptySet()
             );
 
@@ -82,7 +81,7 @@ class AdminCouponServiceTest {
             UUID adminId = UUID.randomUUID();
             AdminCouponCreateRequest request = new AdminCouponCreateRequest(
                     "WELCOME50", "Title", "Desc",
-                    CouponDiscountType.FIXED, 10000, null, null, null, null, null, null, null, null, null
+                    CouponDiscountType.FIXED, 10000, null, null, null, null, null, null, null, null
             );
 
             when(couponRepository.existsByCode("WELCOME50")).thenReturn(true);
@@ -98,7 +97,7 @@ class AdminCouponServiceTest {
             UUID adminId = UUID.randomUUID();
             AdminCouponCreateRequest request = new AdminCouponCreateRequest(
                     "OVER100", "Title", "Desc",
-                    CouponDiscountType.PERCENT, 150, null, null, null, null, null, null, null, null, null
+                    CouponDiscountType.PERCENT, 150, null, null, null, null, null, null, null, null
             );
 
             when(couponRepository.existsByCode("OVER100")).thenReturn(false);

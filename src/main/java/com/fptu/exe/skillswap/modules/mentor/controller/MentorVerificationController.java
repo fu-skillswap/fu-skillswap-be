@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocu
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentUploadIntentResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationRequestActionResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationProgressResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationUploadIntentStatusResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
@@ -89,6 +91,15 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.getMyRequest(principal.getPublicId()));
     }
 
+    @Operation(summary = "Lấy tiến độ wizard mentor", description = "Trả về các bước nộp hồ sơ và các bước kích hoạt nhận booking sau approval. FE không tự suy diễn điều kiện từ nhiều API riêng lẻ.")
+    @GetMapping("/progress")
+    public ApiResponse<MentorVerificationProgressResponse> getMyProgress(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.getMyProgress(principal.getPublicId()));
+    }
+
     @Operation(summary = "Lấy verification timeline", description = "Trả về timeline sự kiện của mentor verification request mới nhất. FE dùng để hiển thị lịch sử tiến độ xác thực như submit, request revision, approve, reject hoặc withdraw.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy timeline thành công"),
@@ -158,6 +169,30 @@ public class MentorVerificationController {
                 java.time.Duration.ofMinutes(15), "Bạn đang tạo upload intent quá nhanh, vui lòng thử lại sau");
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(
                 mentorVerificationService.createDocumentUploadIntent(principal.getPublicId(), request)));
+    }
+
+    @Operation(summary = "Kiểm tra trạng thái upload intent", description = "FE gọi khi quay lại wizard hoặc upload bị gián đoạn để biết file đã được xác nhận, đã hết hạn hay cần tạo lại intent.")
+    @GetMapping("/documents/upload-intents/{uploadIntentId}")
+    public ApiResponse<MentorVerificationUploadIntentStatusResponse> getDocumentUploadIntentStatus(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID uploadIntentId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorVerificationService.getDocumentUploadIntentStatus(principal.getPublicId(), uploadIntentId));
+    }
+
+    @Operation(summary = "Tạo lại upload intent đã hết hạn hoặc bị từ chối", description = "Tạo URL upload private mới với cùng thông tin file. Intent cũ không được tái sử dụng.")
+    @PostMapping("/documents/upload-intents/{uploadIntentId}/retry")
+    public ResponseEntity<ApiResponse<MentorVerificationDocumentUploadIntentResponse>> retryDocumentUploadIntent(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID uploadIntentId
+    ) {
+        ensureAuthenticated(principal);
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER,
+                "mentor-verification:upload-intent:" + principal.getPublicId(), 12,
+                java.time.Duration.ofMinutes(15), "Bạn đang tạo upload intent quá nhanh, vui lòng thử lại sau");
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(
+                mentorVerificationService.retryDocumentUploadIntent(principal.getPublicId(), uploadIntentId)));
     }
 
     @Operation(

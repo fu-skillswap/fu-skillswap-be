@@ -15,13 +15,6 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
-import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.repository.MentorTagRepository;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
@@ -66,7 +59,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -121,8 +113,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    private final TagRepository tagRepository;
-    private final MentorTagRepository mentorTagRepository;
 
     private boolean seederEnabled = false;
 
@@ -140,9 +130,8 @@ public class DevDemoDataSeeder implements CommandLineRunner {
 
         log.info("Starting SkillSwap demo data seeding...");
 
-        Map<String, Tag> helpTopics = loadHelpTopics();
         purgeMenteeSeeds();
-        seedMentors(helpTopics);
+        seedMentors();
         logQualifiedMentorStatistics();
 
         log.info("SkillSwap demo data seeding completed successfully!");
@@ -160,15 +149,14 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         }
     }
 
-    private void seedMentors(Map<String, Tag> helpTopics) {
+    private void seedMentors() {
         for (MentorSeed seed : mentorSeeds()) {
             User user = upsertUser(seed.email(), seed.fullName(), seed.avatarUrl(), Set.of(RoleCode.MENTEE, RoleCode.MENTOR));
             upsertOauthAccount(user, demoProviderUserId(seed.email()));
             upsertStudentProfile(user, seed.toStudentSeed());
 
             MentorProfile mentorProfile = upsertMentorProfile(user, seed);
-            upsertMentorTags(mentorProfile, seed.helpTopicCodes(), helpTopics);
-            upsertMentorService(mentorProfile, seed, helpTopics);
+            upsertMentorService(mentorProfile, seed);
             upsertAvailabilityPlan(mentorProfile);
         }
     }
@@ -245,31 +233,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         return mentorProfileRepository.save(mentorProfile);
     }
 
-    private void upsertMentorTags(MentorProfile mentorProfile, List<String> tagCodes, Map<String, Tag> tags) {
-        if (mentorProfile == null || mentorProfile.getUserId() == null || tagCodes == null || tagCodes.isEmpty()) {
-            return;
-        }
-
-        mentorTagRepository.deleteByIdMentorUserId(mentorProfile.getUserId());
-        boolean primaryAssigned = false;
-        for (String code : tagCodes) {
-            Tag tag = tags.get(code);
-            if (tag == null) {
-                continue;
-            }
-
-            MentorTag mentorTag = MentorTag.builder()
-                    .id(new MentorTagId(mentorProfile.getUserId(), tag.getId(), MentorTagType.HELP_TOPIC))
-                    .mentorProfile(mentorProfile)
-                    .tag(tag)
-                    .isPrimary(!primaryAssigned)
-                    .build();
-            mentorTagRepository.save(mentorTag);
-            primaryAssigned = true;
-        }
-    }
-
-    private void upsertMentorService(MentorProfile mentorProfile, MentorSeed seed, Map<String, Tag> helpTopics) {
+    private void upsertMentorService(MentorProfile mentorProfile, MentorSeed seed) {
         List<MentorService> existing = mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorProfile.getUserId());
         if (!existing.isEmpty()) {
             MentorService service = existing.get(0);
@@ -284,13 +248,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             service.setFree(seed.serviceFree());
             service.setPriceScoin(normalizedServicePrice(seed.serviceFree(), seed.serviceDuration(), seed.priceScoin()));
             service.setActive(true);
-            service.getHelpTopics().clear();
-            for (String code : seed.helpTopicCodes()) {
-                Tag tag = helpTopics.get(code);
-                if (tag != null) {
-                    service.getHelpTopics().add(tag);
-                }
-            }
             mentorServiceRepository.save(service);
             return;
         }
@@ -305,12 +262,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 .priceScoin(normalizedServicePrice(seed.serviceFree(), seed.serviceDuration(), seed.priceScoin()))
                 .isActive(true)
                 .build();
-        for (String code : seed.helpTopicCodes()) {
-            Tag tag = helpTopics.get(code);
-            if (tag != null) {
-                service.getHelpTopics().add(tag);
-            }
-        }
         mentorServiceRepository.save(service);
     }
 
@@ -367,7 +318,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         }
     }
 
-    private void upsertPendingVerificationRequest(User user, MentorProfile mentorProfile, MentorSeed seed, Map<String, Tag> helpTopics) {
+    private void upsertPendingVerificationRequest(User user, MentorProfile mentorProfile, MentorSeed seed) {
         MentorVerificationRequest request = mentorVerificationRequestRepository
                 .findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(user.getId(), OPEN_REQUEST_STATUSES)
                 .orElseGet(MentorVerificationRequest::new);
@@ -459,42 +410,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         mentorVerificationRequestEventRepository.save(event);
     }
 
-    private Tag getRequiredTag(Map<String, Tag> tags, String code) {
-        Tag tag = tags.get(code);
-        if (tag == null) {
-            throw new IllegalStateException("Missing tag seed: " + code);
-        }
-        return tag;
-    }
-
-    private Map<String, Tag> loadHelpTopics() {
-        List<String> codes = List.of(
-                "HELP_STUDY_PLAN",
-                "HELP_MAJOR_ORIENTATION",
-                "HELP_CAREER_PATH",
-                "HELP_INTERNSHIP",
-                "HELP_CV_REVIEW",
-                "HELP_INTERVIEW",
-                "HELP_GRADUATION_THESIS",
-                "HELP_FOREIGN_LANGUAGE",
-                "HELP_CAMPUS_LIFE",
-                "HELP_INFORMATION",
-                "HELP_QA",
-                "HELP_PROJECT_REVIEW"
-        );
-        Map<String, Tag> tags = new HashMap<>();
-        for (String code : codes) {
-            Tag tag = tagRepository.findByCode(code)
-                    .orElseThrow(() -> new IllegalStateException("Missing help topic tag: " + code));
-            if (tag.getStatus() != TagStatus.ACTIVE) {
-                tag.setStatus(TagStatus.ACTIVE);
-                tagRepository.save(tag);
-            }
-            tags.put(code, tag);
-        }
-        return tags;
-    }
-
     private Campus campus(CampusCode code) {
         return campusRepository.findByCode(code)
                 .orElseThrow(() -> new IllegalStateException("Missing campus seed: " + code));
@@ -545,7 +460,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CNTT_KTPM",
                 20,
                 1,
-                List.of("HELP_CV_REVIEW", "HELP_INTERVIEW", "HELP_QA"),
                 "Spring Boot Mentor",
                 "Backend, Spring Boot, REST API, PostgreSQL, Docker, clean architecture",
                 "EXE101, EXE201, PRJ301",
@@ -564,7 +478,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CTTT_TTDPM",
                 10,
                 21,
-                List.of("HELP_PROJECT_REVIEW", "HELP_INFORMATION", "HELP_QA"),
                 "Communication Mentor",
                 "Presentation, storytelling, teamwork, UX explanation, demo pitching",
                 "COM101, COM102, PRJ301",
@@ -583,7 +496,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CNTT_TTNT",
                 10,
                 31,
-                List.of("HELP_CV_REVIEW", "HELP_INTERVIEW", "HELP_STUDY_PLAN"),
                 "AI Mentor",
                 "Machine learning, Python, data processing, model review, project guidance",
                 "AI100, ML101, DSA",
@@ -602,7 +514,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "CNTT_TKDHMT",
                 10,
                 41,
-                List.of("HELP_PROJECT_REVIEW", "HELP_INFORMATION", "HELP_QA"),
                 "Design Mentor",
                 "UI design, visual storytelling, product demo, frontend presentation, design review",
                 "WEB101, UIX201, PRJ301",
@@ -621,7 +532,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 "QTKD_KDQT",
                 10,
                 51,
-                List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP", "HELP_QA"),
                 "International Business Mentor",
                 "Business strategy, market analysis, internship guidance, communication",
                 "BUS101, MKT201, COM102",
@@ -648,7 +558,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             String specializationCode,
             int count,
             int startIndex,
-            List<String> helpTopicCodes,
             String headlinePrefix,
             String expertisePrefix,
             String supportingSubjectsPrefix,
@@ -694,7 +603,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     teachingMode,
                     sessionDuration,
                     demoAvatarUrl("mentor" + suffix),
-                    helpTopicCodes,
                     serviceTitle,
                     serviceDescription,
                     sessionDuration,
@@ -720,14 +628,14 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         Collections.shuffle(campuses, new java.util.Random(20260617L));
 
         List<RandomTrack> tracks = new ArrayList<>(List.of(
-                new RandomTrack("CNTT", "CNTT_ATTT", List.of("HELP_CV_REVIEW", "HELP_QA"), "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, 95),
-                new RandomTrack("CNTT", "CNTT_HTTT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, 105),
-                new RandomTrack("CNTT", "CNTT_TTNT", List.of("HELP_INTERVIEW", "HELP_STUDY_PLAN"), "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, 175),
-                new RandomTrack("CTTT", "CTTT_QHCC", List.of("HELP_INTERVIEW", "HELP_PROJECT_REVIEW"), "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, 90),
-                new RandomTrack("NN", "NN_NNA", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, 115),
-                new RandomTrack("LUAT", "LUAT_LKT", List.of("HELP_QA", "HELP_STUDY_PLAN"), "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, 80),
-                new RandomTrack("QTKD", "QTKD_MKT", List.of("HELP_CAREER_PATH", "HELP_INTERNSHIP"), "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, 100),
-                new RandomTrack("QTKD", "QTKD_TMDT", List.of("HELP_PROJECT_REVIEW", "HELP_QA"), "E-commerce Mentor", "E-commerce, product review, project storytelling, digital business", "ECOM101, PRJ301, COM102", TeachingMode.ONLINE, 60, false, 100)
+                new RandomTrack("CNTT", "CNTT_ATTT", "Security Mentor", "Information security, secure coding, system hardening", "SEC101, DSA, EXE101", TeachingMode.ONLINE, 60, false, 95),
+                new RandomTrack("CNTT", "CNTT_HTTT", "System Analysis Mentor", "Requirements, database design, UML, architecture review", "DB101, UML201, PRJ301", TeachingMode.HYBRID, 60, false, 105),
+                new RandomTrack("CNTT", "CNTT_TTNT", "AI Mentor", "Machine learning, Python, data preparation, portfolio review", "AI100, ML101, DSA", TeachingMode.ONLINE, 90, false, 175),
+                new RandomTrack("CTTT", "CTTT_QHCC", "Communication Mentor", "Presentation, teamwork, pitching, public speaking", "COM101, COM102, PRJ301", TeachingMode.OFFLINE, 90, false, 90),
+                new RandomTrack("NN", "NN_NNA", "English Mentor", "English communication, interview practice, speaking confidence", "ENG101, ENG201, COM102", TeachingMode.ONLINE, 60, false, 115),
+                new RandomTrack("LUAT", "LUAT_LKT", "Law Mentor", "Legal studies, documentation, presentation structure, career advice", "LAW101, COM102, EXE101", TeachingMode.ONLINE, 60, false, 80),
+                new RandomTrack("QTKD", "QTKD_MKT", "Business Mentor", "Marketing, business analysis, internship prep, communication", "BUS101, MKT201, COM102", TeachingMode.HYBRID, 60, false, 100),
+                new RandomTrack("QTKD", "QTKD_TMDT", "E-commerce Mentor", "E-commerce, product review, project storytelling, digital business", "ECOM101, PRJ301, COM102", TeachingMode.ONLINE, 60, false, 100)
         ));
         Collections.shuffle(tracks, new java.util.Random(20260618L));
 
@@ -761,7 +669,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     track.teachingMode(),
                     track.sessionDuration(),
                     demoAvatarUrl("mentor" + suffix),
-                    track.helpTopicCodes(),
                     serviceTitle,
                     serviceDescription,
                     track.sessionDuration(),
@@ -842,8 +749,7 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                 && profile.getSessionDuration() != null
                 && hasText(profile.getHeadline())
                 && hasText(profile.getExpertiseDescription())
-                && hasText(profile.getSupportingSubjects())
-                && !mentorTagRepository.findByIdMentorUserIdAndIdTagTypeIn(profile.getUserId(), List.of(MentorTagType.HELP_TOPIC)).isEmpty();
+                && hasText(profile.getSupportingSubjects());
     }
 
     private String vietnameseFullName(int seedIndex) {
@@ -1040,7 +946,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
     private record RandomTrack(
             String programCode,
             String specializationCode,
-            List<String> helpTopicCodes,
             String headlinePrefix,
             String expertisePrefix,
             String supportingSubjectsPrefix,
@@ -1099,7 +1004,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
             TeachingMode teachingMode,
             Integer sessionDuration,
             String avatarUrl,
-            List<String> helpTopicCodes,
             String serviceTitle,
             String serviceDescription,
             Integer serviceDuration,
@@ -1134,7 +1038,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
                     teachingMode,
                     sessionDuration,
                     avatarUrl,
-                    helpTopicCodes,
                     serviceTitle,
                     serviceDescription,
                     serviceDuration,

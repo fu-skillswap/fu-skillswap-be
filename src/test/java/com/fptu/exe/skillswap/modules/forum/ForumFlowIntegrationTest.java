@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.forum;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
+import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReportReasonType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumCommentUpsertRequest;
@@ -42,7 +42,7 @@ class ForumFlowIntegrationTest {
     private UserRepository userRepository;
 
     @Autowired
-    private TagRepository tagRepository;
+    private ForumTopicRepository forumTopicRepository;
 
     @Autowired
     private ForumPostService forumPostService;
@@ -55,18 +55,21 @@ class ForumFlowIntegrationTest {
 
     private User author;
     private User commenter;
-    private Tag helpTopic;
+    private ForumTopic helpTopic;
 
     @BeforeEach
     void setUp() {
         author = createForumUser("forum-author@test.com", "Forum Author");
         commenter = createForumUser("forum-commenter@test.com", "Forum Commenter");
-        helpTopic = tagRepository.save(Tag.builder()
-                .code("FORUM_FLOW_" + UUID.randomUUID())
-                .nameVi("Forum Flow Topic")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
-                .build());
+        helpTopic = forumTopicRepository.findByCodeAndActiveTrue(ForumTopicCode.QUESTION)
+                .orElseGet(() -> forumTopicRepository.save(ForumTopic.builder()
+                        .id(UUID.randomUUID())
+                        .code(ForumTopicCode.QUESTION)
+                        .nameVi("Hỏi đáp")
+                        .nameEn("Question")
+                        .displayOrder(1)
+                        .active(true)
+                        .build()));
     }
 
     @Test

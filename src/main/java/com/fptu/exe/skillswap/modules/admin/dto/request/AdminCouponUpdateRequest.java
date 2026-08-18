@@ -55,9 +55,6 @@ public record AdminCouponUpdateRequest(
         Set<UUID> applicableServiceIds,
 
         @Schema(description = "Tập hợp mentor user ID được áp dụng coupon")
-        Set<UUID> applicableMentorIds,
-
-        @Schema(description = "Tập hợp help topic ID được áp dụng coupon")
-        Set<UUID> applicableHelpTopicIds
+        Set<UUID> applicableMentorIds
 ) {
 }

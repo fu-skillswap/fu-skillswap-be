@@ -87,8 +87,11 @@ public class SecurityConfig {
                                     "/api/academic-programs",
                                     "/api/academic-programs/*/specializations",
                                     "/api/specializations",
-                                    "/api/catalog/help-topics",
                                     "/api/catalog/mentor-profile-options",
+                                    "/api/forum/topics",
+                                    "/api/forum/posts",
+                                    "/api/forum/posts/*",
+                                    "/api/forum/posts/*/comments",
                                     "/api/blog/posts",
                                     "/api/blog/posts/*",
                                     "/api/blog/posts/*/related",
@@ -102,6 +105,7 @@ public class SecurityConfig {
                     auth
                             .requestMatchers(
                                     RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}$"),
+                                    RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}/availability-preview$"),
                                     RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}/reviews$")
                             ).permitAll();
                     auth

@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.identity.integration;
 
 import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
 import com.fptu.exe.skillswap.modules.catalog.service.CatalogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,17 +20,12 @@ class MasterDataCacheBehaviorTest {
     private AcademicService academicService;
 
     @Autowired
-    private CatalogService catalogService;
-
     @SpyBean
     private CampusRepository campusRepository;
 
-    @SpyBean
-    private TagRepository tagRepository;
-
     @BeforeEach
     void resetSpyInvocations() {
-        clearInvocations(campusRepository, tagRepository);
+        clearInvocations(campusRepository);
     }
 
     @Test
@@ -42,14 +36,4 @@ class MasterDataCacheBehaviorTest {
         verify(campusRepository, times(1)).findByIsActiveTrue();
     }
 
-    @Test
-    void catalogHelpTopics_shouldBeCachedBetweenCalls() {
-        catalogService.getHelpTopics();
-        catalogService.getHelpTopics();
-
-        verify(tagRepository, times(1)).findByTypeAndStatusOrderByWeightDescNameViAsc(
-                com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC,
-                com.fptu.exe.skillswap.modules.catalog.domain.TagStatus.ACTIVE
-        );
-    }
 }

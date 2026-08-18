@@ -9,10 +9,13 @@ import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.mentor.domain.*;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.*;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.*;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
@@ -60,6 +63,9 @@ public class MentorVerificationService {
     @Value("${application.storage.documents-prefix:skillswap/verification-documents}")
     private String verificationDocumentsPrefix = "skillswap/verification-documents";
 
+    @Value("${application.mentor-verification.review-target-hours:48}")
+    private int reviewTargetHours = 48;
+
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
     private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
@@ -70,6 +76,9 @@ public class MentorVerificationService {
     private final StoredFileRepository storedFileRepository;
     private final ObjectProvider<StorageGateway> r2StorageProvider;
     private final MentorVerificationUploadIntentRepository uploadIntentRepository;
+    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final BookingEligibilityPolicy bookingEligibilityPolicy;
 
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
@@ -101,6 +110,64 @@ public class MentorVerificationService {
         MentorVerificationRequest request = findLatestRequest(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
         return buildResponse(request);
+    }
+
+    /**
+     * Một read model duy nhất cho wizard. Approval và khả năng nhận booking là hai trạng thái
+     * khác nhau để user không phải đoán vì sao profile chưa xuất hiện trên Discovery.
+     */
+    @Transactional(readOnly = true)
+    public MentorVerificationProgressResponse getMyProgress(UUID userId) {
+        requireUserId(userId);
+        Optional<MentorVerificationRequest> request = findLatestRequest(userId);
+        List<MentorVerificationDocumentResponse> documents = request
+                .map(value -> mentorVerificationDocumentRepository.findByRequestIdOrderByUploadedAtAsc(value.getId())
+                        .stream().map(this::mapDocumentResponse).toList())
+                .orElseGet(List::of);
+        MentorVerificationChecklistResponse checklist = buildChecklist(userId, documents);
+        MentorProfile profile = mentorProfileRepository.findWithUserByUserId(userId).orElse(null);
+        boolean approved = request.map(value -> value.getStatus() == VerificationStatus.APPROVED).orElse(false);
+        boolean hasActiveService = mentorServiceRepository.existsByMentorProfileUserIdAndIsActiveTrueAndDeliveryMode(
+                userId, MentorServiceDeliveryMode.ONE_TO_ONE);
+        LocalDateTime now = DateTimeUtil.now();
+        boolean hasFutureSlot = mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(List.of(userId), now)
+                .contains(userId);
+        boolean offerReady = approved && hasFutureSlot && bookingEligibilityPolicy
+                .isPublicBookingOfferAvailable(profile, hasActiveService, now);
+
+        List<MentorVerificationProgressResponse.Step> submissionSteps = List.of(
+                step("ACADEMIC_PROFILE", checklist.academicProfileCompleted(), true, false,
+                        "/me/academic-profile", "Hoàn tất thông tin học thuật để admin xác minh danh tính sinh viên."),
+                step("MENTOR_PROFILE", checklist.mentorProfileCompleted(), true, false,
+                        "/me/mentor-profile", "Hoàn tất hồ sơ mentor và các môn học/kết quả tiêu biểu."),
+                step("AFFILIATION_PROOF", checklist.hasAffiliationProof(), true, false,
+                        "/me/mentor-verification", "Tải ít nhất một minh chứng liên kết với trường."),
+                step("EXPERTISE_PROOF", checklist.hasExpertiseProof(), true, false,
+                        "/me/mentor-verification", "Tải ít nhất một minh chứng năng lực mentoring."),
+                step("MENTOR_TERMS", request.map(this::hasAcceptedCurrentTerms).orElse(false), true, false,
+                        "/me/mentor-verification", "Đọc và đồng ý điều khoản mentor trước khi nộp hồ sơ.")
+        );
+        List<MentorVerificationProgressResponse.Step> activationSteps = List.of(
+                step("VERIFICATION_APPROVED", approved, false, true,
+                        "/me/mentor-verification", "Hồ sơ cần được admin phê duyệt trước khi nhận booking."),
+                step("ACTIVE_SERVICE", hasActiveService, false, true,
+                        "/me/mentor-services", "Tạo và bật ít nhất một dịch vụ mentoring sau khi được duyệt."),
+                step("PUBLIC_AVAILABILITY", hasFutureSlot, false, true,
+                        "/me/availability-slots", "Thêm ít nhất một khung giờ rảnh trong tương lai để mentee có thể đặt lịch.")
+        );
+
+        MentorVerificationRequest latest = request.orElse(null);
+        return new MentorVerificationProgressResponse(
+                latest == null ? null : latest.getId(),
+                latest == null ? "NOT_STARTED" : latest.getStatus().name(),
+                latest == null ? null : latest.getSubmittedAt(),
+                estimatedReviewBy(latest),
+                reviewTargetHours,
+                isReviewOverdue(latest, now),
+                submissionSteps,
+                activationSteps,
+                resolveNextAction(latest, checklist, approved, hasActiveService, hasFutureSlot, offerReady)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -152,7 +219,34 @@ public class MentorVerificationService {
         StorageGateway.PrivatePresignedUpload upload = getRequiredStorageGateway()
                 .generatePrivateUploadUrl(intent.getStorageKey(), contentType, java.time.Duration.ofMinutes(15));
         return new MentorVerificationDocumentUploadIntentResponse(
-                intent.getId(), upload.uploadUrl(), upload.expiresAt(), java.util.Map.of("Content-Type", contentType));
+                intent.getId(), upload.uploadUrl(), upload.expiresAt(), java.util.Map.of("Content-Type", contentType), intent.getStatus());
+    }
+
+    @Transactional
+    public MentorVerificationUploadIntentStatusResponse getDocumentUploadIntentStatus(UUID userId, UUID uploadIntentId) {
+        requireUserId(userId);
+        MentorVerificationUploadIntent intent = getOwnedUploadIntentForUpdate(userId, uploadIntentId);
+        if (intent.getStatus() == MentorVerificationUploadIntentStatus.PENDING_UPLOAD
+                && !intent.getExpiresAt().isAfter(DateTimeUtil.now())) {
+            intent.setStatus(MentorVerificationUploadIntentStatus.EXPIRED);
+        }
+        return mapUploadIntentStatus(intent);
+    }
+
+    @Transactional
+    public MentorVerificationDocumentUploadIntentResponse retryDocumentUploadIntent(UUID userId, UUID uploadIntentId) {
+        requireUserId(userId);
+        MentorVerificationUploadIntent expiredIntent = getOwnedUploadIntentForUpdate(userId, uploadIntentId);
+        if (expiredIntent.getStatus() == MentorVerificationUploadIntentStatus.PENDING_UPLOAD
+                && !expiredIntent.getExpiresAt().isAfter(DateTimeUtil.now())) {
+            expiredIntent.setStatus(MentorVerificationUploadIntentStatus.EXPIRED);
+        }
+        if (expiredIntent.getStatus() != MentorVerificationUploadIntentStatus.EXPIRED
+                && expiredIntent.getStatus() != MentorVerificationUploadIntentStatus.REJECTED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Upload intent hiện tại chưa cần tạo lại");
+        }
+        return createDocumentUploadIntent(userId, new MentorVerificationDocumentUploadIntentRequest(
+                expiredIntent.getOriginalFilename(), expiredIntent.getExpectedContentType(), expiredIntent.getExpectedSizeBytes()));
     }
 
     @Transactional
@@ -161,8 +255,21 @@ public class MentorVerificationService {
             MentorVerificationDocumentUploadRequest uploadRequest
     ) {
         requireUserId(userId);
-        MentorVerificationRequest verificationRequest = findEditableRequestForUpdate(userId);
         validateUploadInput(uploadRequest);
+        MentorVerificationUploadIntent existingIntent = getOwnedUploadIntentForUpdate(userId, uploadRequest.uploadIntentId());
+        if (existingIntent.getStatus() == MentorVerificationUploadIntentStatus.CONFIRMED
+                && existingIntent.getConfirmedStoredFile() != null) {
+            MentorVerificationDocument existingDocument = mentorVerificationDocumentRepository
+                    .findByStoredFileId(existingIntent.getConfirmedStoredFile().getId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                            "Upload intent đã xác nhận nhưng chưa có tài liệu tương ứng"));
+            if (existingDocument.getDocumentType() != uploadRequest.documentType()) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Upload intent đã được dùng cho loại minh chứng khác");
+            }
+            return buildResponse(existingDocument.getRequest());
+        }
+
+        MentorVerificationRequest verificationRequest = findEditableRequestForUpdate(userId);
         enforceDocumentCountLimit(verificationRequest.getId(), uploadRequest.documentType());
 
         User user = getRequiredUser(userId);
@@ -518,6 +625,9 @@ public class MentorVerificationService {
                 .rejectionReason(request.getRejectionReason())
                 .revisionCount(request.getRevisionCount())
                 .submittedAt(request.getSubmittedAt())
+                .estimatedReviewBy(estimatedReviewBy(request))
+                .reviewTargetHours(reviewTargetHours)
+                .reviewOverdue(isReviewOverdue(request, DateTimeUtil.now()))
                 .termsAcceptedAt(request.getTermsAcceptedAt())
                 .termsVersion(request.getTermsVersion())
                 .reviewedAt(request.getReviewedAt())
@@ -714,6 +824,93 @@ public class MentorVerificationService {
         return findLatestRequest(userId)
                 .map(req -> req.getStatus().name())
                 .orElse("NOT_STARTED");
+    }
+
+    private MentorVerificationProgressResponse.Step step(
+            String code,
+            boolean completed,
+            boolean requiredForSubmission,
+            boolean requiredForBookingOffer,
+            String actionPath,
+            String message
+    ) {
+        return new MentorVerificationProgressResponse.Step(
+                code, completed, requiredForSubmission, requiredForBookingOffer, actionPath, message);
+    }
+
+    private LocalDateTime estimatedReviewBy(MentorVerificationRequest request) {
+        if (request == null || request.getStatus() != VerificationStatus.PENDING_REVIEW || request.getSubmittedAt() == null) {
+            return null;
+        }
+        return request.getSubmittedAt().plusHours(Math.max(1, reviewTargetHours));
+    }
+
+    private boolean isReviewOverdue(MentorVerificationRequest request, LocalDateTime now) {
+        LocalDateTime estimatedReviewBy = estimatedReviewBy(request);
+        return estimatedReviewBy != null && now != null && now.isAfter(estimatedReviewBy);
+    }
+
+    private MentorVerificationProgressResponse.NextAction resolveNextAction(
+            MentorVerificationRequest request,
+            MentorVerificationChecklistResponse checklist,
+            boolean approved,
+            boolean hasActiveService,
+            boolean hasFutureSlot,
+            boolean offerReady
+    ) {
+        if (request == null || request.getStatus() == VerificationStatus.REJECTED || request.getStatus() == VerificationStatus.WITHDRAWN) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "OPEN_APPLICATION", "/api/me/mentor-verification/request", "Mở hồ sơ đăng ký mentor để bắt đầu hoặc nộp lại.");
+        }
+        if (request.getStatus() == VerificationStatus.PENDING_REVIEW) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "WAIT_FOR_REVIEW", null, "Hồ sơ đang được admin xem xét. Thời gian trả về là thời gian dự kiến, không phải cam kết.");
+        }
+        if (request.getStatus() == VerificationStatus.NEEDS_REVISION || !checklist.canSubmit()) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "COMPLETE_SUBMISSION", "/me/mentor-verification", "Hoàn tất các bước bắt buộc rồi nộp hồ sơ để admin duyệt.");
+        }
+        if (!approved) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "SUBMIT_APPLICATION", "/me/mentor-verification", "Hồ sơ đã đủ điều kiện, hãy xác nhận điều khoản và nộp để admin duyệt.");
+        }
+        if (!hasActiveService) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "CREATE_SERVICE", "/me/mentor-services", "Bạn đã được xác thực. Tạo dịch vụ đầu tiên để nhận booking.");
+        }
+        if (!hasFutureSlot) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "CREATE_AVAILABILITY", "/me/availability-slots", "Thêm lịch rảnh trong tương lai để mentee có thể đặt buổi mentoring.");
+        }
+        if (offerReady) {
+            return new MentorVerificationProgressResponse.NextAction(
+                    "BOOKING_OFFER_READY", "/me/mentor-profile", "Mentor đã sẵn sàng xuất hiện với khả năng nhận booking.");
+        }
+        return new MentorVerificationProgressResponse.NextAction(
+                "CHECK_BOOKING_OFFER", "/me/mentor-profile", "Kiểm tra lại trạng thái nhận booking và lịch rảnh của bạn.");
+    }
+
+    private MentorVerificationUploadIntent getOwnedUploadIntentForUpdate(UUID userId, UUID uploadIntentId) {
+        if (uploadIntentId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "uploadIntentId không được để trống");
+        }
+        MentorVerificationUploadIntent intent = uploadIntentRepository.findByIdForUpdate(uploadIntentId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
+        if (intent.getOwner() == null || !userId.equals(intent.getOwner().getId())) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
+        }
+        return intent;
+    }
+
+    private MentorVerificationUploadIntentStatusResponse mapUploadIntentStatus(MentorVerificationUploadIntent intent) {
+        UUID confirmedDocumentId = intent.getConfirmedStoredFile() == null ? null : mentorVerificationDocumentRepository
+                .findByStoredFileId(intent.getConfirmedStoredFile().getId())
+                .map(MentorVerificationDocument::getId)
+                .orElse(null);
+        boolean canRetry = intent.getStatus() == MentorVerificationUploadIntentStatus.EXPIRED
+                || intent.getStatus() == MentorVerificationUploadIntentStatus.REJECTED;
+        return new MentorVerificationUploadIntentStatusResponse(
+                intent.getId(), intent.getStatus(), intent.getExpiresAt(), canRetry, confirmedDocumentId);
     }
 
     private StorageGateway getRequiredStorageGateway() {

@@ -44,8 +44,6 @@ public record MentorProfileResponse(
         Integer maximumBookingHorizonDays,
         @Schema(description = "Timezone áp dụng cho policy đặt lịch", example = "Asia/Ho_Chi_Minh")
         String bookingTimezone,
-        @Schema(description = "Selected help topics that describe what the mentor can support")
-        List<MentorTagResponse> helpTopics,
         @Schema(description = "Môn - điểm mentor dùng cho peer matching")
         List<MentorSubjectResultResponse> subjectResults,
         @Schema(description = "Mức mentor có thể giúp mentee lấy gốc, 1-4", example = "3")
@@ -86,7 +84,6 @@ public record MentorProfileResponse(
                 .minimumBookingLeadTimeMinutes(120)
                 .maximumBookingHorizonDays(30)
                 .bookingTimezone("Asia/Ho_Chi_Minh")
-                .helpTopics(List.of())
                 .subjectResults(List.of())
                 .featuredProjects(List.of())
                 .achievements(List.of())

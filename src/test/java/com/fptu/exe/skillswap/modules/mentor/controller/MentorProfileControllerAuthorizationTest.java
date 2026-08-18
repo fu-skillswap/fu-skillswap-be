@@ -85,7 +85,6 @@ class MentorProfileControllerAuthorizationTest {
                 "Backend Mentor",
                 "Hỗ trợ Java và Spring Boot",
                 true,
-                List.of(UUID.randomUUID()),
                 List.of(new MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
                 3,
                 3,

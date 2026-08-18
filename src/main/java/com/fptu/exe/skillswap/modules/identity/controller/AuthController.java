@@ -48,7 +48,7 @@ public class AuthController {
     ) {
         rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "auth:google-context:" + resolveClientKey(request),
-                20,
+                60,
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang khởi tạo đăng nhập quá nhanh, vui lòng thử lại sau"
         );
@@ -77,7 +77,7 @@ public class AuthController {
     ) {
         rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
                 "auth:google:" + resolveClientKey(httpServletRequest),
-                20,
+                60,
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang đăng nhập quá nhanh, vui lòng thử lại sau ít phút"
         );

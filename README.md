@@ -29,7 +29,8 @@ Các trách nhiệm chính bao gồm:
 
 - JWT-based authentication kết hợp cookie HttpOnly refresh token và tích hợp Google OAuth
 - Role-based authorization và cơ chế tự động cấp quyền System Administrator
-- Tìm kiếm mentor (mentor discovery) hỗ trợ full-text search (FTS) tiếng Việt và behavioral ranking
+- Tìm kiếm mentor (mentor discovery) hỗ trợ full-text search (FTS) tiếng Việt, behavioral ranking, card contract theo section và xem trước lịch rảnh công khai trước khi đăng nhập
+- Mentor verification có wizard progress do backend tính, upload minh chứng private trực tiếp R2/S3 có thể khôi phục sau gián đoạn, và tách rõ bước được duyệt với bước sẵn sàng nhận booking
 - Quản lý template lịch rảnh (availability templates) và tự động sinh time slots
 - Đặt lịch session 1-on-1 đảm bảo queue safety và quy tắc hết hạn (expiration rules)
 - Tích hợp cổng thanh toán PayOS, giao dịch ví, hạch toán sổ cái (ledger accounting) và payout

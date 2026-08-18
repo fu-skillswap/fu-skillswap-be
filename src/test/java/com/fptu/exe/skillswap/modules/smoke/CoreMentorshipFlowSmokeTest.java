@@ -162,15 +162,10 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.flush();
         entityManager.clear();
 
-        var helpTopicTag = tagRepository.findAll().stream()
-            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
-            .findFirst().orElseThrow();
-
         var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(helpTopicTag.getId()),
                 List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,
@@ -224,15 +219,10 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.flush();
         entityManager.clear();
 
-        var helpTopicTag = tagRepository.findAll().stream()
-            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
-            .findFirst().orElseThrow();
-
         var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(helpTopicTag.getId()),
                 List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,
@@ -322,15 +312,10 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.flush();
         entityManager.clear();
 
-        var helpTopicTag = tagRepository.findAll().stream()
-            .filter(t -> t.getType() == com.fptu.exe.skillswap.modules.catalog.domain.TagType.HELP_TOPIC)
-            .findFirst().orElseThrow();
-
         var upsertReq = new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest(
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(helpTopicTag.getId()),
                 List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
                 3,
                 3,

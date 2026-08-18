@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
+
+import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumModerationAction;
@@ -83,17 +83,17 @@ class AdminForumModerationServiceTest {
         );
 
         User author = User.builder().id(UuidUtil.generateUuidV7()).fullName("Author").build();
-        Tag helpTopic = Tag.builder()
+        ForumTopic helpTopic = ForumTopic.builder()
                 .id(UuidUtil.generateUuidV7())
-                .code("HELP_QA")
+                .code(ForumTopicCode.QUESTION)
                 .nameVi("Giải đáp thắc mắc")
-                .type(TagType.HELP_TOPIC)
-                .status(TagStatus.ACTIVE)
+                .nameEn("Forum topic").displayOrder(1).active(true)
+                .active(true)
                 .build();
         post = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(author)
-                .helpTopic(helpTopic)
+                .forumTopic(helpTopic)
                 .title("Post")
                 .content("Content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -144,7 +144,7 @@ class AdminForumModerationServiceTest {
         ForumPost reportedPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(User.builder().id(UuidUtil.generateUuidV7()).fullName("Author").build())
-                .helpTopic(post.getHelpTopic())
+                .forumTopic(post.getForumTopic())
                 .title("Post")
                 .content("Content")
                 .status(ForumPostStatus.PUBLISHED)
@@ -176,7 +176,7 @@ class AdminForumModerationServiceTest {
         ForumPost secondPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(post.getAuthorUser())
-                .helpTopic(post.getHelpTopic())
+                .forumTopic(post.getForumTopic())
                 .title("Post 2")
                 .content("Content 2")
                 .status(ForumPostStatus.PUBLISHED)
@@ -185,7 +185,7 @@ class AdminForumModerationServiceTest {
         ForumPost thirdPost = ForumPost.builder()
                 .id(UuidUtil.generateUuidV7())
                 .authorUser(post.getAuthorUser())
-                .helpTopic(post.getHelpTopic())
+                .forumTopic(post.getForumTopic())
                 .title("Post 3")
                 .content("Content 3")
                 .status(ForumPostStatus.PUBLISHED)
