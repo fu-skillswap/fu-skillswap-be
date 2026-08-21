@@ -19,6 +19,8 @@ import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,61 +52,26 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("SkillSwap API")
                         .description("""
-                            ## SkillSwap API Documentation - EXE201
-                            
-                            SkillSwap là nền tảng mentoring giữa sinh viên và cựu sinh viên trong phạm vi Đại học FPT.
-                            Backend hiện cung cấp REST API cho xác thực, hồ sơ, questionnaire nhu cầu mentoring,
-                            mentor service, availability, booking, payment, notification, forum, blog, chat và Google Calendar sync.
-                            
-                            ### Quy ước tài liệu API
-                            - Mọi API business trả về `ApiResponse<T>`.
-                            - Một số list endpoint vẫn dùng `page/size`, nhưng một số endpoint mới đã chuyển sang `cursor/limit`.
-                            - Với cursor APIs:
-                              - `cursor` là **opaque string**
-                              - Frontend **không được decode, chỉnh sửa hoặc tự tạo**
-                              - FE chỉ được lấy `nextCursor` từ response trước đó để truyền lại nguyên giá trị
-                            - Các trường thời gian trong response hiện dùng ISO-8601 theo schema `LocalDateTime`.
-                            - Upload production luôn đi qua purpose-scoped upload intent. Client không được tự chọn object key,
-                              bucket hoặc private storage path. Các endpoint upload generic chỉ còn để mô phỏng local development.
-                            
-                            ### Realtime guide cho Frontend
-                            - Dùng **REST API** để:
-                              - gửi chat message
-                              - load conversation list
-                              - load message history
-                              - load notification list và unread count
-                            - Realtime production dùng duy nhất STOMP relay endpoint: `/ws-stomp`
-                            - Legacy raw websocket `/ws` đã bị decommission và sẽ trả `410 Gone`.
-                            - STOMP user destinations hiện dùng cho chat/notification:
-                              - `/user/queue/chat/messages`
-                              - `/user/queue/chat/inbox`
-                              - `/user/queue/chat/unread`
-                              - `/user/queue/notifications/items`
-                              - `/user/queue/notifications/badge`
-                            - Booking realtime hiện push qua STOMP destination: `/user/queue/bookings/status`
-                            - FE gửi access token qua STOMP `CONNECT` header `Authorization: Bearer <accessToken>`.
-                            - Heartbeat production chuẩn là `10000,10000` ở cả client và server relay.
-                            - Sau khi reconnect, FE nên resync dữ liệu cần thiết qua REST.
-                            - Scope realtime hiện tại được giữ nhỏ, chỉ gồm:
-                              - push chat message mới
-                              - push cập nhật inbox chat
-                              - push unread count của chat
-                              - push notification quan trọng
-                              - push badge update cho notification unread count
-                            - Realtime chat có thể tới lệch thứ tự trong tình huống mạng thực tế.
-                              `sequence` là nguồn sự thật cho thứ tự và read cursor; FE phải REST-sync với `afterSequence` sau reconnect hoặc sequence gap.
-                            - Conversation list là dữ liệu động theo `lastMessageAt`; khi merge các cursor page, FE phải dedup theo `conversationId` thay vì append mù.
-                            
-                            ### Google Calendar / Google Meet
-                            - Mentor có thể kết nối Google Calendar qua nhóm API `Google Calendar`.
-                            - Khi booking đủ điều kiện, backend có thể tự tạo Google Meet và đồng bộ lên Google Calendar của mentor.
-                            - Mentee không cần tự connect lịch để nhận link meeting trong flow hiện tại.
-                            
-                            ### Cách dùng token trên Swagger UI
-                            1. Lấy `accessToken` hợp lệ từ flow login hiện tại.
-                            2. Bấm **Authorize** ở góc trên bên phải Swagger UI.
-                            3. Dán `accessToken` vào ô `bearerAuth` (không cần nhập tiền tố `Bearer `).
-                            4. Bấm **Authorize** để gọi các API cần xác thực.
+                            ## Hướng dẫn nhanh cho Frontend
+
+                            Chọn một **nhóm luồng** ở đầu trang, sau đó đọc API từ trên xuống dưới.
+
+                            ### Các luồng chính
+                            1. **Đăng nhập và hồ sơ:** đăng nhập Google → lấy user hiện tại → hoàn thành hồ sơ sinh viên.
+                            2. **Đăng ký mentor:** tạo hồ sơ mentor → tải minh chứng → nộp hồ sơ → chờ admin duyệt.
+                            3. **Đặt lịch:** tìm mentor → chọn lịch → xem giá → tạo booking → thanh toán.
+                            4. **Khu vực mentor:** tạo dịch vụ → mở lịch rảnh → xử lý booking → nhận và rút tiền.
+                            5. **Quản trị:** xem hàng chờ → mở chi tiết → xử lý hồ sơ hoặc sự cố.
+
+                            ### Quy ước cần nhớ
+                            - API nghiệp vụ trả về `ApiResponse<T>`; dữ liệu chính nằm trong `data`.
+                            - API cần đăng nhập phải gửi access token bằng nút **Authorize**.
+                            - Với phân trang bằng `cursor`, FE truyền lại nguyên `nextCursor` từ lần gọi trước.
+                            - Khi tải file, FE tạo URL tải lên trước rồi mới xác nhận file với backend.
+                            - Thời gian trả về theo ISO-8601.
+
+                            ### Dùng token trên Swagger
+                            Bấm **Authorize** và dán access token, không cần thêm chữ `Bearer`.
                             """)
                         .version(apiVersion)
                         .contact(new Contact()
@@ -179,6 +146,7 @@ public class OpenApiConfig {
     }
 
     @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public OpenApiCustomizer deduplicateTags() {
         return openApi -> {
             registerReusableErrorComponents(openApi);

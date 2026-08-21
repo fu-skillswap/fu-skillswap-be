@@ -28,14 +28,14 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/mentor-verification/requests")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Mentor Verification", description = "Nhóm API cho admin review hồ sơ mentor verification, xem chi tiết request và xử lý quyết định theo cơ chế soft lock. FE admin dùng trong queue review và màn hình xử lý hồ sơ.")
+@Tag(name = "Admin - Mentor Verification", description = "Admin xem và xử lý hồ sơ đăng ký mentor.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminMentorVerificationController {
 
     private final AdminMentorVerificationModerationService AdminMentorVerificationModerationService;
 
-    @Operation(summary = "Lấy verification queue", description = "Trả về queue mentor verification dành cho admin với các lựa chọn search, filter, pagination và sort phục vụ vận hành. FE admin dùng ở màn queue trước khi mở một request cụ thể để review.")
+    @Operation(summary = "Bước 1 - Lấy danh sách hồ sơ chờ duyệt", description = "Có thể tìm kiếm, lọc và phân trang.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -48,7 +48,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(AdminMentorVerificationModerationService.getQueue(filterRequest));
     }
 
-    @Operation(summary = "Lấy chi tiết verification request", description = "Trả về chi tiết của một mentor verification request để admin review. FE admin dùng khi mở một request từ queue; backend có thể tự claim soft lock như một side effect nếu request vẫn đang pending review.")
+    @Operation(summary = "Bước 2 - Mở chi tiết hồ sơ", description = "Hệ thống có thể tự giữ hồ sơ cho admin đang xem.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy chi tiết thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -70,7 +70,7 @@ public class AdminMentorVerificationController {
         return principal.getPublicId();
     }
 
-    @Operation(summary = "Lấy trạng thái verification lock", description = "Trả về trạng thái soft lock hiện tại của một mentor verification request. FE admin dùng để biết request đang bị admin nào giữ lock và có nên disable các action quyết định hay không.")
+    @Operation(summary = "Kiểm tra ai đang xử lý hồ sơ", description = "FE dùng để bật hoặc khóa các nút xử lý.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy trạng thái lock thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -84,7 +84,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(AdminMentorVerificationModerationService.getLockStatus(principal.getPublicId(), requestId));
     }
 
-    @Operation(summary = "Gia hạn verification lock", description = "Gia hạn soft lock hiện tại của một mentor verification request. FE admin dùng trong lúc reviewer đang xử lý hồ sơ; việc refresh lock chỉ hợp lệ với admin đang sở hữu lock đó.")
+    @Operation(summary = "Gia hạn thời gian giữ hồ sơ", description = "Chỉ admin đang giữ hồ sơ mới dùng được.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Gia hạn lock thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -98,7 +98,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(AdminMentorVerificationModerationService.refreshLock(principal.getPublicId(), requestId));
     }
 
-    @Operation(summary = "Giải phóng verification lock", description = "Owner hiện tại của soft lock có thể tự release lock; SYSTEM_ADMIN có thể force release lock của admin khác mà không đổi status của request.")
+    @Operation(summary = "Ngừng giữ hồ sơ", description = "Admin hiện tại hoặc system admin có thể thực hiện.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Release lock thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -113,7 +113,7 @@ public class AdminMentorVerificationController {
         return ApiResponse.success(AdminMentorVerificationModerationService.releaseLock(principal.getPublicId(), java.util.Set.copyOf(principal.getRoles()), requestId));
     }
 
-    @Operation(summary = "Yêu cầu chỉnh sửa verification", description = "Đưa mentor verification request về trạng thái cần chỉnh sửa để mentor tiếp tục sửa trên chính request hiện tại thay vì tạo lại từ đầu. FE admin dùng khi reviewer muốn mentor bổ sung hoặc sửa document/profile.")
+    @Operation(summary = "Bước 3A - Yêu cầu mentor bổ sung", description = "Mentor tiếp tục sửa trên hồ sơ hiện tại.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Yêu cầu chỉnh sửa thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -132,7 +132,7 @@ public class AdminMentorVerificationController {
         ));
     }
 
-    @Operation(summary = "Phê duyệt verification request", description = "Phê duyệt mentor verification request và hoàn tất bước review của admin. FE admin dùng khi reviewer xác nhận mentor đã đáp ứng yêu cầu xác thực và có thể đi tiếp như một verified mentor.")
+    @Operation(summary = "Bước 3B - Duyệt hồ sơ mentor", description = "Xác nhận hồ sơ đã đáp ứng yêu cầu.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Phê duyệt thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
@@ -151,7 +151,7 @@ public class AdminMentorVerificationController {
         ));
     }
 
-    @Operation(summary = "Từ chối verification request", description = "Từ chối mentor verification request và đóng flow review hiện tại. FE admin dùng khi reviewer quyết định request không được tiếp tục và mentor sẽ phải tạo request mới sau này nếu muốn thử lại.")
+    @Operation(summary = "Bước 3C - Từ chối hồ sơ mentor", description = "Đóng hồ sơ hiện tại; mentor cần tạo hồ sơ mới nếu đăng ký lại.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Từ chối thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),

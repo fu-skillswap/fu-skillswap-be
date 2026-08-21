@@ -102,4 +102,21 @@ class SwaggerExposureEnabledIntegrationTest {
         assertThat(login.path("responses").path("200").path("headers").has("Set-Cookie")).isTrue();
 
     }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void mentorApplicationDocs_shouldOnlyShowTheMentorApplicationFlow() throws Exception {
+        String json = mockMvc.perform(get("/v3/api-docs/02-mentor-application"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        JsonNode document = objectMapper.readTree(json);
+
+        assertThat(document.path("paths").has("/api/me/mentor-profile")).isTrue();
+        assertThat(document.path("paths").has("/api/me/mentor-verification/request")).isTrue();
+        assertThat(document.path("paths").has("/api/admin/mentor-verification/requests")).isFalse();
+
+        java.util.Set<String> tagNames = new java.util.LinkedHashSet<>();
+        document.path("tags").forEach(tag -> tagNames.add(tag.path("name").asText()));
+        assertThat(tagNames).contains("Hồ sơ mentor", "Đăng ký mentor");
+    }
 }
