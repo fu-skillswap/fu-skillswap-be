@@ -18,7 +18,6 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotR
 import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.GenderCode;
 import com.fptu.exe.skillswap.modules.identity.domain.OauthAccount;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -167,9 +166,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         user.setEmail(email);
         user.setFullName(fullName);
         user.setAvatarUrl(avatarUrl);
-        user.setPhone(null);
-        user.setGender(null);
-        user.setDateOfBirth(null);
         user.setStatus(UserStatus.ACTIVE);
         user.setLastLoginAt(DateTimeUtil.now().minusDays(1));
         user.setDeletedAt(null);

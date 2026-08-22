@@ -110,10 +110,13 @@ Ngoài Mentor Profile, người dùng có thể quản lý dự án nổi bật 
 
 Mỗi file chỉ chấp nhận định dạng `image/jpeg`, `image/png` hoặc `application/pdf`, dung lượng tối đa **15 MB**.
 
-| Loại minh chứng | Enum khi confirm | Số file active tối đa |
-|---|---|---|
-| Minh chứng liên kết trường FPTU | `FPTU_AFFILIATION_PROOF` | 1 |
-| Minh chứng năng lực chuyên môn | `EXPERTISE_PROOF` | 3 |
+| Loại minh chứng | Enum `documentType` khi confirm | Ý nghĩa nghiệp vụ | Số file active tối đa |
+|---|---|---|---|
+| Minh chứng liên kết trường FPTU | `FPTU_AFFILIATION_PROOF` | Thẻ sinh viên, giấy xác nhận SV, bảng điểm, bằng tốt nghiệp | 1 |
+| Minh chứng năng lực chuyên môn | `EXPERTISE_PROOF` | Chứng chỉ quốc tế, giải thưởng, bảng điểm môn chuyên ngành | 3 |
+
+> [!WARNING]
+> Phân biệt giữa **`contentType`** (MIME type của file: `"image/jpeg"`, `"image/png"`, `"application/pdf"`) và **`documentType`** (Loại minh chứng nghiệp vụ: `"FPTU_AFFILIATION_PROOF"` hoặc `"EXPERTISE_PROOF"`). Tuyệt đối không gửi MIME type vào trường `documentType`.
 
 #### Quy trình 4 bước tải lên cho từng file:
 1. `POST /api/me/mentor-verification/documents/upload-intents` với body `{ filename, contentType, sizeBytes }`.
@@ -122,6 +125,19 @@ Mỗi file chỉ chấp nhận định dạng `image/jpeg`, `image/png` hoặc `
 4. Gọi lại API `GET /progress` để cập nhật checklist mới nhất.
 
 ```typescript
+// Bước 1: Request tạo upload intent
+interface MentorVerificationDocumentUploadIntentRequest {
+  filename: string; // Tên file gốc (vd: "ConfirmationLetter_NhatTT.jpg")
+  contentType: "image/jpeg" | "image/png" | "application/pdf";
+  sizeBytes: number; // Tối đa 15MB = 15728640 bytes
+}
+
+// Bước 3: Request xác nhận tài liệu đã upload lên R2
+interface MentorVerificationDocumentUploadRequest {
+  documentType: "FPTU_AFFILIATION_PROOF" | "EXPERTISE_PROOF"; // 👈 KHÔNG truyền MIME type vào đây!
+  uploadIntentId: string; // UUID trả về từ bước 1
+}
+
 interface MentorVerificationDocumentUploadIntentResponse {
   uploadIntentId: string;
   uploadUrl: string; // Chỉ dùng để PUT file trực tiếp lên storage
@@ -140,9 +156,9 @@ interface MentorVerificationUploadIntentStatusResponse {
 
 interface MentorVerificationDocumentResponse {
   id: string;
-  documentType: string;
-  status: string;
-  storageKind: string;
+  documentType: "FPTU_AFFILIATION_PROOF" | "EXPERTISE_PROOF";
+  status: "UPLOADED" | "ACCEPTED" | "REJECTED" | "REMOVED";
+  storageKind: "IMAGE" | "DOCUMENT";
   originalFilename: string;
   contentType: string;
   sizeBytes: number;

@@ -8,7 +8,6 @@ import lombok.*;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.Set;
@@ -43,15 +42,6 @@ public class User {
 
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
-
-    @Column(length = 30)
-    private String phone;
-
-    @Enumerated(EnumType.STRING)
-    private GenderCode gender;
-
-    @Column(name = "date_of_birth")
-    private LocalDate dateOfBirth;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
