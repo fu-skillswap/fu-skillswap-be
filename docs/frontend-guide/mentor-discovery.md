@@ -436,15 +436,20 @@ interface MentorProfileResponse {
 
 | Mục đích | Endpoint |
 |---|---|
-| Lấy danh sách / Tạo mới dự án | `GET`, `POST /api/me/mentor-projects` |
+| Lấy danh sách / Tạo mới dự án | `GET`, `POST /api/me/mentor-projects` (Hỗ trợ `pictureAssetId` tùy chọn) |
 | Cập nhật / Xóa dự án | `PUT`, `DELETE /api/me/mentor-projects/{projectId}` |
-| Upload ảnh bìa dự án | `PUT /api/me/mentor-projects/{projectId}/picture` (Gửi `multipart/form-data` với key `file`) |
+| Tạo Upload Intent cho ảnh dự án | `POST /api/me/mentor-projects/picture/upload-intents` hoặc `POST /api/me/mentor-projects/{projectId}/picture/upload-intents` (`PublicAssetUploadIntentRequest`) |
+| Xác nhận ảnh dự án sau khi PUT lên R2 | `POST /api/me/mentor-projects/{projectId}/picture/confirm` (`{ uploadIntentId }`) |
+| Gỡ ảnh khỏi dự án | `DELETE /api/me/mentor-projects/{projectId}/picture` |
 | Lấy danh sách / Tạo mới thành tích | `GET`, `POST /api/me/mentor-achievements` |
 | Cập nhật / Xóa thành tích | `PUT`, `DELETE /api/me/mentor-achievements/{achievementId}` |
 
-- **Project**: Trường `title` là bắt buộc; các trường `content`, `projectDescription`, `liveDemoUrl` là tùy chọn.
+- **Project**: Trường `title` là bắt buộc; các trường `content`, `projectDescription`, `liveDemoUrl`, `pictureAssetId` là tùy chọn.
 - **Achievement**: Trường `title` là bắt buộc; các trường `awardDescription`, `achievedAt`, `productHeader`, `productDescription`, `demoUrl` là tùy chọn.
-- Khi upload ảnh dự án thành công, sử dụng URL trả về trong `pictureUrl` để hiển thị trên giao diện.
+- **Quy trình Upload ảnh Dự án**:
+  1. Gọi `POST /api/me/mentor-projects/{projectId}/picture/upload-intents` (hoặc `/api/me/mentor-projects/picture/upload-intents`) với body `{ filename, contentType }` (chấp nhận JPG, PNG, WebP; tối đa 5MB).
+  2. Client gửi HTTP `PUT` binary file trực tiếp lên `uploadUrl` của Cloudflare R2.
+  3. Gọi `POST /api/me/mentor-projects/{projectId}/picture/confirm` với `{ uploadIntentId }` để hoàn tất và nhận `pictureUrl` hiển thị.
 
 ---
 

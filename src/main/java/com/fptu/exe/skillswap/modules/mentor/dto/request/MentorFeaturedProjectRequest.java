@@ -20,6 +20,9 @@ public record MentorFeaturedProjectRequest(
         String projectDescription,
 
         @Schema(example = "https://demo.example.com")
-        String liveDemoUrl
+        String liveDemoUrl,
+
+        @Schema(description = "ID của file ảnh portfolio đã upload và xác nhận qua upload intent")
+        java.util.UUID pictureAssetId
 ) {
 }

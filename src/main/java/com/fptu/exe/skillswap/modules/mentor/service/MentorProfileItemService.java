@@ -1,11 +1,10 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
 import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
+import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetResponse;
+import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
+import com.fptu.exe.skillswap.modules.filestorage.service.PublicAssetUploadService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -19,30 +18,21 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class MentorProfileItemService {
 
-    private static final Set<String> PROJECT_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
-    private static final long MAX_PROJECT_IMAGE_BYTES = 5L * 1024L * 1024L;
-
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
-    private final StoredFileRepository storedFileRepository;
-    private final UserRepository userRepository;
-    private final ObjectProvider<StorageGateway> r2StorageProvider;
+    private final PublicAssetUploadService publicAssetUploadService;
 
     @Transactional(readOnly = true)
     public List<MentorFeaturedProjectResponse> listProjects(UUID mentorUserId) {
@@ -58,7 +48,7 @@ public class MentorProfileItemService {
         MentorProfile profile = requireProfile(mentorUserId);
         MentorFeaturedProject project = new MentorFeaturedProject();
         project.setMentorProfile(profile);
-        applyProjectRequest(project, request);
+        applyProjectRequest(project, mentorUserId, request);
         project.setDisplayOrder(nextProjectOrder(mentorUserId));
         return mapProject(mentorFeaturedProjectRepository.save(project));
     }
@@ -67,7 +57,7 @@ public class MentorProfileItemService {
     public MentorFeaturedProjectResponse updateProject(UUID mentorUserId, UUID projectId, MentorFeaturedProjectRequest request) {
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
-        applyProjectRequest(project, request);
+        applyProjectRequest(project, mentorUserId, request);
         return mapProject(mentorFeaturedProjectRepository.save(project));
     }
 
@@ -79,28 +69,40 @@ public class MentorProfileItemService {
     }
 
     @Transactional
-    public MentorFeaturedProjectResponse uploadProjectPicture(UUID mentorUserId, UUID projectId, MultipartFile file) {
+    public PublicAssetUploadIntentResponse createProjectPictureUploadIntent(UUID mentorUserId, PublicAssetUploadIntentRequest request) {
+        requireUserId(mentorUserId);
+        requireProfile(mentorUserId);
+        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+    }
+
+    @Transactional
+    public PublicAssetUploadIntentResponse createProjectPictureUploadIntentForProject(UUID mentorUserId, UUID projectId, PublicAssetUploadIntentRequest request) {
+        requireUserId(mentorUserId);
+        mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
+        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+    }
+
+    @Transactional
+    public MentorFeaturedProjectResponse confirmProjectPicture(UUID mentorUserId, UUID projectId, UUID uploadIntentId) {
+        requireUserId(mentorUserId);
+        if (uploadIntentId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "uploadIntentId không được để trống");
+        }
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
-        validateProjectImage(file);
-        StorageGateway storageService = r2StorageProvider.getIfAvailable();
-        if (storageService == null) {
-            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình R2 để upload ảnh dự án");
-        }
-        User user = userRepository.findById(mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
-        StorageGateway.StorageUploadResult uploadResult = storageService.uploadFile(file, "mentor-projects/" + mentorUserId);
-        StoredFile storedFile = storedFileRepository.save(StoredFile.builder()
-                .owner(user)
-                .purpose(FilePurpose.PORTFOLIO)
-                .originalName(sanitizeFilename(file.getOriginalFilename()))
-                .storageProvider("R2")
-                .storageKey(uploadResult.objectKey())
-                .publicUrl(uploadResult.publicUrl())
-                .mimeType(canonicalizeContentType(file.getContentType()))
-                .sizeBytes(file.getSize())
-                .build());
+        PublicAssetResponse assetResponse = publicAssetUploadService.confirmPortfolioImage(mentorUserId, uploadIntentId);
+        StoredFile storedFile = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetResponse.assetId());
         project.setPictureFile(storedFile);
+        return mapProject(mentorFeaturedProjectRepository.save(project));
+    }
+
+    @Transactional
+    public MentorFeaturedProjectResponse removeProjectPicture(UUID mentorUserId, UUID projectId) {
+        requireUserId(mentorUserId);
+        MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
+        project.setPictureFile(null);
         return mapProject(mentorFeaturedProjectRepository.save(project));
     }
 
@@ -138,7 +140,7 @@ public class MentorProfileItemService {
         mentorAchievementRepository.delete(achievement);
     }
 
-    private void applyProjectRequest(MentorFeaturedProject project, MentorFeaturedProjectRequest request) {
+    private void applyProjectRequest(MentorFeaturedProject project, UUID mentorUserId, MentorFeaturedProjectRequest request) {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu dự án không được để trống");
         }
@@ -146,6 +148,10 @@ public class MentorProfileItemService {
         project.setContent(cleanNullable(request.content()));
         project.setProjectDescription(cleanNullable(request.projectDescription()));
         project.setLiveDemoUrl(cleanNullable(request.liveDemoUrl()));
+        if (request.pictureAssetId() != null) {
+            StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
+            project.setPictureFile(picture);
+        }
     }
 
     private void applyAchievementRequest(MentorAchievement achievement, MentorAchievementRequest request) {
@@ -203,27 +209,6 @@ public class MentorProfileItemService {
                 .build();
     }
 
-    private void validateProjectImage(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Ảnh dự án không được để trống");
-        }
-        if (file.getSize() > MAX_PROJECT_IMAGE_BYTES) {
-            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Ảnh dự án không được vượt quá 5MB");
-        }
-        String contentType = canonicalizeContentType(file.getContentType());
-        if (!PROJECT_IMAGE_TYPES.contains(contentType)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Ảnh dự án chỉ hỗ trợ JPG, PNG hoặc WEBP");
-        }
-    }
-
-    private String canonicalizeContentType(String contentType) {
-        String normalized = contentType == null ? "" : contentType.trim().toLowerCase();
-        if ("image/jpg".equals(normalized) || "image/pjpeg".equals(normalized)) {
-            return "image/jpeg";
-        }
-        return normalized;
-    }
-
     private String clean(String value, String label) {
         if (!StringUtils.hasText(value)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, label + " không được để trống");
@@ -233,13 +218,6 @@ public class MentorProfileItemService {
 
     private String cleanNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String sanitizeFilename(String filename) {
-        if (filename == null) {
-            return null;
-        }
-        return filename.replace("/", "").replace("\\", "").trim();
     }
 
     private void requireUserId(UUID userId) {

@@ -65,6 +65,63 @@ public class PublicAssetUploadService {
         return toResponse(file);
     }
 
+    @Transactional
+    public PublicAssetUploadIntentResponse createPortfolioImageIntent(UUID ownerId, PublicAssetUploadIntentRequest request) {
+        String contentType = normalizeImageType(request.contentType());
+        validateFilename(request.filename());
+        String prefix = "public-assets/portfolio/" + ownerId;
+        StorageGateway.PresignedUpload upload = storageGateway().generatePresignedUploadUrl(request.filename(), contentType, prefix);
+        LocalDateTime expiresAt = DateTimeUtil.now().plusMinutes(15);
+        PublicAssetUploadIntent intent = intentRepository.save(PublicAssetUploadIntent.builder()
+                .owner(entityManager.getReference(User.class, ownerId))
+                .purpose(FilePurpose.PORTFOLIO)
+                .objectKey(upload.objectKey())
+                .expectedContentType(contentType)
+                .expiresAt(expiresAt)
+                .build());
+        return new PublicAssetUploadIntentResponse(intent.getId(), upload.uploadUrl(), expiresAt, Map.of("Content-Type", contentType));
+    }
+
+    @Transactional
+    public PublicAssetResponse confirmPortfolioImage(UUID ownerId, UUID intentId) {
+        PublicAssetUploadIntent intent = intentRepository.findByIdForUpdate(intentId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
+        if (!intent.getOwner().getId().equals(ownerId) || intent.getPurpose() != FilePurpose.PORTFOLIO) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
+        }
+        if (intent.getConfirmedFile() != null) {
+            return toResponse(intent.getConfirmedFile());
+        }
+        if (intent.getExpiresAt().isBefore(DateTimeUtil.now())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Upload intent đã hết hạn");
+        }
+        StorageGateway.ObjectMetadata metadata = storageGateway().headObject(intent.getObjectKey());
+        String contentType = normalizeImageType(metadata.contentType() == null ? intent.getExpectedContentType() : metadata.contentType());
+        if (metadata.sizeBytes() > 5L * 1024 * 1024) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Ảnh dự án vượt quá 5 MiB");
+        }
+        StoredFile file = storedFileRepository.save(StoredFile.builder()
+                .owner(intent.getOwner())
+                .purpose(FilePurpose.PORTFOLIO)
+                .originalName(intent.getObjectKey().substring(intent.getObjectKey().lastIndexOf('/') + 1))
+                .storageProvider(storageGateway().storageProviderName())
+                .storageKey(intent.getObjectKey())
+                .publicUrl(storageGateway().resolvePublicUrl(intent.getObjectKey()))
+                .mimeType(contentType)
+                .sizeBytes(metadata.sizeBytes())
+                .build());
+        intent.setConfirmedFile(file);
+        intent.setConfirmedAt(DateTimeUtil.now());
+        return toResponse(file);
+    }
+
+    @Transactional(readOnly = true)
+    public StoredFile requireOwnedPortfolioImage(UUID ownerId, UUID assetId) {
+        return storedFileRepository.findById(assetId)
+                .filter(file -> file.getPurpose() == FilePurpose.PORTFOLIO && file.getOwner().getId().equals(ownerId))
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Portfolio asset không hợp lệ"));
+    }
+
     @Transactional(readOnly = true)
     public StoredFile requireOwnedBlogImage(UUID ownerId, UUID assetId) {
         return storedFileRepository.findById(assetId)
@@ -81,6 +138,6 @@ public class PublicAssetUploadService {
 
     private PublicAssetResponse toResponse(StoredFile file) { return new PublicAssetResponse(file.getId(), file.getPublicUrl(), file.getMimeType(), file.getSizeBytes() == null ? 0L : file.getSizeBytes()); }
     private StorageGateway storageGateway() { StorageGateway storageGateway = storageGatewayProvider.getIfAvailable(); if (storageGateway == null) throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình storage cho public asset"); return storageGateway; }
-    private String normalizeImageType(String value) { String type = value == null ? "" : value.trim().toLowerCase(Locale.ROOT); if (!IMAGE_TYPES.contains(type)) throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "Blog chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP"); return type; }
+    private String normalizeImageType(String value) { String type = value == null ? "" : value.trim().toLowerCase(Locale.ROOT); if (!IMAGE_TYPES.contains(type)) throw new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "Ảnh chỉ hỗ trợ định dạng PNG, JPEG hoặc WebP"); return type; }
     private void validateFilename(String filename) { if (filename == null || filename.isBlank() || filename.contains("/") || filename.contains("\\")) throw new BaseException(ErrorCode.BAD_REQUEST, "Tên file ảnh không hợp lệ"); }
 }

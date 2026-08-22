@@ -16,12 +16,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.UUID;
@@ -69,15 +67,51 @@ public class MentorProfileItemController {
     }
 
     @Tag(name = "Mentor Profile")
-    @Operation(summary = "Upload ảnh dự án tiêu biểu")
-    @PutMapping(path = "/api/me/mentor-projects/{projectId}/picture", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<MentorFeaturedProjectResponse> uploadProjectPicture(
+    @Operation(summary = "Tạo upload intent cho ảnh dự án tiêu biểu (chưa gắn vào dự án cụ thể)")
+    @PostMapping("/api/me/mentor-projects/picture/upload-intents")
+    public ResponseEntity<ApiResponse<com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse>> createProjectPictureUploadIntent(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID projectId,
-            @RequestPart("file") MultipartFile file
+            @Valid @RequestBody com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(mentorProfileItemService.uploadProjectPicture(principal.getPublicId(), projectId, file));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntent(principal.getPublicId(), request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Tạo upload intent cho ảnh của dự án tiêu biểu cụ thể")
+    @PostMapping("/api/me/mentor-projects/{projectId}/picture/upload-intents")
+    public ResponseEntity<ApiResponse<com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse>> createProjectPictureUploadIntentForProject(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntentForProject(principal.getPublicId(), projectId, request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Xác nhận upload và gắn ảnh vào dự án tiêu biểu")
+    @PostMapping("/api/me/mentor-projects/{projectId}/picture/confirm")
+    public ApiResponse<MentorFeaturedProjectResponse> confirmProjectPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProjectPictureConfirmRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.confirmProjectPicture(principal.getPublicId(), projectId, request.uploadIntentId()));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Gỡ ảnh khỏi dự án tiêu biểu")
+    @DeleteMapping("/api/me/mentor-projects/{projectId}/picture")
+    public ApiResponse<MentorFeaturedProjectResponse> removeProjectPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.removeProjectPicture(principal.getPublicId(), projectId));
     }
 
     @Tag(name = "Mentor Profile")

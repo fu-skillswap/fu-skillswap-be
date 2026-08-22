@@ -83,6 +83,35 @@ interface VerificationStep {
 }
 ```
 
+#### Ma trận chuyển đổi trạng thái (`applicationStatus` Lifecycle & Triggers)
+
+| Trạng thái hiện tại | Trạng thái tiếp theo | Tác nhân (Actor) | Hành động kích hoạt (Trigger Endpoint) | Điều kiện chuyển state |
+|---|---|---|---|---|
+| *(Chưa có)* | `NOT_STARTED` | Hệ thống | `GET /api/me/mentor-verification/progress` | Người dùng chưa từng gửi yêu cầu đăng ký mentor (`requestId === null`). |
+| `NOT_STARTED` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/request` | Mở wizard đăng ký lần đầu hoặc bắt đầu một hồ sơ mới. |
+| `DRAFT` | `PENDING_REVIEW` | Người dùng | `POST /api/me/mentor-verification/submit` | Hoàn thành checklist (Academic Profile, Mentor Profile, 1 Affiliation Proof, ≥ 1 Expertise Proof) và gửi `termsAccepted: true`. |
+| `DRAFT` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng chủ động hủy/rút bản nháp hiện tại. |
+| `PENDING_REVIEW` | `NEEDS_REVISION` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/request-revision` | Admin kiểm tra hồ sơ, yêu cầu bổ sung/sửa đổi minh chứng kèm lý do (`note`). |
+| `PENDING_REVIEW` | `APPROVED` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/approve` | Admin duyệt hồ sơ. Hệ thống tự động cấp Role `MENTOR`. |
+| `PENDING_REVIEW` | `REJECTED` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/reject` | Admin từ chối hồ sơ kèm lý do (`note`). Đơn bị đóng. |
+| `PENDING_REVIEW` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng rút hồ sơ khi hồ sơ chưa bị Admin khóa xử lý (`hasActiveAdminLock === false`). Nếu Admin đang khóa xem xét, API trả `409 Conflict`. |
+| `NEEDS_REVISION` | `PENDING_REVIEW` | Người dùng | `POST /api/me/mentor-verification/submit` | Người dùng cập nhật lại tài liệu/thông tin và bấm nộp lại (`revisionCount` tăng thêm 1). |
+| `NEEDS_REVISION` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng không muốn tiếp tục bổ sung và chọn rút hồ sơ. |
+| `REJECTED` / `WITHDRAWN` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/request` | Người dùng muốn tạo hồ sơ mới sau khi đơn trước đó bị từ chối hoặc đã rút. |
+| `APPROVED` | *(Hoàn tất)* | Hệ thống | — | Trạng thái đích. Người dùng chuyển sang hoàn thiện dịch vụ và lịch rảnh ([mentor-service.md](mentor-service.md)). Không tạo lại request xác thực. |
+
+#### Bảng Quyền Hạn UI Tương Ứng Với Từng Trạng Thái (UI & Action Permissions)
+
+| Trạng thái (`applicationStatus`) | Upload / Xóa minh chứng | Sửa Mentor Profile | Nộp hồ sơ (`submit`) | Rút hồ sơ (`withdraw`) | Trạng thái hiển thị trên UI Frontend |
+|---|:---:|:---:|:---:|:---:|---|
+| `NOT_STARTED` | ❌ | ❌ | ❌ | ❌ | Hiển thị màn hình giới thiệu (Onboarding/Landing), nút CTA "Bắt đầu đăng ký" |
+| `DRAFT` | ✅ | ✅ | ✅ (khi đủ checklist) | ✅ | Mở đầy đủ wizard, cho phép upload/xóa file, điền form profile, checkbox điều khoản |
+| `PENDING_REVIEW` | ❌ | ❌ | ❌ | ✅ (khi chưa bị admin lock) | Khóa form, hiển thị timeline "Đang chờ Admin duyệt", hiển thị `estimatedReviewBy` |
+| `NEEDS_REVISION` | ✅ | ✅ | ✅ (sau khi sửa) | ✅ | Mở lại form wizard, hiển thị lý do cần sửa (`reviewNote` từ timeline), cho phép xóa file cũ và upload lại |
+| `APPROVED` | ❌ | ✅ (ở trang cá nhân) | ❌ | ❌ | Hiển thị thông báo chúc mừng, chuyển hướng sang CTA kết nối Calendar & tạo dịch vụ |
+| `REJECTED` | ❌ | ❌ | ❌ | ❌ | Hiển thị lý do từ chối, nút "Tạo hồ sơ mới" để bắt đầu lại |
+| `WITHDRAWN` | ❌ | ❌ | ❌ | ❌ | Hiển thị thông báo đã rút đơn, nút "Bắt đầu lại" |
+
 > [!TIP]
 > `estimatedReviewBy` là thời gian mục tiêu của hệ thống, không phải cam kết cứng. Sử dụng cờ `reviewOverdue` để hiển thị thông báo tiến độ phù hợp, **không tự ý đổi trạng thái request trên UI**.
 
@@ -98,9 +127,11 @@ Ngoài Mentor Profile, người dùng có thể quản lý dự án nổi bật 
 
 | Mục đích | Endpoint |
 |---|---|
-| Lấy danh sách / Tạo mới dự án | `GET`, `POST /api/me/mentor-projects` |
+| Lấy danh sách / Tạo mới dự án | `GET`, `POST /api/me/mentor-projects` (Hỗ trợ `pictureAssetId` tùy chọn) |
 | Cập nhật / Xóa dự án | `PUT`, `DELETE /api/me/mentor-projects/{projectId}` |
-| Upload ảnh dự án | `PUT /api/me/mentor-projects/{projectId}/picture` (`multipart/form-data`, field `file`) |
+| Tạo Upload Intent cho ảnh dự án | `POST /api/me/mentor-projects/picture/upload-intents` hoặc `POST /api/me/mentor-projects/{projectId}/picture/upload-intents` (`PublicAssetUploadIntentRequest`) |
+| Xác nhận ảnh dự án sau khi PUT lên R2 | `POST /api/me/mentor-projects/{projectId}/picture/confirm` (`{ uploadIntentId }`) |
+| Gỡ ảnh khỏi dự án | `DELETE /api/me/mentor-projects/{projectId}/picture` |
 | Lấy danh sách / Tạo mới thành tích | `GET`, `POST /api/me/mentor-achievements` |
 | Cập nhật / Xóa thành tích | `PUT`, `DELETE /api/me/mentor-achievements/{achievementId}` |
 

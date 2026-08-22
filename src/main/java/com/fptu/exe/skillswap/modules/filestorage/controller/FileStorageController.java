@@ -198,7 +198,9 @@ public class FileStorageController {
                 && key.startsWith("mentor-service-resources/" + principal.getPublicId() + "/");
         boolean blogPublicObject = principal != null && principal.getPublicId() != null
                 && key.startsWith("public-assets/blog/" + principal.getPublicId() + "/");
-        if (!verificationObject && !mentorResourceObject && !blogPublicObject) {
+        boolean portfolioPublicObject = principal != null && principal.getPublicId() != null
+                && key.startsWith("public-assets/portfolio/" + principal.getPublicId() + "/");
+        if (!verificationObject && !mentorResourceObject && !blogPublicObject && !portfolioPublicObject) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi upload của người dùng");
         }
     }
