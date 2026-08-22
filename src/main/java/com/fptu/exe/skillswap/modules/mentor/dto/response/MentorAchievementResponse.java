@@ -12,6 +12,7 @@ import java.util.UUID;
 public record MentorAchievementResponse(
         UUID id,
         String title,
+        String pictureUrl,
         String awardDescription,
         LocalDate achievedAt,
         String productHeader,

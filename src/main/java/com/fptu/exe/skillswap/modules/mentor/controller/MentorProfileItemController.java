@@ -1,8 +1,12 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
+import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorAchievementPictureConfirmRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorAchievementRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFeaturedProjectRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProjectPictureConfirmRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileItemService;
@@ -33,7 +37,7 @@ public class MentorProfileItemController {
     private final MentorProfileItemService mentorProfileItemService;
 
     @Tag(name = "Mentor Profile")
-    @Operation(summary = "Lấy danh sách dự án tiêu biểu của mentor hiện tại")
+    @Operation(summary = "Lấy danh sách dự án nổi bật của mentor hiện tại")
     @GetMapping("/api/me/mentor-projects")
     public ApiResponse<List<MentorFeaturedProjectResponse>> listProjects(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
@@ -43,7 +47,7 @@ public class MentorProfileItemController {
     }
 
     @Tag(name = "Mentor Profile")
-    @Operation(summary = "Tạo dự án tiêu biểu")
+    @Operation(summary = "Tạo dự án nổi bật")
     @PostMapping("/api/me/mentor-projects")
     public ResponseEntity<ApiResponse<MentorFeaturedProjectResponse>> createProject(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -55,7 +59,55 @@ public class MentorProfileItemController {
     }
 
     @Tag(name = "Mentor Profile")
-    @Operation(summary = "Cập nhật dự án tiêu biểu")
+    @Operation(summary = "Tạo upload intent cho ảnh dự án nổi bật (dùng trước khi tạo hoặc cập nhật dự án)")
+    @PostMapping("/api/me/mentor-projects/picture/upload-intents")
+    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createProjectPictureUploadIntent(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody PublicAssetUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntent(principal.getPublicId(), request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Tạo upload intent cho ảnh của dự án nổi bật cụ thể")
+    @PostMapping("/api/me/mentor-projects/{projectId}/picture/upload-intents")
+    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createProjectPictureUploadIntentForProject(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody PublicAssetUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntentForProject(principal.getPublicId(), projectId, request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Xác nhận và gán ảnh vào dự án nổi bật sau khi upload lên storage")
+    @PostMapping("/api/me/mentor-projects/{projectId}/picture/confirm")
+    public ApiResponse<MentorFeaturedProjectResponse> confirmProjectPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId,
+            @Valid @RequestBody MentorProjectPictureConfirmRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.confirmProjectPicture(principal.getPublicId(), projectId, request.uploadIntentId()));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Gỡ ảnh khỏi dự án nổi bật")
+    @DeleteMapping("/api/me/mentor-projects/{projectId}/picture")
+    public ApiResponse<MentorFeaturedProjectResponse> removeProjectPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID projectId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.removeProjectPicture(principal.getPublicId(), projectId));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Cập nhật dự án nổi bật")
     @PutMapping("/api/me/mentor-projects/{projectId}")
     public ApiResponse<MentorFeaturedProjectResponse> updateProject(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -67,55 +119,7 @@ public class MentorProfileItemController {
     }
 
     @Tag(name = "Mentor Profile")
-    @Operation(summary = "Tạo upload intent cho ảnh dự án tiêu biểu (chưa gắn vào dự án cụ thể)")
-    @PostMapping("/api/me/mentor-projects/picture/upload-intents")
-    public ResponseEntity<ApiResponse<com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse>> createProjectPictureUploadIntent(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntent(principal.getPublicId(), request)));
-    }
-
-    @Tag(name = "Mentor Profile")
-    @Operation(summary = "Tạo upload intent cho ảnh của dự án tiêu biểu cụ thể")
-    @PostMapping("/api/me/mentor-projects/{projectId}/picture/upload-intents")
-    public ResponseEntity<ApiResponse<com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse>> createProjectPictureUploadIntentForProject(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID projectId,
-            @Valid @RequestBody com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.created(mentorProfileItemService.createProjectPictureUploadIntentForProject(principal.getPublicId(), projectId, request)));
-    }
-
-    @Tag(name = "Mentor Profile")
-    @Operation(summary = "Xác nhận upload và gắn ảnh vào dự án tiêu biểu")
-    @PostMapping("/api/me/mentor-projects/{projectId}/picture/confirm")
-    public ApiResponse<MentorFeaturedProjectResponse> confirmProjectPicture(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID projectId,
-            @Valid @RequestBody com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProjectPictureConfirmRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorProfileItemService.confirmProjectPicture(principal.getPublicId(), projectId, request.uploadIntentId()));
-    }
-
-    @Tag(name = "Mentor Profile")
-    @Operation(summary = "Gỡ ảnh khỏi dự án tiêu biểu")
-    @DeleteMapping("/api/me/mentor-projects/{projectId}/picture")
-    public ApiResponse<MentorFeaturedProjectResponse> removeProjectPicture(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID projectId
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(mentorProfileItemService.removeProjectPicture(principal.getPublicId(), projectId));
-    }
-
-    @Tag(name = "Mentor Profile")
-    @Operation(summary = "Xóa dự án tiêu biểu")
+    @Operation(summary = "Xóa dự án nổi bật")
     @DeleteMapping("/api/me/mentor-projects/{projectId}")
     public ApiResponse<Void> deleteProject(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -146,6 +150,54 @@ public class MentorProfileItemController {
         ensureAuthenticated(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(mentorProfileItemService.createAchievement(principal.getPublicId(), request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Tạo upload intent cho ảnh học vấn/giải thưởng (dùng trước khi tạo hoặc cập nhật)")
+    @PostMapping("/api/me/mentor-achievements/picture/upload-intents")
+    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createAchievementPictureUploadIntent(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody PublicAssetUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createAchievementPictureUploadIntent(principal.getPublicId(), request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Tạo upload intent cho ảnh của học vấn/giải thưởng cụ thể")
+    @PostMapping("/api/me/mentor-achievements/{achievementId}/picture/upload-intents")
+    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createAchievementPictureUploadIntentForAchievement(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID achievementId,
+            @Valid @RequestBody PublicAssetUploadIntentRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(mentorProfileItemService.createAchievementPictureUploadIntentForAchievement(principal.getPublicId(), achievementId, request)));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Xác nhận và gán ảnh vào học vấn/giải thưởng sau khi upload lên storage")
+    @PostMapping("/api/me/mentor-achievements/{achievementId}/picture/confirm")
+    public ApiResponse<MentorAchievementResponse> confirmAchievementPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID achievementId,
+            @Valid @RequestBody MentorAchievementPictureConfirmRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.confirmAchievementPicture(principal.getPublicId(), achievementId, request.uploadIntentId()));
+    }
+
+    @Tag(name = "Mentor Profile")
+    @Operation(summary = "Gỡ ảnh khỏi học vấn/giải thưởng")
+    @DeleteMapping("/api/me/mentor-achievements/{achievementId}/picture")
+    public ApiResponse<MentorAchievementResponse> removeAchievementPicture(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID achievementId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorProfileItemService.removeAchievementPicture(principal.getPublicId(), achievementId));
     }
 
     @Tag(name = "Mentor Profile")

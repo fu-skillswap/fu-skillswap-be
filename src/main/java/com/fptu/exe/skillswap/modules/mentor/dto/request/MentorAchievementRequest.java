@@ -29,6 +29,9 @@ public record MentorAchievementRequest(
         String productDescription,
 
         @Schema(example = "https://demo.example.com")
-        String demoUrl
+        String demoUrl,
+
+        @Schema(description = "ID của file ảnh portfolio/certificate đã upload và xác nhận qua upload intent")
+        java.util.UUID pictureAssetId
 ) {
 }

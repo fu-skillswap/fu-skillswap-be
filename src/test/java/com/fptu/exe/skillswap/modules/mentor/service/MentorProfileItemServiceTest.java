@@ -256,11 +256,113 @@ class MentorProfileItemServiceTest {
 
         MentorAchievementRequest req = new MentorAchievementRequest(
                 "Top 1 Hackathon", "First place award", LocalDate.of(2026, 1, 1),
-                "App", "App Description", "https://demo.com"
+                "App", "App Description", "https://demo.com", null
         );
 
         MentorAchievementResponse res = service.createAchievement(mentorUserId, req);
         assertEquals("Top 1 Hackathon", res.title());
         assertEquals("First place award", res.awardDescription());
+        assertNull(res.pictureUrl());
+    }
+
+    @Test
+    void createAchievement_WithPictureAssetId_Success() {
+        UUID assetId = UUID.randomUUID();
+        StoredFile file = StoredFile.builder()
+                .id(assetId)
+                .purpose(FilePurpose.PORTFOLIO)
+                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.jpg")
+                .build();
+
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
+        when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId)).thenReturn(file);
+        when(mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId))
+                .thenReturn(List.of());
+        when(mentorAchievementRepository.save(any(MentorAchievement.class)))
+                .thenAnswer(inv -> {
+                    MentorAchievement a = inv.getArgument(0);
+                    a.setId(UUID.randomUUID());
+                    return a;
+                });
+
+        MentorAchievementRequest req = new MentorAchievementRequest(
+                "Top 1 Hackathon", "First place award", LocalDate.of(2026, 1, 1),
+                "App", "App Description", "https://demo.com", assetId
+        );
+
+        MentorAchievementResponse res = service.createAchievement(mentorUserId, req);
+        assertEquals("Top 1 Hackathon", res.title());
+        assertEquals("https://cdn.skillswap.asia/portfolio/cert.jpg", res.pictureUrl());
+    }
+
+    @Test
+    void createAchievementPictureUploadIntent_Success() {
+        when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
+        PublicAssetUploadIntentRequest req = new PublicAssetUploadIntentRequest("cert.png", "image/png");
+        PublicAssetUploadIntentResponse intentResponse = new PublicAssetUploadIntentResponse(
+                UUID.randomUUID(), "https://r2.example.com/upload", LocalDateTime.now().plusMinutes(15), Map.of("Content-Type", "image/png")
+        );
+        when(publicAssetUploadService.createPortfolioImageIntent(mentorUserId, req)).thenReturn(intentResponse);
+
+        PublicAssetUploadIntentResponse res = service.createAchievementPictureUploadIntent(mentorUserId, req);
+        assertEquals(intentResponse.uploadIntentId(), res.uploadIntentId());
+        assertEquals(intentResponse.uploadUrl(), res.uploadUrl());
+    }
+
+    @Test
+    void confirmAchievementPicture_Success() {
+        UUID achievementId = UUID.randomUUID();
+        UUID intentId = UUID.randomUUID();
+        UUID assetId = UUID.randomUUID();
+
+        MentorAchievement achievement = MentorAchievement.builder()
+                .id(achievementId)
+                .mentorProfile(profile)
+                .title("Certified Kubernetes Admin")
+                .build();
+
+        StoredFile storedFile = StoredFile.builder()
+                .id(assetId)
+                .purpose(FilePurpose.PORTFOLIO)
+                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.png")
+                .build();
+
+        when(mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId))
+                .thenReturn(Optional.of(achievement));
+        when(publicAssetUploadService.confirmPortfolioImage(mentorUserId, intentId))
+                .thenReturn(new PublicAssetResponse(assetId, "https://cdn.skillswap.asia/portfolio/cert.png", "image/png", 2048L));
+        when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId))
+                .thenReturn(storedFile);
+        when(mentorAchievementRepository.save(any(MentorAchievement.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        MentorAchievementResponse response = service.confirmAchievementPicture(mentorUserId, achievementId, intentId);
+        assertNotNull(response);
+        assertEquals("https://cdn.skillswap.asia/portfolio/cert.png", response.pictureUrl());
+    }
+
+    @Test
+    void removeAchievementPicture_Success() {
+        UUID achievementId = UUID.randomUUID();
+        StoredFile storedFile = StoredFile.builder()
+                .id(UUID.randomUUID())
+                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.png")
+                .build();
+
+        MentorAchievement achievement = MentorAchievement.builder()
+                .id(achievementId)
+                .mentorProfile(profile)
+                .title("Certified Kubernetes Admin")
+                .pictureFile(storedFile)
+                .build();
+
+        when(mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId))
+                .thenReturn(Optional.of(achievement));
+        when(mentorAchievementRepository.save(any(MentorAchievement.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        MentorAchievementResponse response = service.removeAchievementPicture(mentorUserId, achievementId);
+        assertNotNull(response);
+        assertNull(response.pictureUrl());
     }
 }

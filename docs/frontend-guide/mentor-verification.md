@@ -132,8 +132,11 @@ Ngoài Mentor Profile, người dùng có thể quản lý dự án nổi bật 
 | Tạo Upload Intent cho ảnh dự án | `POST /api/me/mentor-projects/picture/upload-intents` hoặc `POST /api/me/mentor-projects/{projectId}/picture/upload-intents` (`PublicAssetUploadIntentRequest`) |
 | Xác nhận ảnh dự án sau khi PUT lên R2 | `POST /api/me/mentor-projects/{projectId}/picture/confirm` (`{ uploadIntentId }`) |
 | Gỡ ảnh khỏi dự án | `DELETE /api/me/mentor-projects/{projectId}/picture` |
-| Lấy danh sách / Tạo mới thành tích | `GET`, `POST /api/me/mentor-achievements` |
+| Lấy danh sách / Tạo mới thành tích | `GET`, `POST /api/me/mentor-achievements` (Hỗ trợ `pictureAssetId` tùy chọn) |
 | Cập nhật / Xóa thành tích | `PUT`, `DELETE /api/me/mentor-achievements/{achievementId}` |
+| Tạo Upload Intent cho ảnh thành tích | `POST /api/me/mentor-achievements/picture/upload-intents` hoặc `POST /api/me/mentor-achievements/{achievementId}/picture/upload-intents` (`PublicAssetUploadIntentRequest`) |
+| Xác nhận ảnh thành tích sau khi PUT lên R2 | `POST /api/me/mentor-achievements/{achievementId}/picture/confirm` (`{ uploadIntentId }`) |
+| Gỡ ảnh khỏi thành tích | `DELETE /api/me/mentor-achievements/{achievementId}/picture` |
 
 ---
 

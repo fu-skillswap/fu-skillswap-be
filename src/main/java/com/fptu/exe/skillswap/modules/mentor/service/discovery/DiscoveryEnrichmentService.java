@@ -71,8 +71,6 @@ public class DiscoveryEnrichmentService {
         ).orElse(List.of()));
     }
 
-
-
     private List<MentorService> loadActiveServicesByMentorIds(Collection<UUID> mentorUserIds) {
         return Optional.ofNullable(mentorServiceRepository.findByMentorProfileUserIdInAndIsActiveTrueOrderByCreatedAtAsc(new ArrayList<>(mentorUserIds)))
                 .orElse(List.of());
@@ -129,6 +127,7 @@ public class DiscoveryEnrichmentService {
                         .add(MentorAchievementResponse.builder()
                                 .id(achievement.getId())
                                 .title(achievement.getTitle())
+                                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
                                 .awardDescription(achievement.getAwardDescription())
                                 .achievedAt(achievement.getAchievedAt())
                                 .productHeader(achievement.getProductHeader())
@@ -140,6 +139,4 @@ public class DiscoveryEnrichmentService {
                                 .build()));
         return result;
     }
-
-
 }

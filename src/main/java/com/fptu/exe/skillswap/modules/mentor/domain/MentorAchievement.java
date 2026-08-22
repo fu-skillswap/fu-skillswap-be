@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
+import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -30,6 +31,10 @@ public class MentorAchievement {
 
     @Column(nullable = false, length = 200)
     private String title;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "picture_file_id", foreignKey = @ForeignKey(name = "fk_ma_picture"))
+    private StoredFile pictureFile;
 
     @Column(name = "award_description", columnDefinition = "TEXT")
     private String awardDescription;

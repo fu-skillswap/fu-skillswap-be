@@ -120,7 +120,7 @@ public class MentorProfileItemService {
         MentorProfile profile = requireProfile(mentorUserId);
         MentorAchievement achievement = new MentorAchievement();
         achievement.setMentorProfile(profile);
-        applyAchievementRequest(achievement, request);
+        applyAchievementRequest(achievement, mentorUserId, request);
         achievement.setDisplayOrder(nextAchievementOrder(mentorUserId));
         return mapAchievement(mentorAchievementRepository.save(achievement));
     }
@@ -129,7 +129,7 @@ public class MentorProfileItemService {
     public MentorAchievementResponse updateAchievement(UUID mentorUserId, UUID achievementId, MentorAchievementRequest request) {
         MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
-        applyAchievementRequest(achievement, request);
+        applyAchievementRequest(achievement, mentorUserId, request);
         return mapAchievement(mentorAchievementRepository.save(achievement));
     }
 
@@ -138,6 +138,40 @@ public class MentorProfileItemService {
         MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
         mentorAchievementRepository.delete(achievement);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicAssetUploadIntentResponse createAchievementPictureUploadIntent(UUID mentorUserId, PublicAssetUploadIntentRequest request) {
+        requireProfile(mentorUserId);
+        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicAssetUploadIntentResponse createAchievementPictureUploadIntentForAchievement(UUID mentorUserId, UUID achievementId, PublicAssetUploadIntentRequest request) {
+        requireUserId(mentorUserId);
+        mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
+        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+    }
+
+    @Transactional
+    public MentorAchievementResponse confirmAchievementPicture(UUID mentorUserId, UUID achievementId, UUID uploadIntentId) {
+        requireUserId(mentorUserId);
+        MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
+        PublicAssetResponse assetResponse = publicAssetUploadService.confirmPortfolioImage(mentorUserId, uploadIntentId);
+        StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetResponse.assetId());
+        achievement.setPictureFile(picture);
+        return mapAchievement(mentorAchievementRepository.save(achievement));
+    }
+
+    @Transactional
+    public MentorAchievementResponse removeAchievementPicture(UUID mentorUserId, UUID achievementId) {
+        requireUserId(mentorUserId);
+        MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
+        achievement.setPictureFile(null);
+        return mapAchievement(mentorAchievementRepository.save(achievement));
     }
 
     private void applyProjectRequest(MentorFeaturedProject project, UUID mentorUserId, MentorFeaturedProjectRequest request) {
@@ -154,7 +188,7 @@ public class MentorProfileItemService {
         }
     }
 
-    private void applyAchievementRequest(MentorAchievement achievement, MentorAchievementRequest request) {
+    private void applyAchievementRequest(MentorAchievement achievement, UUID mentorUserId, MentorAchievementRequest request) {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu học vấn/giải thưởng không được để trống");
         }
@@ -164,6 +198,10 @@ public class MentorProfileItemService {
         achievement.setProductHeader(cleanNullable(request.productHeader()));
         achievement.setProductDescription(cleanNullable(request.productDescription()));
         achievement.setDemoUrl(cleanNullable(request.demoUrl()));
+        if (request.pictureAssetId() != null) {
+            StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
+            achievement.setPictureFile(picture);
+        }
     }
 
     private MentorProfile requireProfile(UUID mentorUserId) {
@@ -198,6 +236,7 @@ public class MentorProfileItemService {
         return MentorAchievementResponse.builder()
                 .id(achievement.getId())
                 .title(achievement.getTitle())
+                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
                 .awardDescription(achievement.getAwardDescription())
                 .achievedAt(achievement.getAchievedAt())
                 .productHeader(achievement.getProductHeader())

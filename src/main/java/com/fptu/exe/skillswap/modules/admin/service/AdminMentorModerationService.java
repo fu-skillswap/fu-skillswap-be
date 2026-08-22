@@ -161,6 +161,7 @@ public class AdminMentorModerationService {
         return MentorAchievementResponse.builder()
                 .id(achievement.getId())
                 .title(achievement.getTitle())
+                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
                 .awardDescription(achievement.getAwardDescription())
                 .achievedAt(achievement.getAchievedAt())
                 .productHeader(achievement.getProductHeader())
