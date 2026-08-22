@@ -27,10 +27,7 @@ import java.time.Duration;
 import java.util.UUID;
 
 @Slf4j
-@Service
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true")
-@ConditionalOnMissingBean(StorageGateway.class)
 public class S3StorageGatewayImpl implements StorageGateway {
 
     private final S3Client s3Client;

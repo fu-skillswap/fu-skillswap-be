@@ -25,7 +25,11 @@ application:
     client-id: ${GOOGLE_CLIENT_ID:dev-google-client-id}
   security:
     jwt:
-      secret-key: ${JWT_SECRET_KEY}
+      secret-key: ${JWT_SECRET_KEY:c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0}
+      refresh-token:
+        cookie:
+          secure: ${JWT_REFRESH_COOKIE_SECURE:false}
+          same-site: ${JWT_REFRESH_COOKIE_SAME_SITE:Lax}
   upload:
     dir: ./uploads/files
   mail:

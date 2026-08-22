@@ -6,31 +6,31 @@ import lombok.Getter;
 public enum ErrorCode {
     // Hệ thống và chung.
     UNCATEGORIZED_EXCEPTION(500, "SYS_9999", "error.sys.unknown", "Lỗi hệ thống không xác định"),
-    INVALID_KEY(400, "SYS_0001", "error.sys.invalid_key", "Khóa không hợp lệ"),
+    INVALID_KEY(400, "SYS_0001", "error.sys.invalid_key", "Key không hợp lệ"),
     BAD_REQUEST(400, "SYS_0002", "error.sys.bad_request", "Yêu cầu không hợp lệ"),
-    CONFIGURATION_ERROR(500, "SYS_0004", "error.sys.configuration", "Cấu hình hệ thống chưa hợp lệ"),
-    STORAGE_ERROR(500, "SYS_0005", "error.sys.storage", "Hệ thống lưu trữ hiện không khả dụng"),
-    DATABASE_ERROR(500, "SYS_0006", "error.sys.database", "Hệ thống dữ liệu gặp sự cố"),
+    CONFIGURATION_ERROR(500, "SYS_0004", "error.sys.configuration", "Lỗi cấu hình hệ thống"),
+    STORAGE_ERROR(500, "SYS_0005", "error.sys.storage", "Lỗi hệ thống lưu trữ"),
+    DATABASE_ERROR(500, "SYS_0006", "error.sys.database", "Lỗi hệ thống dữ liệu"),
     RESOURCE_CONFLICT(409, "SYS_0007", "error.sys.conflict", "Dữ liệu xung đột với trạng thái hiện tại"),
-    PAYLOAD_TOO_LARGE(413, "SYS_0008", "error.sys.payload_too_large", "Dữ liệu tải lên vượt quá giới hạn cho phép"),
+    PAYLOAD_TOO_LARGE(413, "SYS_0008", "error.sys.payload_too_large", "Dữ liệu tải lên vượt quá giới hạn"),
     UNSUPPORTED_MEDIA_TYPE(415, "SYS_0009", "error.sys.unsupported_media_type", "Kiểu dữ liệu gửi lên không được hỗ trợ"),
-    TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Bạn đang thao tác quá nhanh, vui lòng thử lại sau"),
-    METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức HTTP không được hỗ trợ cho endpoint này"),
-    UNPROCESSABLE_ENTITY(422, "SYS_0012", "error.sys.unprocessable_entity", "Dữ liệu đúng định dạng nhưng không thể xử lý trong ngữ cảnh hiện tại"),
+    TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Thao tác quá nhanh, thử lại sau"),
+    METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức không được hỗ trợ"),
+    UNPROCESSABLE_ENTITY(422, "SYS_0012", "error.sys.unprocessable_entity", "Dữ liệu đúng định dạng nhưng không thể xử lý"),
 
     // Xác thực.
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),
-    UNAUTHORIZED(403, "AUTH_1002", "error.auth.unauthorized", "Bạn không có quyền truy cập tài nguyên này"),
-    ACCESS_DENIED(403, "AUTH_1007", "error.auth.access_denied", "Bạn không có quyền thực hiện hành động này"),
-    SESSION_EXPIRED(401, "AUTH_1003", "error.auth.session_expired", "Phiên đăng nhập đã hết hạn hoặc không hợp lệ"),
-    USER_BANNED(403, "AUTH_1004", "error.auth.user_banned", "Tài khoản của bạn đã bị khóa"),
-    USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản của bạn chưa hoạt động"),
-    OAUTH_VERIFICATION_FAILED(400, "AUTH_1006", "error.auth.oauth_failed", "Xác thực tài khoản Google thất bại"),
+    UNAUTHORIZED(403, "AUTH_1002", "error.auth.unauthorized", "Bạn không có quyền truy cập tài nguyên"),
+    ACCESS_DENIED(403, "AUTH_1007", "error.auth.access_denied", "Bạn không có quyền thực hiện hành động"),
+    SESSION_EXPIRED(401, "AUTH_1003", "error.auth.session_expired", "Phiên đăng nhập đã hết hạn"),
+    USER_BANNED(403, "AUTH_1004", "error.auth.user_banned", "Tài khoản đã bị khóa"),
+    USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản chưa hoạt động"),
+    OAUTH_VERIFICATION_FAILED(400, "AUTH_1006", "error.auth.oauth_failed", "Xác thực Google thất bại"),
 
     // Google Calendar.
-    GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước khi tạo dịch vụ mentoring"),
-    GOOGLE_CALENDAR_MENTOR_VERIFICATION_REQUIRED(409, "CAL_4402", "error.calendar.mentor_verification_required", "Chỉ mentor đã được duyệt mới được kết nối Google Calendar"),
-    GOOGLE_CALENDAR_DISCONNECT_BLOCKED(409, "CAL_4403", "error.calendar.disconnect_blocked", "Cần tắt toàn bộ dịch vụ mentoring trước khi ngắt Google Calendar"),
+    GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước"),
+    GOOGLE_CALENDAR_MENTOR_VERIFICATION_REQUIRED(409, "CAL_4402", "error.calendar.mentor_verification_required", "Chỉ dành cho mentor đã được duyệt"),
+    GOOGLE_CALENDAR_DISCONNECT_BLOCKED(409, "CAL_4403", "error.calendar.disconnect_blocked", "Phải tắt toàn bộ dịch vụ mentoring trước"),
 
     // Nghiệp vụ.
     USER_EXISTED(400, "USER_2001", "error.user.existed", "Người dùng đã tồn tại"),
@@ -39,7 +39,7 @@ public enum ErrorCode {
     NOT_FOUND(404, "SYS_0003", "error.sys.not_found", "Không tìm thấy tài nguyên"),
 
     // Thanh toán.
-    PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang có sự cố, vui lòng thử lại sau"),
+    PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang gặp sự cố, vui lòng thử lại sau"),
     INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
 
     // Blog.
@@ -59,7 +59,7 @@ public enum ErrorCode {
     AVAILABILITY_TEMPLATE_INACTIVE_SERVICE(400, "AVAIL_4306", "error.availability.template_inactive_service", "Service gắn vào template không còn hợp lệ"),
     AVAILABILITY_TEMPLATE_EXPIRED(409, "AVAIL_4307", "error.availability.template_expired", "Availability template đã hết hiệu lực"),
     AVAILABILITY_TEMPLATE_HAS_PENDING_BOOKINGS(409, "AVAIL_4308", "error.availability.template_pending", "Template có booking đang chờ xử lý"),
-    AVAILABILITY_TEMPLATE_HAS_LOCKING_BOOKINGS(409, "AVAIL_4309", "error.availability.template_locking", "Template có booking hoặc group session đang giữ lịch"),
+    AVAILABILITY_TEMPLATE_HAS_LOCKING_BOOKINGS(409, "AVAIL_4309", "error.availability.template_locking", "Template có booking đang giữ lịch"),
     AVAILABILITY_TEMPLATE_INVALID_OCCURRENCE(400, "AVAIL_4310", "error.availability.template_invalid_occurrence", "Ngày occurrence không hợp lệ"),
     AVAILABILITY_TEMPLATE_EXCEPTION_EXISTS(409, "AVAIL_4311", "error.availability.template_exception_exists", "Ngày này đã được bỏ qua"),
     AVAILABILITY_TEMPLATE_EXCEPTION_NOT_FOUND(404, "AVAIL_4312", "error.availability.template_exception_not_found", "Không tìm thấy exception"),

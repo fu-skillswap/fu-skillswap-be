@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 public class RefreshTokenCookieProperties {
 
     private String name = "skillswap_refresh_token";
-    private String path = "/";
+    private String path = "/api/auth";
     private boolean secure = true;
     private String sameSite = "Lax";
 }

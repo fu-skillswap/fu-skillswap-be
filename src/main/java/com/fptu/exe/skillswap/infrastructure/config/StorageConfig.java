@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
+import com.fptu.exe.skillswap.infrastructure.storage.S3StorageGatewayImpl;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -63,5 +65,11 @@ public class StorageConfig {
                     "Storage Gateway chưa cấu hình đầy đủ. Hãy kiểm tra STORAGE_ENDPOINT, STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY và STORAGE_BUCKET"
             );
         }
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "application.storage", name = "enabled", havingValue = "true")
+    public StorageGateway storageGateway(S3Client s3Client, S3Presigner s3Presigner, StorageProperties properties) {
+        return new S3StorageGatewayImpl(s3Client, s3Presigner, properties);
     }
 }
