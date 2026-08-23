@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,7 +11,10 @@ import java.util.UUID;
 @Entity
 @Table(name = "user_sessions", indexes = {
     @Index(name = "idx_user_sessions_user_id", columnList = "user_id"),
-    @Index(name = "idx_user_sessions_token", columnList = "refresh_token_hash")
+    @Index(name = "idx_user_sessions_token", columnList = "refresh_token_hash"),
+    @Index(name = "idx_user_sessions_grace_replacement_session_id", columnList = "grace_replacement_session_id"),
+    @Index(name = "idx_user_sessions_state_expiry", columnList = "session_state, expires_at"),
+    @Index(name = "idx_user_sessions_expires_at", columnList = "expires_at")
 })
 @Getter
 @Setter
@@ -73,7 +75,3 @@ public class UserSession {
         createdAt = DateTimeUtil.now();
     }
 }
-
-
-
-

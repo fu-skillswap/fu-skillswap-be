@@ -54,7 +54,11 @@ public class User {
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(
         name = "user_roles",
-        joinColumns = @JoinColumn(name = "user_id", foreignKey = @ForeignKey(name = "fk_user_roles_user"))
+        joinColumns = @JoinColumn(name = "user_id", foreignKey = @ForeignKey(name = "fk_user_roles_user")),
+        indexes = {
+            @Index(name = "idx_user_roles_user_id", columnList = "user_id"),
+            @Index(name = "idx_user_roles_role", columnList = "role")
+        }
     )
     @Column(name = "role")
     @Enumerated(EnumType.STRING)
