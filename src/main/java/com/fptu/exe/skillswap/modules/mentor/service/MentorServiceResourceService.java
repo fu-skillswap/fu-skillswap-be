@@ -27,7 +27,7 @@ public class MentorServiceResourceService {
   @Transactional public MentorServiceResourceUploadUrlResponse createUploadUrl(UUID mentorId, UUID serviceId, MentorServiceResourceUploadUrlRequest r) {
     MentorService service=owned(mentorId,serviceId); if(resourceRepository.countByServiceIdAndDeletedAtIsNull(serviceId)>=MAX_RESOURCES || resourceRepository.sumActiveSizeByMentorId(mentorId)>=MAX_MENTOR_BYTES) throw new BaseException(ErrorCode.RESOURCE_CONFLICT,"Đã đạt giới hạn tài liệu");
     String ext=extension(r.filename(),r.resourceType()); UUID intentId=UUID.randomUUID(); String key="mentor-service-resources/"+mentorId+"/"+serviceId+"/"+intentId+ext;
-    var intent=MentorServiceResourceUploadIntent.builder().id(intentId).service(service).storageKey(key).expectedType(r.resourceType()).expiresAt(LocalDateTime.now().plus(UPLOAD_TTL)).build();
+    var intent=MentorServiceResourceUploadIntent.builder().id(intentId).service(service).storageKey(key).expectedType(r.resourceType()).expiresAt(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now().plus(UPLOAD_TTL)).build();
     intentRepository.save(intent); var upload=storageGateway().generatePrivateUploadUrl(key,mime(r.resourceType()),UPLOAD_TTL);
     return new MentorServiceResourceUploadUrlResponse(intent.getId(),upload.uploadUrl(),upload.expiresAt(),mime(r.resourceType()));
   }
@@ -35,7 +35,7 @@ public class MentorServiceResourceService {
     var i=intentRepository.findByIdForUpdate(r.uploadIntentId()).orElseThrow(()->new ResourceNotFoundException("Upload intent không tồn tại"));
     if(!i.getService().getId().equals(serviceId)||!i.getService().getMentorProfile().getUserId().equals(mentorId)) throw new ResourceNotFoundException("Upload intent không tồn tại");
     if(i.getStatus()!= MentorServiceResourceUploadIntent.Status.PENDING_UPLOAD) throw new BaseException(ErrorCode.RESOURCE_CONFLICT,"Upload intent đã được xử lý");
-    if(i.getExpiresAt().isBefore(LocalDateTime.now())) {i.setStatus(MentorServiceResourceUploadIntent.Status.EXPIRED); throw new BaseException(ErrorCode.RESOURCE_CONFLICT,"Upload intent đã hết hạn");}
+    if(i.getExpiresAt().isBefore(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now())) {i.setStatus(MentorServiceResourceUploadIntent.Status.EXPIRED); throw new BaseException(ErrorCode.RESOURCE_CONFLICT,"Upload intent đã hết hạn");}
     if(i.getExpectedType()!=r.resourceType()) throw new BaseException(ErrorCode.BAD_REQUEST,"Loại file không khớp upload intent");
     var metadata=storageGateway().headObject(i.getStorageKey()); validate(metadata,i.getExpectedType(),i.getStorageKey());
     if (resourceRepository.sumActiveSizeByMentorId(mentorId) + metadata.sizeBytes() > MAX_MENTOR_BYTES) throw new BaseException(ErrorCode.RESOURCE_CONFLICT,"Đã đạt giới hạn dung lượng tài liệu");
@@ -48,7 +48,7 @@ public class MentorServiceResourceService {
     return resourceRepository.findByServiceIdAndDeletedAtIsNullOrderByCreatedAtAsc(serviceId).stream().map(x->{boolean yes=x.getVisibility()==MentorServiceResourceVisibility.AUTHENTICATED||entitled;return map(x,yes,yes?null:"BOOKING_REQUIRED");}).toList();
   }
   @Transactional public MentorServiceResourceResponse update(UUID mentorId,UUID serviceId,UUID id,MentorServiceResourceUpdateRequest r){var x=ownedResource(mentorId,serviceId,id);checkVersion(x,r.expectedVersion());x.setTitle(r.title().trim());x.setDescription(trim(r.description()));x.setVisibility(r.visibility());return map(x,true,null);}
-  @Transactional public void delete(UUID mentorId,UUID serviceId,UUID id,Integer version){var x=ownedResource(mentorId,serviceId,id);checkVersion(x,version);x.setDeletedAt(LocalDateTime.now());}
+  @Transactional public void delete(UUID mentorId,UUID serviceId,UUID id,Integer version){var x=ownedResource(mentorId,serviceId,id);checkVersion(x,version);x.setDeletedAt(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now());}
   @Transactional public MentorServiceResourceDownloadResponse download(UUID viewerId,UUID id){
     var x=resourceRepository.findById(id).filter(r->r.getDeletedAt()==null).orElseThrow(()->new ResourceNotFoundException("Không tìm thấy tài liệu"));
     boolean allowed=x.getVisibility()==MentorServiceResourceVisibility.AUTHENTICATED||bookingEligibilityPolicy.canAccessServiceResources(viewerId,x.getService().getId());

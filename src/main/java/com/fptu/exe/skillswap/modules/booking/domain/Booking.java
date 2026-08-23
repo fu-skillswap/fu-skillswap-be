@@ -213,6 +213,12 @@ public class Booking {
     @Column(name = "meeting_link", columnDefinition = "TEXT")
     private String meetingLink;
 
+    @Column(name = "calendar_availability_unknown", nullable = false)
+    private boolean calendarAvailabilityUnknown;
+
+    @Column(name = "calendar_availability_checked_at")
+    private LocalDateTime calendarAvailabilityCheckedAt;
+
     @Deprecated
     @Column(columnDefinition = "TEXT")
     private String location;

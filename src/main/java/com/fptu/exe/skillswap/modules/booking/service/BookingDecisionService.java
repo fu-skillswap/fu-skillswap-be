@@ -75,12 +75,16 @@ public class BookingDecisionService {
 
         // This is deliberately before every SELECT ... FOR UPDATE below. A stale or unavailable
         // Google response must never extend the lifetime of booking, user, mentor or slot locks.
-        validateCalendarAvailabilityBeforeAcceptance(mentorUserId, bookingId);
+        boolean calendarAvailabilityUnknown = validateCalendarAvailabilityBeforeAcceptance(mentorUserId, bookingId);
 
-        UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với khung giờ mentoring"));
-        UUID menteeId = bookingRepository.findMenteeIdByBookingId(bookingId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với mentee"));
+        // Canonical order for existing booking commands:
+        // Booking -> participant users -> MentorProfile -> Slot -> PaymentOrder -> PaymentAttempt.
+        Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
+        UUID slotId = booking.getSlot() == null ? null : booking.getSlot().getId();
+        UUID menteeId = booking.getMentee() == null ? null : booking.getMentee().getId();
+        if (slotId == null || menteeId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Booking chưa gắn đầy đủ mentee và khung giờ mentoring");
+        }
 
         List<UUID> participantIds = Stream.of(mentorUserId, menteeId)
                 .distinct()
@@ -95,10 +99,13 @@ public class BookingDecisionService {
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
 
-        Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
-
         if (booking.getSlot() == null || !booking.getSlot().getId().equals(slotId)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ của booking đã thay đổi");
+        }
+        if ((booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT
+                || BookingActionPolicy.isScheduled(booking.getStatus()))
+                && booking.getAcceptedAt() != null) {
+            return bookingResponseMapper.toBookingResponse(booking);
         }
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể chấp nhận booking đang chờ phản hồi");
@@ -162,6 +169,8 @@ public class BookingDecisionService {
             booking.setStatus(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         }
         booking.setAcceptedAt(now);
+        booking.setCalendarAvailabilityUnknown(calendarAvailabilityUnknown);
+        booking.setCalendarAvailabilityCheckedAt(googleCalendarBusyPort == null ? null : now);
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
         slot.setBooked(true);
 
@@ -337,6 +346,9 @@ public class BookingDecisionService {
     @Transactional
     public BookingResponse rejectBooking(UUID mentorUserId, UUID bookingId, RejectBookingRequest request) {
         Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
+        if (booking.getStatus() == BookingStatus.REJECTED && booking.getRejectedAt() != null) {
+            return bookingResponseMapper.toBookingResponse(booking);
+        }
         if (booking.getStatus() != BookingStatus.PENDING) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể từ chối booking đang chờ phản hồi");
         }
@@ -406,21 +418,21 @@ public class BookingDecisionService {
         return booking;
     }
 
-    private void validateCalendarAvailabilityBeforeAcceptance(UUID mentorUserId, UUID bookingId) {
+    private boolean validateCalendarAvailabilityBeforeAcceptance(UUID mentorUserId, UUID bookingId) {
         if (googleCalendarBusyPort == null || mentorUserId == null || bookingId == null) {
-            return;
+            return false;
         }
         Booking booking = bookingRepository.findById(bookingId).orElse(null);
         if (booking == null
                 || booking.getMentorProfile() == null
                 || !mentorUserId.equals(booking.getMentorProfile().getUserId())) {
             // Keep authorization/not-found behavior in the locked transactional flow below.
-            return;
+            return false;
         }
         LocalDateTime startTime = selectedStartTime(booking);
         LocalDateTime endTime = selectedEndTime(booking);
         if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
-            return;
+            return false;
         }
 
         Instant startUtc = BookingTime.toInstant(startTime);
@@ -434,11 +446,16 @@ public class BookingDecisionService {
                 throw new BaseException(ErrorCode.GOOGLE_CALENDAR_BUSY_CONFLICT,
                         "Khung giờ booking trùng với lịch bận trên Google Calendar của mentor.");
             }
+            return false;
         } catch (BaseException ex) {
-            throw ex;
+            if (ex.getErrorCode() == ErrorCode.GOOGLE_CALENDAR_BUSY_CONFLICT) {
+                throw ex;
+            }
+            return true;
         } catch (RuntimeException ex) {
-            throw new BaseException(ErrorCode.GOOGLE_CALENDAR_AVAILABILITY_UNAVAILABLE,
-                    "Chưa thể kiểm tra lịch Google Calendar của mentor. Vui lòng thử lại sau.");
+            // Database availability remains authoritative. A provider outage must not
+            // block mentor work; the response flags the uncertainty for a warning.
+            return true;
         }
     }
 

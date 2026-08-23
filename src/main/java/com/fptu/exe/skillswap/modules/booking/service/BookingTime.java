@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 
 /**
@@ -26,6 +27,10 @@ public final class BookingTime {
 
     public static Instant toInstant(LocalDateTime value) {
         return value == null ? null : value.atZone(BUSINESS_ZONE).toInstant();
+    }
+
+    public static OffsetDateTime toOffsetDateTime(LocalDateTime value) {
+        return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
     }
 
     public static LocalDateTime now() {

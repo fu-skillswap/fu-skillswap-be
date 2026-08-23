@@ -40,7 +40,7 @@ import java.util.UUID;
 public class BookingLifecycleMaintenanceService {
 
     private static final long PAYMENT_WINDOW_MINUTES = BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES;
-    private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    private static final String PAYMENT_DEADLINE_TEXT = "60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.PAID

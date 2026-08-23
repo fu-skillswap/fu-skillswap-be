@@ -456,7 +456,7 @@ public class MentorDiscoveryService {
     }
 
     private LocalDateTime currentTime() {
-        return LocalDateTime.now(APP_ZONE);
+        return com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
     }
 
     private List<MentorDiscoveryQueryRow> loadDiscoveryRowsInPageOrder(List<UUID> mentorUserIds) {

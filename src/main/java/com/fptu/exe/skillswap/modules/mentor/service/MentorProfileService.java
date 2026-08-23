@@ -108,7 +108,7 @@ public class MentorProfileService {
         profile.setGithubUrl(cleanNullable(request.githubUrl()));
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
         profile.setSupportingSubjects(buildLegacySubjectSummary(request.subjectResults()));
-        touchMentorActivity(profile, LocalDateTime.now());
+        touchMentorActivity(profile, com.fptu.exe.skillswap.shared.util.DateTimeUtil.now());
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
         if (mentorBookingPolicyService != null) {

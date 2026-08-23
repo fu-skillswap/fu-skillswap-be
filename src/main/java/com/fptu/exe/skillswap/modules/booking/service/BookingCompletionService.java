@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
@@ -40,7 +41,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isConfirmedBookingStatus;
 import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedEndTime;
 import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedStartTime;
 
@@ -89,6 +89,12 @@ public class BookingCompletionService {
         requireDirectBooking(booking);
         if (!isMentorOfBooking(booking, mentorUserId)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor của booking mới được xác nhận hoàn tất buổi mentoring");
+        }
+        if ((booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
+                || booking.getStatus() == BookingStatus.COMPLETED
+                || booking.getStatus() == BookingStatus.AUTO_CLOSED)
+                && booking.getCompletedAt() != null) {
+            return bookingResponseMapper.toBookingResponse(booking);
         }
         synchronizePostSessionStatusForPhaseOne(booking, now);
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
@@ -177,12 +183,17 @@ public class BookingCompletionService {
         synchronizePostSessionStatusForPhaseOne(booking, now);
         assertBookingAccess(booking, currentUserId);
 
+        if (isMentorOfBooking(booking, currentUserId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Mentor không thể tự xác nhận thay cho participant còn lại");
+        }
+        if (booking.getStatus() == BookingStatus.COMPLETED
+                && BookingStateMapper.toCanonicalCompletionOutcome(booking) == BookingCompletionOutcome.USER_CONFIRMED) {
+            return bookingResponseMapper.toBookingResponse(booking);
+        }
+
         if (booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ xác nhận sau buổi học");
-        }
-        if (isMentorOfBooking(booking, currentUserId)) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED, "Mentor không thể tự xác nhận thay cho participant còn lại");
         }
         ensureWithinPostSessionReviewWindow(booking, now);
 
@@ -251,6 +262,15 @@ public class BookingCompletionService {
         synchronizePostSessionStatusForPhaseOne(booking, now);
         assertBookingAccess(booking, currentUserId);
 
+        if (booking.getStatus() == BookingStatus.UNDER_REVIEW
+                && currentUserId.equals(booking.getIssueSubmittedByUserId())
+                && request.issueType() == booking.getIssueType()) {
+            return BookingIssueResponse.builder()
+                    .bookingId(booking.getId()).status(booking.getStatus())
+                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt())).issueType(booking.getIssueType())
+                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt())).build();
+        }
+
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
                 && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái cho phép báo vấn đề");
@@ -283,9 +303,9 @@ public class BookingCompletionService {
         return BookingIssueResponse.builder()
                 .bookingId(savedBooking.getId())
                 .status(savedBooking.getStatus())
-                .issueSubmittedAt(savedBooking.getIssueSubmittedAt())
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueSubmittedAt()))
                 .issueType(savedBooking.getIssueType())
-                .issueRespondedAt(savedBooking.getIssueRespondedAt())
+                .issueRespondedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueRespondedAt()))
                 .build();
     }
 
@@ -301,6 +321,11 @@ public class BookingCompletionService {
         assertBookingAccess(booking, currentUserId);
         if (booking.getStatus() != BookingStatus.UNDER_REVIEW || booking.getIssueSubmittedAt() == null) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện không có issue đang mở");
+        }
+        if (currentUserId.equals(booking.getIssueRespondedByUserId()) && booking.getIssueRespondedAt() != null) {
+            return BookingIssueResponse.builder().bookingId(booking.getId()).status(booking.getStatus())
+                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt())).issueType(booking.getIssueType())
+                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt())).build();
         }
         if (booking.getIssueRespondedAt() != null) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Issue này đã có phản hồi từ counterparty");
@@ -319,8 +344,8 @@ public class BookingCompletionService {
         recordBookingEvent(saved, BookingEventType.ISSUE_RESPONDED,
                 BookingStatus.UNDER_REVIEW, BookingEventActorType.USER, currentUserId, null);
         return BookingIssueResponse.builder().bookingId(saved.getId()).status(saved.getStatus())
-                .issueSubmittedAt(saved.getIssueSubmittedAt()).issueType(saved.getIssueType())
-                .issueRespondedAt(saved.getIssueRespondedAt()).build();
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(saved.getIssueSubmittedAt())).issueType(saved.getIssueType())
+                .issueRespondedAt(BookingTime.toOffsetDateTime(saved.getIssueRespondedAt())).build();
     }
 
     @Transactional

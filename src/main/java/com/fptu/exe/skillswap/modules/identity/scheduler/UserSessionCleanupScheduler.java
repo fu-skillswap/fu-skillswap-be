@@ -28,7 +28,7 @@ public class UserSessionCleanupScheduler {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
         LocalDateTime cutoff = now.minusDays(retentionDays);
         int totalDeleted = 0;
         int batchSize = Math.max(50, properties.getCleanupBatchSize());

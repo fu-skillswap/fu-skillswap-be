@@ -28,5 +28,5 @@ public class MentorServiceResourceUploadIntent {
     @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "resource_id") private MentorServiceResource resource;
     @Version @Builder.Default private Integer version=0;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
-    @PrePersist void create(){createdAt=LocalDateTime.now();}
+    @PrePersist void create(){createdAt=com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();}
 }

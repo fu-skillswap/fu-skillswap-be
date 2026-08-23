@@ -37,7 +37,26 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class BookingQueryService {
 
-    private static final List<BookingStatus> BOOKING_LIST_PAID_PRIORITY_STATUSES = List.of(BookingStatus.PAID);
+    private static final List<BookingStatus> MENTEE_PRIMARY_ACTION_STATUSES = List.of(
+            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+            BookingStatus.AWAITING_MENTOR_COMPLETION,
+            BookingStatus.AWAITING_MENTEE_CONFIRMATION,
+            BookingStatus.UNDER_REVIEW
+    );
+    private static final List<BookingStatus> MENTEE_SECONDARY_ACTION_STATUSES = List.of(BookingStatus.PENDING);
+    private static final List<BookingStatus> MENTEE_UPCOMING_STATUSES = List.of(BookingStatus.PAID);
+    private static final List<BookingStatus> MENTOR_PRIMARY_ACTION_STATUSES = List.of(
+            BookingStatus.PENDING,
+            BookingStatus.AWAITING_MENTOR_COMPLETION,
+            BookingStatus.UNDER_REVIEW
+    );
+    private static final List<BookingStatus> MENTOR_SECONDARY_ACTION_STATUSES = List.of(
+            BookingStatus.ACCEPTED_AWAITING_PAYMENT
+    );
+    private static final List<BookingStatus> MENTOR_UPCOMING_STATUSES = List.of(
+            BookingStatus.PAID,
+            BookingStatus.AWAITING_MENTEE_CONFIRMATION
+    );
 
     private static final List<BookingStatus> BOOKING_LIST_CANCELLED_PRIORITY_STATUSES = List.of(
             BookingStatus.CANCELLED_BY_MENTEE,
@@ -63,33 +82,33 @@ public class BookingQueryService {
                 : bookingPageable(safeRequest);
 
         LocalDateTime startTimeStart = DateTimeUtil.now().minusDays(7);
-        LocalDateTime startTimeEnd = DateTimeUtil.now().plusDays(7);
+        LocalDateTime startTimeEnd = DateTimeUtil.now().plusDays(90);
 
         Page<Booking> page = switch (role) {
             case MENTEE -> safeRequest.getStatus() == null
                     ? bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
                             currentUserId,
-                            BOOKING_LIST_PAID_PRIORITY_STATUSES,
-                            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-                            BookingStatus.PENDING,
+                            MENTEE_PRIMARY_ACTION_STATUSES,
+                            MENTEE_SECONDARY_ACTION_STATUSES,
+                            MENTEE_UPCOMING_STATUSES,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
                             startTimeStart,
                             startTimeEnd,
                             pageable
                     )
-                    : bookingRepository.findMyMenteeBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
+                    : bookingRepository.findByMenteeIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
             case MENTOR -> safeRequest.getStatus() == null
                     ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
                             currentUserId,
-                            BOOKING_LIST_PAID_PRIORITY_STATUSES,
-                            BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-                            BookingStatus.PENDING,
+                            MENTOR_PRIMARY_ACTION_STATUSES,
+                            MENTOR_SECONDARY_ACTION_STATUSES,
+                            MENTOR_UPCOMING_STATUSES,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
                             startTimeStart,
                             startTimeEnd,
                             pageable
                     )
-                    : bookingRepository.findMyMentorBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
+                    : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
         };
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();

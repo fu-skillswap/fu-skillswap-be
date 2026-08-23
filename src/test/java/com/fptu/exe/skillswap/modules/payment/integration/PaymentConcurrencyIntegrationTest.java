@@ -2,7 +2,9 @@ package com.fptu.exe.skillswap.modules.payment.integration;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerAccount;
@@ -12,6 +14,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -36,6 +39,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +51,9 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
     @Autowired
     private PaymentOrderService paymentOrderService;
+
+    @Autowired
+    private BookingService bookingService;
 
     @Autowired
     private PaymentOrderRepository paymentOrderRepository;
@@ -121,6 +128,9 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
                     .serviceIsFreeSnapshot(false)
                     .serviceDurationSnapshot(60)
                     .servicePriceScoinSnapshot(100_000)
+                    .acceptedAt(LocalDateTime.now())
+                    .selectedStartTime(LocalDateTime.now().plusDays(1))
+                    .selectedEndTime(LocalDateTime.now().plusDays(1).plusHours(1))
                     .build();
             booking = bookingRepository.save(booking);
 
@@ -154,6 +164,18 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
     @AfterEach
     void tearDown() {
+        jdbcTemplate.execute("DELETE FROM google_calendar_sync_jobs");
+        jdbcTemplate.execute("DELETE FROM domain_event_outbox");
+        jdbcTemplate.execute("DELETE FROM email_outbox");
+        jdbcTemplate.execute("DELETE FROM notifications");
+        jdbcTemplate.execute("DELETE FROM conversation_booking_links");
+        jdbcTemplate.execute("DELETE FROM conversation_participants");
+        jdbcTemplate.execute("DELETE FROM conversations");
+        jdbcTemplate.execute("DELETE FROM sessions");
+        jdbcTemplate.execute("DELETE FROM booking_events");
+        jdbcTemplate.execute("DELETE FROM mentor_violation_events");
+        jdbcTemplate.execute("DELETE FROM settlement_entries");
+        jdbcTemplate.execute("DELETE FROM settlement_accounts");
         jdbcTemplate.execute("DELETE FROM credit_ledger_entries");
         jdbcTemplate.execute("DELETE FROM credit_ledger_accounts");
         jdbcTemplate.execute("DELETE FROM payment_attempts");
@@ -214,5 +236,72 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
         PaymentAttempt attemptInDb = paymentAttemptRepository.findById(surplusAttempt.getId()).orElseThrow();
         assertEquals(PaymentAttemptStatus.SUCCEEDED_SURPLUS, attemptInDb.getStatus(), "Attempt status should be SUCCEEDED_SURPLUS");
+    }
+
+    @Test
+    void paidWebhookAndMenteeCancel_concurrent_shouldSerializeWithoutDeadlockAndRefundOnce() throws Exception {
+        transactionTemplate.execute(status -> {
+            order.setStatus(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT);
+            order.setRemainingPayableScoin(100_000);
+            order.setSettlementStatus(null);
+            paymentOrderRepository.save(order);
+            surplusAttempt.setAttemptNo(1);
+            surplusAttempt.setStatus(PaymentAttemptStatus.REDIRECTED);
+            paymentAttemptRepository.save(surplusAttempt);
+            return null;
+        });
+
+        when(payOsGateway.verifyWebhook(any())).thenReturn(new PayOsGateway.VerifiedWebhook(
+                "999999", "pl-race", "evt-race", "txn-race", "PAID", true,
+                LocalDateTime.now(), 100_000L));
+        PaymentWebhookRequest webhookRequest = new PaymentWebhookRequest(
+                "00", "Success", true,
+                new PaymentWebhookRequest.PaymentWebhookDataRequest(
+                        999999L, 100_000L, "booking payment", "123123", "REF-RACE", "TXN-RACE",
+                        "VND", "pl-race", "00", "Success", "cb", "cbn", "cn", "can", "van", "vanr"),
+                "sig");
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicReference<Throwable> webhookFailure = new AtomicReference<>();
+        AtomicReference<Throwable> cancelFailure = new AtomicReference<>();
+        try {
+            var webhookFuture = executor.submit(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    paymentOrderService.handleWebhook(webhookRequest);
+                } catch (Throwable throwable) {
+                    webhookFailure.set(throwable);
+                }
+            });
+            var cancelFuture = executor.submit(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    bookingService.cancelBookingByMentee(
+                            mentee.getId(), booking.getId(), new CancelBookingRequest("Changed plan"));
+                } catch (Throwable throwable) {
+                    cancelFailure.set(throwable);
+                }
+            });
+
+            org.junit.jupiter.api.Assertions.assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            webhookFuture.get(15, TimeUnit.SECONDS);
+            cancelFuture.get(15, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        org.junit.jupiter.api.Assertions.assertNull(webhookFailure.get(), "Webhook must complete without deadlock");
+        org.junit.jupiter.api.Assertions.assertNull(cancelFailure.get(), "Cancellation must complete without deadlock");
+        Booking storedBooking = bookingRepository.findById(booking.getId()).orElseThrow();
+        PaymentOrder storedOrder = paymentOrderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(BookingStatus.CANCELLED_BY_MENTEE, storedBooking.getStatus());
+        assertEquals(PaymentOrderStatus.PAID, storedOrder.getStatus());
+        assertEquals(PaymentSettlementStatus.REFUNDED, storedOrder.getSettlementStatus());
+        assertEquals(100_000, creditLedgerService.getAvailableBalance(mentee.getId()));
     }
 }

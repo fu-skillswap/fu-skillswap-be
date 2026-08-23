@@ -20,7 +20,7 @@ public class BookingEmailListener {
 
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
-    private static final String PAYMENT_DEADLINE_TEXT = "trong vòng 6 giờ hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    private static final String PAYMENT_DEADLINE_TEXT = "trong vòng 60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
 
     private final EmailDispatchService emailDispatchService;
 

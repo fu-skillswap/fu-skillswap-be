@@ -580,7 +580,7 @@ public class AvailabilityTemplateService {
     private LocalDate today() { return LocalDate.now(TEMPLATE_ZONE); }
     private LocalDateTime now() { return DateTimeUtil.now(); }
     private LocalDateTime toStored(LocalDate date, LocalTime time) { return LocalDateTime.of(date, time); }
-    private LocalDateTime nextRollover() { return LocalDateTime.now(TEMPLATE_ZONE).plusDays(1).toLocalDate().atStartOfDay().plusMinutes(1); }
+    private LocalDateTime nextRollover() { return DateTimeUtil.now().plusDays(1).toLocalDate().atStartOfDay().plusMinutes(1); }
     private List<LocalDate> dates(LocalDate from, LocalDate to) { List<LocalDate> dates = new ArrayList<>(); for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) dates.add(date); return dates; }
     private String encodeDays(List<DayOfWeek> days) { return days.stream().distinct().sorted().map(Enum::name).collect(Collectors.joining(",")); }
     private Set<DayOfWeek> decodeDays(String encoded) { return Arrays.stream(encoded.split(",")).map(DayOfWeek::valueOf).collect(Collectors.toCollection(() -> EnumSet.noneOf(DayOfWeek.class))); }

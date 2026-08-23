@@ -51,7 +51,7 @@ public class NotificationArchiveManifest {
     @jakarta.persistence.PrePersist
     void onCreate() {
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
         }
     }
 }

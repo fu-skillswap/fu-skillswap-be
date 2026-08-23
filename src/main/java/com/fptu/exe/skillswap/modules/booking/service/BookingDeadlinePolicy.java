@@ -7,7 +7,8 @@ public final class BookingDeadlinePolicy {
 
     public static final long PENDING_RESPONSE_WINDOW_HOURS = 12;
     public static final long PENDING_RESPONSE_PREPARATION_HOURS = 3;
-    public static final long PAYMENT_WINDOW_MINUTES = 6 * 60;
+    /** Async mentor approval still gives the mentee time to react without holding a scarce slot for hours. */
+    public static final long PAYMENT_WINDOW_MINUTES = 60;
     public static final long PAYMENT_PREPARATION_MINUTES = 60;
 
     private BookingDeadlinePolicy() {

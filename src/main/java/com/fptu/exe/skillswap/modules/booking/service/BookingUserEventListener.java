@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -12,14 +13,11 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class BookingUserEventListener {
-
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final BookingService bookingService;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
@@ -51,6 +49,6 @@ public class BookingUserEventListener {
     }
 
     private LocalDateTime currentTime() {
-        return LocalDateTime.now(APP_ZONE);
+        return DateTimeUtil.now();
     }
 }

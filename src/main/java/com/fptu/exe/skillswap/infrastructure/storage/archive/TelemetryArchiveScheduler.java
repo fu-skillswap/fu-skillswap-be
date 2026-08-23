@@ -83,7 +83,7 @@ public class TelemetryArchiveScheduler {
                 }
 
                 if (!jsonLines.isEmpty()) {
-                    LocalDateTime now = LocalDateTime.now();
+                    LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
                     String prefix = String.format("archives/telemetry/%04d/%02d/%02d",
                             now.getYear(), now.getMonthValue(), now.getDayOfMonth());
 

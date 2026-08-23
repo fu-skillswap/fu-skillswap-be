@@ -117,25 +117,45 @@ public class BookingResponseMapper {
 
         boolean canCancel = false;
         boolean canComplete = false;
+        boolean canPay = false;
+        boolean canAccept = false;
+        boolean canReject = false;
+        boolean canCompleteByMentor = false;
+        boolean canConfirmByMentee = false;
+        boolean canJoin = false;
+        boolean canReportIssue = false;
+        boolean canRespondIssue = false;
         boolean canSubmitFeedback = false;
 
         if (currentUserId != null) {
             boolean beforeSession = startTime != null && now.isBefore(startTime);
-            if (booking.getStatus() == BookingStatus.PENDING) {
-                canCancel = isMenteeUser && beforeSession;
-            } else if (booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isScheduledBookingStatus(booking.getStatus())) {
-                canCancel = (isMenteeUser || isMentorUser) && beforeSession;
-            }
+            LocalDateTime paymentDeadline = resolvePaymentDeadline(booking);
+            boolean beforePendingDeadline = booking.getPendingExpireAt() == null || now.isBefore(booking.getPendingExpireAt());
+            boolean beforePaymentDeadline = paymentDeadline == null || now.isBefore(paymentDeadline);
+            boolean hasMeetingAccess = (link != null && !link.isBlank())
+                    || (booking.getLocation() != null && !booking.getLocation().isBlank());
 
-            if (isMentorUser) {
-                canComplete = (booking.getStatus() == BookingStatus.PAID || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
-                        && endTime != null && now.isAfter(endTime);
-            } else if (isMenteeUser) {
-                canComplete = (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
-                        || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION)
-                        && endTime != null
-                        && now.isBefore(endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
-            }
+            canCancel = isMenteeUser
+                    ? BookingActionPolicy.canCancelByMentee(booking.getStatus(), beforeSession)
+                    : isMentorUser && BookingActionPolicy.canCancelByMentor(booking.getStatus(), beforeSession);
+            canPay = isMenteeUser && BookingActionPolicy.canPay(booking.getStatus(), beforePaymentDeadline);
+            canAccept = isMentorUser && BookingActionPolicy.canAcceptOrReject(booking.getStatus(), beforePendingDeadline);
+            canReject = canAccept;
+            canCompleteByMentor = isMentorUser
+                    && BookingActionPolicy.canMentorComplete(booking.getStatus(), now, endTime);
+            canConfirmByMentee = isMenteeUser
+                    && BookingActionPolicy.canMenteeConfirm(booking.getStatus(), now, endTime);
+            canComplete = canCompleteByMentor || canConfirmByMentee;
+            canJoin = (isMenteeUser || isMentorUser)
+                    && BookingActionPolicy.canJoin(booking.getStatus(), now, startTime, endTime, hasMeetingAccess);
+            canReportIssue = (isMenteeUser || isMentorUser)
+                    && BookingActionPolicy.canReportIssue(booking.getStatus(), now, endTime);
+            canRespondIssue = (isMenteeUser || isMentorUser)
+                    && booking.getStatus() == BookingStatus.UNDER_REVIEW
+                    && booking.getIssueSubmittedAt() != null
+                    && booking.getIssueRespondedAt() == null
+                    && !currentUserId.equals(booking.getIssueSubmittedByUserId())
+                    && now.isBefore(booking.getIssueSubmittedAt().plusHours(24));
 
             canSubmitFeedback = isMenteeUser
                     && booking.getStatus() == BookingStatus.COMPLETED
@@ -149,7 +169,8 @@ public class BookingResponseMapper {
             completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
         }
         BookingDisplayGuidance displayGuidance = deriveDisplayGuidance(
-                booking, isMenteeUser, isMentorUser, now, startTime, endTime, completionOutcome, canSubmitFeedback
+                booking, isMenteeUser, isMentorUser, now, startTime, endTime,
+                completionOutcome, canSubmitFeedback, canJoin
         );
 
         return BookingResponse.builder()
@@ -178,8 +199,8 @@ public class BookingResponseMapper {
                 .bookingStatus(bookingLifecycleStatus)
                 .paymentStatus(bookingPaymentStatus)
                 .settlementStatus(paymentOrder == null ? null : paymentOrder.getSettlementStatus())
-                .releasedAt(paymentOrder == null ? null : paymentOrder.getReleasedAt())
-                .refundedAt(paymentOrder == null ? null : paymentOrder.getRefundedAt())
+                .releasedAt(BookingTime.toOffsetDateTime(paymentOrder == null ? null : paymentOrder.getReleasedAt()))
+                .refundedAt(BookingTime.toOffsetDateTime(paymentOrder == null ? null : paymentOrder.getRefundedAt()))
                 .refundedScoin(paymentOrder == null ? null : paymentOrder.getRefundedScoin())
                 .refundReason(paymentOrder == null ? null : paymentOrder.getRefundReason())
                 .learningGoalTitle(booking.getLearningGoalTitle())
@@ -194,41 +215,52 @@ public class BookingResponseMapper {
                 .calendarSyncErrorMessage(session == null ? null : session.getCalendarSyncErrorMessage())
                 .googleMeetAutoGenerated(session == null ? null : session.isGoogleMeetAutoGenerated())
                 .googleCalendarManaged(session == null ? null : session.isGoogleCalendarManaged())
+                .calendarAvailabilityUnknown(booking.isCalendarAvailabilityUnknown())
                 .location(booking.getLocation())
-                .selectedStartTime(startTime)
-                .selectedEndTime(endTime)
-                .reviewDeadlineAt(endTime == null ? null : endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))
-                .actualStartTime(actualStart)
-                .actualEndTime(actualEnd)
-                .acceptedAt(booking.getAcceptedAt())
-                .pendingExpireAt(booking.getPendingExpireAt())
-                .rejectedAt(booking.getRejectedAt())
-                .cancelledAt(booking.getCancelledAt())
-                .completedAt(booking.getCompletedAt())
-                .finalizedAt(booking.getFinalizedAt())
-                .autoClosedAt(booking.getAutoClosedAt())
+                .selectedStartTime(BookingTime.toOffsetDateTime(startTime))
+                .selectedEndTime(BookingTime.toOffsetDateTime(endTime))
+                .reviewDeadlineAt(BookingTime.toOffsetDateTime(endTime == null ? null : endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))
+                .actualStartTime(BookingTime.toOffsetDateTime(actualStart))
+                .actualEndTime(BookingTime.toOffsetDateTime(actualEnd))
+                .acceptedAt(BookingTime.toOffsetDateTime(booking.getAcceptedAt()))
+                .pendingExpireAt(BookingTime.toOffsetDateTime(booking.getPendingExpireAt()))
+                .rejectedAt(BookingTime.toOffsetDateTime(booking.getRejectedAt()))
+                .cancelledAt(BookingTime.toOffsetDateTime(booking.getCancelledAt()))
+                .completedAt(BookingTime.toOffsetDateTime(booking.getCompletedAt()))
+                .finalizedAt(BookingTime.toOffsetDateTime(booking.getFinalizedAt()))
+                .autoClosedAt(BookingTime.toOffsetDateTime(booking.getAutoClosedAt()))
                 .completionOutcome(completionOutcome)
-                .issueSubmittedAt(booking.getIssueSubmittedAt())
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt()))
                 .issueType(booking.getIssueType())
                 .issueDescription(booking.getIssueDescription())
-                .issueRespondedAt(booking.getIssueRespondedAt())
+                .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt()))
                 .issueRespondedByUserId(booking.getIssueRespondedByUserId())
                 .issueResponseNote(booking.getIssueResponseNote())
-                .issueResolvedAt(booking.getIssueResolvedAt())
+                .issueResolvedAt(BookingTime.toOffsetDateTime(booking.getIssueResolvedAt()))
                 .issueResolvedByUserId(booking.getIssueResolvedByUserId())
                 .issueResolutionNote(booking.getIssueResolutionNote())
                 .mentorNote(booking.getMentorNote())
                 .menteeNote(booking.getMenteeNote())
-                .createdAt(booking.getCreatedAt())
-                .updatedAt(booking.getUpdatedAt())
+                .createdAt(BookingTime.toOffsetDateTime(booking.getCreatedAt()))
+                .updatedAt(BookingTime.toOffsetDateTime(booking.getUpdatedAt()))
                 .conversationId(conversationId)
                 .canCancel(canCancel)
                 .canComplete(canComplete)
+                .canPay(canPay)
+                .canAccept(canAccept)
+                .canReject(canReject)
+                .canCompleteByMentor(canCompleteByMentor)
+                .canConfirmByMentee(canConfirmByMentee)
+                .canJoin(canJoin)
+                .canReportIssue(canReportIssue)
+                .canRespondIssue(canRespondIssue)
+                .joinAvailableAt(BookingTime.toOffsetDateTime(startTime == null ? null : startTime.minusMinutes(BookingActionPolicy.JOIN_EARLY_MINUTES)))
+                .joinClosesAt(BookingTime.toOffsetDateTime(endTime == null ? null : endTime.plusMinutes(BookingActionPolicy.JOIN_GRACE_MINUTES)))
                 .canSubmitFeedback(canSubmitFeedback)
                 .cancellationRefundPolicy(BookingCancellationRefundPolicy.current())
                 .displayState(displayGuidance.state())
                 .nextAction(displayGuidance.action())
-                .actionDeadlineAt(displayGuidance.deadlineAt())
+                .actionDeadlineAt(BookingTime.toOffsetDateTime(displayGuidance.deadlineAt()))
                 .build();
     }
 
@@ -240,7 +272,8 @@ public class BookingResponseMapper {
             LocalDateTime startTime,
             LocalDateTime endTime,
             BookingCompletionOutcome outcome,
-            boolean canSubmitFeedback
+            boolean canSubmitFeedback,
+            boolean canJoin
     ) {
         if (booking.getStatus() == BookingStatus.UNDER_REVIEW || outcome == BookingCompletionOutcome.UNDER_REVIEW) {
             return new BookingDisplayGuidance(BookingDisplayState.UNDER_REVIEW, BookingNextAction.VIEW_ISSUE, null);
@@ -250,14 +283,36 @@ public class BookingResponseMapper {
             return new BookingDisplayGuidance(BookingDisplayState.CANCELED_OR_EXPIRED, BookingNextAction.NONE, null);
         }
         if (booking.getStatus() == BookingStatus.PENDING) {
-            return isMentor
+            boolean decisionWindowOpen = booking.getPendingExpireAt() == null
+                    || now.isBefore(booking.getPendingExpireAt());
+            return isMentor && decisionWindowOpen
                     ? new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED, BookingNextAction.ACCEPT_OR_REJECT, booking.getPendingExpireAt())
                     : new BookingDisplayGuidance(BookingDisplayState.PENDING_MENTOR_RESPONSE, BookingNextAction.NONE, booking.getPendingExpireAt());
         }
         if (booking.getStatus() == BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
-            return isMentee
-                    ? new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.PAY_NOW, resolvePaymentDeadline(booking))
-                    : new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.NONE, resolvePaymentDeadline(booking));
+            LocalDateTime paymentDeadline = resolvePaymentDeadline(booking);
+            boolean paymentWindowOpen = paymentDeadline == null || now.isBefore(paymentDeadline);
+            return isMentee && paymentWindowOpen
+                    ? new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.PAY_NOW, paymentDeadline)
+                    : new BookingDisplayGuidance(BookingDisplayState.PAYMENT_REQUIRED, BookingNextAction.NONE, paymentDeadline);
+        }
+        if (endTime != null && !now.isBefore(endTime)
+                && (booking.getStatus() == BookingStatus.PAID
+                || booking.getStatus() == BookingStatus.AWAITING_MENTOR_COMPLETION
+                || booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION)) {
+            if (isMentee && now.isBefore(endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+                return new BookingDisplayGuidance(BookingDisplayState.WAITING_CONFIRMATION,
+                        BookingNextAction.CONFIRM_SESSION,
+                        endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
+            }
+            if (isMentor && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+                return new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED,
+                        BookingNextAction.COMPLETE_SESSION,
+                        endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
+            }
+            return new BookingDisplayGuidance(BookingDisplayState.WAITING_CONFIRMATION,
+                    BookingNextAction.NONE,
+                    endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
         }
         if (booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
             return new BookingDisplayGuidance(BookingDisplayState.WAITING_CONFIRMATION,
@@ -278,9 +333,11 @@ public class BookingResponseMapper {
                     ? new BookingDisplayGuidance(BookingDisplayState.FEEDBACK_REQUIRED, BookingNextAction.LEAVE_FEEDBACK, null)
                     : new BookingDisplayGuidance(BookingDisplayState.COMPLETED, BookingNextAction.NONE, null);
         }
-        if (endTime != null && !now.isBefore(endTime)) {
-            return new BookingDisplayGuidance(BookingDisplayState.MENTOR_ACTION_REQUIRED,
-                    isMentor ? BookingNextAction.COMPLETE_SESSION : BookingNextAction.NONE, null);
+        if (canJoin) {
+            BookingDisplayState state = startTime != null && now.isBefore(startTime)
+                    ? BookingDisplayState.UPCOMING : BookingDisplayState.IN_SESSION;
+            return new BookingDisplayGuidance(state, BookingNextAction.JOIN_SESSION,
+                    endTime == null ? null : endTime.plusMinutes(BookingActionPolicy.JOIN_GRACE_MINUTES));
         }
         if (startTime != null && !now.isBefore(startTime) && (endTime == null || now.isBefore(endTime))) {
             return new BookingDisplayGuidance(BookingDisplayState.IN_SESSION, BookingNextAction.NONE, null);
@@ -328,22 +385,13 @@ public class BookingResponseMapper {
                 : (booking.getSlot() != null ? booking.getSlot().getEndTime() : null);
     }
 
-    public static boolean isConfirmedBookingStatus(BookingStatus status) {
-        return hasSessionBookingStatus(status);
-    }
-
     /** Booking đã thanh toán và vẫn còn trong phiên học, nên có thể thao tác trước giờ bắt đầu. */
     public static boolean isScheduledBookingStatus(BookingStatus status) {
-        return status == BookingStatus.PAID
-                || status == BookingStatus.AWAITING_MENTOR_COMPLETION
-                || status == BookingStatus.AWAITING_MENTEE_CONFIRMATION;
+        return BookingActionPolicy.isScheduled(status);
     }
 
     /** Booking đã từng có phiên học; dùng khi chỉ cần đọc dữ liệu phiên, không cấp quyền thao tác. */
     public static boolean hasSessionBookingStatus(BookingStatus status) {
-        return isScheduledBookingStatus(status)
-                || status == BookingStatus.COMPLETED
-                || status == BookingStatus.AUTO_CLOSED
-                || status == BookingStatus.UNDER_REVIEW;
+        return BookingActionPolicy.hasSession(status);
     }
 }

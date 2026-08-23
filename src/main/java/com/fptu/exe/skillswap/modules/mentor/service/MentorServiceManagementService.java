@@ -24,6 +24,7 @@ import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import lombok.RequiredArgsConstructor;
@@ -111,7 +112,7 @@ public class MentorServiceManagementService {
                 .deliveryMode(deliveryMode)
                 .build();
 
-        touchMentorActivity(mentorProfile, LocalDateTime.now());
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
         return toResponse(mentorServiceRepository.save(service));
     }
 
@@ -133,7 +134,7 @@ public class MentorServiceManagementService {
         service.setFree(isFree);
         service.setPriceScoin(normalizePriceScoin(isFree, request.priceScoin(), service.getDurationMinutes()));
         service.setMaintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()));
-        touchMentorActivity(mentorProfile, LocalDateTime.now());
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
 
         return toResponse(mentorServiceRepository.save(service));
     }
@@ -156,7 +157,7 @@ public class MentorServiceManagementService {
             googleCalendarConnectionPort.requireActiveConnectionForServiceCreation(mentorUserId);
         }
         if (!Boolean.TRUE.equals(request.isActive())) {
-            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime now = DateTimeUtil.now();
             List<Booking> affectedPending = bookingRepository.findByServiceIdAndStatus(serviceId, BookingStatus.PENDING).stream()
                     .filter(booking -> booking.getSelectedStartTime() != null && booking.getSelectedStartTime().isAfter(now))
                     .toList();
@@ -178,7 +179,7 @@ public class MentorServiceManagementService {
             }
         }
         service.setActive(request.isActive());
-        touchMentorActivity(mentorProfile, LocalDateTime.now());
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
         MentorServiceManagementResponse response = toResponse(mentorServiceRepository.save(service));
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
         return response;
@@ -299,7 +300,7 @@ public class MentorServiceManagementService {
     }
 
     private void rejectPendingBookings(List<Booking> bookings, String reason) {
-        LocalDateTime rejectedAt = LocalDateTime.now();
+        LocalDateTime rejectedAt = DateTimeUtil.now();
         for (Booking booking : bookings) {
             if (booking.getStatus() != BookingStatus.PENDING) {
                 continue;

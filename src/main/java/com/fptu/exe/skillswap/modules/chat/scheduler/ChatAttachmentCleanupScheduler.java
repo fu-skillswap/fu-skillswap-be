@@ -33,7 +33,7 @@ public class ChatAttachmentCleanupScheduler {
     @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-cleanup-cron:0 50 2 * * *}")
     @Transactional
     public void markExpiredAttachments() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
         List<ChatAttachment> candidates = attachmentRepository.findExpiredForTransition(
                 ChatAttachmentState.ACTIVE, now, PageRequest.of(0, Math.max(50, properties.getCleanupBatchSize())));
         candidates.forEach(attachment -> attachment.setState(ChatAttachmentState.EXPIRED));
@@ -51,7 +51,7 @@ public class ChatAttachmentCleanupScheduler {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
         LocalDateTime cutoff = now.minusDays(properties.getChatAttachmentDeleteGraceDays());
         List<ChatAttachment> candidates = attachmentRepository.findReadyForPhysicalDeletion(
                 EnumSet.of(ChatAttachmentState.EXPIRED, ChatAttachmentState.REVOKED, ChatAttachmentState.TAKEN_DOWN),

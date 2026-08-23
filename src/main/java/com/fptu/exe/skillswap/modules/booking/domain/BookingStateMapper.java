@@ -4,19 +4,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 
-import java.util.EnumSet;
-import java.util.Set;
-
 public final class BookingStateMapper {
-
-    private static final Set<BookingStatus> FREE_BOOKING_CONFIRMED_STATUSES = EnumSet.of(
-            BookingStatus.PAID,
-            BookingStatus.AWAITING_MENTOR_COMPLETION,
-            BookingStatus.AWAITING_MENTEE_CONFIRMATION,
-            BookingStatus.COMPLETED,
-            BookingStatus.AUTO_CLOSED,
-            BookingStatus.UNDER_REVIEW
-    );
 
     private BookingStateMapper() {
     }

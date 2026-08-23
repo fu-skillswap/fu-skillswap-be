@@ -214,6 +214,8 @@ class BookingServiceTest {
 
         org.mockito.Mockito.lenient().when(mentorProfileRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(mentorProfile));
+        org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
+                .thenReturn(Optional.of(slot));
         org.mockito.Mockito.lenient().when(bookingRepository.findSlotIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(slot.getId()));
         org.mockito.Mockito.lenient().when(bookingRepository.findMenteeIdByBookingId(org.mockito.ArgumentMatchers.any(UUID.class)))
@@ -787,7 +789,7 @@ class BookingServiceTest {
         request.setRole(BookingViewRole.MENTOR);
         request.setStatus(BookingStatus.PAID);
 
-        when(bookingRepository.findMyMentorBookingsByStatusAndDateRange(eq(mentorId), eq(BookingStatus.PAID), any(), any(), any(Pageable.class)))
+        when(bookingRepository.findByMentorProfileUserIdAndStatus(eq(mentorId), eq(BookingStatus.PAID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));
 
         PageResponse<BookingResponse> response = bookingService.getMyBookings(mentorId, request);
@@ -804,9 +806,9 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
+                eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
+                eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
-                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
                 any(LocalDateTime.class),
                 any(LocalDateTime.class),
@@ -819,9 +821,9 @@ class BookingServiceTest {
         assertEquals(BookingStatus.PAID, response.getContent().getFirst().status());
         verify(bookingRepository).findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
+                eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
+                eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
-                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
                 any(LocalDateTime.class),
                 any(LocalDateTime.class),
@@ -837,9 +839,9 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
                 eq(mentorId),
-                eq(List.of(BookingStatus.PAID)),
-                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.PENDING, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.UNDER_REVIEW)),
+                eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT)),
+                eq(List.of(BookingStatus.PAID, BookingStatus.AWAITING_MENTEE_CONFIRMATION)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
                 any(LocalDateTime.class),
                 any(LocalDateTime.class),
@@ -852,9 +854,9 @@ class BookingServiceTest {
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.getContent().getFirst().status());
         verify(bookingRepository).findMyMentorBookingsOrderedByDashboardPriority(
                 eq(mentorId),
-                eq(List.of(BookingStatus.PAID)),
-                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                eq(BookingStatus.PENDING),
+                eq(List.of(BookingStatus.PENDING, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.UNDER_REVIEW)),
+                eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT)),
+                eq(List.of(BookingStatus.PAID, BookingStatus.AWAITING_MENTEE_CONFIRMATION)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
                 any(LocalDateTime.class),
                 any(LocalDateTime.class),
@@ -873,9 +875,9 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
+                eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
+                eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
-                eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
                 any(LocalDateTime.class),
                 any(LocalDateTime.class),
@@ -1089,8 +1091,11 @@ class BookingServiceTest {
         assertEquals("Mentor completion note", booking.getMentorNote());
         assertEquals("Mentee completion note", booking.getMenteeNote());
 
-        // 3. Mentor tries to write note again -> fails
-        assertThrows(BaseException.class, () -> bookingService.completeBooking(mentorId, booking.getId(), new CompleteBookingRequest("Try again")));
+        // 3. Retry after a committed response is idempotent and must not overwrite the original note.
+        BookingResponse replay = bookingService.completeBooking(
+                mentorId, booking.getId(), new CompleteBookingRequest("Try again"));
+        assertNotNull(replay);
+        assertEquals("Mentor completion note", booking.getMentorNote());
 
         // 4. Non-participant tries to complete -> fails
         assertThrows(BaseException.class, () -> bookingService.completeBooking(UUID.randomUUID(), booking.getId(), new CompleteBookingRequest("Impoverished")));
@@ -1140,7 +1145,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void expireAwaitingPaymentBookings_afterSixHours_shouldExpireBookingAndPaymentOrder() {
+    void expireAwaitingPaymentBookings_afterOneHour_shouldExpireBookingAndPaymentOrder() {
         Booking staleBooking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         staleBooking.setAcceptedAt(DateTimeUtil.now().minusHours(7));
         staleBooking.setSelectedStartTime(DateTimeUtil.now().plusHours(2));
@@ -1159,7 +1164,7 @@ class BookingServiceTest {
 
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
-        assertTrue(staleBooking.getRejectReason().contains("6 giờ hoặc ít nhất 1 giờ trước giờ bắt đầu"));
+        assertTrue(staleBooking.getRejectReason().contains("60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu"));
         verify(paymentOrderService).expireAwaitingPayment(staleBooking);
         verify(eventPublisher, org.mockito.Mockito.times(2))
                 .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));

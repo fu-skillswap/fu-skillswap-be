@@ -22,14 +22,14 @@ class BookingDeadlinePolicyTest {
     }
 
     @Test
-    void paymentDeadlineKeepsTheOneHourPreparationBuffer() {
+    void paymentDeadlineUsesTheEarlierOneHourWindowOrPreparationBuffer() {
         LocalDateTime acceptedAt = LocalDateTime.of(2026, 8, 1, 8, 0);
 
         assertEquals(
-                LocalDateTime.of(2026, 8, 1, 14, 0),
+                LocalDateTime.of(2026, 8, 1, 9, 0),
                 BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAt, LocalDateTime.of(2026, 8, 2, 8, 0)));
         assertEquals(
-                LocalDateTime.of(2026, 8, 1, 11, 0),
-                BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAt, LocalDateTime.of(2026, 8, 1, 12, 0)));
+                LocalDateTime.of(2026, 8, 1, 8, 30),
+                BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAt, LocalDateTime.of(2026, 8, 1, 9, 30)));
     }
 }

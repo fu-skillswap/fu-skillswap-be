@@ -26,6 +26,6 @@ public class MentorServiceResource {
     @Version @Builder.Default private Integer version = 0;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
     @Column(name = "updated_at", nullable = false) private LocalDateTime updatedAt;
-    @PrePersist void create(){ createdAt=LocalDateTime.now(); updatedAt=createdAt; }
-    @PreUpdate void update(){ updatedAt=LocalDateTime.now(); }
+    @PrePersist void create(){ createdAt=com.fptu.exe.skillswap.shared.util.DateTimeUtil.now(); updatedAt=createdAt; }
+    @PreUpdate void update(){ updatedAt=com.fptu.exe.skillswap.shared.util.DateTimeUtil.now(); }
 }

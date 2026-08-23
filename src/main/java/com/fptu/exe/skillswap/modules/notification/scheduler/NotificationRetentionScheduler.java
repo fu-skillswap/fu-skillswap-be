@@ -40,7 +40,7 @@ public class NotificationRetentionScheduler {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
         LocalDateTime readCutoff = now.minusDays(properties.getNotificationReadArchiveDays());
         int batchSize = Math.max(50, Math.min(500, properties.getCleanupBatchSize()));
         int totalArchived = 0;
@@ -66,7 +66,7 @@ public class NotificationRetentionScheduler {
         if (retentionDays <= 0) {
             return;
         }
-        LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
+        LocalDateTime cutoff = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now().minusDays(retentionDays);
         int totalDeleted = 0;
         int batchSize = Math.max(50, Math.min(500, properties.getCleanupBatchSize()));
         for (int batch = 0; batch < 100; batch++) {

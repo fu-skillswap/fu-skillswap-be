@@ -4,6 +4,7 @@ public enum BookingNextAction {
     NONE,
     PAY_NOW,
     ACCEPT_OR_REJECT,
+    JOIN_SESSION,
     COMPLETE_SESSION,
     CONFIRM_SESSION,
     LEAVE_FEEDBACK,

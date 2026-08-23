@@ -51,7 +51,9 @@ public class MyBookingController {
             description = """
                     Trả về danh sách booking theo góc nhìn của user hiện tại.
                     FE dùng role=MENTEE để hiển thị các request do tôi tạo, hoặc role=MENTOR để hiển thị các request được gửi tới tôi với tư cách mentor.
-                    Đây là API danh sách chính cho lịch sử booking, màn pending actions và màn theo dõi trạng thái booking.
+                    Không truyền status: trả dashboard 7 ngày trước đến 90 ngày tới, ưu tiên việc cần làm và lịch gần nhất.
+                    Có status: trả toàn bộ lịch sử của trạng thái đó theo phân trang, không giới hạn ngày.
+                    API này chỉ đọc database và không gọi PayOS.
                     """
     )
     @ApiResponses({

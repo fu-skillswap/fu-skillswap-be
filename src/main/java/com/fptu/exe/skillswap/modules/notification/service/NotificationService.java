@@ -158,7 +158,7 @@ public class NotificationService {
                         "Thông báo không tồn tại hoặc không thuộc quyền truy cập"));
 
         if (notification.getReadAt() == null) {
-            notification.setReadAt(LocalDateTime.now());
+            notification.setReadAt(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now());
             notificationRepository.save(notification);
             long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(currentUserId);
 
@@ -169,7 +169,7 @@ public class NotificationService {
 
     @Transactional
     public void markAllAsRead(UUID currentUserId) {
-        notificationRepository.markAllAsRead(currentUserId, LocalDateTime.now());
+        notificationRepository.markAllAsRead(currentUserId, com.fptu.exe.skillswap.shared.util.DateTimeUtil.now());
         long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(currentUserId);
 
         enqueueNotificationBadgeOutbox(currentUserId, currentUserId, unreadCount, "READ_ALL");

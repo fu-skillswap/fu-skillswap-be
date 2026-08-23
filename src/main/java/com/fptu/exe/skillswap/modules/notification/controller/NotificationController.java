@@ -114,7 +114,7 @@ public class NotificationController {
             @PathVariable UUID id) {
         ensureAuthenticated(principal);
         notificationService.markAsRead(principal.getPublicId(), id);
-        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(java.time.LocalDateTime.now()).status(200).code("SUCCESS").message("Đánh dấu đã đọc thành công").build());
+        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now()).status(200).code("SUCCESS").message("Đánh dấu đã đọc thành công").build());
     }
 
     @Operation(
@@ -126,7 +126,7 @@ public class NotificationController {
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {
         ensureAuthenticated(principal);
         notificationService.markAllAsRead(principal.getPublicId());
-        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(java.time.LocalDateTime.now()).status(200).code("SUCCESS").message("Đánh dấu tất cả đã đọc thành công").build());
+        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now()).status(200).code("SUCCESS").message("Đánh dấu tất cả đã đọc thành công").build());
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

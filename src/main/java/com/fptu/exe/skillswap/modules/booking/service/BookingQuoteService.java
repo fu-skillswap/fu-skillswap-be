@@ -87,8 +87,9 @@ public class BookingQuoteService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ không còn đủ thời gian để mentor phản hồi.");
         }
         return new BookingQuoteResponse(
-                slot.getId(), service.getId(), service.getTitle(), service.getDurationMinutes(), start, end,
-                pendingExpireAt,
+                slot.getId(), service.getId(), service.getTitle(), service.getDurationMinutes(),
+                BookingTime.toOffsetDateTime(start), BookingTime.toOffsetDateTime(end),
+                BookingTime.toOffsetDateTime(pendingExpireAt),
                 (int) BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES,
                 (int) BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES,
                 pricingPreviewService.estimateForService(menteeUserId, service),
