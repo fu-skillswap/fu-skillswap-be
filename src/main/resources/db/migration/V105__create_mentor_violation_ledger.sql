@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 CREATE TABLE mentor_violation_events (
     id UUID PRIMARY KEY,
     mentor_user_id UUID NOT NULL REFERENCES mentor_profiles(user_id) ON DELETE CASCADE,

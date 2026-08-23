@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- ACCEPTED predates the payment-aware booking lifecycle. New bookings use
 -- ACCEPTED_AWAITING_PAYMENT until payment succeeds, or PAID when they are
 -- confirmed without payment. Preserve legacy confirmed bookings as PAID.

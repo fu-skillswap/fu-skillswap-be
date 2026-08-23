@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 ALTER TABLE mentor_violation_events
     ADD COLUMN source_module VARCHAR(30),
     ADD COLUMN source_reference_id UUID,

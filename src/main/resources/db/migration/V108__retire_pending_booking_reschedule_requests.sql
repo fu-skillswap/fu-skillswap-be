@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Reschedule is not released in production. Preserve request history for audit, but make every
 -- previously actionable request terminal so no dormant PENDING workflow survives deployment.
 UPDATE booking_reschedule_requests
