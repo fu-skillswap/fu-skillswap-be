@@ -5,7 +5,6 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleActorRole;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
@@ -196,18 +195,21 @@ public class BookingRescheduleService {
                                                             String reason,
                                                             boolean adminOverride) {
         BookingRescheduleStatus previousStatus = rescheduleRequest.getStatus();
-        Booking booking = rescheduleRequest.getBooking();
+        Booking booking = bookingRepository.findByIdForSessionUpdate(rescheduleRequest.getBooking().getId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         validateRescheduleableBooking(booking);
         ensureWithinRescheduleResponseWindow(booking);
 
         UUID proposedSlotId = rescheduleRequest.getProposedSlot().getId();
         UUID currentSlotId = rescheduleRequest.getCurrentSlot().getId();
-        MentorAvailabilitySlot proposedSlot = mentorAvailabilitySlotRepository.findByIdForUpdate(proposedSlotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot mới tại thời điểm chấp nhận"));
-        MentorAvailabilitySlot currentSlot = currentSlotId.equals(proposedSlotId)
-                ? proposedSlot
-                : mentorAvailabilitySlotRepository.findByIdForUpdate(currentSlotId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot cũ tại thời điểm chấp nhận"));
+        Map<UUID, MentorAvailabilitySlot> lockedSlots = new java.util.LinkedHashMap<>();
+        java.util.stream.Stream.of(currentSlotId, proposedSlotId)
+                .distinct()
+                .sorted()
+                .forEach(slotId -> lockedSlots.put(slotId, mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
+                        .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot tại thời điểm chấp nhận"))));
+        MentorAvailabilitySlot proposedSlot = lockedSlots.get(proposedSlotId);
+        MentorAvailabilitySlot currentSlot = lockedSlots.get(currentSlotId);
 
         validateProposedSlotForBooking(booking, proposedSlot);
         bookingSlotValidator.validateSelectedRange(
@@ -238,21 +240,14 @@ public class BookingRescheduleService {
         booking.setSelectedEndTime(rescheduleRequest.getProposedSelectedEndTime());
         booking.setRequestedStartTime(rescheduleRequest.getProposedSelectedStartTime());
         booking.setRequestedEndTime(rescheduleRequest.getProposedSelectedEndTime());
-        if (booking.getStatus() == BookingStatus.PAID) {
-            booking.setStatus(BookingStatus.PAID);
-        } else {
-            booking.setStatus(BookingStatus.ACCEPTED);
-        }
         booking.setUpdatedAt(DateTimeUtil.now());
         booking.setRescheduleCount((booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) + 1);
         bookingRepository.save(booking);
-        if (booking.getStatus() == BookingStatus.PAID || booking.getStatus() == BookingStatus.ACCEPTED) {
-            sessionService.updateScheduleForBooking(
-                    booking.getId(),
-                    rescheduleRequest.getProposedSelectedStartTime(),
-                    rescheduleRequest.getProposedSelectedEndTime()
-            );
-        }
+        sessionService.updateScheduleForBooking(
+                booking.getId(),
+                rescheduleRequest.getProposedSelectedStartTime(),
+                rescheduleRequest.getProposedSelectedEndTime()
+        );
 
         LocalDateTime now = DateTimeUtil.now();
         for (Booking pendingBooking : overlappingPendingBookings) {
@@ -353,8 +348,8 @@ public class BookingRescheduleService {
     }
 
     private void validateRescheduleableBooking(Booking booking) {
-        if (!BookingStateMapper.isPaidOrReservedForSchedule(booking.getStatus())) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking đã xác nhận mới được reschedule");
+        if (booking.getStatus() != BookingStatus.PAID) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking đã thanh toán và chưa bắt đầu mới được reschedule");
         }
         if (booking.getService() == null || booking.getService().getId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking hiện không gắn với service hợp lệ để reschedule");
@@ -418,7 +413,7 @@ public class BookingRescheduleService {
         }
         boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatusIn(
                 slot.getId(),
-                List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID),
+                List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID),
                 slot.getStartTime(),
                 slot.getEndTime()
         );

@@ -21,21 +21,23 @@ public record ServiceSlotCandidateItemResponse(
         boolean isSelectable,
         @Schema(description = "Lý do tổng quát nếu segment không thể chọn")
         String reasonIfBlocked,
-        @Schema(description = "true nếu segment đang bị block bởi ít nhất một booking ACCEPTED đang overlap")
+        @Schema(description = "true nếu segment đang bị block bởi ít nhất một booking đã được chốt đang overlap")
         boolean blockedByAcceptedBooking,
-        @Schema(description = "bookingId ACCEPTED đầu tiên đang block segment này, nếu có", nullable = true)
+        @Schema(description = "bookingId đã được chốt đầu tiên đang block segment này, nếu có", nullable = true)
         UUID blockingBookingId,
-        @Schema(description = "serviceId của booking ACCEPTED đang block segment này, nếu có", nullable = true)
+        @Schema(description = "serviceId của booking đã được chốt đang block segment này, nếu có", nullable = true)
         UUID blockingServiceId,
-        @Schema(description = "Tiêu đề service của booking ACCEPTED đang block segment này, nếu có", nullable = true)
+        @Schema(description = "Tiêu đề service của booking đã được chốt đang block segment này, nếu có", nullable = true)
         String blockingServiceTitle,
-        @Schema(description = "true nếu booking ACCEPTED đang block thuộc cùng service mà FE đang query")
+        @Schema(description = "true nếu booking đã được chốt đang block thuộc cùng service mà FE đang query")
         boolean blockedBySameService,
-        @Schema(description = "true nếu booking ACCEPTED đang block thuộc service khác service mà FE đang query")
+        @Schema(description = "true nếu booking đã được chốt đang block thuộc service khác service mà FE đang query")
         boolean blockedByDifferentService,
         @Schema(description = "Note rõ nghĩa cho FE: segment đã bị đặt bởi cùng service hay service khác", nullable = true)
         String bookingConflictNote,
         @Schema(description = "true nếu segment đang bị trùng lịch bận trên Google Calendar của mentor", nullable = true)
-        Boolean blockedByGoogleCalendar
+        Boolean blockedByGoogleCalendar,
+        @Schema(description = "true nếu không thể kiểm tra Google Calendar tại thời điểm đọc candidate; FE có thể cho chọn nhưng cần hiểu mentor accept sẽ kiểm tra lại", nullable = true)
+        Boolean calendarAvailabilityUnknown
 ) {
 }

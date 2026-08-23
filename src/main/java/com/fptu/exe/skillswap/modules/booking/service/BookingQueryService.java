@@ -12,7 +12,6 @@ import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -34,16 +33,11 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isConfirmedBookingStatus;
-
 @Service
 @RequiredArgsConstructor
 public class BookingQueryService {
 
-    private static final List<BookingStatus> BOOKING_LIST_PAID_PRIORITY_STATUSES = List.of(
-            BookingStatus.PAID,
-            BookingStatus.ACCEPTED
-    );
+    private static final List<BookingStatus> BOOKING_LIST_PAID_PRIORITY_STATUSES = List.of(BookingStatus.PAID);
 
     private static final List<BookingStatus> BOOKING_LIST_CANCELLED_PRIORITY_STATUSES = List.of(
             BookingStatus.CANCELLED_BY_MENTEE,
@@ -54,10 +48,9 @@ public class BookingQueryService {
     private final SessionService sessionService;
     private final ConversationService conversationService;
     private final PaymentOrderRepository paymentOrderRepository;
-    private final PaymentOrderService paymentOrderService;
     private final BookingResponseMapper bookingResponseMapper;
 
-    @Transactional
+    @Transactional(readOnly = true)
     public PageResponse<BookingResponse> getMyBookings(UUID currentUserId, BookingListRequest request) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -99,8 +92,6 @@ public class BookingQueryService {
                     : bookingRepository.findMyMentorBookingsByStatusAndDateRange(currentUserId, safeRequest.getStatus(), startTimeStart, startTimeEnd, pageable);
         };
 
-        recoverAwaitingPaymentBookings(page.getContent());
-
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         Map<UUID, UUID> bookingToConvMap = conversationService != null
                 ? conversationService.findConversationIdsForBookings(page.getContent())
@@ -131,7 +122,7 @@ public class BookingQueryService {
                 .build();
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public BookingResponse getBookingDetail(UUID currentUserId, UUID bookingId) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -143,9 +134,6 @@ public class BookingQueryService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
-        recoverAwaitingPaymentBooking(booking);
-        ensureSessionExistsForConfirmedBooking(booking);
-
         return bookingResponseMapper.toBookingResponse(booking);
     }
 
@@ -184,7 +172,6 @@ public class BookingQueryService {
         }
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        ensureSessionExistsForConfirmedBooking(booking);
         return bookingResponseMapper.toBookingResponse(booking);
     }
 
@@ -193,35 +180,6 @@ public class BookingQueryService {
         boolean isMentor = booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem booking này");
-        }
-    }
-
-    private void recoverAwaitingPaymentBookings(List<Booking> bookings) {
-        if (bookings == null || bookings.isEmpty()) {
-            return;
-        }
-        for (Booking booking : bookings) {
-            recoverAwaitingPaymentBooking(booking);
-        }
-    }
-
-    private void recoverAwaitingPaymentBooking(Booking booking) {
-        if (booking == null || booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT || paymentOrderService == null) {
-            return;
-        }
-        try {
-            paymentOrderService.synchronizeProviderStatusForBooking(booking.getId());
-        } catch (Exception ignored) {
-            // best effort synchronization
-        }
-    }
-
-    private void ensureSessionExistsForConfirmedBooking(Booking booking) {
-        if (booking == null || !isConfirmedBookingStatus(booking.getStatus()) || sessionService == null) {
-            return;
-        }
-        if (sessionService.findByBookingId(booking.getId()) == null) {
-            sessionService.createForAcceptedBooking(booking);
         }
     }
 

@@ -48,7 +48,7 @@ FE Browser                      Backend API                     PayOS Gateway
 ---
 
 ### 2.2 Xem Trước Checkout Booking (`POST /api/me/bookings/{bookingId}/checkout-preview`)
-Frontend gọi API này để hiển thị trước số tiền VND / S-Coin cần thanh toán khi người dùng nhập thử mã giảm giá (Coupon).
+Frontend gọi API này để hiển thị trước số tiền VND / S-Coin cần thanh toán khi người dùng nhập thử mã giảm giá (Coupon). Hiện tại nền tảng quy đổi `1 SCoin = 1 VND`; FE luôn ưu tiên các trường tiền backend trả về thay vì tự quy đổi.
 
 - **Endpoint**: `POST /api/me/bookings/{bookingId}/checkout-preview`
 - **Header**: `Authorization: Bearer <accessToken>`

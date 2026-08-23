@@ -36,7 +36,7 @@ Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
 | `GET /api/me/google-calendar/status` | Khi mở trang quản lý service để quyết định hiển thị CTA kết nối |
 | `GET /api/me/google-calendar/authorization-context?redirectUri=...&codeChallenge=...` | Sau khi mentor bấm “Kết nối Google Calendar” |
 | `POST /api/me/google-calendar/connect` | Tại trang callback sau khi Google trả `code` và `state` |
-| `POST /api/me/google-calendar/disconnect` | Khi mentor chủ động ngắt kết nối và không còn service active |
+| `POST /api/me/google-calendar/disconnect` | Khi mentor chủ động ngắt kết nối, không còn service active và không còn booking `PAID` trong tương lai |
 
 Tất cả endpoint trên yêu cầu Bearer token. Endpoint tạo context và connect chỉ chấp nhận mentor đã được Admin duyệt.
 
@@ -82,7 +82,7 @@ interface GoogleCalendarConnectRequest {
 |---|---|
 | `409 / CAL_4401` | Calendar chưa kết nối hoặc cần kết nối lại. Giữ dữ liệu form service ở state tạm và mở CTA kết nối Calendar. |
 | `409 / CAL_4402` | Hồ sơ mentor chưa được duyệt. Điều hướng về trang trạng thái verification. |
-| `409 / CAL_4403` | Không thể disconnect vì còn service active. Hiển thị danh sách service và yêu cầu tắt chúng trước. |
+| `409 / CAL_4403` | Không thể disconnect vì còn service active hoặc còn booking `PAID` trong tương lai. Giữ kết nối đến khi các lịch này kết thúc. |
 | `400 / AUTH_1006` | State, PKCE, callback hoặc authorization code không hợp lệ/hết hạn. Bắt đầu flow mới. |
 
 Không chỉ dựa vào trạng thái cũ trong `GET /api/auth/me`: backend luôn kiểm tra và khóa connection trong transaction khi tạo hoặc bật lại service để tránh race condition với disconnect.
@@ -282,11 +282,12 @@ interface ServiceSlotCandidateItemResponse {
   remainingPendingQuota: number;      // Quota còn lại = max(0, 3 - pendingCount)
   isSelectable: boolean;              // true: cho phép click chọn; false: disable/xám ô
   reasonIfBlocked: string | null;     // Mã lý do chặn
-  blockedByAcceptedBooking: boolean;  // true nếu đã có booking ACCEPTED
-  blockedBySameService: boolean;      // true nếu booking ACCEPTED cùng service
-  blockedByDifferentService: boolean; // true nếu booking ACCEPTED khác service
+  blockedByAcceptedBooking: boolean;  // true nếu đã có booking đã được chốt slot
+  blockedBySameService: boolean;      // true nếu booking chốt slot thuộc cùng service
+  blockedByDifferentService: boolean; // true nếu booking chốt slot thuộc service khác
   bookingConflictNote: string | null; // Tooltip giải thích chi tiết cho UI
-  blockedByGoogleCalendar?: boolean;  // true nếu trùng lịch bận trên Google Calendar của mentor
+  blockedByGoogleCalendar?: boolean;      // true nếu trùng lịch bận trên Google Calendar của mentor
+  calendarAvailabilityUnknown?: boolean;  // Google tạm không kiểm tra được; vẫn cho chọn, mentor accept sẽ kiểm tra lại
 }
 ```
 

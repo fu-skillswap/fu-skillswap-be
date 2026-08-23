@@ -34,8 +34,6 @@ public record MentorProfileResponse(
         Boolean isAvailable,
         @Schema(description = "Temporary booking suspension end time if the mentor is under booking penalty", nullable = true, example = "2026-06-27T10:00:00")
         LocalDateTime bookingSuspendedUntil,
-        @Schema(description = "Late cancellation penalty points tracked by the backend", example = "0.50")
-        BigDecimal lateCancellationPenaltyPoints,
         @Schema(description = "Timestamp when the mentor was verified by admin", nullable = true, example = "2026-06-20T14:30:00")
         LocalDateTime verifiedAt,
         @Schema(description = "Số phút tối thiểu trước giờ bắt đầu mentor cho phép mentee đặt lịch", example = "120")
@@ -80,7 +78,6 @@ public record MentorProfileResponse(
                 .requiredFieldsCompleted(false)
                 .userId(userId)
                 .isAvailable(true)
-                .lateCancellationPenaltyPoints(BigDecimal.ZERO)
                 .minimumBookingLeadTimeMinutes(120)
                 .maximumBookingHorizonDays(30)
                 .bookingTimezone("Asia/Ho_Chi_Minh")

@@ -62,7 +62,7 @@ public class PaymentOrderService {
             InternalTelemetryService internalTelemetryService,
             TransactionTemplate transactionTemplate
     ) {
-        PaymentResponseMapper responseMapper = new PaymentResponseMapper();
+        PaymentResponseMapper responseMapper = new PaymentResponseMapper(paymentProperties);
         PaymentOrderCodeGenerator codeGenerator = new PaymentOrderCodeGenerator();
         PaymentLifecycleService lifecycleService = new PaymentLifecycleService(
                 paymentOrderRepository,
@@ -84,7 +84,8 @@ public class PaymentOrderService {
                 responseMapper,
                 eventPublisher,
                 internalTelemetryService,
-                transactionTemplate
+                transactionTemplate,
+                paymentProperties
         );
         PaymentCheckoutService checkoutService = new PaymentCheckoutService(
                 bookingQueryPort,
@@ -107,7 +108,6 @@ public class PaymentOrderService {
                 paymentAttemptRepository,
                 responseMapper
         );
-        queryService.setPaymentWebhookService(webhookService);
 
         this.paymentCheckoutService = checkoutService;
         this.paymentWebhookService = webhookService;
@@ -142,6 +142,24 @@ public class PaymentOrderService {
     }
 
     public PaymentCheckoutResponse getByTarget(UUID currentUserId, PaymentTargetType targetType, UUID targetId) {
+        return paymentOrderQueryService.getByTarget(currentUserId, targetType, targetId);
+    }
+
+    /**
+     * Manual recovery is intentionally an explicit command. Read endpoints never contact PayOS
+     * or write state; webhook and scheduled reconciliation remain the normal update sources.
+     */
+    public PaymentCheckoutResponse synchronizeProviderStatus(UUID currentUserId,
+                                                              PaymentTargetType targetType,
+                                                              UUID targetId) {
+        paymentOrderQueryService.assertAccess(currentUserId, targetType, targetId);
+        if (targetType != PaymentTargetType.BOOKING) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(
+                    com.fptu.exe.skillswap.shared.exception.ErrorCode.BAD_REQUEST,
+                    "Manual payment sync hiện chỉ hỗ trợ booking"
+            );
+        }
+        paymentWebhookService.synchronizeProviderStatusForBooking(targetId);
         return paymentOrderQueryService.getByTarget(currentUserId, targetType, targetId);
     }
 

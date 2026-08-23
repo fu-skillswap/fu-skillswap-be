@@ -8,7 +8,11 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+        prefix = "application.features.booking-reschedule",
+        name = "enabled",
+        havingValue = "true"
+)
 @RequiredArgsConstructor
 public class BookingRescheduleScheduler {
 

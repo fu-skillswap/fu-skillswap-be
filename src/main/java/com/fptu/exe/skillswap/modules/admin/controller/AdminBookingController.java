@@ -2,9 +2,7 @@ package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequestResponse;
 import com.fptu.exe.skillswap.modules.admin.service.AdminBookingModerationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -74,6 +72,7 @@ public class AdminBookingController {
             description = "Admin đóng một booking đang UNDER_REVIEW sau khi xử lý dispute/manual support. Action chỉ finalize lại booking, không đổi service hay payment gốc."
     )
     @PostMapping("/{bookingId}/resolve-issue")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ApiResponse<BookingResponse> resolveIssue(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -82,38 +81,4 @@ public class AdminBookingController {
         return ApiResponse.success(adminBookingModerationService.resolveBookingIssue(principal.getPublicId(), bookingId, request));
     }
 
-    @GetMapping("/{bookingId}/reschedule-requests")
-    @Operation(
-            summary = "Admin xem yêu cầu đổi lịch của booking",
-            description = "Trả về toàn bộ reschedule request của một booking để admin kiểm tra lịch sử đổi lịch khi xử lý vận hành hoặc dispute."
-    )
-    public ApiResponse<java.util.List<BookingRescheduleRequestResponse>> getRescheduleRequests(@PathVariable UUID bookingId) {
-        return ApiResponse.success(adminBookingModerationService.getRescheduleRequests(bookingId));
-    }
-
-    @PostMapping("/reschedule-requests/{requestId}/force-approve")
-    @Operation(
-            summary = "Admin force approve yêu cầu đổi lịch",
-            description = "Admin phê duyệt thủ công một reschedule request đang pending khi cần can thiệp vận hành. Backend ghi nhận actor admin và áp dụng lịch mới nếu request còn hợp lệ."
-    )
-    public ApiResponse<BookingRescheduleRequestResponse> approveRescheduleRequest(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID requestId,
-            @Valid @RequestBody RespondBookingRescheduleRequest request
-    ) {
-        return ApiResponse.success(adminBookingModerationService.acceptRescheduleRequest(principal.getPublicId(), requestId, request));
-    }
-
-    @PostMapping("/reschedule-requests/{requestId}/force-reject")
-    @Operation(
-            summary = "Admin force reject yêu cầu đổi lịch",
-            description = "Admin từ chối thủ công một reschedule request đang pending khi cần xử lý vận hành hoặc dispute. Booking hiện tại được giữ nguyên."
-    )
-    public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID requestId,
-            @Valid @RequestBody RespondBookingRescheduleRequest request
-    ) {
-        return ApiResponse.success(adminBookingModerationService.rejectRescheduleRequest(principal.getPublicId(), requestId, request));
-    }
 }

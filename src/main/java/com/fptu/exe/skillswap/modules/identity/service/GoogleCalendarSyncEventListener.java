@@ -14,17 +14,19 @@ public class GoogleCalendarSyncEventListener {
 
     private final GoogleCalendarSyncService googleCalendarSyncService;
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    // Persist the sync job with the booking transaction. The worker performs the
+    // external Google call later, after commit.
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onCreateRequested(GoogleCalendarCreateBookingRequestedEvent event) {
         googleCalendarSyncService.enqueueCreate(event.bookingId());
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onUpdateRequested(GoogleCalendarUpdateBookingRequestedEvent event) {
         googleCalendarSyncService.enqueueUpdate(event.bookingId(), event.bookingUpdatedAt());
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void onCancelRequested(GoogleCalendarCancelBookingRequestedEvent event) {
         googleCalendarSyncService.enqueueCancel(event.bookingId(), event.status());
     }

@@ -36,12 +36,42 @@ public class EmailDispatchService {
             String plainTextFallback,
             String templateCode
     ) {
+        java.util.UUID outboxId = queueHtmlOnce(
+                dedupeKey,
+                toEmail,
+                subject,
+                htmlBody,
+                plainTextFallback,
+                templateCode
+        );
+        if (outboxId == null) {
+            return false;
+        }
+        // This is only a fast path. The durable PENDING record is also picked up by
+        // EmailRetryScheduler if the process stops immediately after the transaction.
+        self.dispatchEmailAsync(outboxId);
+        return true;
+    }
+
+    /**
+     * Persists the mail intent in the caller's transaction. It deliberately does not
+     * trigger an async send, so callers can use it from a BEFORE_COMMIT listener.
+     */
+    @Transactional
+    public java.util.UUID queueHtmlOnce(
+            String dedupeKey,
+            String toEmail,
+            String subject,
+            String htmlBody,
+            String plainTextFallback,
+            String templateCode
+    ) {
         if (dedupeKey == null || dedupeKey.isBlank()) {
             throw new IllegalArgumentException("dedupeKey is required");
         }
         if (emailOutboxRepository.existsByDedupeKey(dedupeKey)) {
             log.debug("Skipping duplicate email. dedupeKey={}", dedupeKey);
-            return false;
+            return null;
         }
 
         EmailOutbox outbox = EmailOutbox.builder()
@@ -65,12 +95,9 @@ public class EmailDispatchService {
             outbox = emailOutboxRepository.saveAndFlush(outbox);
         } catch (DataIntegrityViolationException ex) {
             log.debug("Skipping duplicate email after unique constraint. dedupeKey={}", dedupeKey);
-            return false;
+            return null;
         }
-
-        // Call the async method via self-proxy to ensure @Async works
-        self.dispatchEmailAsync(outbox.getId());
-        return true;
+        return outbox.getId();
     }
 
     @org.springframework.scheduling.annotation.Async("emailTaskExecutor")

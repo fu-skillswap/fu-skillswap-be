@@ -2,12 +2,15 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -24,7 +27,7 @@ import java.util.stream.Collectors;
 public class BookingReminderEmailService {
 
     // Reminder should cover both paid bookings and legacy accepted bookings that are already confirmed for scheduling.
-    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID, BookingStatus.ACCEPTED);
+    private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
     private static final DateTimeFormatter DAILY_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
@@ -35,6 +38,12 @@ public class BookingReminderEmailService {
 
     private final BookingRepository bookingRepository;
     private final EmailDispatchService emailDispatchService;
+    private SessionService sessionService;
+
+    @Autowired(required = false)
+    void setSessionService(SessionService sessionService) {
+        this.sessionService = sessionService;
+    }
 
     public int sendUpcomingSessionReminders() {
         LocalDateTime now = DateTimeUtil.now();
@@ -54,6 +63,27 @@ public class BookingReminderEmailService {
             if (sendMentorReminder(booking)) {
                 sent++;
             }
+        }
+        return sent;
+    }
+
+    /** Calendar is optional. This warns participants when a confirmed booking has no usable meeting access. */
+    public int sendMeetingAccessFallbackWarnings() {
+        LocalDateTime now = DateTimeUtil.now();
+        int sent = sendMeetingAccessFallbackWarnings(now.plusMinutes(119), now.plusMinutes(121), false);
+        return sent + sendMeetingAccessFallbackWarnings(now.plusMinutes(29), now.plusMinutes(31), true);
+    }
+
+    private int sendMeetingAccessFallbackWarnings(LocalDateTime startInclusive,
+                                                   LocalDateTime endExclusive,
+                                                   boolean notifyMentee) {
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(
+                CONFIRMED_STATUSES, startInclusive, endExclusive);
+        int sent = 0;
+        for (Booking booking : bookings) {
+            if (hasMeetingAccess(booking)) continue;
+            if (sendMissingAccessWarningToMentor(booking, notifyMentee ? "30 phút" : "2 giờ")) sent++;
+            if (notifyMentee && sendMissingAccessWarningToMentee(booking)) sent++;
         }
         return sent;
     }
@@ -143,22 +173,50 @@ public class BookingReminderEmailService {
 
     public int sendAutoCloseWarningEmails() {
         LocalDateTime now = DateTimeUtil.now();
-        // Auto-close is anchored to mentor completion, never to raw selectedEndTime.
-        LocalDateTime endExclusive = now.minusHours(3);
+        // Auto-close is anchored to selectedEndTime + 24 hours; this query targets the one-hour warning.
+        LocalDateTime endExclusive = now.plusHours(1);
         LocalDateTime startInclusive = endExclusive.minusMinutes(1);
-        
-        List<Booking> bookings = bookingRepository.findBookingsAboutToAutoClose(
-                BookingStatus.AWAITING_MENTEE_CONFIRMATION,
-                startInclusive,
-                endExclusive
-        );
 
         int sent = 0;
-        for (Booking booking : bookings) {
-            if (sendMenteeAutoCloseWarning(booking)) sent++;
-            if (sendMentorAutoCloseWarning(booking)) sent++;
+        for (BookingStatus status : List.of(BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION)) {
+            for (Booking booking : bookingRepository.findBookingsAboutToAutoClose(status, startInclusive, endExclusive)) {
+                if (sendMenteeAutoCloseWarning(booking)) sent++;
+                if (sendMentorAutoCloseWarning(booking)) sent++;
+            }
         }
         return sent;
+    }
+
+    private boolean hasMeetingAccess(Booking booking) {
+        if (booking == null) return false;
+        Session session = sessionService == null ? null : sessionService.findByBookingId(booking.getId());
+        MeetingPlatform platform = session == null ? booking.getMeetingPlatform() : session.getMeetingPlatform();
+        String link = session == null ? booking.getMeetingLink() : session.getMeetingLink();
+        if (platform == MeetingPlatform.OFFLINE) return hasText(booking.getLocation());
+        return hasText(link);
+    }
+
+    private boolean sendMissingAccessWarningToMentor(Booking booking, String remainingTime) {
+        if (booking == null || booking.getId() == null || booking.getMentorProfile() == null
+                || booking.getMentorProfile().getUser() == null || !hasText(booking.getMentorProfile().getUser().getEmail())) return false;
+        String subject = "[SkillSwap] Booking chưa có thông tin tham gia buổi học";
+        EmailPayload payload = buildSessionReminderPayload(booking, subject, "Cần bổ sung thông tin buổi học",
+                "Cần thao tác", mentorName(booking), menteeName(booking),
+                "Buổi mentoring sẽ bắt đầu sau " + remainingTime + " nhưng chưa có link họp hoặc địa điểm hợp lệ.",
+                "Hãy vào SkillSwap để bổ sung link họp hoặc địa điểm ngay.", "Cập nhật thông tin buổi học");
+        return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTOR:" + remainingTime + ":" + booking.getId(),
+                booking.getMentorProfile().getUser().getEmail(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTOR");
+    }
+
+    private boolean sendMissingAccessWarningToMentee(Booking booking) {
+        if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) return false;
+        String subject = "[SkillSwap] Buổi học chưa có thông tin tham gia";
+        EmailPayload payload = buildSessionReminderPayload(booking, subject, "Cần kiểm tra thông tin buổi học",
+                "Cần chú ý", menteeName(booking), mentorName(booking),
+                "Buổi mentoring sẽ bắt đầu sau 30 phút nhưng hiện chưa có link họp hoặc địa điểm hợp lệ.",
+                "Hãy liên hệ mentor qua SkillSwap; nếu không thể tham gia khi tới giờ, bạn có thể báo mentor no-show.", "Xem booking");
+        return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTEE:" + booking.getId(),
+                booking.getMentee().getEmail(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTEE");
     }
 
     private boolean sendMenteeAutoCloseWarning(Booking booking) {

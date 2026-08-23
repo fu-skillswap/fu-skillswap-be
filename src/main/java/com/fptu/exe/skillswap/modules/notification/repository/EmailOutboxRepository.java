@@ -26,6 +26,18 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
 
     Optional<EmailOutbox> findByDedupeKey(String dedupeKey);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select emailOutbox
+            from EmailOutbox emailOutbox
+            where emailOutbox.status = :status
+            order by emailOutbox.createdAt asc
+            """)
+    java.util.List<EmailOutbox> findBatchByStatusForUpdate(
+            @Param("status") NotificationStatus status,
+            Pageable pageable
+    );
+
     @Query(value = """
             select emailOutbox
             from EmailOutbox emailOutbox

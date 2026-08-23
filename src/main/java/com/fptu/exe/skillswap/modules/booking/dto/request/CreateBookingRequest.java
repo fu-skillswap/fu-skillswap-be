@@ -46,18 +46,18 @@ public record CreateBookingRequest(
                                 java.time.LocalDateTime ignoredSelectedEndTime,
                                 String learningGoalTitle, String learningGoalDescription) {
         this(availabilitySlotId, serviceId,
-                selectedStartTime == null ? null : selectedStartTime.toInstant(java.time.ZoneOffset.UTC),
+                selectedStartTime == null ? null : selectedStartTime.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 learningGoalTitle, learningGoalDescription, ignoredSelectedEndTime);
     }
 
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime selectedStartTime() {
-        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneOffset.UTC);
+        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime selectedEndTime() {
         return legacySelectedEndTime != null ? legacySelectedEndTime
-                : (startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt.plusSeconds(3600), java.time.ZoneOffset.UTC));
+                : (startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt.plusSeconds(3600), java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
     }
 }

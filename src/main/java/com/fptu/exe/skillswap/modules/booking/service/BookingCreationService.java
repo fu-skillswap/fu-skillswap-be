@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotR
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -31,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -43,6 +43,7 @@ public class BookingCreationService {
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final UserQueryPort userQueryPort;
+    private final UserLockPort userLockPort;
     private final MentorQueryPort mentorQueryPort;
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
@@ -60,8 +61,11 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu tạo booking");
         }
 
-        User mentee = userQueryPort.findUserById(menteeUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
+        List<User> lockedMentees = userLockPort.lockUsersForUpdate(List.of(menteeUserId));
+        if (lockedMentees.size() != 1) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại");
+        }
+        User mentee = lockedMentees.getFirst();
         bookingEligibilityPolicy.validateBookerEligibility(mentee);
 
         long menteePendingCount = bookingRepository.countByMenteeIdAndStatus(menteeUserId, BookingStatus.PENDING);
@@ -113,7 +117,7 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu không được để trống");
         }
         requestedStartAt = requestedStartAt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
-        LocalDateTime selectedStartTime = LocalDateTime.ofInstant(requestedStartAt, ZoneOffset.UTC);
+        LocalDateTime selectedStartTime = BookingTime.fromInstant(requestedStartAt);
         LocalDateTime selectedEndTime = selectedStartTime.plusMinutes(mentorService.getDurationMinutes());
         bookingSlotValidator.validateSelectedRange(slot, mentorService, selectedStartTime, selectedEndTime, now);
         bookingSlotValidator.validateServiceAttachedToSlot(slot.getId(), mentorService.getId());
@@ -127,7 +131,7 @@ public class BookingCreationService {
                 slot.getId(),
                 selectedStartTime,
                 selectedEndTime,
-                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID)
+                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID)
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho đúng segment này.");

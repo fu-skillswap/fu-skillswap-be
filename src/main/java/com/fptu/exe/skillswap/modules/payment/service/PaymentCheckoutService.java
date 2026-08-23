@@ -47,9 +47,6 @@ import static com.fptu.exe.skillswap.modules.payment.service.PaymentLifecycleSer
 @RequiredArgsConstructor
 public class PaymentCheckoutService {
 
-    private static final int MIN_SERVICE_PRICE_SCOIN_PER_MINUTE = 1_200;
-    private static final int MAX_SERVICE_PRICE_SCOIN_PER_MINUTE = 500_000;
-
     private final BookingQueryPort bookingQueryPort;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
@@ -129,9 +126,7 @@ public class PaymentCheckoutService {
             }
 
             int originalPriceScoin = resolveBasePriceScoin(booking);
-            int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
-            int menteeSurchargeScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * menteeSurchargeBps) / 10_000;
-            int menteePayablePrice = originalPriceScoin + menteeSurchargeScoin;
+            int menteePayablePrice = PricingPolicy.menteePayableScoin(originalPriceScoin, paymentProperties);
 
             var coupon = couponService == null ? null : couponService.resolveCoupon(request.couponCode());
             if (couponService != null) {
@@ -224,8 +219,11 @@ public class PaymentCheckoutService {
                                                                     PaymentGatewayProvider.CreatePaymentLinkResult createResult,
                                                                     UUID currentUserId) {
         return transactionTemplate.execute(status -> {
-            PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
+            // This phase does not mutate booking. Keep the shared payment lock order:
+            // payment order -> payment attempt.
             PaymentOrder order = paymentOrderRepository.findByIdForUpdate(paymentOrderId).orElseThrow();
+            PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
+            validateAttemptBelongsToOrder(order, attempt);
             if (attempt.getStatus() != PaymentAttemptStatus.CREATING) {
                 return paymentResponseMapper.toResponse(order, attempt);
             }
@@ -253,13 +251,22 @@ public class PaymentCheckoutService {
 
     private void failProviderAttempt(UUID paymentOrderId, UUID paymentAttemptId, RuntimeException cause) {
         transactionTemplate.executeWithoutResult(status -> {
-            PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
             PaymentOrder order = paymentOrderRepository.findByIdForUpdate(paymentOrderId).orElseThrow();
+            PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
+            validateAttemptBelongsToOrder(order, attempt);
             if (attempt.getStatus() == PaymentAttemptStatus.CREATING) {
                 paymentWebhookService.markAttemptFinalState(attempt, PaymentAttemptStatus.FAILED, null, null, "CREATE_FAILED", cause.getMessage());
                 paymentLifecycleService.cancelAwaitingPaymentOrder(order);
             }
         });
+    }
+
+    private void validateAttemptBelongsToOrder(PaymentOrder order, PaymentAttempt attempt) {
+        if (order == null || attempt == null || order.getId() == null
+                || !order.getId().equals(attempt.getPaymentOrderId())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Payment attempt không thuộc payment order cần xử lý");
+        }
     }
 
     private void validateCheckoutOwnership(UUID currentUserId, Booking booking) {
@@ -279,8 +286,7 @@ public class PaymentCheckoutService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Booking đã kết thúc ở trạng thái " + booking.getStatus() + " và không thể thanh toán");
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.getStatus() + ")");
         }
         LocalDateTime deadline = paymentDeadline(booking);
@@ -312,20 +318,7 @@ public class PaymentCheckoutService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ mentoring đang có thời lượng không hợp lệ");
         }
         int normalizedPrice = Math.max(0, basePriceScoin);
-        int minimumPrice = durationMinutes * MIN_SERVICE_PRICE_SCOIN_PER_MINUTE;
-        if (normalizedPrice < minimumPrice) {
-            throw new BaseException(
-                    ErrorCode.BAD_REQUEST,
-                    "Dịch vụ mentoring có phí phải có giá tối thiểu " + minimumPrice + " SCoin cho " + durationMinutes + " phút"
-            );
-        }
-        int maximumPrice = durationMinutes * MAX_SERVICE_PRICE_SCOIN_PER_MINUTE;
-        if (normalizedPrice > maximumPrice) {
-            throw new BaseException(
-                    ErrorCode.BAD_REQUEST,
-                    "Dịch vụ mentoring có phí chỉ được đặt tối đa " + maximumPrice + " SCoin cho " + durationMinutes + " phút"
-            );
-        }
+        PricingPolicy.validatePaidServicePrice(normalizedPrice, durationMinutes);
         return normalizedPrice;
     }
 
@@ -415,7 +408,7 @@ public class PaymentCheckoutService {
                                                                                 long providerOrderCode) {
         return new PaymentGatewayProvider.CreatePaymentLinkCommand(
                 providerOrderCode,
-                order.getRemainingPayableScoin().longValue(),
+                PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties),
                 buildProviderDescription(order),
                 paymentProperties.getPayos().getReturnUrl(),
                 paymentProperties.getPayos().getCancelUrl(),
@@ -428,7 +421,7 @@ public class PaymentCheckoutService {
                 List.of(new PaymentGatewayProvider.PaymentItem(
                         buildPaymentItemName(booking),
                         1,
-                        order.getRemainingPayableScoin().longValue()
+                        PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties)
                 ))
         );
     }

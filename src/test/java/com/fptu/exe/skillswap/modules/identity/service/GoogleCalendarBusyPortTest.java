@@ -19,6 +19,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -99,5 +100,27 @@ class GoogleCalendarBusyPortTest {
         assertEquals(end, actual.get(0).endTime());
         assertTrue(actual.get(0).overlaps(start.minusSeconds(60), end.plusSeconds(60)));
         assertFalse(actual.get(0).overlaps(end.plusSeconds(60), end.plusSeconds(120)));
+    }
+
+    @Test
+    void queryBusyIntervals_activeConnectionFailure_shouldExposeFailureToCaller() {
+        UUID mentorUserId = UUID.randomUUID();
+        UUID connectionId = UUID.randomUUID();
+        GoogleCalendarConnection connection = GoogleCalendarConnection.builder()
+                .id(connectionId)
+                .connectionStatus(GoogleCalendarConnectionStatus.ACTIVE)
+                .calendarId("primary")
+                .accessTokenCiphertext("encrypted-access")
+                .build();
+        when(connectionRepository.findByUserId(mentorUserId)).thenReturn(Optional.of(connection));
+        when(transactionTemplate.execute(any())).thenReturn("decrypted-token");
+        when(googleCalendarApiClient.queryFreeBusy(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("Google unavailable"));
+
+        assertThrows(IllegalStateException.class, () -> connectionService.queryBusyIntervals(
+                mentorUserId,
+                Instant.now(),
+                Instant.now().plusSeconds(3600)
+        ));
     }
 }

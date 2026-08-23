@@ -71,7 +71,7 @@ public class PaymentController {
         return ResponseEntity.ok(ApiResponse.success(paymentOrderService.previewCheckout(principal.getPublicId(), bookingId, request)));
     }
 
-    @Operation(summary = "Lấy payment order theo booking", description = "FE dùng để poll trạng thái payment order theo booking. Webhook PayOS vẫn là nguồn chốt chính; nếu webhook bị trễ hoặc miss, backend sẽ fallback đồng bộ từ PayOS và tự finalize khi provider đã xác nhận PAID/SUCCESS.")
+    @Operation(summary = "Lấy payment order theo booking", description = "API chỉ đọc trạng thái đã lưu trong database. FE có thể poll API này; webhook và reconciliation scheduler là nguồn cập nhật trạng thái chính.")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me/payment-orders/{targetType}/{targetId}")
     public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> getByTarget(
@@ -80,6 +80,25 @@ public class PaymentController {
             @PathVariable UUID targetId) {
         ensureAuthenticated(principal);
         return ResponseEntity.ok(ApiResponse.success(paymentOrderService.getByTarget(principal.getPublicId(), targetType, targetId)));
+    }
+
+    @Operation(summary = "Đồng bộ thủ công payment order", description = "Chỉ dùng khi FE cần người dùng chủ động kiểm tra lại một booking đang chờ thanh toán. API gọi PayOS ngoài transaction; đã có giới hạn tần suất, không dùng để poll.")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/me/payment-orders/{targetType}/{targetId}/sync")
+    public ResponseEntity<ApiResponse<PaymentCheckoutResponse>> synchronizeByTarget(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable PaymentTargetType targetType,
+            @PathVariable UUID targetId) {
+        ensureAuthenticated(principal);
+        rateLimitService.check(
+                RateLimitScope.SECURITY,
+                "payment:manual-sync:" + principal.getPublicId() + ":" + targetType + ":" + targetId,
+                2,
+                Duration.ofMinutes(1),
+                "Bạn đang đồng bộ payment quá nhanh, vui lòng thử lại sau"
+        );
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentOrderService.synchronizeProviderStatus(principal.getPublicId(), targetType, targetId)));
     }
 
     @Operation(summary = "Webhook payment provider", description = "Endpoint nhận webhook chuẩn từ PayOS. Backend verify chữ ký thật, xử lý idempotent và chỉ chốt PAID khi webhook hợp lệ.")

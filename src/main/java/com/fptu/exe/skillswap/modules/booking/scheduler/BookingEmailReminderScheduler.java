@@ -26,6 +26,7 @@ public class BookingEmailReminderScheduler {
             }
             if (inAppSent > 0) log.info("Sent {} in-app booking engagement reminders.", inAppSent);
             int warningSent = bookingReminderEmailService.sendAutoCloseWarningEmails();
+            warningSent += bookingReminderEmailService.sendMeetingAccessFallbackWarnings();
             if (warningSent > 0) {
                 log.info("Sent {} auto-close warning emails.", warningSent);
             }

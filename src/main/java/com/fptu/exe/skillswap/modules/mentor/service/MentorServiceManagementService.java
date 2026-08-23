@@ -20,6 +20,8 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequ
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
@@ -37,10 +39,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MentorServiceManagementService {
 
-    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(30, 60, 90, 120);
-    private static final int MIN_PRICE_SCOIN_PER_MINUTE = 500;
-    private static final int MAX_PRICE_SCOIN_PER_MINUTE = 500_000;
-
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final UserRepository userRepository;
@@ -49,6 +47,7 @@ public class MentorServiceManagementService {
     private final BookingRepository bookingRepository;
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final PaymentProperties paymentProperties;
     private AvailabilityTemplateService availabilityTemplateService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -71,9 +70,9 @@ public class MentorServiceManagementService {
     @Transactional(readOnly = true)
     public MentorServiceConstraintsResponse getServiceConstraints() {
         return new MentorServiceConstraintsResponse(
-                ALLOWED_DURATIONS,
-                MIN_PRICE_SCOIN_PER_MINUTE,
-                MAX_PRICE_SCOIN_PER_MINUTE
+                PricingPolicy.ALLOWED_DURATIONS,
+                PricingPolicy.MIN_PRICE_SCOIN_PER_MINUTE,
+                PricingPolicy.MAX_PRICE_SCOIN_PER_MINUTE
         );
     }
 
@@ -209,8 +208,8 @@ public class MentorServiceManagementService {
 
     private MentorServiceManagementResponse toResponse(MentorService service) {
         int basePrice = service.isFree() ? 0 : defaultInteger(service.getPriceScoin());
-        int publicPrice = (int) Math.round(basePrice * 1.10);
-        int payout = (int) Math.round(basePrice * 0.95);
+        int publicPrice = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
+        int payout = PricingPolicy.mentorNetScoin(basePrice, paymentProperties);
 
         return MentorServiceManagementResponse.builder()
                 .serviceId(service.getId())
@@ -233,7 +232,7 @@ public class MentorServiceManagementService {
     }
 
     private Integer validateDuration(Integer durationMinutes) {
-        if (durationMinutes == null || !ALLOWED_DURATIONS.contains(durationMinutes)) {
+        if (durationMinutes == null || !PricingPolicy.ALLOWED_DURATIONS.contains(durationMinutes)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ chỉ được chọn 30, 60, 90 hoặc 120 phút");
         }
         return durationMinutes;
@@ -247,38 +246,16 @@ public class MentorServiceManagementService {
             return 0;
         }
 
-        if (priceScoin == null || priceScoin <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ có phí phải có priceScoin lớn hơn 0");
-        }
-        int minPrice = minimumPriceForDuration(durationMinutes);
-        if (priceScoin < minPrice) {
-            throw new BaseException(
-                    ErrorCode.BAD_REQUEST,
-                    "Dịch vụ có phí phải có giá tối thiểu " + minPrice + " SCoin cho " + durationMinutes + " phút"
-            );
-        }
-        int maxPrice = maximumPriceForDuration(durationMinutes);
-        if (priceScoin > maxPrice) {
-            throw new BaseException(
-                    ErrorCode.BAD_REQUEST,
-                    "Dịch vụ có phí chỉ được đặt tối đa " + maxPrice + " SCoin cho " + durationMinutes + " phút"
-            );
-        }
+        PricingPolicy.validatePaidServicePrice(priceScoin, durationMinutes);
         return priceScoin;
     }
 
     private int minimumPriceForDuration(Integer durationMinutes) {
-        if (durationMinutes == null || durationMinutes <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ không hợp lệ");
-        }
-        return durationMinutes * MIN_PRICE_SCOIN_PER_MINUTE;
+        return PricingPolicy.minimumPriceForDuration(durationMinutes);
     }
 
     private int maximumPriceForDuration(Integer durationMinutes) {
-        if (durationMinutes == null || durationMinutes <= 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ không hợp lệ");
-        }
-        return durationMinutes * MAX_PRICE_SCOIN_PER_MINUTE;
+        return PricingPolicy.maximumPriceForDuration(durationMinutes);
     }
 
     private String cleanRequired(String value, String label) {

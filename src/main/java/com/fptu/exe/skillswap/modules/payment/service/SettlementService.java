@@ -286,9 +286,10 @@ public class SettlementService {
             return;
         }
 
+        int refundShare = (grossScoin * LATE_MENTEE_CANCEL_REFUND_BPS) / 10_000;
         int mentorShare = (grossScoin * LATE_MENTEE_CANCEL_MENTOR_BPS) / 10_000;
-        int platformShare = (grossScoin * LATE_MENTEE_CANCEL_PLATFORM_BPS) / 10_000;
-        int refundShare = Math.max(0, grossScoin - mentorShare - platformShare);
+        // Platform absorbs the integer rounding remainder so the allocation always equals grossScoin.
+        int platformShare = Math.max(0, grossScoin - refundShare - mentorShare);
 
         if (refundShare > 0) {
             creditLedgerService.refundCredit(

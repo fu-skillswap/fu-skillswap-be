@@ -1,0 +1,170 @@
+package com.fptu.exe.skillswap.modules.booking.service;
+
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class BookingCompletionServiceTest {
+
+    private static final ZoneId APP_ZONE = ZoneId.of(DateTimeUtil.ZONE_HCM);
+    private static final Instant FIXED_NOW = Instant.parse("2026-08-23T03:00:00Z");
+
+    @Mock private BookingRepository bookingRepository;
+    @Mock private MentorProfileRepository mentorProfileRepository;
+    @Mock private EntityManager entityManager;
+    @Mock private SessionService sessionService;
+    @Mock private SettlementService settlementService;
+    @Mock private BookingEventService bookingEventService;
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private InternalTelemetryService internalTelemetryService;
+    @Mock private BookingResponseMapper bookingResponseMapper;
+
+    private BookingCompletionService service;
+    private UUID bookingId;
+    private UUID menteeId;
+    private UUID mentorId;
+
+    @BeforeEach
+    void setUp() {
+        DateTimeUtil.setClock(Clock.fixed(FIXED_NOW, APP_ZONE));
+        service = new BookingCompletionService(
+                bookingRepository,
+                mentorProfileRepository,
+                entityManager,
+                sessionService,
+                settlementService,
+                bookingEventService,
+                eventPublisher,
+                internalTelemetryService,
+                bookingResponseMapper
+        );
+        bookingId = UUID.randomUUID();
+        menteeId = UUID.randomUUID();
+        mentorId = UUID.randomUUID();
+    }
+
+    @AfterEach
+    void restoreClock() {
+        DateTimeUtil.setClock(Clock.system(APP_ZONE));
+    }
+
+    @Test
+    void submitIssue_menteeReportsMenteeNoShow_shouldRejectBeforeMutation() {
+        Booking booking = eligibleBooking();
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.submitBookingIssue(
+                menteeId,
+                bookingId,
+                new SubmitBookingIssueRequest(BookingIssueType.MENTEE_NO_SHOW, "Mentee không tham gia")
+        ));
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+        assertEquals(BookingStatus.AWAITING_MENTOR_COMPLETION, booking.getStatus());
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void submitIssue_mentorReportsMentorNoShow_shouldRejectBeforeMutation() {
+        Booking booking = eligibleBooking();
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.submitBookingIssue(
+                mentorId,
+                bookingId,
+                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia")
+        ));
+
+        assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
+        assertEquals(BookingStatus.AWAITING_MENTOR_COMPLETION, booking.getStatus());
+        verify(bookingRepository, never()).save(any());
+    }
+
+    @Test
+    void submitIssue_menteeReportsMentorNoShow_shouldAccept() {
+        Booking booking = eligibleBooking();
+        stubSave(booking);
+
+        var response = service.submitBookingIssue(
+                menteeId,
+                bookingId,
+                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia")
+        );
+
+        assertEquals(BookingStatus.UNDER_REVIEW, response.status());
+        assertEquals(BookingIssueType.MENTOR_NO_SHOW, response.issueType());
+    }
+
+    @Test
+    void submitIssue_participantReportsGenericIssue_shouldAccept() {
+        Booking booking = eligibleBooking();
+        stubSave(booking);
+
+        var response = service.submitBookingIssue(
+                mentorId,
+                bookingId,
+                new SubmitBookingIssueRequest(BookingIssueType.TECHNICAL_PROBLEM, "Không thể kết nối cuộc gọi")
+        );
+
+        assertEquals(BookingStatus.UNDER_REVIEW, response.status());
+        assertEquals(BookingIssueType.TECHNICAL_PROBLEM, response.issueType());
+    }
+
+    private void stubSave(Booking booking) {
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+    }
+
+    private Booking eligibleBooking() {
+        User mentee = new User();
+        mentee.setId(menteeId);
+        User mentorUser = new User();
+        mentorUser.setId(mentorId);
+        MentorProfile mentor = MentorProfile.builder()
+                .userId(mentorId)
+                .user(mentorUser)
+                .build();
+        LocalDateTime now = LocalDateTime.ofInstant(FIXED_NOW, APP_ZONE);
+        return Booking.builder()
+                .id(bookingId)
+                .mentee(mentee)
+                .mentorProfile(mentor)
+                .status(BookingStatus.AWAITING_MENTOR_COMPLETION)
+                .selectedStartTime(now.minusHours(2))
+                .selectedEndTime(now.minusHours(1))
+                .build();
+    }
+}

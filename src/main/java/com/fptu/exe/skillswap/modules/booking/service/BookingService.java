@@ -94,6 +94,7 @@ public class BookingService {
                 bookingRepository,
                 mentorAvailabilitySlotRepository,
                 userPort,
+                userPort,
                 mentorPort,
                 bookingSlotValidator,
                 bookingEligibilityPolicy,
@@ -146,7 +147,6 @@ public class BookingService {
                 sessionService,
                 conversationService,
                 paymentOrderRepo,
-                paymentOrderService,
                 mapper
         );
         this.bookingLifecycleMaintenanceService = new BookingLifecycleMaintenanceService(

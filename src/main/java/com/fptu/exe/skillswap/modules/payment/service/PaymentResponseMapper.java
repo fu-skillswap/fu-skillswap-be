@@ -1,13 +1,18 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@RequiredArgsConstructor
 public class PaymentResponseMapper {
+
+    private final PaymentProperties paymentProperties;
 
     public PaymentCheckoutResponse toResponse(PaymentOrder order, PaymentAttempt attempt) {
         if (order == null) {
@@ -23,7 +28,7 @@ public class PaymentResponseMapper {
                 .campaignCreditAppliedScoin(order.getCampaignCreditScoin())
                 .userCreditAppliedScoin(order.getUserCreditScoin())
                 .remainingPayableScoin(order.getRemainingPayableScoin())
-                .remainingPayableVnd(order.getRemainingPayableScoin())
+                .remainingPayableVnd(safeVnd(order.getRemainingPayableScoin()))
                 .status(order.getStatus())
                 .paymentProvider(order.getPaymentProvider())
                 .providerOrderCode(attempt != null && StringUtils.hasText(attempt.getProviderOrderCode())
@@ -39,5 +44,13 @@ public class PaymentResponseMapper {
                 .paymentLink(order.getPaymentLink())
                 .expiresAt(order.getExpiresAt())
                 .build();
+    }
+
+    private Integer safeVnd(Integer scoin) {
+        long value = PricingPolicy.toVnd(scoin == null ? 0 : scoin, paymentProperties);
+        if (value > Integer.MAX_VALUE) {
+            throw new IllegalStateException("Số tiền VND vượt giới hạn response");
+        }
+        return (int) value;
     }
 }

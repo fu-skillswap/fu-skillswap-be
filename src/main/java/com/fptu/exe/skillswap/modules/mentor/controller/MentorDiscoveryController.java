@@ -137,7 +137,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Lấy candidate segments của một service trong một availability slot",
-            description = "FE gọi sau khi user đã chọn parent slot và selected service. Backend chỉ trả về exact candidate segments của đúng service được yêu cầu, đồng thời note rõ segment nào bị block bởi booking ACCEPTED của cùng service hoặc service khác."
+            description = "FE gọi sau khi user đã chọn parent slot và selected service. Backend chỉ trả về exact candidate segments của đúng service được yêu cầu, đồng thời note rõ segment nào bị block bởi booking đã được chốt của cùng service hoặc service khác."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment của service đã chọn"),

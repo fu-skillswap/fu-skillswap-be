@@ -148,8 +148,8 @@ class BookingEmailNotificationTest {
                 .service(mentorService)
                 .build());
 
-        when(emailDispatchService.sendHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
-                .thenReturn(true);
+        when(emailDispatchService.queueHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
+                .thenReturn(UUID.randomUUID());
     }
 
     private User createMentee(String email, String name, String code) {
@@ -185,7 +185,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailDispatchService, timeout(2_000).times(1)).sendHtmlOnce(
+        verify(emailDispatchService, times(1)).queueHtmlOnce(
                 startsWith("BOOKING_EMAIL:BOOKING_ACCEPTED_EMAIL:"),
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã chấp nhận lịch của bạn"),
@@ -204,7 +204,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailDispatchService, timeout(2_000).times(1)).sendHtmlOnce(
+        verify(emailDispatchService, times(1)).queueHtmlOnce(
                 startsWith("BOOKING_EMAIL:BOOKING_REJECTED_EMAIL:"),
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Yêu cầu đặt lịch của bạn đã bị mentor từ chối"),
@@ -223,7 +223,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailDispatchService, timeout(2_000).times(1)).sendHtmlOnce(
+        verify(emailDispatchService, times(1)).queueHtmlOnce(
                 startsWith("BOOKING_EMAIL:BOOKING_CANCELLED_BY_MENTEE_EMAIL:"),
                 eq(mentorUser.getEmail()),
                 eq("[SkillSwap] Mentee đã hủy lịch"),
@@ -243,7 +243,7 @@ class BookingEmailNotificationTest {
         TestTransaction.flagForCommit();
         TestTransaction.end();
 
-        verify(emailDispatchService, timeout(2_000).times(1)).sendHtmlOnce(
+        verify(emailDispatchService, times(1)).queueHtmlOnce(
                 startsWith("BOOKING_EMAIL:BOOKING_CANCELLED_BY_MENTOR_EMAIL:"),
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã hủy lịch"),
@@ -256,7 +256,7 @@ class BookingEmailNotificationTest {
     @Test
     void emailSendFailure_shouldNotRollbackBooking() {
         doThrow(new RuntimeException("Queue Error")).when(emailDispatchService)
-                .sendHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+                .queueHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         

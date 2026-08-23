@@ -122,7 +122,6 @@ public class AdminMentorModerationService {
                 .reviewCount(profile.getTotalReviews())
                 .completedSessions(profile.getTotalCompletedSessions())
                 .rejectedBookings(profile.getTotalRejectedBookings())
-                .lateCancellationPenaltyPoints(profile.getLateCancellationPenaltyPoints())
                 .portfolioUrl(profile.getPortfolioUrl())
                 .linkedinUrl(profile.getLinkedinUrl())
                 .githubUrl(profile.getGithubUrl())

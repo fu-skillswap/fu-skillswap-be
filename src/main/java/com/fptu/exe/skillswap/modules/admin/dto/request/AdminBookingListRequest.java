@@ -12,7 +12,7 @@ import java.util.UUID;
 @Setter
 public class AdminBookingListRequest extends BasePageRequest {
 
-    @Schema(description = "Lọc theo trạng thái booking", example = "ACCEPTED")
+    @Schema(description = "Lọc theo trạng thái booking", example = "PAID")
     private BookingStatus status;
 
     @Schema(description = "Lọc theo userId của mentor")

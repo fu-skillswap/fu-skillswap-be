@@ -14,6 +14,8 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotR
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
+import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
@@ -24,9 +26,11 @@ import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +48,6 @@ public class BookingDecisionService {
 
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-            BookingStatus.ACCEPTED,
             BookingStatus.PAID
     );
 
@@ -57,12 +60,22 @@ public class BookingDecisionService {
     private final ConversationService conversationService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
+    private GoogleCalendarBusyPort googleCalendarBusyPort;
+
+    @Autowired(required = false)
+    void setGoogleCalendarBusyPort(GoogleCalendarBusyPort googleCalendarBusyPort) {
+        this.googleCalendarBusyPort = googleCalendarBusyPort;
+    }
 
     @Transactional
     public BookingResponse acceptBooking(UUID mentorUserId, UUID bookingId, AcceptBookingRequest request) {
         if (bookingId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
+
+        // This is deliberately before every SELECT ... FOR UPDATE below. A stale or unavailable
+        // Google response must never extend the lifetime of booking, user, mentor or slot locks.
+        validateCalendarAvailabilityBeforeAcceptance(mentorUserId, bookingId);
 
         UUID slotId = bookingRepository.findSlotIdByBookingId(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking hoặc booking không gắn với khung giờ mentoring"));
@@ -276,6 +289,9 @@ public class BookingDecisionService {
                        : "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
         ));
+        if (isFree) {
+            eventPublisher.publishEvent(new GoogleCalendarCreateBookingRequestedEvent(savedBooking.getId()));
+        }
 
         for (Booking pendingBooking : pendingBookings) {
             if (!pendingBooking.getId().equals(booking.getId())) {
@@ -388,6 +404,42 @@ public class BookingDecisionService {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền thao tác trên booking này");
         }
         return booking;
+    }
+
+    private void validateCalendarAvailabilityBeforeAcceptance(UUID mentorUserId, UUID bookingId) {
+        if (googleCalendarBusyPort == null || mentorUserId == null || bookingId == null) {
+            return;
+        }
+        Booking booking = bookingRepository.findById(bookingId).orElse(null);
+        if (booking == null
+                || booking.getMentorProfile() == null
+                || !mentorUserId.equals(booking.getMentorProfile().getUserId())) {
+            // Keep authorization/not-found behavior in the locked transactional flow below.
+            return;
+        }
+        LocalDateTime startTime = selectedStartTime(booking);
+        LocalDateTime endTime = selectedEndTime(booking);
+        if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
+            return;
+        }
+
+        Instant startUtc = BookingTime.toInstant(startTime);
+        Instant endUtc = BookingTime.toInstant(endTime);
+        try {
+            boolean overlapsBusyTime = googleCalendarBusyPort
+                    .queryBusyIntervals(mentorUserId, startUtc, endUtc)
+                    .stream()
+                    .anyMatch(interval -> interval.overlaps(startUtc, endUtc));
+            if (overlapsBusyTime) {
+                throw new BaseException(ErrorCode.GOOGLE_CALENDAR_BUSY_CONFLICT,
+                        "Khung giờ booking trùng với lịch bận trên Google Calendar của mentor.");
+            }
+        } catch (BaseException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new BaseException(ErrorCode.GOOGLE_CALENDAR_AVAILABILITY_UNAVAILABLE,
+                    "Chưa thể kiểm tra lịch Google Calendar của mentor. Vui lòng thử lại sau.");
+        }
     }
 
     private void touchMentorActivity(MentorProfile profile, LocalDateTime activityAt) {

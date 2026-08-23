@@ -9,7 +9,9 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
@@ -41,7 +43,6 @@ public class BookingLifecycleMaintenanceService {
     private static final String PAYMENT_DEADLINE_TEXT = "6 giờ hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-            BookingStatus.ACCEPTED,
             BookingStatus.PAID
     );
 
@@ -53,6 +54,7 @@ public class BookingLifecycleMaintenanceService {
     private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
     private final com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplinePort mentorDisciplinePort;
     private AvailabilityTemplateService availabilityTemplateService;
+    private MentorViolationService mentorViolationService;
 
     public BookingLifecycleMaintenanceService(
             BookingRepository bookingRepository,
@@ -81,6 +83,11 @@ public class BookingLifecycleMaintenanceService {
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
+    }
+
+    @Autowired(required = false)
+    void setMentorViolationService(MentorViolationService mentorViolationService) {
+        this.mentorViolationService = mentorViolationService;
     }
 
     @Transactional
@@ -220,13 +227,12 @@ public class BookingLifecycleMaintenanceService {
         int changed = 0;
         List<Booking> candidates = new ArrayList<>();
         candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.PAID, now));
-        candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.ACCEPTED, now));
         candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.AWAITING_MENTOR_COMPLETION, now));
         for (Booking candidate : candidates) {
             changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
         }
-        for (Booking candidate : bookingRepository.findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
-                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(5))) {
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
+                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS))) {
             changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
         }
         for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
@@ -245,7 +251,7 @@ public class BookingLifecycleMaintenanceService {
         if (booking == null) return false;
 
         BookingStatus oldStatus = booking.getStatus();
-        if ((oldStatus == BookingStatus.PAID || oldStatus == BookingStatus.ACCEPTED)
+        if (oldStatus == BookingStatus.PAID
                 && selectedEndTime(booking) != null && !now.isBefore(selectedEndTime(booking))) {
             booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
             booking.setPostSessionPromptedAt(now);
@@ -256,6 +262,23 @@ public class BookingLifecycleMaintenanceService {
         if (oldStatus == BookingStatus.AWAITING_MENTOR_COMPLETION) {
             LocalDateTime end = selectedEndTime(booking);
             if (end == null) return false;
+            if (!now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+                booking.setMentorCompletionOverdueAt(now);
+                recordMentorViolation(booking, MentorViolationType.COMPLETION_OVERDUE,
+                        "Mentor không xác nhận hoàn tất trong 24 giờ sau buổi học.");
+                recordEvent(booking, BookingEventType.MENTOR_COMPLETION_OVERDUE, oldStatus, BookingEventActorType.SYSTEM);
+                booking.setStatus(BookingStatus.COMPLETED);
+                booking.setAutoClosedAt(now);
+                booking.setFinalizedAt(now);
+                booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
+                settlementService.releaseForBooking(booking);
+                recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
+                notifyMentor(booking, "Booking đã tự động hoàn tất",
+                        "Bạn không xác nhận hoàn tất trong 24 giờ. Booking đã tự đóng và hệ thống ghi nhận điểm vi phạm nội bộ.");
+                notifyMentee(booking, "Booking đã tự động hoàn tất",
+                        "Không có báo cáo vấn đề trong 24 giờ nên booking đã tự đóng và tiền được xử lý theo chính sách.");
+                return true;
+            }
             if (booking.getMentorCompletionReminder30mAt() == null && !now.isBefore(end.plusMinutes(30))) {
                 booking.setMentorCompletionReminder30mAt(now);
                 notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Buổi mentoring đã kết thúc. Vui lòng xác nhận hoàn tất trong thời hạn cho phép.");
@@ -271,29 +294,24 @@ public class BookingLifecycleMaintenanceService {
                 notifyMentee(booking, "Chưa nhận được xác nhận từ mentor", "Bạn có thể tiếp tục chờ hoặc báo vấn đề nếu buổi mentoring không diễn ra.");
                 return true;
             }
-            if (booking.getMentorCompletionOverdueAt() == null && !now.isBefore(end.plusHours(24))) {
-                booking.setMentorCompletionOverdueAt(now);
-                incrementMentorCompletionOverdue(booking);
-                recordEvent(booking, BookingEventType.MENTOR_COMPLETION_OVERDUE, oldStatus, BookingEventActorType.SYSTEM);
-                notifyMentor(booking, "Booking quá hạn xác nhận", "Booking đã được đưa vào hàng chờ vận hành vì bạn chưa xác nhận hoàn tất.");
-                return true;
-            }
             return false;
         }
         if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION && booking.getCompletedAt() != null) {
-            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(booking.getCompletedAt().plusHours(5))) {
-                booking.setAutoCloseWarningSentAt(now);
-                notifyMentee(booking, "Buổi mentoring sắp tự đóng", "Bạn còn một giờ để xác nhận hoặc báo vấn đề.");
-                notifyMentor(booking, "Buổi mentoring sắp tự đóng", "Nếu không có issue, settlement sẽ được release khi booking tự đóng.");
-                return true;
-            }
-            if (!now.isBefore(booking.getCompletedAt().plusHours(6))) {
+            LocalDateTime end = selectedEndTime(booking);
+            if (end == null) return false;
+            if (!now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
                 booking.setStatus(BookingStatus.COMPLETED);
                 booking.setAutoClosedAt(now);
                 booking.setFinalizedAt(now);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
                 settlementService.releaseForBooking(booking);
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
+                return true;
+            }
+            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(end.plusHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS))) {
+                booking.setAutoCloseWarningSentAt(now);
+                notifyMentee(booking, "Buổi mentoring sắp tự đóng", "Bạn còn một giờ để xác nhận hoặc báo vấn đề.");
+                notifyMentor(booking, "Buổi mentoring sắp tự đóng", "Nếu không có issue, settlement sẽ được release khi booking tự đóng.");
                 return true;
             }
         }
@@ -318,7 +336,8 @@ public class BookingLifecycleMaintenanceService {
             if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
                 settlementService.refundForMentorNoShow(booking);
-                incrementMentorNoShow(booking);
+                recordMentorViolation(booking, MentorViolationType.MENTOR_NO_SHOW,
+                        "Hệ thống xác nhận mentor no-show do không phản hồi báo cáo đúng hạn.");
             } else {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
                 settlementService.releaseForBooking(booking);
@@ -385,16 +404,9 @@ public class BookingLifecycleMaintenanceService {
         return deadline != null && !deadline.isAfter(now);
     }
 
-    private void incrementMentorNoShow(Booking booking) { incrementMentorCounter(booking, true); }
-    private void incrementMentorCompletionOverdue(Booking booking) { incrementMentorCounter(booking, false); }
-
-    private void incrementMentorCounter(Booking booking, boolean noShow) {
-        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null || mentorDisciplinePort == null) return;
-        if (noShow) {
-            mentorDisciplinePort.incrementMentorNoShowCount(booking.getMentorProfile().getUserId());
-        } else {
-            mentorDisciplinePort.incrementMentorCompletionOverdueCount(booking.getMentorProfile().getUserId());
-        }
+    private void recordMentorViolation(Booking booking, MentorViolationType type, String reason) {
+        if (mentorViolationService == null || booking == null || booking.getMentorProfile() == null) return;
+        mentorViolationService.record(booking.getMentorProfile().getUserId(), booking.getId(), type, reason);
     }
 
     private void recordEvent(Booking booking, BookingEventType type, BookingStatus oldStatus, BookingEventActorType actor) {

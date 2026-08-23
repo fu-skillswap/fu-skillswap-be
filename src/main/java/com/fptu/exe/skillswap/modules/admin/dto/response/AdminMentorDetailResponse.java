@@ -90,9 +90,6 @@ public record AdminMentorDetailResponse(
         @Schema(description = "Number of rejected bookings", example = "1")
         Integer rejectedBookings,
 
-        @Schema(description = "Late cancellation penalty points accumulated", example = "0.5")
-        BigDecimal lateCancellationPenaltyPoints,
-
         @Schema(description = "Mentor's portfolio site URL", example = "https://myportfolio.local", nullable = true)
         String portfolioUrl,
 

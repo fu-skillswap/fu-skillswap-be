@@ -16,7 +16,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class BookingEngagementService {
-    private static final List<BookingStatus> REMINDABLE = List.of(BookingStatus.PAID, BookingStatus.ACCEPTED);
+    private static final List<BookingStatus> REMINDABLE = List.of(BookingStatus.PAID);
     private final BookingRepository bookingRepository;
     private final BookingEngagementDeliveryRepository deliveryRepository;
     private final NotificationService notificationService;

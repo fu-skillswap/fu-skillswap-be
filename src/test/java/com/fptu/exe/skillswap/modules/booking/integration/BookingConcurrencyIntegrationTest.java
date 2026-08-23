@@ -237,6 +237,121 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
     }
 
     @Test
+    void menteePendingQuota_concurrentCreateFromFour_shouldAllowOnlyOneRequest() throws Exception {
+        SetupPendingQuotaData setupData = transactionTemplate.execute(status -> {
+            User mentee = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentee-quota"))
+                    .fullName("Mentee Pending Quota")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+            User mentorUser = userRepository.save(User.builder()
+                    .email(uniqueEmail("mentor-quota"))
+                    .fullName("Mentor Pending Quota")
+                    .status(UserStatus.ACTIVE)
+                    .build());
+            completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
+
+            MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
+                    .user(mentorUser)
+                    .status(MentorStatus.ACTIVE)
+                    .verifiedAt(DateTimeUtil.now().minusDays(1))
+                    .isAvailable(true)
+                    .headline("Quota concurrency mentor")
+                    .expertiseDescription("Kiểm tra giới hạn booking pending")
+                    .foundationSupportLevel(3)
+                    .outputReviewSupportLevel(3)
+                    .directionSupportLevel(3)
+                    .teachingMode(TeachingMode.ONLINE)
+                    .sessionDuration(60)
+                    .build());
+
+            LocalDateTime base = DateTimeUtil.now().plusDays(5)
+                    .withMinute(0).withSecond(0).withNano(0);
+            MentorAvailabilitySlot existingSlot = createSlot(mentorProfile, base, base.plusHours(1));
+            MentorAvailabilitySlot firstSlot = createSlot(mentorProfile, base.plusDays(1), base.plusDays(1).plusHours(1));
+            MentorAvailabilitySlot secondSlot = createSlot(mentorProfile, base.plusDays(2), base.plusDays(2).plusHours(1));
+
+            var service = mentorServiceRepository.saveAndFlush(
+                    com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                            .mentorProfile(mentorProfile)
+                            .title("Pending quota service")
+                            .description("Service dùng cho concurrency quota test")
+                            .durationMinutes(60)
+                            .isFree(false)
+                            .priceScoin(30_000)
+                            .isActive(true)
+                            .build());
+            linkSlotToService(firstSlot, service);
+            linkSlotToService(secondSlot, service);
+
+            for (int index = 0; index < 4; index++) {
+                bookingRepository.save( com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                        .mentee(mentee)
+                        .mentorProfile(mentorProfile)
+                        .slot(existingSlot)
+                        .status(BookingStatus.PENDING)
+                        .learningGoalTitle("Existing pending " + index)
+                        .learningGoalDescription("Existing pending booking")
+                        .requestedStartTime(existingSlot.getStartTime())
+                        .requestedEndTime(existingSlot.getEndTime())
+                        .selectedStartTime(existingSlot.getStartTime())
+                        .selectedEndTime(existingSlot.getEndTime())
+                        .build());
+            }
+            bookingRepository.flush();
+
+            return new SetupPendingQuotaData(
+                    mentee.getId(), service.getId(),
+                    firstSlot.getId(), firstSlot.getStartTime(), firstSlot.getEndTime(),
+                    secondSlot.getId(), secondSlot.getStartTime(), secondSlot.getEndTime());
+        });
+        assertNotNull(setupData);
+
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executorService = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = executorService.submit(createBookingTask(
+                    setupData.menteeId(), setupData.firstSlotId(), setupData.serviceId(),
+                    setupData.firstStart(), setupData.firstEnd(), readyLatch, startLatch));
+            Future<Boolean> second = executorService.submit(createBookingTask(
+                    setupData.menteeId(), setupData.secondSlotId(), setupData.serviceId(),
+                    setupData.secondStart(), setupData.secondEnd(), readyLatch, startLatch));
+
+            assertTrue(readyLatch.await(5, TimeUnit.SECONDS));
+            startLatch.countDown();
+
+            boolean firstSucceeded = getFuture(first);
+            boolean secondSucceeded = getFuture(second);
+            assertEquals(1, (firstSucceeded ? 1 : 0) + (secondSucceeded ? 1 : 0));
+            assertEquals(5L, bookingRepository.countByMenteeIdAndStatus(setupData.menteeId(), BookingStatus.PENDING));
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    private Callable<Boolean> createBookingTask(UUID menteeId,
+                                                UUID slotId,
+                                                UUID serviceId,
+                                                LocalDateTime start,
+                                                LocalDateTime end,
+                                                CountDownLatch readyLatch,
+                                                CountDownLatch startLatch) {
+        return () -> {
+            readyLatch.countDown();
+            assertTrue(startLatch.await(5, TimeUnit.SECONDS));
+            try {
+                bookingService.createBooking(menteeId,
+                        new CreateBookingRequest(slotId, serviceId, start, end,
+                                "Concurrent quota request", "Verify pending quota lock"));
+                return true;
+            } catch (BaseException exception) {
+                return false;
+            }
+        };
+    }
+
+    @Test
     void menteeDoubleBooking_concurrentAccept_onlyOneSucceeds() throws Exception {
         SetupMenteeDoubleBookingData setupData = transactionTemplate.execute(status -> {
             User mentee = userRepository.save(User.builder()
@@ -616,7 +731,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .directionSupportLevel(2)
                     .teachingMode(TeachingMode.ONLINE)
                     .sessionDuration(60)
-                    .lateCancellationPenaltyPoints(BigDecimal.valueOf(1.00))
                     .build());
 
             LocalDateTime slot1Start = DateTimeUtil.now().plusDays(2)
@@ -667,7 +781,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile)
                     .slot(slot2)
                     .learningGoalTitle("Accepted Booking")
-                    .status(BookingStatus.ACCEPTED)
+                    .status(BookingStatus.PAID)
                     .selectedStartTime(slot2.getStartTime())
                     .selectedEndTime(slot2.getEndTime())
                     .requestedStartTime(slot2.getStartTime())
@@ -695,10 +809,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             MentorProfile updatedProfile = mentorProfileRepository.findById(setupData.mentorId()).orElseThrow();
             assertEquals(1, updatedProfile.getTotalReviews());
             assertEquals(0, BigDecimal.valueOf(5.00).setScale(2).compareTo(updatedProfile.getAverageRating()));
-            assertNotNull(updatedProfile.getBookingSuspendedUntil());
-            // The fixture starts at 1.00 and a late cancellation adds 0.50.
-            // Concurrent feedback must not lose that independent profile update.
-            assertEquals(0, BigDecimal.valueOf(1.50).setScale(2).compareTo(updatedProfile.getLateCancellationPenaltyPoints()));
         } finally {
             executorService.shutdownNow();
         }
@@ -750,9 +860,41 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                 .build());
     }
 
+    private MentorAvailabilitySlot createSlot(MentorProfile mentorProfile,
+                                              LocalDateTime startTime,
+                                              LocalDateTime endTime) {
+        return mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
+                .mentorProfile(mentorProfile)
+                .rule(createAvailabilityRule(mentorProfile, startTime, endTime))
+                .startTime(startTime)
+                .endTime(endTime)
+                .timezone("Asia/Ho_Chi_Minh")
+                .isActive(true)
+                .isBooked(false)
+                .build());
+    }
+
+    private void linkSlotToService(MentorAvailabilitySlot slot,
+                                   com.fptu.exe.skillswap.modules.mentor.domain.MentorService service) {
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(slot.getId(), service.getId()))
+                .slot(slot)
+                .service(service)
+                .build());
+    }
+
     private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId, UUID serviceId, LocalDateTime slotStart, LocalDateTime slotEnd) {}
     private record SetupFeedbackData(UUID mentorId, UUID booking1Id, UUID booking2Id, UUID booking3Id, UUID mentee1Id, UUID mentee2Id, UUID mentee3Id) {}
     private record SetupFeedbackAndCancelData(UUID mentorId, UUID bookingCompletedId, UUID bookingAcceptedId, UUID menteeId) {}
+    private record SetupPendingQuotaData(
+            UUID menteeId,
+            UUID serviceId,
+            UUID firstSlotId,
+            LocalDateTime firstStart,
+            LocalDateTime firstEnd,
+            UUID secondSlotId,
+            LocalDateTime secondStart,
+            LocalDateTime secondEnd) {}
     private record SetupMenteeDoubleBookingData(
             UUID menteeId,
             UUID mentor1Id, UUID slot1Id, UUID service1Id,

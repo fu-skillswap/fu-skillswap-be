@@ -409,8 +409,8 @@ class MentorAvailabilityServiceTest {
         );
 
         // Google busy on 3rd segment: slotStart + 2h (which is now + 3h) to slotStart + 3h (now + 4h)
-        java.time.Instant busyStartUtc = slotStart.plusHours(2).atZone(java.time.ZoneOffset.UTC).toInstant();
-        java.time.Instant busyEndUtc = slotEnd.atZone(java.time.ZoneOffset.UTC).toInstant();
+        java.time.Instant busyStartUtc = BookingTime.toInstant(slotStart.plusHours(2));
+        java.time.Instant busyEndUtc = BookingTime.toInstant(slotEnd);
         when(googleCalendarBusyPort.queryBusyIntervals(eq(mentorUserId), any(), any()))
                 .thenReturn(List.of(new GoogleCalendarBusyInterval(busyStartUtc, busyEndUtc)));
 
@@ -441,5 +441,45 @@ class MentorAvailabilityServiceTest {
         org.junit.jupiter.api.Assertions.assertFalse(candidate3.isSelectable());
         assertEquals("Trùng lịch bận trên Google Calendar của mentor", candidate3.reasonIfBlocked());
         assertTrue(candidate3.blockedByGoogleCalendar());
+    }
+
+    @Test
+    void getServiceSlotCandidates_googleUnavailable_shouldRemainSelectableAndExposeUnknownFlag() {
+        UUID slotId = UUID.randomUUID();
+        UUID serviceId = UUID.randomUUID();
+        LocalDateTime slotStart = LocalDateTime.now().withSecond(0).withNano(0).plusHours(4);
+
+        MentorService service = MentorService.builder()
+                .id(serviceId)
+                .mentorProfile(mentorProfile)
+                .title("1:1 Mentoring")
+                .durationMinutes(60)
+                .isActive(true)
+                .deliveryMode(MentorServiceDeliveryMode.ONE_TO_ONE)
+                .build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .startTime(slotStart)
+                .endTime(slotStart.plusHours(1))
+                .isActive(true)
+                .isBooked(false)
+                .build();
+        AvailabilitySlotService binding = AvailabilitySlotService.builder().slot(slot).service(service).build();
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)).thenReturn(Optional.of(binding));
+        when(googleCalendarBusyPort.queryBusyIntervals(eq(mentorUserId), any(), any()))
+                .thenThrow(new IllegalStateException("Google timeout"));
+        when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
+        when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
+
+        ServiceSlotCandidatesResponse response = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+
+        assertEquals(1, response.candidateServiceSlots().size());
+        var candidate = response.candidateServiceSlots().getFirst();
+        assertTrue(candidate.isSelectable());
+        assertEquals(Boolean.TRUE, candidate.calendarAvailabilityUnknown());
+        assertEquals(Boolean.FALSE, candidate.blockedByGoogleCalendar());
     }
 }

@@ -14,6 +14,8 @@ import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort
 import com.fptu.exe.skillswap.modules.identity.port.MentorCalendarEligibilityPort;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -21,6 +23,7 @@ import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -43,6 +46,12 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
     private final GoogleOAuthStateService googleOAuthStateService;
     private final GoogleApiProperties googleApiProperties;
     private final MentorCalendarEligibilityPort mentorCalendarEligibilityPort;
+    private BookingRepository bookingRepository;
+
+    @Autowired(required = false)
+    void setBookingRepository(BookingRepository bookingRepository) {
+        this.bookingRepository = bookingRepository;
+    }
 
     public GoogleAuthorizationContextResponse issueAuthorizationContext(
             UUID userId,
@@ -128,6 +137,13 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
                 throw new BaseException(
                         ErrorCode.GOOGLE_CALENDAR_DISCONNECT_BLOCKED,
                         "Cần tắt toàn bộ dịch vụ mentoring trước khi ngắt Google Calendar"
+                );
+            }
+            if (bookingRepository != null && bookingRepository.existsByMentorProfileUserIdAndStatusAndSelectedStartTimeAfter(
+                    userId, BookingStatus.PAID, DateTimeUtil.now())) {
+                throw new BaseException(
+                        ErrorCode.GOOGLE_CALENDAR_DISCONNECT_BLOCKED,
+                        "Không thể ngắt Google Calendar khi còn booking đã thanh toán trong tương lai"
                 );
             }
             ConnectionRevocationSnapshot result = new ConnectionRevocationSnapshot(
@@ -349,8 +365,8 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
             String calendarId = StringUtils.hasText(connection.getCalendarId()) ? connection.getCalendarId() : "primary";
             return googleCalendarApiClient.queryFreeBusy(accessToken, calendarId, timeMin, timeMax);
         } catch (Exception ex) {
-            log.warn("Querying Google Calendar busy intervals failed gracefully for mentorUserId={}: {}", mentorUserId, ex.getMessage());
-            return List.of();
+            log.warn("Querying Google Calendar busy intervals failed for mentorUserId={}: {}", mentorUserId, ex.getMessage());
+            throw new IllegalStateException("Không thể kiểm tra lịch Google Calendar của mentor", ex);
         }
     }
 

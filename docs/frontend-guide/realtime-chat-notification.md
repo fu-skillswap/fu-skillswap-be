@@ -360,7 +360,7 @@ export interface TypingPayload {
 export interface BookingStatusUpdatedEvent {
   bookingId: string;
   oldStatus: string;
-  newStatus: string; // "ACCEPTED", "PAID", "AWAITING_MENTOR_COMPLETION", "COMPLETED", "CANCELLED_BY_MENTOR", "UNDER_REVIEW", etc.
+  newStatus: string; // "ACCEPTED_AWAITING_PAYMENT", "PAID", "AWAITING_MENTOR_COMPLETION", "COMPLETED", "CANCELLED_BY_MENTOR", "UNDER_REVIEW", etc.
   updatedAt: string;
 }
 ```

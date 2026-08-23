@@ -43,7 +43,7 @@ class BookingReminderEmailServiceTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<BookingStatus>> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
         verify(bookingRepository).findConfirmedBookingsStartingBetween(statusesCaptor.capture(), any(), any());
-        assertTrue(statusesCaptor.getValue().contains(BookingStatus.ACCEPTED));
+        assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
         assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
         verify(emailDispatchService).sendHtmlOnce(
                 eq("BOOKING_SESSION_REMINDER_MENTEE:" + booking.getId()),
@@ -126,7 +126,7 @@ class BookingReminderEmailServiceTest {
 
         Booking booking2 = Booking.builder()
                 .id(UUID.randomUUID())
-                .status(BookingStatus.ACCEPTED)
+                .status(BookingStatus.PAID)
                 .mentee(mentee)
                 .mentorProfile(profile1)
                 .serviceTitleSnapshot("CV Review")

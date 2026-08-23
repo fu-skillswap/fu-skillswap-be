@@ -23,6 +23,10 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSeverity;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSource;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -40,6 +44,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -72,6 +77,12 @@ public class AdminForumModerationService {
     private final NotificationService notificationService;
     private final ForumTextPolicy forumTextPolicy;
     private final CursorCodec cursorCodec;
+    private MentorViolationService mentorViolationService;
+
+    @Autowired(required = false)
+    void setMentorViolationService(MentorViolationService mentorViolationService) {
+        this.mentorViolationService = mentorViolationService;
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<ForumReportResponse> getReports(AdminForumReportListRequest request) {
@@ -245,6 +256,7 @@ public class AdminForumModerationService {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+
     }
 
     private void hideReportedPost(UUID adminUserId, ForumReport report, String reviewNote) {
@@ -267,6 +279,8 @@ public class AdminForumModerationService {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+
+        recordForumViolationIfMentor(post.getAuthorUser().getId(), post.getId(), adminUserId, reviewNote);
 
         notifyBestEffort(
                 post.getAuthorUser().getId(),
@@ -315,6 +329,8 @@ public class AdminForumModerationService {
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
 
+        recordForumViolationIfMentor(comment.getAuthorUser().getId(), comment.getId(), adminUserId, reviewNote);
+
         notifyBestEffort(
                 comment.getAuthorUser().getId(),
                 NotificationType.FORUM_COMMENT_HIDDEN,
@@ -323,6 +339,15 @@ public class AdminForumModerationService {
                 "FORUM_COMMENT",
                 comment.getId()
         );
+    }
+
+    private void recordForumViolationIfMentor(UUID authorUserId, UUID sourceReferenceId, UUID adminUserId, String reviewNote) {
+        if (mentorViolationService == null || authorUserId == null) {
+            return;
+        }
+        mentorViolationService.recordAdminConfirmed(authorUserId, MentorViolationSource.FORUM, sourceReferenceId,
+                MentorViolationType.FORUM_POLICY_BREACH, MentorViolationSeverity.MEDIUM, adminUserId,
+                "Admin ẩn nội dung forum của mentor do vi phạm quy định.", reviewNote);
     }
 
     private void dismissReport(UUID adminUserId, ForumReport report, String reviewNote) {

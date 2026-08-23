@@ -24,10 +24,6 @@ public interface PaymentAttemptRepository extends JpaRepository<PaymentAttempt, 
     @Query("select pa from PaymentAttempt pa where pa.id = :id")
     Optional<PaymentAttempt> findByIdForUpdate(@Param("id") UUID id);
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select pa from PaymentAttempt pa where pa.providerOrderCode = :providerOrderCode")
-    Optional<PaymentAttempt> findByProviderOrderCodeForUpdate(@Param("providerOrderCode") String providerOrderCode);
-
     boolean existsByProviderTransactionId(String providerTransactionId);
 
     boolean existsByProviderEventId(String providerEventId);

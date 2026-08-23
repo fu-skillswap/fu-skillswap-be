@@ -26,7 +26,7 @@ public record MentorAvailabilitySlotResponse(
         TeachingMode teachingMode,
         @Schema(description = "Tổng số booking request PENDING đã gửi vào parent slot này ở thời điểm hiện tại", example = "2")
         Integer pendingRequestCount,
-        @Schema(description = "Số booking trong slot này đã được mentor chấp nhận ở trạng thái ACCEPTED", example = "1")
+        @Schema(description = "Số booking trong slot này đã được chốt, bao gồm booking đang chờ thanh toán hoặc đã thanh toán", example = "1")
         Integer acceptedSlotCount,
         @Schema(description = "Legacy field cũ của phase candidate summary. FE mới không nên dùng ở parent slot.", example = "3", deprecated = true, hidden = true)
         Integer maxPendingRequests,

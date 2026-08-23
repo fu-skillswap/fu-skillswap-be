@@ -59,8 +59,7 @@ public class BookingPricingPreviewService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu để tính giá preview");
         }
         int basePrice = normalizedBasePrice(service);
-        int surcharge = basePrice == 0 ? 0 : (basePrice * paymentProperties.getMenteeSurchargeBps()) / 10_000;
-        int beforeCampaign = basePrice + surcharge;
+        int beforeCampaign = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
         Booking pricingContext = Booking.builder()
                 .service(service)
                 .mentorProfile(service.getMentorProfile())
@@ -97,8 +96,7 @@ public class BookingPricingPreviewService {
         }
         int basePrice = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot()) ? 0
                 : Math.max(0, booking.getServicePriceScoinSnapshot() == null ? 0 : booking.getServicePriceScoinSnapshot());
-        int surcharge = basePrice == 0 ? 0 : (basePrice * paymentProperties.getMenteeSurchargeBps()) / 10_000;
-        int beforeDiscount = basePrice + surcharge;
+        int beforeDiscount = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
 
         Coupon coupon = couponService.resolveCouponForPreview(couponCode);
         couponService.validateApplicable(coupon, booking, viewerUserId, beforeDiscount);

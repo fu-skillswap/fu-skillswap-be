@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public enum BookingStatus {
     PENDING,
     ACCEPTED_AWAITING_PAYMENT,
-    ACCEPTED,
     PAID,
     REJECTED,
     EXPIRED,

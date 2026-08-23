@@ -19,7 +19,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
@@ -29,6 +31,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,9 +48,6 @@ import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapp
 @RequiredArgsConstructor
 public class BookingCompletionService {
 
-    private static final int POST_SESSION_REVIEW_WINDOW_HOURS = 24;
-    private static final int POST_SESSION_ISSUE_WINDOW_HOURS = 24;
-
     private final BookingRepository bookingRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final EntityManager entityManager;
@@ -57,6 +57,12 @@ public class BookingCompletionService {
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
+    private MentorViolationService mentorViolationService;
+
+    @Autowired(required = false)
+    void setMentorViolationService(MentorViolationService mentorViolationService) {
+        this.mentorViolationService = mentorViolationService;
+    }
 
     @Transactional
     public BookingResponse completeBooking(UUID currentUserId, UUID bookingId, CompleteBookingRequest request) {
@@ -90,6 +96,10 @@ public class BookingCompletionService {
         }
         if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chưa thể hoàn tất booking trước khi buổi mentoring kết thúc");
+        }
+        if (!now.isBefore(selectedEndTime(booking).plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Đã quá thời hạn mentor xác nhận; booking sẽ được hệ thống tự động hoàn tất");
         }
 
         String completionNote = trimToNull(request == null ? null : request.completionNote());
@@ -136,7 +146,7 @@ public class BookingCompletionService {
                 savedBooking.getMentee().getId(),
                 NotificationType.SESSION_COMPLETED,
                 "Mentor đã xác nhận hoàn tất buổi mentoring",
-                "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong " + POST_SESSION_REVIEW_WINDOW_HOURS + " giờ.",
+                "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong " + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ.",
                 "BOOKING",
                 savedBooking.getId()
         ));
@@ -167,7 +177,8 @@ public class BookingCompletionService {
         synchronizePostSessionStatusForPhaseOne(booking, now);
         assertBookingAccess(booking, currentUserId);
 
-        if (booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
+        if (booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION
+                && booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ xác nhận sau buổi học");
         }
         if (isMentorOfBooking(booking, currentUserId)) {
@@ -351,7 +362,7 @@ public class BookingCompletionService {
             if (settlementService != null) {
                 settlementService.refundForMentorNoShow(booking);
             }
-            incrementMentorNoShow(booking);
+            recordMentorNoShowViolation(booking);
         } else {
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setFinalizedAt(now);
@@ -368,14 +379,10 @@ public class BookingCompletionService {
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
 
-    private void incrementMentorNoShow(Booking booking) {
-        if (booking == null || booking.getMentorProfile() == null) {
-            return;
-        }
-        mentorProfileRepository.findByIdForUpdate(booking.getMentorProfile().getUserId()).ifPresent(profile -> {
-            profile.setMentorNoShowCount(defaultInteger(profile.getMentorNoShowCount()) + 1);
-            mentorProfileRepository.save(profile);
-        });
+    private void recordMentorNoShowViolation(Booking booking) {
+        if (mentorViolationService == null || booking == null || booking.getMentorProfile() == null) return;
+        mentorViolationService.record(booking.getMentorProfile().getUserId(), booking.getId(),
+                MentorViolationType.MENTOR_NO_SHOW, "Admin xác nhận mentor không có mặt trong buổi học.");
     }
 
     private Booking getBookingForSessionAction(UUID currentUserId, UUID bookingId) {
@@ -412,7 +419,7 @@ public class BookingCompletionService {
         if (booking == null) {
             return;
         }
-        if (booking.getStatus() == BookingStatus.ACCEPTED || booking.getStatus() == BookingStatus.PAID) {
+        if (booking.getStatus() == BookingStatus.PAID) {
             LocalDateTime endTime = selectedEndTime(booking);
             if (endTime != null && !now.isBefore(endTime)) {
                 booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
@@ -421,18 +428,17 @@ public class BookingCompletionService {
     }
 
     private void ensureWithinPostSessionReviewWindow(Booking booking, LocalDateTime now) {
-        if (booking.getCompletedAt() != null
-                && now.isAfter(booking.getCompletedAt().plusHours(POST_SESSION_REVIEW_WINDOW_HOURS))) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn xác nhận buổi học (" + POST_SESSION_REVIEW_WINDOW_HOURS + " giờ)");
+        LocalDateTime end = selectedEndTime(booking);
+        if (end != null && !now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn xác nhận buổi học (" + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ)");
         }
     }
 
     private void ensureWithinIssueWindow(Booking booking, LocalDateTime now) {
-        LocalDateTime issueDeadline = booking.getCompletedAt() != null
-                ? booking.getCompletedAt().plusHours(POST_SESSION_ISSUE_WINDOW_HOURS)
-                : (selectedEndTime(booking) != null ? selectedEndTime(booking).plusHours(POST_SESSION_ISSUE_WINDOW_HOURS) : null);
-        if (issueDeadline != null && now.isAfter(issueDeadline)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn báo cáo vấn đề (" + POST_SESSION_ISSUE_WINDOW_HOURS + " giờ)");
+        LocalDateTime end = selectedEndTime(booking);
+        LocalDateTime issueDeadline = end == null ? null : end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS);
+        if (issueDeadline != null && !now.isBefore(issueDeadline)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn báo cáo vấn đề (" + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ)");
         }
     }
 
@@ -441,6 +447,17 @@ public class BookingCompletionService {
         boolean isMentor = booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền báo cáo vấn đề cho booking này");
+        }
+        if (issueType == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại vấn đề là bắt buộc");
+        }
+        if (issueType == BookingIssueType.MENTOR_NO_SHOW && !isMentee) {
+            throw new BaseException(ErrorCode.BAD_REQUEST,
+                    "Chỉ mentee mới có thể báo cáo mentor không tham gia buổi học");
+        }
+        if (issueType == BookingIssueType.MENTEE_NO_SHOW && !isMentor) {
+            throw new BaseException(ErrorCode.BAD_REQUEST,
+                    "Chỉ mentor mới có thể báo cáo mentee không tham gia buổi học");
         }
     }
 

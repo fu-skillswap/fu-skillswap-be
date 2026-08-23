@@ -42,19 +42,19 @@ public record CreateAvailabilitySlotRequest(
     @Deprecated(forRemoval = true)
     public CreateAvailabilitySlotRequest(java.time.LocalDateTime startAt, java.time.LocalDateTime endAt,
                                          String note, List<UUID> serviceIds) {
-        this(startAt == null ? null : startAt.toInstant(java.time.ZoneOffset.UTC),
-                endAt == null ? null : endAt.toInstant(java.time.ZoneOffset.UTC), note, serviceIds,
+        this(startAt == null ? null : startAt.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
+                endAt == null ? null : endAt.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), note, serviceIds,
                 false, false, List.of(), true);
     }
 
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime startTime() {
-        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneOffset.UTC);
+        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime endTime() {
-        return endAt == null ? null : java.time.LocalDateTime.ofInstant(endAt, java.time.ZoneOffset.UTC);
+        return endAt == null ? null : java.time.LocalDateTime.ofInstant(endAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 
 }

@@ -10,7 +10,8 @@ public interface GoogleCalendarBusyPort {
 
     /**
      * Queries busy time intervals for the given mentor within [timeMin, timeMax].
-     * Returns an empty list if the mentor has not connected Google Calendar or if external service fails gracefully.
+     * Returns an empty list if the mentor has not connected Google Calendar. A connected calendar
+     * that cannot be checked must throw so callers can choose fail-soft or fail-closed behavior.
      */
     List<GoogleCalendarBusyInterval> queryBusyIntervals(UUID mentorUserId, Instant timeMin, Instant timeMax);
 }

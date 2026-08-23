@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
@@ -24,6 +25,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -64,6 +66,7 @@ public class PaymentWebhookService {
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final TransactionTemplate transactionTemplate;
+    private final PaymentProperties paymentProperties;
 
     public PaymentCheckoutResponse handleWebhook(PaymentWebhookRequest request) {
         if (request == null || request.data() == null || request.data().orderCode() == null) {
@@ -71,7 +74,9 @@ public class PaymentWebhookService {
         }
 
         PaymentGatewayProvider.VerifiedWebhook verified = paymentGatewayProviderFactory.getProvider(PaymentProvider.PAYOS).verifyWebhook(request);
-        if (!verified.success() || !isPaidProviderWebhook(verified.providerStatus())) {
+        boolean paidWebhook = verified.success() && isPaidProviderWebhook(verified.providerStatus());
+        boolean terminalWebhook = isTerminalProviderWebhook(verified.providerStatus());
+        if (!paidWebhook && !terminalWebhook) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Webhook PayOS chưa xác nhận thanh toán thành công");
         }
 
@@ -84,13 +89,17 @@ public class PaymentWebhookService {
         }
 
         return transactionTemplate.execute(status -> {
-            PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(verified.providerOrderCode())
+            // Giữ thứ tự lock thống nhất với checkout/expiry: booking -> payment order -> payment attempt.
+            // Không lock attempt theo providerOrderCode trước, nếu không webhook và luồng hủy có thể chờ chéo nhau.
+            PaymentOrder snapshotOrder = paymentOrderRepository.findById(optimisticAttempt.getPaymentOrderId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+            Booking lockedBooking = bookingQueryPort.findByIdForSessionUpdate(snapshotOrder.getTargetId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+            PaymentOrder order = paymentOrderRepository.findByIdForUpdate(snapshotOrder.getId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+            PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(optimisticAttempt.getId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
                             "Không tìm thấy payment attempt tương ứng với orderCode PayOS"));
-            PaymentOrder order = paymentOrderRepository.findByIdForUpdate(attempt.getPaymentOrderId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-            Booking lockedBooking = bookingQueryPort.findByIdForSessionUpdate(order.getTargetId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
 
             String providerEventId = resolveProviderEventId(verified);
             if (StringUtils.hasText(providerEventId)
@@ -98,12 +107,20 @@ public class PaymentWebhookService {
                     || paymentAttemptRepository.existsByProviderEventId(providerEventId))) {
                 return paymentResponseMapper.toResponse(order, attempt);
             }
+            if (terminalWebhook) {
+                if (isFinal(order.getStatus())) {
+                    return paymentResponseMapper.toResponse(order, attempt);
+                }
+                applyTerminalWebhook(order, attempt, verified, providerEventId);
+                order = paymentOrderRepository.save(order);
+                return paymentResponseMapper.toResponse(order, attempt);
+            }
             if (order.getStatus() == PaymentOrderStatus.PAID) {
                 if (attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED && attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED_SURPLUS) {
                     attempt.setProviderOrderCode(verified.providerOrderCode());
                     attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
                     attempt.setProviderStatus("PAID");
-                    issueSurplusCreditIfNeeded(order, attempt, verified.amount(), 0L);
+                    issueSurplusCreditIfNeeded(order, attempt, verified.amount(), expectedProviderPayable(order));
                     markAttemptFinalState(attempt, PaymentAttemptStatus.SUCCEEDED_SURPLUS, verified.providerTransactionId(), providerEventId, "PAID", null);
                 }
                 return paymentResponseMapper.toResponse(order, attempt);
@@ -174,18 +191,26 @@ public class PaymentWebhookService {
                     ? ""
                     : paymentLink.providerStatus().toUpperCase(Locale.ROOT);
             transactionTemplate.executeWithoutResult(status -> synchronizeProviderStatusInTransaction(
-                    order.getId(), attempt.getProviderOrderCode(), paymentLink, providerStatus));
+                    order.getTargetId(), order.getId(), attempt.getId(), paymentLink, providerStatus));
         } catch (Exception ex) {
             log.warn("Không thể đồng bộ trạng thái PayOS cho paymentOrderId={}: {}", order.getId(), ex.getMessage());
         }
     }
 
-    private void synchronizeProviderStatusInTransaction(UUID paymentOrderId,
-                                                        String providerOrderCode,
+    private void synchronizeProviderStatusInTransaction(UUID bookingId,
+                                                        UUID paymentOrderId,
+                                                        UUID paymentAttemptId,
                                                         PaymentGatewayProvider.PaymentLinkDetails paymentLink,
                                                         String providerStatus) {
-        PaymentAttempt attempt = paymentAttemptRepository.findByProviderOrderCodeForUpdate(providerOrderCode).orElseThrow();
+        // Canonical lock order for every booking payment mutation:
+        // booking -> payment order -> payment attempt.
+        Booking booking = bookingQueryPort.findByIdForSessionUpdate(bookingId).orElseThrow();
         PaymentOrder order = paymentOrderRepository.findByIdForUpdate(paymentOrderId).orElseThrow();
+        PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
+        if (!paymentOrderId.equals(attempt.getPaymentOrderId())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Payment attempt không thuộc payment order cần đồng bộ");
+        }
         if (isFinal(order.getStatus())) {
             return;
         }
@@ -195,7 +220,6 @@ public class PaymentWebhookService {
         attempt.setProviderPaymentLinkId(paymentLink.providerPaymentLinkId());
         switch (providerStatus) {
             case "PAID", "SUCCESS", "00" -> {
-                Booking booking = bookingQueryPort.findByIdForSessionUpdate(order.getTargetId()).orElseThrow();
                 finalizeInternalPayment(order, attempt, attempt.getProviderTransactionId(),
                         attempt.getProviderEventId(), paymentLink.providerStatus(), booking);
             }
@@ -281,10 +305,11 @@ public class PaymentWebhookService {
     }
 
     private void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
-        Booking booking = lockedBooking != null
-                ? lockedBooking
-                : bookingQueryPort.findByIdForSessionUpdate(order.getTargetId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+        if (lockedBooking == null) {
+            throw new IllegalArgumentException(
+                    "Booking phải được khóa trước PaymentOrder và PaymentAttempt khi hoàn tất thanh toán");
+        }
+        Booking booking = lockedBooking;
         if (booking.getStatus() == BookingStatus.PAID) {
             if (sessionService != null) {
                 sessionService.createForAcceptedBooking(booking);
@@ -294,8 +319,7 @@ public class PaymentWebhookService {
             }
             return;
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                && booking.getStatus() != BookingStatus.ACCEPTED) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
             compensateCapturedPaymentForTerminalBooking(booking, order);
             log.warn("finalizePaidBooking: booking {} ở trạng thái {} không thể chuyển sang PAID. " +
                             "Payment order vẫn được ghi nhận PAID và hệ thống đã chạy bù trừ nội bộ nếu cần.",
@@ -333,6 +357,7 @@ public class PaymentWebhookService {
                 "Thanh toán thành công. Lịch học đã được xác nhận.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
         ));
+        eventPublisher.publishEvent(new GoogleCalendarCreateBookingRequestedEvent(booking.getId()));
 
         eventPublisher.publishEvent(new NotificationEvent(
                 booking.getMentorProfile().getUserId(),
@@ -391,7 +416,7 @@ public class PaymentWebhookService {
     private long expectedProviderPayable(PaymentOrder order) {
         return order == null || order.getRemainingPayableScoin() == null
                 ? 0L
-                : Math.max(0L, order.getRemainingPayableScoin().longValue());
+                : PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties);
     }
 
     private void issueSurplusCreditIfNeeded(PaymentOrder order,
@@ -405,9 +430,6 @@ public class PaymentWebhookService {
         if (surplusAmount <= 0) {
             return;
         }
-        if (surplusAmount > Integer.MAX_VALUE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Số tiền thanh toán dư vượt quá giới hạn hệ thống");
-        }
         if (creditLedgerService.hasIssuedCreditForSource(LedgerSourceType.PAYMENT_ATTEMPT, attempt.getId())) {
             return;
         }
@@ -416,7 +438,7 @@ public class PaymentWebhookService {
                 CreditOriginType.PAYMENT_SURPLUS,
                 LedgerSourceType.PAYMENT_ATTEMPT,
                 attempt.getId(),
-                (int) surplusAmount,
+                PricingPolicy.toScoin(surplusAmount, paymentProperties),
                 "Hoàn tiền thanh toán dư cho order " + order.getOrderCode()
         );
         log.info("Issued payment surplus credit for attempt {} order {} amount {} SCoin",
@@ -445,7 +467,57 @@ public class PaymentWebhookService {
             return false;
         }
         String normalized = providerStatus.trim().toUpperCase(Locale.ROOT);
-        return "00".equals(normalized) || "PAID".equals(normalized);
+        return "00".equals(normalized) || "PAID".equals(normalized) || "SUCCESS".equals(normalized);
+    }
+
+    private boolean isTerminalProviderWebhook(String providerStatus) {
+        if (!StringUtils.hasText(providerStatus)) {
+            return false;
+        }
+        return switch (providerStatus.trim().toUpperCase(Locale.ROOT)) {
+            case "CANCELLED", "EXPIRED", "FAILED" -> true;
+            default -> false;
+        };
+    }
+
+    private void applyTerminalWebhook(PaymentOrder order,
+                                      PaymentAttempt attempt,
+                                      PaymentGatewayProvider.VerifiedWebhook verified,
+                                      String providerEventId) {
+        String status = verified.providerStatus().trim().toUpperCase(Locale.ROOT);
+        order.setProviderOrderCode(verified.providerOrderCode());
+        order.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+        order.setProviderTransactionId(verified.providerTransactionId());
+        order.setProviderEventId(providerEventId);
+        order.setProviderStatus(status);
+
+        attempt.setProviderOrderCode(verified.providerOrderCode());
+        attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+        paymentLifecycleService.rollbackReservedCredit(order);
+        if (couponService != null) {
+            couponService.voidRedemption(order.getId());
+        }
+        switch (status) {
+            case "CANCELLED" -> {
+                order.setStatus(PaymentOrderStatus.CANCELLED);
+                order.setCancelledAt(DateTimeUtil.now());
+                markAttemptFinalState(attempt, PaymentAttemptStatus.CANCELLED,
+                        verified.providerTransactionId(), providerEventId, status, "PayOS payment link bị hủy");
+            }
+            case "EXPIRED" -> {
+                order.setStatus(PaymentOrderStatus.EXPIRED);
+                order.setFailedAt(DateTimeUtil.now());
+                markAttemptFinalState(attempt, PaymentAttemptStatus.EXPIRED,
+                        verified.providerTransactionId(), providerEventId, status, "PayOS payment link đã hết hạn");
+            }
+            case "FAILED" -> {
+                order.setStatus(PaymentOrderStatus.FAILED);
+                order.setFailedAt(DateTimeUtil.now());
+                markAttemptFinalState(attempt, PaymentAttemptStatus.FAILED,
+                        verified.providerTransactionId(), providerEventId, status, "PayOS payment link thất bại");
+            }
+            default -> throw new IllegalArgumentException("Unsupported terminal payment status: " + status);
+        }
     }
 
     private String resolveProviderEventId(PaymentGatewayProvider.VerifiedWebhook verified) {

@@ -9,6 +9,6 @@ public final class BookingCancellationRefundPolicy {
     }
 
     public static BookingCancellationRefundPolicyResponse current() {
-        return new BookingCancellationRefundPolicyResponse(4 * 60, 100, 50, 100, 100);
+        return new BookingCancellationRefundPolicyResponse(4 * 60, 100, 50, 35, 15, 100, 100);
     }
 }

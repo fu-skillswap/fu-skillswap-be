@@ -11,7 +11,6 @@ public final class BookingStateMapper {
 
     private static final Set<BookingStatus> FREE_BOOKING_CONFIRMED_STATUSES = EnumSet.of(
             BookingStatus.PAID,
-            BookingStatus.ACCEPTED,
             BookingStatus.AWAITING_MENTOR_COMPLETION,
             BookingStatus.AWAITING_MENTEE_CONFIRMATION,
             BookingStatus.COMPLETED,
@@ -23,6 +22,14 @@ public final class BookingStateMapper {
     }
 
     public static BookingLifecycleStatus toLifecycleStatus(Booking booking) {
+        return toLifecycleStatus(booking, null);
+    }
+
+    /**
+     * Keeps the public lifecycle explicit when the shared internal EXPIRED value
+     * came from either a request timeout or a payment timeout.
+     */
+    public static BookingLifecycleStatus toLifecycleStatus(Booking booking, PaymentOrder paymentOrder) {
         if (booking == null) {
             return null;
         }
@@ -33,11 +40,11 @@ public final class BookingStateMapper {
         return switch (status) {
             case PENDING -> BookingLifecycleStatus.REQUESTED;
             case ACCEPTED_AWAITING_PAYMENT -> BookingLifecycleStatus.WAITING_PAYMENT;
-            // ACCEPTED is legacy only. It is shown as confirmed to avoid exposing an ambiguous state.
-            case ACCEPTED -> BookingLifecycleStatus.CONFIRMED;
             case PAID, AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION -> BookingLifecycleStatus.CONFIRMED;
             case REJECTED -> BookingLifecycleStatus.REJECTED_BY_MENTOR;
-            case EXPIRED -> BookingLifecycleStatus.REQUEST_EXPIRED;
+            case EXPIRED -> paymentOrder != null && paymentOrder.getStatus() == PaymentOrderStatus.EXPIRED
+                    ? BookingLifecycleStatus.PAYMENT_EXPIRED
+                    : BookingLifecycleStatus.REQUEST_EXPIRED;
             case CANCELLED_BY_MENTEE -> BookingLifecycleStatus.CANCELED_BY_MENTEE;
             case CANCELLED_BY_MENTOR -> BookingLifecycleStatus.CANCELED_BY_MENTOR;
             case UNDER_REVIEW -> BookingLifecycleStatus.UNDER_REVIEW;
@@ -69,7 +76,6 @@ public final class BookingStateMapper {
         return switch (booking.getStatus()) {
             case PENDING -> BookingPaymentStatus.PENDING;
             case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;
-            case ACCEPTED -> BookingPaymentStatus.PENDING;
             case REJECTED, EXPIRED -> BookingPaymentStatus.EXPIRED;
             case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.REFUNDED;
             case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, AUTO_CLOSED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
@@ -98,15 +104,14 @@ public final class BookingStateMapper {
         };
     }
 
-    public static boolean isLegacyConfirmedForScheduling(BookingStatus status) {
+    public static boolean isConfirmedForScheduling(BookingStatus status) {
         return status != null && (status == BookingStatus.PAID
-                || status == BookingStatus.ACCEPTED
                 || status == BookingStatus.AWAITING_MENTOR_COMPLETION
                 || status == BookingStatus.AWAITING_MENTEE_CONFIRMATION);
     }
 
     public static boolean isPaidOrReservedForSchedule(BookingStatus status) {
-        return status != null && (status == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isLegacyConfirmedForScheduling(status));
+        return status != null && (status == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedForScheduling(status));
     }
 
     private static boolean isFreeBooking(Booking booking) {

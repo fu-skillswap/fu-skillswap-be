@@ -27,6 +27,11 @@ public class PaymentProperties {
     @Max(10_000)
     private int menteeSurchargeBps = 1000;
 
+    /** Explicit conversion used when building PayOS VND amounts. */
+    @Min(1)
+    @Max(1_000_000)
+    private int scoinToVndRate = 1;
+
     /**
      * Phí nền tảng của mentor, tính theo basis point.
      * 1000 bps = 10%.

@@ -221,7 +221,6 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         mentorProfile.setTotalSessions(seed.activeMentor() ? 20 : 0);
         mentorProfile.setTotalCompletedSessions(seed.activeMentor() ? 18 : 0);
         mentorProfile.setTotalRejectedBookings(seed.activeMentor() ? 1 : 0);
-        mentorProfile.setLateCancellationPenaltyPoints(seed.activeMentor() ? BigDecimal.valueOf(0.2) : BigDecimal.ZERO);
         mentorProfile.setAvailable(seed.activeMentor());
         mentorProfile.setBookingSuspendedUntil(null);
         mentorProfile.setVerifiedAt(seed.activeMentor() ? DateTimeUtil.now().minusDays(seed.verifiedDaysAgo()) : null);

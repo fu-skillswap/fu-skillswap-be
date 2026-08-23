@@ -15,11 +15,16 @@ import com.fptu.exe.skillswap.modules.chat.repository.ChatReportRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationUserBlockRepository;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSeverity;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSource;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -38,6 +43,12 @@ public class ConversationSafetyService {
     private final ConversationUserBlockRepository conversationUserBlockRepository;
     private final ChatReportRepository chatReportRepository;
     private final AdminAuditWriterService adminAuditWriterService;
+    private MentorViolationService mentorViolationService;
+
+    @Autowired(required = false)
+    void setMentorViolationService(MentorViolationService mentorViolationService) {
+        this.mentorViolationService = mentorViolationService;
+    }
 
     @Transactional
     public ConversationBlockResponse block(UUID conversationId, UUID blockerUserId) {
@@ -119,6 +130,11 @@ public class ConversationSafetyService {
                 Map.of("previousStatus", ChatReportStatus.OPEN.name(), "conversationId", conversation.getId()),
                 Map.of("status", saved.getStatus().name(), "conversationLocked", conversation.getStatus() == ConversationStatus.LOCKED)
         );
+        if (request.status() == ChatReportStatus.RESOLVED_LOCKED && mentorViolationService != null) {
+            mentorViolationService.recordAdminConfirmed(report.getReportedUserId(), MentorViolationSource.CHAT, saved.getId(),
+                    MentorViolationType.CHAT_POLICY_BREACH, MentorViolationSeverity.MEDIUM, adminUserId,
+                    "Admin khóa cuộc hội thoại sau khi xác nhận chat report.", request.reviewNote());
+        }
         return toResponse(saved);
     }
 

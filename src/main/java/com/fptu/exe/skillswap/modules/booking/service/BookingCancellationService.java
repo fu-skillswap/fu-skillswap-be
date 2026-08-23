@@ -10,7 +10,10 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
+import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCancelBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
@@ -24,13 +27,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isConfirmedBookingStatus;
+import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isScheduledBookingStatus;
 import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedStartTime;
 
 @Service
@@ -39,13 +41,9 @@ public class BookingCancellationService {
 
     private static final long MENTEE_FREE_CANCEL_DEADLINE_MINUTES = 4 * 60;
     private static final long MENTOR_SAFE_CANCEL_DEADLINE_MINUTES = 6 * 60;
-    private static final long MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES = 3 * 60;
-    private static final BigDecimal MENTOR_LATE_CANCEL_PENALTY = BigDecimal.valueOf(0.5);
-    private static final int MENTOR_LATE_CANCEL_SUSPENSION_DAYS = 3;
 
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-            BookingStatus.ACCEPTED,
             BookingStatus.PAID
     );
 
@@ -58,10 +56,16 @@ public class BookingCancellationService {
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
     private AvailabilityTemplateService availabilityTemplateService;
+    private MentorViolationService mentorViolationService;
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
+    }
+
+    @Autowired(required = false)
+    void setMentorViolationService(MentorViolationService mentorViolationService) {
+        this.mentorViolationService = mentorViolationService;
     }
 
     @Transactional
@@ -79,7 +83,7 @@ public class BookingCancellationService {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
         }
 
-        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT && !isConfirmedBookingStatus(booking.getStatus())) {
+        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT && !isScheduledBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
         }
 
@@ -103,17 +107,21 @@ public class BookingCancellationService {
             if (entityManager != null) {
                 entityManager.refresh(lockedProfile);
             }
-            applyMentorCancellationPenalty(lockedProfile, minutesUntilStart, now);
             lockedProfile.setTotalMentorCancelledBookings(defaultInteger(lockedProfile.getTotalMentorCancelledBookings()) + 1);
             touchMentorActivity(lockedProfile, now);
             mentorProfileRepository.save(lockedProfile);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        if (mentorViolationService != null && minutesUntilStart < MENTOR_SAFE_CANCEL_DEADLINE_MINUTES) {
+            mentorViolationService.record(mentorUserId, savedBooking.getId(), MentorViolationType.LATE_CANCELLATION,
+                    "Mentor hủy booking khi còn " + minutesUntilStart + " phút trước giờ bắt đầu.");
+        }
 
         if (sessionService != null) {
             sessionService.cancelForBooking(bookingId);
         }
+        eventPublisher.publishEvent(new GoogleCalendarCancelBookingRequestedEvent(bookingId, savedBooking.getStatus()));
         if (paymentOrderService != null) {
             paymentOrderService.handleMentorCancellation(savedBooking);
         }
@@ -174,16 +182,17 @@ public class BookingCancellationService {
         }
         if (booking.getStatus() != BookingStatus.PENDING
                 && booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                && !isConfirmedBookingStatus(booking.getStatus())) {
+                && !isScheduledBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hủy booking đang chờ phản hồi hoặc đã được chấp nhận");
         }
 
         LocalDateTime now = DateTimeUtil.now();
         BookingStatus currentStatus = booking.getStatus();
-        long minutesUntilStart = isConfirmedBookingStatus(currentStatus)
-                ? minutesUntilStart(booking, now)
-                : Long.MAX_VALUE;
-        boolean lateCancellation = isConfirmedBookingStatus(currentStatus)
+        long minutesUntilStart = minutesUntilStart(booking, now);
+        if (minutesUntilStart <= 0) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã bắt đầu, không thể hủy bằng luồng này");
+        }
+        boolean lateCancellation = currentStatus == BookingStatus.PAID
                 && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
 
         booking.setStatus(BookingStatus.CANCELLED_BY_MENTEE);
@@ -200,7 +209,8 @@ public class BookingCancellationService {
         if (sessionService != null) {
             sessionService.cancelForBooking(bookingId);
         }
-        if (paymentOrderService != null && (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isConfirmedBookingStatus(currentStatus))) {
+        eventPublisher.publishEvent(new GoogleCalendarCancelBookingRequestedEvent(bookingId, savedBooking.getStatus()));
+        if (paymentOrderService != null && (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || currentStatus == BookingStatus.PAID)) {
             paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
         }
 
@@ -263,18 +273,6 @@ public class BookingCancellationService {
             return 0;
         }
         return Duration.between(now, startTime).toMinutes();
-    }
-
-    private void applyMentorCancellationPenalty(MentorProfile mentorProfile, long minutesUntilStart, LocalDateTime now) {
-        if (minutesUntilStart < MENTOR_SUSPENSION_CANCEL_DEADLINE_MINUTES) {
-            mentorProfile.setBookingSuspendedUntil(now.plusDays(MENTOR_LATE_CANCEL_SUSPENSION_DAYS));
-        }
-        if (minutesUntilStart < MENTOR_SAFE_CANCEL_DEADLINE_MINUTES) {
-            BigDecimal currentPenalty = mentorProfile.getLateCancellationPenaltyPoints() == null
-                    ? BigDecimal.ZERO
-                    : mentorProfile.getLateCancellationPenaltyPoints();
-            mentorProfile.setLateCancellationPenaltyPoints(currentPenalty.add(MENTOR_LATE_CANCEL_PENALTY));
-        }
     }
 
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {

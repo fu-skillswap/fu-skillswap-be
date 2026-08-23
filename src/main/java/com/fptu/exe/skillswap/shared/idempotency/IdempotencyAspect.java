@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.core.annotation.Order;
@@ -21,6 +23,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -54,7 +58,7 @@ public class IdempotencyAspect {
             return joinPoint.proceed();
         }
         HttpServletRequest request = attributes.getRequest();
-        String key = normalizeKey(request.getHeader("Idempotency-Key"));
+        String key = scopedKey(normalizeKey(request.getHeader("Idempotency-Key")));
         String fingerprint = fingerprint(joinPoint.getArgs(), request.getMethod(), request.getRequestURI());
 
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
@@ -88,13 +92,13 @@ public class IdempotencyAspect {
                 now,
                 now.plusHours(RETENTION_HOURS));
         if (claimed.isEmpty()) {
-            return replayOrReject(key, request, fingerprint);
+            return replayOrReject(key, request, fingerprint, returnsApiResponse(joinPoint));
         }
 
         try {
             Object result = joinPoint.proceed();
-            if (result instanceof ResponseEntity<?> response && response.getStatusCode().is2xxSuccessful()) {
-                persistReplay(key, response, now);
+            if (isSuccessful(result)) {
+                persistReplay(key, result, now);
             }
             return result;
         } catch (Throwable ex) {
@@ -103,7 +107,10 @@ public class IdempotencyAspect {
         }
     }
 
-    private Object replayOrReject(String key, HttpServletRequest request, String fingerprint) {
+    private Object replayOrReject(String key,
+                                  HttpServletRequest request,
+                                  String fingerprint,
+                                  boolean returnsApiResponse) {
         IdempotencyKey existing = idempotencyKeyRepository.findById(key)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "IDEMPOTENCY_REQUEST_IN_PROGRESS"));
         if (!request.getMethod().equals(existing.getMethod())
@@ -114,17 +121,45 @@ public class IdempotencyAspect {
         if (!existing.isCompleted()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "IDEMPOTENCY_REQUEST_IN_PROGRESS");
         }
+        if (returnsApiResponse) {
+            try {
+                return objectMapper.readValue(existing.getResponseBody(), ApiResponse.class);
+            } catch (JsonProcessingException ex) {
+                throw new BaseException(ErrorCode.DATABASE_ERROR, "Không thể đọc idempotency response", ex);
+            }
+        }
         return ResponseEntity.status(existing.getResponseStatus())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(existing.getResponseBody());
     }
 
-    private void persistReplay(String key, ResponseEntity<?> response, LocalDateTime completedAt) {
+    private boolean returnsApiResponse(ProceedingJoinPoint joinPoint) {
+        if (!(joinPoint.getSignature() instanceof MethodSignature signature)) {
+            return false;
+        }
+        return ApiResponse.class.isAssignableFrom(signature.getReturnType());
+    }
+
+    private boolean isSuccessful(Object result) {
+        if (result instanceof ResponseEntity<?> response) {
+            return response.getStatusCode().is2xxSuccessful();
+        }
+        return result instanceof ApiResponse<?>;
+    }
+
+    private void persistReplay(String key, Object result, LocalDateTime completedAt) {
         IdempotencyKey record = idempotencyKeyRepository.findById(key)
                 .orElseThrow(() -> new BaseException(ErrorCode.DATABASE_ERROR, "Không tìm thấy idempotency claim"));
         try {
-            record.setResponseStatus(response.getStatusCode().value());
-            record.setResponseBody(objectMapper.writeValueAsString(response.getBody()));
+            if (result instanceof ResponseEntity<?> response) {
+                record.setResponseStatus(response.getStatusCode().value());
+                record.setResponseBody(objectMapper.writeValueAsString(response.getBody()));
+            } else if (result instanceof ApiResponse<?> response) {
+                record.setResponseStatus(response.getStatus());
+                record.setResponseBody(objectMapper.writeValueAsString(response));
+            } else {
+                return;
+            }
             record.setCompletedAt(completedAt);
             idempotencyKeyRepository.save(record);
         } catch (JsonProcessingException ex) {
@@ -138,6 +173,20 @@ public class IdempotencyAspect {
             throw new BaseException(ErrorCode.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED");
         }
         return key;
+    }
+
+    private String scopedKey(String rawKey) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String principal = authentication == null || authentication.getPrincipal() == null
+                ? "anonymous"
+                : authentication.getName();
+        try {
+            String material = principal + "\n" + rawKey;
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(material.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new BaseException(ErrorCode.DATABASE_ERROR, "Không thể tạo idempotency namespace", ex);
+        }
     }
 
     private String fingerprint(Object[] args, String method, String path) {

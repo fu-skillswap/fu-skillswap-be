@@ -27,11 +27,11 @@ public record MentorManagedAvailabilitySlotResponse(
 ) {
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime startTime() {
-        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneOffset.UTC);
+        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime endTime() {
-        return endAt == null ? null : java.time.LocalDateTime.ofInstant(endAt, java.time.ZoneOffset.UTC);
+        return endAt == null ? null : java.time.LocalDateTime.ofInstant(endAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
 }

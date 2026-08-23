@@ -124,7 +124,6 @@ class AdminMentorModerationServiceTest {
                 .totalReviews(10)
                 .totalCompletedSessions(15)
                 .totalRejectedBookings(2)
-                .lateCancellationPenaltyPoints(BigDecimal.valueOf(1.0))
                 .portfolioUrl("portfolio")
                 .linkedinUrl("linkedin")
                 .githubUrl("github")
@@ -156,7 +155,6 @@ class AdminMentorModerationServiceTest {
         assertEquals("CNTT", detail.primaryLabel());
         assertEquals(15, detail.completedSessions());
         assertEquals(2, detail.rejectedBookings());
-        assertEquals(BigDecimal.valueOf(1.0), detail.lateCancellationPenaltyPoints());
     }
 
     @Test

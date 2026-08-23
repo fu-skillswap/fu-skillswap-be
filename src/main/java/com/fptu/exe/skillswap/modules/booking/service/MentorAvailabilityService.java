@@ -95,7 +95,6 @@ public class MentorAvailabilityService {
     private static final int MAXIMUM_PARENT_SLOT_DURATION_MINUTES = 720;
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
-            BookingStatus.ACCEPTED,
             BookingStatus.PAID
     );
 
@@ -353,8 +352,8 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng ngày availability không hợp lệ hoặc vượt quá giới hạn 31 ngày");
         }
         ZoneId policyZone = resolvePolicyZone(mentorUserId);
-        LocalDateTime start = fromDate.atStartOfDay(policyZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
-        LocalDateTime end = toDate.plusDays(1).atStartOfDay(policyZone).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        LocalDateTime start = fromDate.atStartOfDay();
+        LocalDateTime end = toDate.plusDays(1).atStartOfDay();
 
         return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, start, end).stream()
                 .filter(slot -> isActive == null || slot.isActive() == isActive)
@@ -528,10 +527,18 @@ public class MentorAvailabilityService {
         int horizonDays = policy.maximumBookingHorizonDays();
 
         List<GoogleCalendarBusyInterval> googleBusyIntervals = List.of();
+        boolean calendarAvailabilityUnknown = false;
         if (mentorUserId != null && googleCalendarBusyPort != null) {
-            Instant slotStartUtc = slot.getStartTime().atZone(ZoneOffset.UTC).toInstant();
-            Instant slotEndUtc = slot.getEndTime().atZone(ZoneOffset.UTC).toInstant();
-            googleBusyIntervals = googleCalendarBusyPort.queryBusyIntervals(mentorUserId, slotStartUtc, slotEndUtc);
+            Instant slotStartUtc = BookingTime.toInstant(slot.getStartTime());
+            Instant slotEndUtc = BookingTime.toInstant(slot.getEndTime());
+            try {
+                googleBusyIntervals = googleCalendarBusyPort.queryBusyIntervals(mentorUserId, slotStartUtc, slotEndUtc);
+            } catch (RuntimeException ex) {
+                // Candidate discovery must remain available when Google is slow/down. The
+                // definitive check happens again when the mentor accepts the request.
+                calendarAvailabilityUnknown = true;
+                log.warn("Google Calendar availability is unknown for mentorUserId={}: {}", mentorUserId, ex.getMessage());
+            }
         }
 
         List<Booking> acceptedBookings = SLOT_LOCKING_STATUSES.stream()
@@ -572,8 +579,8 @@ public class MentorAvailabilityService {
             boolean blockedBySameService = blockedByAccepted && blockingServiceId != null && blockingServiceId.equals(service.getId());
             boolean blockedByDifferentService = blockedByAccepted && !blockedBySameService;
 
-            Instant candidateStartUtc = candidateStart.atZone(ZoneOffset.UTC).toInstant();
-            Instant candidateEndUtc = candidateEnd.atZone(ZoneOffset.UTC).toInstant();
+            Instant candidateStartUtc = BookingTime.toInstant(candidateStart);
+            Instant candidateEndUtc = BookingTime.toInstant(candidateEnd);
             boolean blockedByGoogleBusy = googleBusyIntervals != null && googleBusyIntervals.stream()
                     .anyMatch(interval -> interval.overlaps(candidateStartUtc, candidateEndUtc));
 
@@ -599,8 +606,8 @@ public class MentorAvailabilityService {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_ACCEPTED_REASON;
                 bookingConflictNote = blockedBySameService
-                        ? "Segment này đã có booking ACCEPTED của cùng service"
-                        : "Segment này đã có booking ACCEPTED của service khác trong cùng slot";
+                        ? "Segment này đã có booking đã được xác nhận của cùng service"
+                        : "Segment này đã có booking đã được xác nhận của service khác trong cùng slot";
             } else if (blockedByGoogleBusy) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_GOOGLE_BUSY_REASON;
@@ -626,6 +633,7 @@ public class MentorAvailabilityService {
                     .blockedByDifferentService(blockedByDifferentService)
                     .bookingConflictNote(bookingConflictNote)
                     .blockedByGoogleCalendar(blockedByGoogleBusy)
+                    .calendarAvailabilityUnknown(calendarAvailabilityUnknown)
                     .build());
             current = candidateEnd;
         }
@@ -1147,11 +1155,11 @@ public class MentorAvailabilityService {
     }
 
     private LocalDateTime toUtcLocal(Instant value) {
-        return value == null ? null : LocalDateTime.ofInstant(value, ZoneOffset.UTC);
+        return BookingTime.fromInstant(value);
     }
 
     private Instant toInstant(LocalDateTime value) {
-        return value == null ? null : value.toInstant(ZoneOffset.UTC);
+        return BookingTime.toInstant(value);
     }
 
     private boolean hasLockingBookings(UUID slotId) {

@@ -180,10 +180,9 @@ interface AdminResolveBookingIssueRequest {
 
 ---
 
-### 5.3 Can Thiệp Yêu Cầu Đổi Lịch (Force Reschedule)
-- **Xem lịch sử đổi lịch của booking**: `GET /api/admin/bookings/{bookingId}/reschedule-requests`
-- **Admin duyệt cưỡng chế**: `POST /api/admin/bookings/reschedule-requests/{requestId}/force-approve`
-- **Admin từ chối cưỡng chế**: `POST /api/admin/bookings/reschedule-requests/{requestId}/force-reject` (Body: `{ "reason": string }`)
+### 5.3 Đổi lịch
+
+Tính năng đổi lịch chưa phát hành. Không có API đổi lịch cho mentee, mentor hoặc admin.
 
 ---
 

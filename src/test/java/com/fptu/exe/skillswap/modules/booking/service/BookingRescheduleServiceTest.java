@@ -119,7 +119,7 @@ class BookingRescheduleServiceTest {
                 .mentorProfile(mentorProfile)
                 .service(service)
                 .slot(currentSlot)
-                .status(BookingStatus.ACCEPTED)
+                .status(BookingStatus.PAID)
                 .selectedStartTime(currentSlot.getStartTime())
                 .selectedEndTime(currentSlot.getEndTime())
                 .rescheduleCount(0)
@@ -165,6 +165,7 @@ class BookingRescheduleServiceTest {
                 .build();
 
         when(bookingRescheduleRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(proposedSlot.getId())).thenReturn(Optional.of(proposedSlot));
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(currentSlot.getId())).thenReturn(Optional.of(currentSlot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -207,6 +208,7 @@ class BookingRescheduleServiceTest {
                 .build();
 
         when(bookingRescheduleRequestRepository.findByIdForUpdate(request.getId())).thenReturn(Optional.of(request));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(proposedSlot.getId())).thenReturn(Optional.of(proposedSlot));
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(currentSlot.getId())).thenReturn(Optional.of(currentSlot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));

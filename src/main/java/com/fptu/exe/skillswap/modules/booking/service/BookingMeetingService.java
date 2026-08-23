@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Objects;
 import java.util.UUID;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isConfirmedBookingStatus;
+import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isScheduledBookingStatus;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +39,7 @@ public class BookingMeetingService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu meeting link");
         }
-        if (!isConfirmedBookingStatus(booking.getStatus())) {
+        if (!isScheduledBookingStatus(booking.getStatus())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận thanh toán");
         }
 
@@ -56,6 +56,10 @@ public class BookingMeetingService {
         boolean meetingChanged = !Objects.equals(previousPlatform, nextPlatform)
                 || !Objects.equals(previousMeetingLink, nextMeetingLink)
                 || !Objects.equals(previousLocation, nextLocation);
+        if (session.isGoogleCalendarManaged() && meetingChanged) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                    "Thông tin cuộc họp đang được Google Calendar quản lý, không thể sửa thủ công");
+        }
 
         session.setMeetingPlatform(nextPlatform);
         session.setMeetingLink(nextMeetingLink);

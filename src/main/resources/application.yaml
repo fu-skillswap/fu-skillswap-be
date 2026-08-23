@@ -260,6 +260,7 @@ application:
   payment:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
     mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
+    scoin-to-vnd-rate: ${PAYMENT_SCOIN_TO_VND_RATE:1}
     mentor-commission-bps: ${PAYMENT_MENTOR_COMMISSION_BPS:1000}
     payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
     payos:
@@ -278,6 +279,10 @@ application:
     # Set APPLICATION_SWAGGER_ENABLED=false in production to block public Swagger/OpenAPI access.
     # Default true for local development convenience.
     enabled: ${APPLICATION_SWAGGER_ENABLED:true}
+  features:
+    booking-reschedule:
+      # Reschedule is intentionally not released. There are no public or admin API routes for it.
+      enabled: ${APPLICATION_FEATURES_BOOKING_RESCHEDULE_ENABLED:false}
 
 logging:
   pattern:

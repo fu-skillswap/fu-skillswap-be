@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.notification.event;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -15,8 +14,10 @@ public class NotificationEventListener {
 
     private final NotificationService notificationService;
 
-    @Async("notificationExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    // Notification rows and their realtime outbox events must commit with the
+    // business change. Realtime delivery itself is handled asynchronously by the
+    // durable domain outbox publisher.
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleNotificationEvent(NotificationEvent event) {
         try {
             notificationService.createNotification(

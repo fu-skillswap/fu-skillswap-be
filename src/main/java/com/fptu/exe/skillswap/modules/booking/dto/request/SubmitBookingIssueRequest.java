@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-@Schema(description = "Payload để participant báo vấn đề sau buổi mentoring")
+@Schema(description = "Payload báo vấn đề sau buổi mentoring. MENTOR_NO_SHOW chỉ mentee được gửi; MENTEE_NO_SHOW chỉ mentor được gửi; các loại khác cho phép cả hai bên.")
 public record SubmitBookingIssueRequest(
         @Schema(example = "MENTOR_NO_SHOW")
         @NotNull(message = "issueType là bắt buộc")

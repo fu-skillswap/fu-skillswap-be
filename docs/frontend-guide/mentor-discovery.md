@@ -357,6 +357,8 @@ interface ServiceSlotCandidatesResponse {
     blockedBySameService: boolean;
     blockedByDifferentService: boolean;
     bookingConflictNote: string | null;
+    blockedByGoogleCalendar?: boolean;
+    calendarAvailabilityUnknown?: boolean; // vẫn có thể chọn; mentor accept sẽ kiểm tra lại
   }>;
 }
 ```

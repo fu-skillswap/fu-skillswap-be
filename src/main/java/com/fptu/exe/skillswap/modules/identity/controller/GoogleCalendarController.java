@@ -61,7 +61,7 @@ public class GoogleCalendarController {
     }
 
     @PostMapping("/disconnect")
-    @Operation(summary = "Ngắt kết nối Google Calendar hiện tại")
+    @Operation(summary = "Ngắt kết nối Google Calendar hiện tại", description = "Không thể ngắt khi mentor còn service active hoặc còn booking PAID trong tương lai.")
     public ApiResponse<GoogleCalendarStatusResponse> disconnect(@AuthenticationPrincipal UserPrincipal principal) {
         ensurePrincipal(principal);
         return ApiResponse.success(googleCalendarConnectionService.disconnect(principal.getPublicId()));

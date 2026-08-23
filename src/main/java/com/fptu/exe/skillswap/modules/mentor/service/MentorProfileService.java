@@ -157,7 +157,6 @@ public class MentorProfileService {
                 .expertiseDescription(profile.getExpertiseDescription())
                 .isAvailable(profile.isAvailable())
                 .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
-                .lateCancellationPenaltyPoints(profile.getLateCancellationPenaltyPoints())
                 .verifiedAt(profile.getVerifiedAt())
                 .minimumBookingLeadTimeMinutes(policy.minimumBookingLeadTimeMinutes())
                 .maximumBookingHorizonDays(policy.maximumBookingHorizonDays())

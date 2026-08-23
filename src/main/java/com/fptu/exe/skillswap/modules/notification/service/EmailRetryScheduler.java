@@ -31,13 +31,21 @@ public class EmailRetryScheduler {
             log.warn("[{}] Đã chuyển {} email FAILED sang FATAL_ERROR do vượt quá số lần retry.", threadName, fatalCount);
         }
         
+        List<EmailOutbox> pendingEmails = emailOutboxRepository.findBatchByStatusForUpdate(
+                NotificationStatus.PENDING,
+                PageRequest.of(0, 20)
+        );
+        for (EmailOutbox outbox : pendingEmails) {
+            emailDispatchService.dispatchEmailAsync(outbox.getId());
+        }
+
         List<EmailOutbox> failedEmails = emailOutboxRepository.findRetryBatchForUpdate(
                 NotificationStatus.FAILED,
                 3,
                 PageRequest.of(0, 10)
         );
         if (failedEmails.isEmpty()) {
-            log.info("[{}] Không có email FAILED nào cần retry.", threadName);
+            log.debug("[{}] Không có email FAILED nào cần retry.", threadName);
             return;
         }
 

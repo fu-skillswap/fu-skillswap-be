@@ -3,16 +3,12 @@ package com.fptu.exe.skillswap.modules.booking.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRescheduleRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequestResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.booking.service.BookingRescheduleService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -48,7 +44,6 @@ import java.time.Duration;
 public class MyBookingController {
 
     private final BookingService bookingService;
-    private final BookingRescheduleService bookingRescheduleService;
     private final InMemoryRateLimitService rateLimitService;
 
     @Operation(
@@ -95,8 +90,8 @@ public class MyBookingController {
             summary = "Hủy booking của tôi",
             description = """
                     Hủy một booking thuộc về mentee hiện tại.
-                    FE dùng khi mentee không muốn tiếp tục một request đang PENDING hoặc một buổi đã ACCEPTED và phải gửi kèm lý do hủy.
-                    Backend có hành vi khác nhau khi hủy booking PENDING và khi hủy booking ACCEPTED, nên FE cần handle response theo trạng thái thực tế.
+                    FE dùng khi mentee không muốn tiếp tục một request đang PENDING hoặc một buổi đã được xác nhận và phải gửi kèm lý do hủy.
+                    Backend có hành vi khác nhau khi hủy booking PENDING và booking đã xác nhận, nên FE cần handle response theo trạng thái thực tế.
                     """
     )
     @ApiResponses({
@@ -108,6 +103,7 @@ public class MyBookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Booking không ở trạng thái có thể hủy hoặc đã quá mốc thời gian backend cho phép")
     })
     @PostMapping("/{bookingId}/cancel")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ApiResponse<BookingResponse> cancelBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -122,61 +118,6 @@ public class MyBookingController {
                 "Bạn đang gửi yêu cầu hủy hoặc hoàn tiền quá nhanh, vui lòng thử lại sau"
         );
         return ApiResponse.success(bookingService.cancelBookingByMentee(principal.getPublicId(), bookingId, request));
-    }
-
-    @PostMapping("/{bookingId}/reschedule-requests")
-    @Operation(
-            summary = "Mentee tạo yêu cầu đổi lịch",
-            description = "Tạo reschedule request cho một booking đã được accept mà user hiện tại là mentee. FE dùng khi mentee muốn đề xuất khung giờ mới; request sẽ ở trạng thái pending cho participant còn lại phản hồi."
-    )
-    public ApiResponse<BookingRescheduleRequestResponse> createRescheduleRequest(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID bookingId,
-            @Valid @RequestBody CreateBookingRescheduleRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.created(bookingRescheduleService.createByMentee(principal.getPublicId(), bookingId, request));
-    }
-
-    @GetMapping("/{bookingId}/reschedule-requests")
-    @Operation(
-            summary = "Lấy các yêu cầu đổi lịch của booking",
-            description = "Trả về danh sách reschedule request của một booking mà user hiện tại là participant. FE dùng ở booking detail để hiển thị lịch sử đề xuất đổi lịch và action accept/reject nếu còn pending."
-    )
-    public ApiResponse<java.util.List<BookingRescheduleRequestResponse>> getRescheduleRequests(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID bookingId
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(bookingRescheduleService.getMyBookingRequests(principal.getPublicId(), bookingId));
-    }
-
-    @PostMapping("/reschedule-requests/{requestId}/accept")
-    @Operation(
-            summary = "Participant chấp nhận yêu cầu đổi lịch",
-            description = "Participant còn lại chấp nhận một reschedule request đang pending. Backend sẽ cập nhật slot/thời gian booking theo đề xuất hợp lệ và trả trạng thái reschedule mới cho FE."
-    )
-    public ApiResponse<BookingRescheduleRequestResponse> acceptRescheduleRequest(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID requestId,
-            @Valid @RequestBody RespondBookingRescheduleRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(bookingRescheduleService.acceptByParticipant(principal.getPublicId(), requestId, request));
-    }
-
-    @PostMapping("/reschedule-requests/{requestId}/reject")
-    @Operation(
-            summary = "Participant từ chối yêu cầu đổi lịch",
-            description = "Participant còn lại từ chối một reschedule request đang pending. FE dùng để đóng đề xuất đổi lịch nhưng giữ booking hiện tại không đổi."
-    )
-    public ApiResponse<BookingRescheduleRequestResponse> rejectRescheduleRequest(
-            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID requestId,
-            @Valid @RequestBody RespondBookingRescheduleRequest request
-    ) {
-        ensureAuthenticated(principal);
-        return ApiResponse.success(bookingRescheduleService.rejectByParticipant(principal.getPublicId(), requestId, request));
     }
 
     @Operation(
@@ -197,6 +138,7 @@ public class MyBookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Booking chưa đủ điều kiện để complete hoặc đã hoàn thành trước đó")
     })
     @PostMapping("/{bookingId}/complete")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ApiResponse<BookingResponse> completeBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -208,9 +150,10 @@ public class MyBookingController {
 
     @Operation(
             summary = "Participant xác nhận buổi mentoring",
-            description = "Participant còn lại xác nhận buổi mentoring đã diễn ra ổn sau khi mentor đã complete. Phase 1 mở sẵn contract này cho target beta mới."
+            description = "Mentee xác nhận buổi mentoring đã diễn ra, kể cả khi mentor chưa bấm complete. Deadline luôn tính từ selectedEndTime + 24 giờ."
     )
     @PostMapping("/{bookingId}/confirm")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ApiResponse<BookingResponse> confirmBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -222,9 +165,10 @@ public class MyBookingController {
 
     @Operation(
             summary = "Participant báo vấn đề sau buổi mentoring",
-            description = "Participant hợp lệ của booking báo vấn đề trong cửa sổ 4 giờ sau khi session kết thúc. Phase 1 mới chuẩn bị contract và validation skeleton cho flow này."
+            description = "Participant hợp lệ báo vấn đề trong cửa sổ 24 giờ tính từ selectedEndTime, không phụ thuộc lúc mentor bấm complete."
     )
     @PostMapping("/{bookingId}/issue")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ApiResponse<BookingIssueResponse> submitIssue(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
@@ -235,6 +179,7 @@ public class MyBookingController {
     }
 
     @PostMapping("/{bookingId}/issue/respond")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     @Operation(summary = "Phản hồi booking issue", description = "Chỉ counterparty của người đã report được phản hồi một lần trong 24 giờ. Phản hồi không tự giải quyết dispute.")
     public ApiResponse<BookingIssueResponse> respondToIssue(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,

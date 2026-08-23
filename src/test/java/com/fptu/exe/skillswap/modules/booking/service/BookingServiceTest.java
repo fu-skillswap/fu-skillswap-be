@@ -49,6 +49,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -68,9 +70,11 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class BookingServiceTest {
 
     @Mock
@@ -179,7 +183,6 @@ class BookingServiceTest {
                 .totalReviews(5)
                 .totalCompletedSessions(2)
                 .totalSessions(2)
-                .lateCancellationPenaltyPoints(BigDecimal.ZERO)
                 .build();
 
         slot = new MentorAvailabilitySlot();
@@ -218,11 +221,13 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(userRepository.findByIdForUpdate(org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(Optional.of(mentee));
         // Accept locks both participants in UUID order before locking the slot.
-        // Unit tests exercise booking state transitions, so provide the canonical
-        // pair unless a test explicitly models a missing participant.
+        // Return precisely the users requested: creation locks one mentee, while
+        // decision commands lock the mentor/mentee pair.
         org.mockito.Mockito.lenient().when(userRepository.findAllByIdInOrderByIdForUpdate(
                         org.mockito.ArgumentMatchers.anyCollection()))
-                .thenReturn(List.of(mentorUser, mentee));
+                .thenAnswer(invocation -> ((java.util.Collection<UUID>) invocation.getArgument(0)).stream()
+                        .map(userId -> mentorId.equals(userId) ? mentorUser : mentee)
+                        .toList());
         org.mockito.Mockito.lenient().when(availabilitySlotServiceRepository.existsBySlotIdAndServiceId(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(true);
         org.mockito.Mockito.lenient().doNothing().when(settlementService).releaseForBooking(org.mockito.ArgumentMatchers.any());
@@ -335,6 +340,7 @@ class BookingServiceTest {
         CreateBookingRequest request = bookingRequest("Need architecture advice", null);
 
         when(userRepository.findById(mentorBooker.getId())).thenReturn(Optional.of(mentorBooker));
+        when(userRepository.findAllByIdInOrderByIdForUpdate(List.of(mentorBooker.getId()))).thenReturn(List.of(mentorBooker));
         when(academicService.hasCompletedStudentProfile(mentorBooker.getId())).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
 
@@ -562,7 +568,7 @@ class BookingServiceTest {
 
     @Test
     void saveMeetingLink_invalidUrl_shouldThrowBadRequest() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.saveMeetingLink(
@@ -576,7 +582,7 @@ class BookingServiceTest {
 
     @Test
     void saveMeetingLink_sameValues_shouldNotCreateNotification() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setLocation("Room 201");
         com.fptu.exe.skillswap.modules.booking.domain.Session session = new com.fptu.exe.skillswap.modules.booking.domain.Session();
         session.setMeetingPlatform(MeetingPlatform.GOOGLE_MEET);
@@ -597,7 +603,7 @@ class BookingServiceTest {
 
     @Test
     void completeBooking_asMentor_shouldUpdateCompletionAndCounters() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().minusHours(1));
         booking.setSelectedEndTime(testNow().minusMinutes(10));
         booking.setRequestedStartTime(testNow().minusHours(1));
@@ -625,7 +631,7 @@ class BookingServiceTest {
 
     @Test
     void completeBooking_asMentee_shouldNotifyMentor() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().minusHours(1));
         booking.setSelectedEndTime(testNow().minusMinutes(10));
         booking.setRequestedStartTime(testNow().minusHours(1));
@@ -656,7 +662,7 @@ class BookingServiceTest {
 
     @Test
     void completeBooking_beforeStart_shouldThrowConflict() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(2));
         booking.setSelectedEndTime(testNow().plusHours(3));
         booking.setRequestedStartTime(testNow().plusHours(2));
@@ -674,13 +680,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentor_withinSixHours_shouldApplyPenalty() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+    void cancelBookingByMentor_withinSixHours_shouldCancelBooking() {
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(4));
         booking.setSelectedEndTime(testNow().plusHours(5));
         booking.setRequestedStartTime(testNow().plusHours(4));
         booking.setRequestedEndTime(testNow().plusHours(5));
-        mentorProfile.setLateCancellationPenaltyPoints(BigDecimal.ZERO);
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
 
@@ -691,15 +696,14 @@ class BookingServiceTest {
         );
 
         assertEquals(BookingStatus.CANCELLED_BY_MENTOR, response.status());
-        assertEquals(BigDecimal.valueOf(0.5), mentorProfile.getLateCancellationPenaltyPoints());
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
         verify(paymentOrderService).handleMentorCancellation(eq(booking));
     }
 
     @Test
-    void cancelBookingByMentor_underThreeHours_shouldSuspendMentor() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+    void cancelBookingByMentor_underThreeHours_shouldCancelBooking() {
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(2));
         booking.setSelectedEndTime(testNow().plusHours(3));
         booking.setRequestedStartTime(testNow().plusHours(2));
@@ -709,8 +713,6 @@ class BookingServiceTest {
 
         bookingService.cancelBookingByMentor(mentorId, booking.getId(), new CancelBookingRequest("Emergency"));
 
-        assertNotNull(mentorProfile.getBookingSuspendedUntil());
-        assertTrue(mentorProfile.getBookingSuspendedUntil().isAfter(LocalDateTime.now().plusDays(2)));
         verify(paymentOrderService).handleMentorCancellation(eq(booking));
     }
 
@@ -734,7 +736,7 @@ class BookingServiceTest {
 
     @Test
     void cancelBookingByMentee_acceptedBeforeFourHours_shouldReleaseSlotWithoutPenalty() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(5));
         booking.setSelectedEndTime(testNow().plusHours(6));
         booking.setRequestedStartTime(testNow().plusHours(5));
@@ -757,7 +759,7 @@ class BookingServiceTest {
 
     @Test
     void cancelBookingByMentee_acceptedWithinFourHours_shouldTriggerLateCancellationSettlement() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(3));
         booking.setSelectedEndTime(testNow().plusHours(4));
         booking.setRequestedStartTime(testNow().plusHours(3));
@@ -780,12 +782,12 @@ class BookingServiceTest {
 
     @Test
     void getMyBookings_asMentorWithStatus_shouldQueryCorrectRepository() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         BookingListRequest request = new BookingListRequest();
         request.setRole(BookingViewRole.MENTOR);
-        request.setStatus(BookingStatus.ACCEPTED);
+        request.setStatus(BookingStatus.PAID);
 
-        when(bookingRepository.findMyMentorBookingsByStatusAndDateRange(eq(mentorId), eq(BookingStatus.ACCEPTED), any(), any(), any(Pageable.class)))
+        when(bookingRepository.findMyMentorBookingsByStatusAndDateRange(eq(mentorId), eq(BookingStatus.PAID), any(), any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));
 
         PageResponse<BookingResponse> response = bookingService.getMyBookings(mentorId, request);
@@ -802,7 +804,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
-                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(List.of(BookingStatus.PAID)),
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
@@ -817,7 +819,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.PAID, response.getContent().getFirst().status());
         verify(bookingRepository).findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
-                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(List.of(BookingStatus.PAID)),
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
@@ -835,7 +837,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
                 eq(mentorId),
-                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(List.of(BookingStatus.PAID)),
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
@@ -850,7 +852,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.getContent().getFirst().status());
         verify(bookingRepository).findMyMentorBookingsOrderedByDashboardPriority(
                 eq(mentorId),
-                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(List.of(BookingStatus.PAID)),
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
@@ -861,7 +863,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void getMyBookings_awaitingPaymentBooking_shouldTriggerPaymentRecovery() {
+    void getMyBookings_awaitingPaymentBooking_shouldNotCallPaymentProvider() {
         Booking awaitingPayment = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         Booking paid = bookingForDecision(BookingStatus.PAID);
         paid.setId(UUID.randomUUID());
@@ -871,7 +873,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
                 eq(menteeId),
-                eq(List.of(BookingStatus.PAID, BookingStatus.ACCEPTED)),
+                eq(List.of(BookingStatus.PAID)),
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
                 eq(BookingStatus.PENDING),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
@@ -882,30 +884,29 @@ class BookingServiceTest {
 
         bookingService.getMyBookings(menteeId, request);
 
-        verify(paymentOrderService).synchronizeProviderStatusForBooking(awaitingPayment.getId());
-        verify(paymentOrderService, never()).synchronizeProviderStatusForBooking(paid.getId());
+        verifyNoInteractions(paymentOrderService);
     }
 
     @Test
     void getAdminBookings_shouldUseSearchForAdminAndMapResponse() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         AdminBookingListRequest request = new AdminBookingListRequest();
-        request.setStatus(BookingStatus.ACCEPTED);
+        request.setStatus(BookingStatus.PAID);
         request.setMentorUserId(mentorId);
         request.setMenteeUserId(menteeId);
 
-        when(bookingRepository.searchForAdmin(eq(BookingStatus.ACCEPTED), eq(mentorId), eq(menteeId), any(Pageable.class)))
+        when(bookingRepository.searchForAdmin(eq(BookingStatus.PAID), eq(mentorId), eq(menteeId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));
 
         PageResponse<BookingResponse> response = bookingService.getAdminBookings(request);
 
         assertEquals(1, response.getContent().size());
-        assertEquals(BookingStatus.ACCEPTED, response.getContent().getFirst().status());
+        assertEquals(BookingStatus.PAID, response.getContent().getFirst().status());
     }
 
     @Test
     void getBookingDetail_userOutsideBooking_shouldThrowUnauthorized() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->
@@ -916,14 +917,14 @@ class BookingServiceTest {
     }
 
     @Test
-    void getBookingDetail_awaitingPaymentBooking_shouldTriggerPaymentRecovery() {
+    void getBookingDetail_awaitingPaymentBooking_shouldNotCallPaymentProvider() {
         Booking booking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
 
         BookingResponse response = bookingService.getBookingDetail(menteeId, booking.getId());
 
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
-        verify(paymentOrderService).synchronizeProviderStatusForBooking(booking.getId());
+        verifyNoInteractions(paymentOrderService);
     }
 
     @Test
@@ -995,7 +996,7 @@ class BookingServiceTest {
 
     @Test
     void actualSessionFields_shouldMirrorRealSessionEntityWhenPresent() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         com.fptu.exe.skillswap.modules.booking.domain.Session session = com.fptu.exe.skillswap.modules.booking.domain.Session.builder()
                 .id(UUID.randomUUID())
                 .sourceType(com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType.BOOKING)
@@ -1007,20 +1008,20 @@ class BookingServiceTest {
         BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
 
         assertEquals(booking.getId(), response.sessionId());
-        assertEquals(BookingStatus.ACCEPTED, response.sessionStatus());
+        assertEquals(BookingStatus.PAID, response.sessionStatus());
         assertEquals(session.getId(), response.actualSessionId());
         assertEquals(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.COMPLETED, response.actualSessionStatus());
     }
 
     @Test
     void actualSessionFields_shouldStayNullWhenSessionDoesNotExist() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         when(sessionService.findByBookingId(booking.getId())).thenReturn(null);
 
         BookingResponse response = ReflectionTestUtils.invokeMethod(bookingService, "toBookingResponse", booking);
 
         assertEquals(booking.getId(), response.sessionId());
-        assertEquals(BookingStatus.ACCEPTED, response.sessionStatus());
+        assertEquals(BookingStatus.PAID, response.sessionStatus());
         assertNull(response.actualSessionId());
         assertNull(response.actualSessionStatus());
     }
@@ -1065,7 +1066,7 @@ class BookingServiceTest {
 
     @Test
     void completeBooking_doubleSidedNotes_successful() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().minusHours(2));
         booking.setSelectedEndTime(testNow().minusHours(1));
         booking.setRequestedStartTime(testNow().minusHours(2));
@@ -1106,7 +1107,7 @@ class BookingServiceTest {
 
     @Test
     void cancelBookingByMentor_shouldCancelSession() {
-        Booking booking = bookingForDecision(BookingStatus.ACCEPTED);
+        Booking booking = bookingForDecision(BookingStatus.PAID);
         when(bookingRepository.findByIdForCancellation(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -1222,7 +1223,7 @@ class BookingServiceTest {
     }
 
     private Booking bookingForDecision(BookingStatus status) {
-        slot.setBooked(status == BookingStatus.ACCEPTED || status == BookingStatus.COMPLETED);
+        slot.setBooked(status == BookingStatus.PAID || status == BookingStatus.COMPLETED);
         slot.setActive(true);
         return Booking.builder()
                 .id(UUID.randomUUID())

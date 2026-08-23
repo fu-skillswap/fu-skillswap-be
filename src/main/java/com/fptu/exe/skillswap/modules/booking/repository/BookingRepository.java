@@ -217,6 +217,12 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMentorProfileUserId(UUID mentorUserId);
 
+    boolean existsByMentorProfileUserIdAndStatusAndSelectedStartTimeAfter(
+            UUID mentorUserId,
+            BookingStatus status,
+            LocalDateTime selectedStartTimeAfter
+    );
+
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
 
     boolean existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
@@ -442,11 +448,11 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select count(b.id) > 0
             from Booking b
             where b.mentee.id = :menteeId
-              and b.status = 'ACCEPTED'
+              and b.status = 'PAID'
               and b.selectedStartTime < :endTime
               and b.selectedEndTime > :startTime
             """)
-    boolean hasOverlappingAcceptedBooking(
+    boolean hasOverlappingPaidBooking(
             @Param("menteeId") UUID menteeId,
             @Param("startTime") java.time.LocalDateTime startTime,
             @Param("endTime") java.time.LocalDateTime endTime
@@ -510,7 +516,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             where booking.status = :status
-              and booking.completedAt between :startInclusive and :endExclusive
+              and booking.selectedEndTime between :startInclusive and :endExclusive
             """)
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
     List<Booking> findBookingsAboutToAutoClose(

@@ -21,14 +21,8 @@ public class PaymentOrderQueryService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final PaymentResponseMapper paymentResponseMapper;
-    private PaymentWebhookService paymentWebhookService;
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void setPaymentWebhookService(PaymentWebhookService paymentWebhookService) {
-        this.paymentWebhookService = paymentWebhookService;
-    }
-
-    @Transactional
+    @Transactional(readOnly = true)
     public PaymentCheckoutResponse getByTarget(UUID currentUserId, PaymentTargetType targetType, UUID targetId) {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
@@ -39,12 +33,21 @@ public class PaymentOrderQueryService {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Không có quyền xem payment order này");
         }
 
-        PaymentAttempt latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId()).orElse(null);
-        if (latestAttempt != null && paymentWebhookService != null) {
-            paymentWebhookService.trySynchronizeProviderStatus(order, latestAttempt);
-            order = paymentOrderRepository.findById(order.getId()).orElse(order);
-            latestAttempt = paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId()).orElse(null);
-        }
+        PaymentAttempt latestAttempt = paymentAttemptRepository
+                .findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())
+                .orElse(null);
         return paymentResponseMapper.toResponse(order, latestAttempt);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertAccess(UUID currentUserId, PaymentTargetType targetType, UUID targetId) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetId(targetType, targetId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
+        if (!currentUserId.equals(order.getPayerUserId()) && !currentUserId.equals(order.getMentorUserId())) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED, "Không có quyền thao tác payment order này");
+        }
     }
 }

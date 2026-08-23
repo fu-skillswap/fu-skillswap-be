@@ -68,22 +68,12 @@ public class MentorQueryPortImpl implements MentorQueryPort, MentorDisciplinePor
     @Override
     @Transactional
     public void incrementMentorNoShowCount(UUID mentorUserId) {
-        if (mentorUserId == null) return;
-        mentorProfileRepository.findById(mentorUserId).ifPresent(profile -> {
-            int current = profile.getMentorNoShowCount() == null ? 0 : profile.getMentorNoShowCount();
-            profile.setMentorNoShowCount(current + 1);
-            mentorProfileRepository.save(profile);
-        });
+        // Deprecated: violations are recorded only through MentorViolationService.
     }
 
     @Override
     @Transactional
     public void incrementMentorCompletionOverdueCount(UUID mentorUserId) {
-        if (mentorUserId == null) return;
-        mentorProfileRepository.findById(mentorUserId).ifPresent(profile -> {
-            int current = profile.getMentorCompletionOverdueCount() == null ? 0 : profile.getMentorCompletionOverdueCount();
-            profile.setMentorCompletionOverdueCount(current + 1);
-            mentorProfileRepository.save(profile);
-        });
+        // Deprecated: violations are recorded only through MentorViolationService.
     }
 }

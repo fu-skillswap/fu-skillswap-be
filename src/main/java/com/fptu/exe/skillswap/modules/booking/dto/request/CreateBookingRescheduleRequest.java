@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Schema(description = "Payload tạo reschedule request cho booking đã ACCEPTED.")
+@Schema(description = "Payload tạo reschedule request cho booking đã được xác nhận.")
 public record CreateBookingRescheduleRequest(
         @NotNull(message = "proposedSlotId là bắt buộc")
         UUID proposedSlotId,

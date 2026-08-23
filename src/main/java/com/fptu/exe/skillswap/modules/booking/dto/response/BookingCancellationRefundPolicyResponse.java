@@ -7,6 +7,8 @@ public record BookingCancellationRefundPolicyResponse(
         int earlyMenteeCancellationDeadlineMinutes,
         int earlyMenteeRefundPercent,
         int lateMenteeRefundPercent,
+        int lateMentorSharePercent,
+        int latePlatformSharePercent,
         int mentorCancellationRefundPercent,
         int mentorNoShowRefundPercent
 ) {

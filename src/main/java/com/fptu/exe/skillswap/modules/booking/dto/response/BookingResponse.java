@@ -126,6 +126,8 @@ public record BookingResponse(
         LocalDateTime selectedStartTime,
         @Schema(description = "Thời gian kết thúc thực sự được chọn cho booking")
         LocalDateTime selectedEndTime,
+        @Schema(description = "Hạn cuối xác nhận hoặc báo issue sau buổi học; luôn bằng selectedEndTime + 24 giờ", nullable = true)
+        LocalDateTime reviewDeadlineAt,
         @Schema(description = "Thời gian bắt đầu thực tế nếu có", nullable = true)
         LocalDateTime actualStartTime,
         @Schema(description = "Thời gian kết thúc thực tế nếu có", nullable = true)
@@ -178,8 +180,6 @@ public record BookingResponse(
         boolean canCancel,
         @Schema(description = "true nếu user hiện tại có thể hoàn tất booking")
         boolean canComplete,
-        @Schema(description = "true nếu user hiện tại có thể đề xuất dời lịch")
-        boolean canReschedule,
         @Schema(description = "true nếu user hiện tại có thể viết đánh giá feedback")
         boolean canSubmitFeedback,
         @Schema(description = "Cancellation/refund policy platform currently applied to this booking")

@@ -98,7 +98,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_bookingNotCompleted_shouldThrowConflict() {
-        booking.setStatus(BookingStatus.ACCEPTED);
+        booking.setStatus(BookingStatus.PAID);
         when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->

@@ -151,7 +151,7 @@ class BookingLifecycleMaintenanceServiceTest {
     }
 
     @Test
-    void processPostSessionLifecycle_awaitingMenteeConfirmation_afterFiveHours_shouldSendWarningNotification() {
+    void processPostSessionLifecycle_awaitingMenteeConfirmation_oneHourBeforeReviewDeadline_shouldSendWarningNotification() {
         LocalDateTime now = LocalDateTime.now();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
@@ -159,13 +159,13 @@ class BookingLifecycleMaintenanceServiceTest {
                 .mentorProfile(mentorProfile)
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
-                .selectedStartTime(now.minusHours(7))
-                .selectedEndTime(now.minusHours(6))
-                .completedAt(now.minusHours(5).minusMinutes(10)) // completed 5h10m ago
+                .selectedStartTime(now.minusHours(25))
+                .selectedEndTime(now.minusHours(23).minusMinutes(10))
+                .completedAt(now.minusHours(5).minusMinutes(10))
                 .autoCloseWarningSentAt(null)
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
                 eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(LocalDateTime.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
@@ -179,7 +179,7 @@ class BookingLifecycleMaintenanceServiceTest {
     }
 
     @Test
-    void processPostSessionLifecycle_awaitingMenteeConfirmation_afterSixHours_shouldAutoCloseAndReleaseSettlement() {
+    void processPostSessionLifecycle_awaitingMenteeConfirmation_afterReviewDeadline_shouldAutoCloseAndReleaseSettlement() {
         LocalDateTime now = LocalDateTime.now();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
@@ -187,13 +187,13 @@ class BookingLifecycleMaintenanceServiceTest {
                 .mentorProfile(mentorProfile)
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
-                .selectedStartTime(now.minusHours(8))
-                .selectedEndTime(now.minusHours(7))
-                .completedAt(now.minusHours(6).minusMinutes(5)) // completed 6h5m ago
+                .selectedStartTime(now.minusHours(26))
+                .selectedEndTime(now.minusHours(24).minusMinutes(5))
+                .completedAt(now.minusHours(6).minusMinutes(5))
                 .autoCloseWarningSentAt(now.minusHours(1))
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
                 eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(LocalDateTime.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));

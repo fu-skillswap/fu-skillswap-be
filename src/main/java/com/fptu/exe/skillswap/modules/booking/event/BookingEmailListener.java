@@ -4,10 +4,11 @@ import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -23,15 +24,15 @@ public class BookingEmailListener {
 
     private final EmailDispatchService emailDispatchService;
 
-    // Best-effort email must not hold the API response path after the business transaction commits.
-    @Async("mailNotificationExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    // Queue the email in the same transaction as the booking. Dispatch remains async
+    // through EmailOutbox, so a process crash cannot lose the notification intent.
+    @TransactionalEventListener(phase = TransactionPhase.BEFORE_COMMIT)
     public void handleBookingEmailNotification(BookingEmailNotificationEvent event) {
         log.info("Processing email event: {} for booking: {}", event.getEventType(), event.getBookingId());
 
         EmailContent content = buildContent(event);
         try {
-            emailDispatchService.sendHtmlOnce(
+            java.util.UUID outboxId = emailDispatchService.queueHtmlOnce(
                     dedupeKey(event),
                     event.getRecipientEmail(),
                     content.subject(),
@@ -39,6 +40,14 @@ public class BookingEmailListener {
                     renderPlainText(event, content),
                     event.getEventType().name()
             );
+            if (outboxId != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        emailDispatchService.dispatchEmailAsync(outboxId);
+                    }
+                });
+            }
         } catch (Exception ex) {
             log.error("Booking email event failed but transaction remains committed. eventType={}, bookingId={}, recipient={}",
                     event.getEventType(), event.getBookingId(), event.getRecipientEmail(), ex);

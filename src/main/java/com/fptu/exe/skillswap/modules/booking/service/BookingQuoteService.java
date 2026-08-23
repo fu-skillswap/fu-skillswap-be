@@ -25,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -69,7 +68,7 @@ public class BookingQuoteService {
         MentorService service = mentorQueryPort
                 .findActiveServiceByIdAndMentorUserId(request.serviceId(), mentor.getUserId())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn khả dụng"));
-        LocalDateTime start = LocalDateTime.ofInstant(normalizedStartAt, ZoneOffset.UTC);
+        LocalDateTime start = BookingTime.fromInstant(normalizedStartAt);
         LocalDateTime end = start.plusMinutes(service.getDurationMinutes());
         LocalDateTime now = DateTimeUtil.now();
         bookingSlotValidator.validateSelectedRange(slot, service, start, end, now);
@@ -79,7 +78,7 @@ public class BookingQuoteService {
 
         if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
                 menteeUserId, slot.getId(), start, end,
-                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.ACCEPTED, BookingStatus.PAID))) {
+                List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã có booking cho exact segment này.");
         }
 

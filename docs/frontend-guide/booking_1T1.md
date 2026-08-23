@@ -32,7 +32,7 @@
 
 - `startAt` khi lấy báo giá (Quote) và tạo booking (`createBooking`) là chuẩn **`Instant` UTC** (ví dụ: `2026-06-30T12:00:00Z`).
 - Giá trị này **bắt buộc phải lấy từ `candidateServiceSlots[].startTime`** của API candidate, tuyệt đối không tự tính toán lại từ giờ xem trước (preview).
-- Các trường thời gian trong `BookingResponse` và yêu cầu đổi lịch (Reschedule) là **`LocalDateTime` theo múi giờ kinh doanh `Asia/Ho_Chi_Minh`** (UTC+7). Không tự động thêm hậu tố `Z` khi parse hoặc hiển thị các giá trị này.
+- Các trường thời gian trong `BookingResponse` là **`LocalDateTime` theo múi giờ kinh doanh `Asia/Ho_Chi_Minh`** (UTC+7). Không tự động thêm hậu tố `Z` khi parse hoặc hiển thị các giá trị này.
 
 ---
 
@@ -76,7 +76,7 @@ Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact C
 
 > [!TIP]
 > - Sử dụng `actionDeadlineAt` khi có giá trị để hiển thị đồng hồ đếm ngược (Countdown).
-> - Sử dụng các cờ boolean `canCancel`, `canComplete`, `canReschedule`, `canSubmitFeedback` để bật/tắt (enable/disable) nút bấm tương ứng.
+> - Sử dụng các cờ boolean `canCancel`, `canComplete`, `canSubmitFeedback` để bật/tắt (enable/disable) nút bấm tương ứng.
 > - Luôn phải xử lý mã lỗi `409 Conflict` vì trạng thái dữ liệu có thể thay đổi giữa lúc render và lúc người dùng nhấn nút.
 
 ---
@@ -135,6 +135,8 @@ interface BookingQuoteResponse {
     earlyMenteeCancellationDeadlineMinutes: number;
     earlyMenteeRefundPercent: number;
     lateMenteeRefundPercent: number;
+    lateMentorSharePercent: number;
+    latePlatformSharePercent: number;
     mentorCancellationRefundPercent: number;
     mentorNoShowRefundPercent: number;
   };
@@ -268,6 +270,7 @@ interface BookingResponse {
 
   selectedStartTime: string | null;
   selectedEndTime: string | null;
+  reviewDeadlineAt: string | null; // selectedEndTime + 24 giờ
   acceptedAt: string | null;
   pendingExpireAt: string | null;
   cancelledAt: string | null;
@@ -287,12 +290,13 @@ interface BookingResponse {
   conversationId: string | null;
   canCancel: boolean;
   canComplete: boolean;
-  canReschedule: boolean;
   canSubmitFeedback: boolean;
   cancellationRefundPolicy: {
     earlyMenteeCancellationDeadlineMinutes: number;
     earlyMenteeRefundPercent: number;
     lateMenteeRefundPercent: number;
+    lateMentorSharePercent: number;
+    latePlatformSharePercent: number;
     mentorCancellationRefundPercent: number;
     mentorNoShowRefundPercent: number;
   };
@@ -361,6 +365,16 @@ interface SaveMeetingLinkRequest {
 > [!NOTE]
 > Nếu `googleCalendarManaged === true`, không hiển thị form chỉnh sửa link họp thủ công vì link Google Meet được tạo và quản lý tự động. Việc đồng bộ Google Calendar diễn ra bất đồng bộ; `calendarSyncStatus` chỉ để biểu thị trạng thái kết nối, không phải là điều kiện chặn mentee tham gia buổi học.
 
+### 5.4 Điểm vi phạm nội bộ của mentor
+
+`GET /api/me/mentor-violations?page=0&size=20` chỉ cho mentor hiện tại xem điểm phạt của chính mình. Response có `lifetimePenaltyScore`, `activePenaltyScore` (90 ngày gần nhất), `bookingSuspendedUntil` và lịch sử. Không đưa dữ liệu này lên mentor discovery hoặc màn hình mentee.
+
+Admin dùng `GET /api/admin/mentors/{mentorUserId}/violations?page=0&size=20`. Ledger chung nhận lỗi booking (`LATE_CANCELLATION`, `COMPLETION_OVERDUE`, `MENTOR_NO_SHOW`), nội dung chat/forum bị admin xác nhận, fraud verification và lỗi vận hành do admin xác nhận. Report chưa được admin kết luận không làm tăng điểm.
+
+Admin có thể ghi nhận lỗi đã xác minh bằng `POST /api/admin/mentors/{mentorUserId}/violations`. `sourceReferenceId` là bắt buộc để retry không tạo điểm trùng. API này không nhận các lỗi booking vì booking phải tự ghi nhận từ booking gốc.
+
+Nếu quyết định bị xác định là sai, admin dùng `POST /api/admin/mentors/{mentorUserId}/violations/{violationId}/reverse` với lý do bắt buộc. Event cũ vẫn giữ cho audit nhưng không còn tính vào điểm active/lifetime và hệ thống tính lại thời gian khóa booking.
+
 ---
 
 ## 6. Thao Tác Dành Cho Mentee & Người Tham Gia (Mentee & Participant Actions)
@@ -373,64 +387,12 @@ interface SaveMeetingLinkRequest {
 
 ---
 
-### 6.2 Yêu Cầu Đổi Lịch (Reschedule Flow)
-
-Chỉ hiển thị nút đổi lịch khi `canReschedule === true`.
-- **Quy định đổi lịch**: Mỗi booking chỉ được đổi lịch tối đa **1 lần**.
-- **Thời hạn gửi yêu cầu**: Phải tạo yêu cầu **trước giờ học cũ ít nhất 6 tiếng**.
-- **Thời hạn phản hồi**: Người nhận yêu cầu phải bấm Đồng ý/Từ chối **trước giờ học cũ ít nhất 2 tiếng** (nếu không yêu cầu sẽ hết hạn `EXPIRED`).
-
-| Vai trò | Gửi yêu cầu đổi lịch | Đồng ý / Từ chối yêu cầu |
-|---|---|---|
-| Mentee | `POST /api/me/bookings/{bookingId}/reschedule-requests` | `POST /api/me/bookings/reschedule-requests/{requestId}/accept` hoặc `/reject` |
-| Mentor | `POST /api/mentor/bookings/{bookingId}/reschedule-requests` | `POST /api/mentor/bookings/reschedule-requests/{requestId}/accept` hoặc `/reject` |
-
-```typescript
-interface CreateBookingRescheduleRequest {
-  proposedSlotId: string;
-  proposedSelectedStartTime: string; // LocalDateTime (Asia/Ho_Chi_Minh)
-  proposedSelectedEndTime: string;   // LocalDateTime (Asia/Ho_Chi_Minh)
-  reason: string;                    // 1 - 1000 ký tự
-}
-
-interface RespondBookingRescheduleRequest {
-  reason: string; // 1 - 1000 ký tự (Bắt buộc cho cả Accept và Reject)
-}
-
-interface BookingRescheduleRequestResponse {
-  rescheduleRequestId: string;
-  bookingId: string;
-  currentSlotId: string;
-  proposedSlotId: string;
-  previousSelectedStartTime: string;
-  previousSelectedEndTime: string;
-  proposedSelectedStartTime: string;
-  proposedSelectedEndTime: string;
-  requesterRole: "MENTEE" | "MENTOR" | "ADMIN";
-  requestedByUserId: string;
-  responderRole: "MENTEE" | "MENTOR" | "ADMIN" | null;
-  respondedByUserId: string | null;
-  status: "PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED";
-  requestReason: string;
-  responseNote: string | null;
-  adminOverride: boolean;
-  requestedAt: string;
-  respondedAt: string | null;
-  expiredAt: string | null;
-}
-```
-
-> [!TIP]
-> Sau khi Accept/Reject thành công, hãy tải lại chi tiết booking và lịch sử đổi lịch. **Không tự động đổi giờ trên giao diện trước khi nhận được phản hồi thành công từ backend**.
-
----
-
-### 6.3 Hoàn Thành, Xác Nhận, Báo Cáo Sự Cố & Đánh Giá
+### 6.2 Hoàn Thành, Xác Nhận, Báo Cáo Sự Cố & Đánh Giá
 
 | Thao tác | Endpoint | Khi nào sử dụng |
 |---|---|---|
 | Complete (Dùng chung) | `POST /api/me/bookings/{bookingId}/complete` | Dùng cho UI chung: Mentor sẽ bấm hoàn thành, Mentee sẽ bấm xác nhận |
-| Xác nhận (Confirm) | `POST /api/me/bookings/{bookingId}/confirm` | Mentee xác nhận buổi học thành công sau khi mentor đã bấm complete |
+| Xác nhận (Confirm) | `POST /api/me/bookings/{bookingId}/confirm` | Mentee xác nhận buổi học đã diễn ra, kể cả khi mentor chưa bấm complete |
 | Báo cáo sự cố (Issue) | `POST /api/me/bookings/{bookingId}/issue` | Người tham gia báo cáo vấn đề trong khung giờ cho phép sau buổi học |
 | Phản hồi sự cố (Respond Issue) | `POST /api/me/bookings/{bookingId}/issue/respond` | Bên còn lại phản hồi khiếu nại (tối đa 1 lần phản hồi) |
 | Đánh giá (Feedback) | `POST /api/bookings/{bookingId}/feedback` | Dành riêng cho mentee khi `canSubmitFeedback === true` |
@@ -446,8 +408,8 @@ interface ConfirmBookingRequest {
 
 interface SubmitBookingIssueRequest {
   issueType:
-    | "MENTOR_NO_SHOW"      // Mentor không tham gia
-    | "MENTEE_NO_SHOW"      // Mentee không tham gia
+    | "MENTOR_NO_SHOW"      // Mentor không tham gia; chỉ mentee được gửi
+    | "MENTEE_NO_SHOW"      // Mentee không tham gia; chỉ mentor được gửi
     | "QUALITY_ISSUE"       // Chất lượng buổi học không đảm bảo
     | "TECHNICAL_PROBLEM"   // Sự cố kỹ thuật/đường truyền
     | "OTHER";              // Lý do khác
@@ -470,13 +432,18 @@ interface SubmitFeedbackRequest {
 > [!NOTE]
 > Sự cố khiếu nại không tự động được đóng sau khi bên còn lại phản hồi. Nếu `bookingStatus === "UNDER_REVIEW"` hoặc `nextAction === "VIEW_ISSUE"`, hãy hiển thị chi tiết khiếu nại để người dùng theo dõi; **không tự đưa ra kết luận hoàn tiền trước khi có quyết định chính thức**.
 
+> [!IMPORTANT]
+> Deadline xác nhận hoặc báo vấn đề luôn là `selectedEndTime + 24 giờ`, không tính từ lúc mentor bấm complete. Nếu cả hai bên không thao tác, backend tự đóng booking và release tiền bình thường; mentor bị ghi nhận `COMPLETION_OVERDUE`.
+
+Chính sách hủy booking đã thanh toán: hủy trước giờ học ít nhất 4 giờ được hoàn 100%; hủy trong vòng dưới 4 giờ chia `50% mentee / 35% mentor / 15% nền tảng`; từ đúng giờ bắt đầu không được hủy và trường hợp vắng mặt phải đi qua no-show flow.
+
 ---
 
 ## 7. Tích Hợp Thanh Toán, Chat & Lịch (Integrations)
 
 - **Thanh toán**: Khi `nextAction === "PAY_NOW"`, chuyển hướng người dùng sang luồng thanh toán trong [payment.md](payment.md). Sau khi thanh toán tại PayOS và được chuyển hướng về, tiến hành kiểm tra/truy vấn trạng thái thanh toán và tải lại chi tiết booking.
 - **Phòng Chat**: Trường `conversationId` có thể mang giá trị `null` khi booking chưa được xác nhận (`CONFIRMED`). Frontend **không tự ý tạo conversation**; chỉ mở khung chat khi backend đã trả về ID hợp lệ theo [realtime-chat-notification.md](realtime-chat-notification.md).
-- **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`.
+- **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`. Khi sync lỗi, booking và thanh toán vẫn hợp lệ; hiển thị CTA cho mentor nhập link/địa điểm thủ công. Backend nhắc mentor trước 2 giờ và cả hai bên trước 30 phút nếu vẫn chưa có thông tin tham gia hợp lệ.
 
 ---
 
