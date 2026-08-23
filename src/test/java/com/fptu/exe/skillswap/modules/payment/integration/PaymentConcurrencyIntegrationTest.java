@@ -190,6 +190,8 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
     @Test
     void handleWebhook_concurrentSurplusPayment_shouldIssueCreditOnlyOnce() throws InterruptedException {
+        int threads = 5;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
         CountDownLatch latch = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threads);
         AtomicInteger successCount = new AtomicInteger(0);
@@ -207,30 +209,34 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         );
         when(payOsGateway.verifyWebhook(any())).thenReturn(verifiedWebhook);
 
-        for (int i = 0; i < threads; i++) {
-            executor.submit(() -> {
-                try {
-                    latch.await();
-                    PaymentWebhookRequest req = new PaymentWebhookRequest(
-                            "00", "Success", true,
-                            new PaymentWebhookRequest.PaymentWebhookDataRequest(
-                                    999999L, 100_000L, "description", "123123", "REF", "TXN",
-                                    "VND", "pl-123", "00", "Success", "cb", "cbn", "cn", "can", "van", "vanr"
-                            ),
-                            "sig"
-                    );
-                    paymentOrderService.handleWebhook(req);
-                    successCount.incrementAndGet();
-                } catch (Exception e) {
-                    // Ignore exceptions from duplicate event IDs, optimistic locks, etc.
-                } finally {
-                    done.countDown();
-                }
-            });
-        }
+        try {
+            for (int i = 0; i < threads; i++) {
+                executor.submit(() -> {
+                    try {
+                        latch.await();
+                        PaymentWebhookRequest req = new PaymentWebhookRequest(
+                                "00", "Success", true,
+                                new PaymentWebhookRequest.PaymentWebhookDataRequest(
+                                        999999L, 100_000L, "description", "123123", "REF", "TXN",
+                                        "VND", "pl-123", "00", "Success", "cb", "cbn", "cn", "can", "van", "vanr"
+                                ),
+                                "sig"
+                        );
+                        paymentOrderService.handleWebhook(req);
+                        successCount.incrementAndGet();
+                    } catch (Exception e) {
+                        // Ignore exceptions from duplicate event IDs, optimistic locks, etc.
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            }
 
-        latch.countDown();
-        done.await(10, TimeUnit.SECONDS);
+            latch.countDown();
+            done.await(10, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
 
         int balance = creditLedgerService.getAvailableBalance(mentee.getId());
         assertEquals(100_000, balance, "Credit should be exactly 100,000 SCoin regardless of concurrent webhooks.");
