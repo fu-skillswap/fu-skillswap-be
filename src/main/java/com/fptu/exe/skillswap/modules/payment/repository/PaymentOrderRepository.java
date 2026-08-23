@@ -33,6 +33,9 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
     @Query("select po from PaymentOrder po where po.id = :id")
     Optional<PaymentOrder> findByIdForUpdate(@Param("id") UUID id);
 
+    @Query("select po.targetId from PaymentOrder po where po.id = :id")
+    Optional<UUID> findTargetIdById(@Param("id") UUID id);
+
     boolean existsByTargetTypeAndTargetId(PaymentTargetType targetType, UUID targetId);
 
     boolean existsByProviderOrderCode(String providerOrderCode);

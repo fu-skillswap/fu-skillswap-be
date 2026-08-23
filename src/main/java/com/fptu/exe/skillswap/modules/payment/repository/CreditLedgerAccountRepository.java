@@ -15,6 +15,7 @@ public interface CreditLedgerAccountRepository extends JpaRepository<CreditLedge
 
     Optional<CreditLedgerAccount> findByOwnerTypeAndOwnerId(LedgerAccountType ownerType, UUID ownerId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select account
             from CreditLedgerAccount account

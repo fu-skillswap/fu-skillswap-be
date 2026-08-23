@@ -419,7 +419,7 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(webhookRequest)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-1"));
         // Optimistic (non-locking) read before entering the transaction
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
@@ -500,7 +500,7 @@ class PaymentOrderServiceTest {
         );
         when(payOsGateway.verifyWebhook(request)).thenReturn(notPaid);
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
@@ -541,7 +541,7 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-dup"));
         // Optimistic read before entering the transaction
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
@@ -626,7 +626,7 @@ class PaymentOrderServiceTest {
         );
         when(payOsGateway.verifyWebhook(request)).thenReturn(underpaid);
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
@@ -667,7 +667,7 @@ class PaymentOrderServiceTest {
 
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-surplus"));
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
-        when(paymentOrderRepository.findById(order.getId())).thenReturn(Optional.of(order));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));

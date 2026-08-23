@@ -91,11 +91,11 @@ public class PaymentWebhookService {
         return transactionTemplate.execute(status -> {
             // Giữ thứ tự lock thống nhất với checkout/expiry: booking -> payment order -> payment attempt.
             // Không lock attempt theo providerOrderCode trước, nếu không webhook và luồng hủy có thể chờ chéo nhau.
-            PaymentOrder snapshotOrder = paymentOrderRepository.findById(optimisticAttempt.getPaymentOrderId())
+            UUID targetId = paymentOrderRepository.findTargetIdById(optimisticAttempt.getPaymentOrderId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-            Booking lockedBooking = bookingQueryPort.findByIdForSessionUpdate(snapshotOrder.getTargetId())
+            Booking lockedBooking = bookingQueryPort.findByIdForSessionUpdate(targetId)
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
-            PaymentOrder order = paymentOrderRepository.findByIdForUpdate(snapshotOrder.getId())
+            PaymentOrder order = paymentOrderRepository.findByIdForUpdate(optimisticAttempt.getPaymentOrderId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
             PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(optimisticAttempt.getId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,

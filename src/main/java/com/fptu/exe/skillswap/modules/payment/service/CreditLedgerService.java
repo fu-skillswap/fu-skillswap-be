@@ -270,13 +270,13 @@ public class CreditLedgerService {
     }
 
     private CreditLedgerAccount lockAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
-        CreditLedgerAccount existing = accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+        CreditLedgerAccount existing = accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
                 .orElse(null);
         if (existing != null) {
             return existing;
         }
         ensureAccount(ownerType, ownerId, accountCode);
-        return accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
+        return accountRepository.findByOwnerTypeAndOwnerIdForUpdate(ownerType, ownerId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không thể khóa credit account"));
     }
 
