@@ -91,7 +91,7 @@ Không chỉ dựa vào trạng thái cũ trong `GET /api/auth/me`: backend luô
 
 ## 3. Quản Lý Dịch Vụ Mentoring (Service Management)
 
-1. Gọi `GET /api/me/mentor-services/constraints` trước khi mở form tạo mới để lấy các ràng buộc về thời lượng (`durationMinutes`) và khoảng giá Scoin do nền tảng quy định.
+1. Gọi `GET /api/me/mentor-services/constraints` trước khi mở form tạo mới để lấy các ràng buộc về thời lượng (`durationMinutes`: 30, 60, 90, 120) và khoảng giá Scoin do nền tảng quy định (tối thiểu 500 SCoin/phút, tương ứng 30p = 15.000, 60p = 30.000, 90p = 45.000, 120p = 60.000).
 2. Tạo dịch vụ mới qua `POST /api/me/mentor-services`.
 3. Sử dụng `GET /api/me/mentor-services?isActive=true|false` để quản lý danh sách dịch vụ của mình (bỏ query `isActive` để lấy toàn bộ).
 4. Sử dụng `PUT /api/me/mentor-services/{serviceId}` để chỉnh sửa và `PATCH /api/me/mentor-services/{serviceId}/active` để bật/tắt trạng thái hoạt động.
@@ -101,9 +101,9 @@ interface CreateMentorServiceRequest {
   title: string;                    // 1 - 200 ký tự (Bắt buộc)
   description: string;              // 1 - 1000 ký tự (Bắt buộc)
   expectedOutcome: string;          // 1 - 1000 ký tự (Bắt buộc)
-  durationMinutes: number;          // Bắt buộc, phải thuộc danh sách allowedDurationMinutes từ constraints
+  durationMinutes: number;          // Bắt buộc, thuộc danh sách allowedDurationMinutes (30, 60, 90, 120)
   isFree: boolean;                  // true: miễn phí, false: có phí
-  priceScoin: number;               // Giá Scoin (0 nếu isFree = true)
+  priceScoin: number;               // Giá Scoin (0 nếu isFree = true; tối thiểu 500 Scoin/phút nếu có phí)
   maintainPostSessionChat?: boolean;// Duy trì phòng chat sau buổi học
   deliveryMode?: string;            // Mặc định "ONE_TO_ONE"
 }
@@ -177,8 +177,8 @@ interface UpdateMentorBookingPolicyRequest {
 ## 5. Lịch Rảnh Trực Tiếp (Direct Availability Slots)
 
 Lịch rảnh trực tiếp (Direct Slot) là các khung giờ rảnh dùng một lần.
-- Thời gian gửi lên request bắt buộc là chuỗi **`Instant` UTC** (ví dụ: `2026-06-29T01:00:00Z`).
-- Giao diện người dùng chuyển đổi giờ địa phương mà mentor nhập sang UTC trước khi gửi, và hiển thị theo múi giờ (`Asia/Ho_Chi_Minh`) nhận được từ backend.
+- Thời gian gửi lên request là chuỗi **ISO-8601** (chấp nhận cả UTC `2026-06-29T01:00:00Z` hoặc offset địa phương `2026-06-29T08:00:00+07:00`). Backend tự động chuẩn hóa (auto-truncate) về phút tròn (`:00.000Z`), FE không lo dính lỗi do mili-giây lẻ từ datepicker.
+- Giao diện người dùng hiển thị theo múi giờ (`Asia/Ho_Chi_Minh`) nhận được từ backend.
 
 | Endpoint | Mục đích |
 |---|---|
@@ -189,8 +189,8 @@ Lịch rảnh trực tiếp (Direct Slot) là các khung giờ rảnh dùng mộ
 
 ```typescript
 interface CreateAvailabilitySlotRequest {
-  startAt: string;                       // Chuỗi ISO Instant UTC
-  endAt: string;                         // Chuỗi ISO Instant UTC
+  startAt: string;                       // Chuỗi ISO Instant UTC hoặc ISO Offset
+  endAt: string;                         // Chuỗi ISO Instant UTC hoặc ISO Offset
   note?: string;                         // Ghi chú, tối đa 200 ký tự
   serviceIds: string[];                  // Danh sách UUID dịch vụ áp dụng cho slot này
   replaceGeneratedOccurrences?: boolean; // Cho phép ghi đè lên slot tự động sinh từ template
@@ -221,7 +221,7 @@ interface DeactivateAvailabilitySlotRequest {
 
 ## 6. Mẫu Lịch Lặp Tuần (Availability Templates)
 
-Template là lịch lặp cố định theo các thứ trong tuần sử dụng múi giờ `Asia/Ho_Chi_Minh`. Backend sẽ tự động sinh (materialize) thành các slot rảnh cụ thể trong tương lai. Không dùng trực tiếp template để đặt lịch.
+Template là lịch lặp cố định theo các thứ trong tuần sử dụng múi giờ `Asia/Ho_Chi_Minh`. Backend sẽ tự động sinh (materialize) thành các slot rảnh cụ thể trong **28 ngày tới (~4 tuần)**. Không dùng trực tiếp template để đặt lịch.
 
 | Endpoint | Mục đích |
 |---|---|
@@ -267,13 +267,51 @@ interface AvailabilityTemplateResponse {
 
 ---
 
-## 7. Xử Lý Lỗi Thường Gặp (Error Handling)
+## 7. Tra Cứu Candidate Segments & Đồng Bộ Lịch Bận (Booking Candidates & Google Busy Overlay)
 
-| HTTP Status | Hướng xử lý cho Frontend |
+Khi Mentee chọn một Slot rảnh và một Service cụ thể, Frontend gọi API:
+`GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/services/{serviceId}/candidates`
+
+Backend sẽ trả về **toàn bộ timeline các segment candidate** được chia nhỏ theo `durationMinutes` của service trong slot, kèm theo cờ `isSelectable` và lý do nếu bị khóa.
+
+```typescript
+interface ServiceSlotCandidateItemResponse {
+  startTime: string;                  // ISO UTC: "2026-06-29T08:00:00Z"
+  endTime: string;                    // ISO UTC: "2026-06-29T09:00:00Z"
+  pendingCount: number;               // Số request PENDING hiện có trên segment này (tối đa 3)
+  remainingPendingQuota: number;      // Quota còn lại = max(0, 3 - pendingCount)
+  isSelectable: boolean;              // true: cho phép click chọn; false: disable/xám ô
+  reasonIfBlocked: string | null;     // Mã lý do chặn
+  blockedByAcceptedBooking: boolean;  // true nếu đã có booking ACCEPTED
+  blockedBySameService: boolean;      // true nếu booking ACCEPTED cùng service
+  blockedByDifferentService: boolean; // true nếu booking ACCEPTED khác service
+  bookingConflictNote: string | null; // Tooltip giải thích chi tiết cho UI
+  blockedByGoogleCalendar?: boolean;  // true nếu trùng lịch bận trên Google Calendar của mentor
+}
+```
+
+### Các Mã `reasonIfBlocked` & Hướng Dẫn Hiển Thị UI:
+
+| `reasonIfBlocked` | Ý nghĩa | Trạng thái hiển thị trên FE |
+|---|---|---|
+| `null` (`isSelectable: true`) | Khung giờ hoàn toàn khả dụng | Render ô màu xanh / cho phép bấm đặt lịch |
+| `"Segment này đã bắt đầu hoặc đã trôi qua"` | Khung giờ trong quá khứ | Render ô xám (disabled), tooltip: *"Khung giờ đã trôi qua"* |
+| `"Yêu cầu đặt trước tối thiểu"` | Vi phạm Lead Time của mentor (vd: đặt trước < 2 giờ) | Render ô xám (disabled), tooltip: `bookingConflictNote` (vd: *"Khung giờ này yêu cầu đặt trước tối thiểu 2 giờ"*) |
+| `"Vượt quá thời hạn mở lịch cho phép"` | Vi phạm Horizon của mentor (vd: đặt trước > 30 ngày) | Render ô xám (disabled), tooltip: `bookingConflictNote` |
+| `"Đã có booking được mentor chấp nhận trùng với khoảng thời gian này"` | Đã có mentee khác được chấp nhận | Render ô đỏ/xám (disabled), tooltip: `bookingConflictNote` |
+| `"Trùng lịch bận trên Google Calendar của mentor"` | Mentor có lịch bận cá nhân trên Google Calendar (FreeBusy Overlay) | Render ô xám (disabled) có icon Google Calendar, tooltip: *"Trùng lịch bận trên Google Calendar của mentor"* |
+| `"Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận"` | Hết hàng đợi PENDING (3/3) | Render ô vàng/xám (disabled), tooltip: *"Đã đủ 3 yêu cầu chờ xác nhận"* |
+
+---
+
+## 8. Xử Lý Lỗi Thường Gặp (Error Handling)
+
+| HTTP Status / Code | Hướng xử lý cho Frontend |
 |---|---|
 | `400 Bad Request` | Hiển thị thông báo lỗi validation theo từng ô nhập liệu. Không retry tự động. |
 | `401 Unauthorized` | Thực hiện quy trình Refresh Token theo [identity.md](identity.md). |
 | `403 Forbidden` | API này chỉ dành cho tài khoản có Role `MENTOR`. Ẩn các thao tác nếu user chưa được duyệt. |
 | `404 Not Found` | Dịch vụ, slot rảnh hoặc template không còn tồn tại hoặc không thuộc quyền sở hữu của mentor hiện tại. |
 | `409 Conflict` | Xung đột phiên bản (Optimistic Locking) hoặc slot bị khóa bởi booking đang xử lý. Tải lại dữ liệu và dùng version mới nhất. |
+| `409 CAL_4404 (GOOGLE_CALENDAR_BUSY_CONFLICT)` | Khung giờ bị trùng lịch bận phát sinh đột xuất trên Google Calendar của mentor. Hiển thị thông báo yêu cầu mentee chọn khung giờ khác. |
 | `429 Too Many Requests` | Đọc `retryAfterSeconds`, khóa nút thao tác và hiển thị đếm ngược thời gian chờ. |

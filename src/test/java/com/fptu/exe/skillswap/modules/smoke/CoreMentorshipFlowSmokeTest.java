@@ -243,8 +243,8 @@ class CoreMentorshipFlowSmokeTest {
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
         slot.setMentorProfile(mp);
-        slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0));
-        slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0));
+        slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0).withSecond(0).withNano(0));
+        slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0).withSecond(0).withNano(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
         slot = slotRepository.saveAndFlush(slot);
         var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
@@ -339,8 +339,8 @@ class CoreMentorshipFlowSmokeTest {
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
         slot.setMentorProfile(mp);
-        slot.setStartTime(DateTimeUtil.now().plusDays(1).withHour(10).withMinute(0));
-        slot.setEndTime(DateTimeUtil.now().plusDays(1).withHour(12).withMinute(0));
+        slot.setStartTime(DateTimeUtil.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0));
+        slot.setEndTime(DateTimeUtil.now().plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
         slot = slotRepository.saveAndFlush(slot);
         slot = slotRepository.findById(slot.getId()).orElseThrow();

@@ -51,7 +51,7 @@ public class BookingQuoteService {
         if (request == null || request.slotId() == null || request.serviceId() == null || request.startAt() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "slotId, serviceId và startAt là bắt buộc");
         }
-        validateWholeMinute(request.startAt());
+        Instant normalizedStartAt = request.startAt().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
 
         User mentee = userQueryPort.findUserById(menteeUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
@@ -69,7 +69,7 @@ public class BookingQuoteService {
         MentorService service = mentorQueryPort
                 .findActiveServiceByIdAndMentorUserId(request.serviceId(), mentor.getUserId())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn khả dụng"));
-        LocalDateTime start = LocalDateTime.ofInstant(request.startAt(), ZoneOffset.UTC);
+        LocalDateTime start = LocalDateTime.ofInstant(normalizedStartAt, ZoneOffset.UTC);
         LocalDateTime end = start.plusMinutes(service.getDurationMinutes());
         LocalDateTime now = DateTimeUtil.now();
         bookingSlotValidator.validateSelectedRange(slot, service, start, end, now);
@@ -112,12 +112,6 @@ public class BookingQuoteService {
         if (!slot.isActive() || slot.getStartTime() == null || slot.getEndTime() == null
                 || !slot.getEndTime().isAfter(slot.getStartTime()) || !slot.getEndTime().isAfter(now)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
-        }
-    }
-
-    private void validateWholeMinute(Instant startAt) {
-        if (startAt.getEpochSecond() % 60 != 0 || startAt.getNano() != 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "SCHEDULING_TIME_PRECISION_INVALID");
         }
     }
 }

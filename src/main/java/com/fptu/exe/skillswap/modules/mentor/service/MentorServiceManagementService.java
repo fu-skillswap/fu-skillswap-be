@@ -18,7 +18,6 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstrain
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -28,9 +27,8 @@ import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -39,8 +37,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MentorServiceManagementService {
 
-    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 30, 60, 90);
-    private static final int MIN_PRICE_SCOIN_PER_MINUTE = 1_200;
+    private static final Set<Integer> ALLOWED_DURATIONS = Set.of(30, 60, 90, 120);
+    private static final int MIN_PRICE_SCOIN_PER_MINUTE = 500;
     private static final int MAX_PRICE_SCOIN_PER_MINUTE = 500_000;
 
     private final MentorServiceRepository mentorServiceRepository;
@@ -77,18 +75,6 @@ public class MentorServiceManagementService {
                 MIN_PRICE_SCOIN_PER_MINUTE,
                 MAX_PRICE_SCOIN_PER_MINUTE
         );
-    }
-
-    /** Java-only compatibility bridge for the removed `active=all` query convention. */
-    @Deprecated(forRemoval = true)
-    public List<MentorServiceManagementResponse> getMyServices(UUID mentorUserId, String active) {
-        if (active == null || active.isBlank() || "all".equalsIgnoreCase(active)) {
-            return getMyServices(mentorUserId, (Boolean) null);
-        }
-        if ("true".equalsIgnoreCase(active) || "false".equalsIgnoreCase(active)) {
-            return getMyServices(mentorUserId, Boolean.valueOf(active));
-        }
-        throw new BaseException(ErrorCode.BAD_REQUEST, "Query param active chỉ chấp nhận true, false hoặc all");
     }
 
     @Transactional(readOnly = true)
@@ -128,15 +114,6 @@ public class MentorServiceManagementService {
 
         touchMentorActivity(mentorProfile, LocalDateTime.now());
         return toResponse(mentorServiceRepository.save(service));
-    }
-
-    /** Java-only bridge; the HTTP endpoint uses CreateMentorServiceRequest. */
-    @Deprecated(forRemoval = true)
-    public MentorServiceManagementResponse createService(UUID mentorUserId, MentorServiceUpsertRequest request) {
-        return createService(mentorUserId, new CreateMentorServiceRequest(
-                request.title(), request.description(), request.expectedOutcome(), request.durationMinutes(),
-                request.isFree(), request.priceScoin(), false, MentorServiceDeliveryMode.ONE_TO_ONE
-        ));
     }
 
     @Transactional
@@ -257,7 +234,7 @@ public class MentorServiceManagementService {
 
     private Integer validateDuration(Integer durationMinutes) {
         if (durationMinutes == null || !ALLOWED_DURATIONS.contains(durationMinutes)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ chỉ được chọn 15, 30, 60 hoặc 90 phút");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ chỉ được chọn 30, 60, 90 hoặc 120 phút");
         }
         return durationMinutes;
     }

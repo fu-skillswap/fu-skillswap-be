@@ -139,6 +139,7 @@ class MentorAvailabilityWindowIntegrationTest {
     void getMySlots_shouldIncludeSlotThatStartsBeforeWindowButOverlapsWindow() {
         List<MentorManagedAvailabilitySlotResponse> responses = mentorAvailabilityService.getMySlots(
                 mentorUser.getId(),
+                null,
                 queryStartDate,
                 queryStartDate.plusDays(4)
         );

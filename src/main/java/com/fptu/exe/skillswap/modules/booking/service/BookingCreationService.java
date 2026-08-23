@@ -109,10 +109,10 @@ public class BookingCreationService {
         MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
 
         Instant requestedStartAt = request.startAt();
-        if (requestedStartAt == null || (request.legacySelectedEndTime() == null
-                && (requestedStartAt.getEpochSecond() % 60 != 0 || requestedStartAt.getNano() != 0))) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "SCHEDULING_TIME_PRECISION_INVALID");
+        if (requestedStartAt == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu không được để trống");
         }
+        requestedStartAt = requestedStartAt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
         LocalDateTime selectedStartTime = LocalDateTime.ofInstant(requestedStartAt, ZoneOffset.UTC);
         LocalDateTime selectedEndTime = selectedStartTime.plusMinutes(mentorService.getDurationMinutes());
         bookingSlotValidator.validateSelectedRange(slot, mentorService, selectedStartTime, selectedEndTime, now);

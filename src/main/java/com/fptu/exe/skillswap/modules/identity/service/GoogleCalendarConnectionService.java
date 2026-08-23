@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleCalendarConnectRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleCalendarStatusResponse;
+import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.MentorCalendarEligibilityPort;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
@@ -31,7 +33,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class GoogleCalendarConnectionService implements GoogleCalendarConnectionPort {
+public class GoogleCalendarConnectionService implements GoogleCalendarConnectionPort, GoogleCalendarBusyPort {
 
     private final UserRepository userRepository;
     private final GoogleCalendarConnectionRepository connectionRepository;
@@ -327,6 +329,28 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         }
         if (!StringUtils.hasText(requestRedirectUri) || !configuredRedirectUri.equals(requestRedirectUri.trim())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "redirectUri không khớp với cấu hình Google Calendar của hệ thống");
+        }
+    }
+
+    @Override
+    public List<GoogleCalendarBusyInterval> queryBusyIntervals(UUID mentorUserId, java.time.Instant timeMin, java.time.Instant timeMax) {
+        if (mentorUserId == null || timeMin == null || timeMax == null) {
+            return List.of();
+        }
+        try {
+            GoogleCalendarConnection connection = connectionRepository.findByUserId(mentorUserId).orElse(null);
+            if (connection == null || connection.getConnectionStatus() != GoogleCalendarConnectionStatus.ACTIVE) {
+                return List.of();
+            }
+            String accessToken = resolveAccessTokenForSync(connection.getId());
+            if (!StringUtils.hasText(accessToken)) {
+                return List.of();
+            }
+            String calendarId = StringUtils.hasText(connection.getCalendarId()) ? connection.getCalendarId() : "primary";
+            return googleCalendarApiClient.queryFreeBusy(accessToken, calendarId, timeMin, timeMax);
+        } catch (Exception ex) {
+            log.warn("Querying Google Calendar busy intervals failed gracefully for mentorUserId={}: {}", mentorUserId, ex.getMessage());
+            return List.of();
         }
     }
 

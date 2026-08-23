@@ -7,13 +7,10 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceUpsertRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorServiceManagementService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,7 +20,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -105,11 +101,11 @@ class MentorServiceManagementServiceTest {
     }
 
     @Test
-    void getMyServices_defaultAll_shouldReturnBothActiveAndInactive() {
+    void getMyServices_nullActive_shouldReturnBothActiveAndInactive() {
         when(mentorServiceRepository.findByMentorProfileUserIdOrderByCreatedAtAsc(mentorUserId))
                 .thenReturn(List.of(activeService, inactiveService));
 
-        var response = mentorServiceManagementService.getMyServices(mentorUserId, "all");
+        var response = mentorServiceManagementService.getMyServices(mentorUserId, (Boolean) null);
 
         assertEquals(2, response.size());
         verify(mentorServiceRepository).findByMentorProfileUserIdOrderByCreatedAtAsc(mentorUserId);
@@ -121,7 +117,7 @@ class MentorServiceManagementServiceTest {
         when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(mentorUserId, true))
                 .thenReturn(List.of(activeService));
 
-        var response = mentorServiceManagementService.getMyServices(mentorUserId, "true");
+        var response = mentorServiceManagementService.getMyServices(mentorUserId, true);
 
         assertEquals(1, response.size());
         assertEquals(true, response.getFirst().active());
@@ -133,7 +129,7 @@ class MentorServiceManagementServiceTest {
         when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(mentorUserId, false))
                 .thenReturn(List.of(inactiveService));
 
-        var response = mentorServiceManagementService.getMyServices(mentorUserId, "false");
+        var response = mentorServiceManagementService.getMyServices(mentorUserId, false);
 
         assertEquals(1, response.size());
         assertEquals(false, response.getFirst().active());
@@ -141,26 +137,16 @@ class MentorServiceManagementServiceTest {
     }
 
     @Test
-    void getMyServices_invalidActiveFilter_shouldThrowBadRequest() {
-        BaseException exception = assertThrows(
-                BaseException.class,
-                () -> mentorServiceManagementService.getMyServices(mentorUserId, "abc")
-        );
-
-        assertEquals("Query param active chỉ chấp nhận true, false hoặc all", exception.getMessage());
-        verify(mentorServiceRepository, never()).findByMentorProfileUserIdOrderByCreatedAtAsc(mentorUserId);
-        verify(mentorServiceRepository, never()).findByMentorProfileUserIdAndIsActiveOrderByCreatedAtAsc(eq(mentorUserId), anyBoolean());
-    }
-
-    @Test
-    void createService_paidServiceBelowMinimum_shouldThrowBadRequest() {
-        MentorServiceUpsertRequest request = new MentorServiceUpsertRequest(
+    void createService_invalidDuration_15mins_shouldThrowBadRequest() {
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
                 "Review project",
                 "Mo ta",
                 "Ket qua",
-                60,
+                15,
                 false,
-                71_999
+                72_000,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
         );
 
         BaseException exception = assertThrows(
@@ -168,20 +154,44 @@ class MentorServiceManagementServiceTest {
                 () -> mentorServiceManagementService.createService(mentorUserId, request)
         );
 
-        assertEquals("Dịch vụ có phí phải có giá tối thiểu 72000 SCoin cho 60 phút", exception.getMessage());
+        assertEquals("Thời lượng dịch vụ chỉ được chọn 30, 60, 90 hoặc 120 phút", exception.getMessage());
+        verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void createService_paidServiceBelowMinimum_shouldThrowBadRequest() {
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
+                "Review project",
+                "Mo ta",
+                "Ket qua",
+                60,
+                false,
+                29_999,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
+        );
+
+        BaseException exception = assertThrows(
+                BaseException.class,
+                () -> mentorServiceManagementService.createService(mentorUserId, request)
+        );
+
+        assertEquals("Dịch vụ có phí phải có giá tối thiểu 30000 SCoin cho 60 phút", exception.getMessage());
         verify(googleCalendarConnectionPort, never()).requireActiveConnectionForServiceCreation(mentorUserId);
         verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void createService_paidServiceAboveMaximum_shouldThrowBadRequest() {
-        MentorServiceUpsertRequest request = new MentorServiceUpsertRequest(
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
                 "Review project",
                 "Mo ta",
                 "Ket qua",
                 60,
                 false,
-                30_000_001
+                30_000_001,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
         );
 
         BaseException exception = assertThrows(
@@ -195,6 +205,34 @@ class MentorServiceManagementServiceTest {
     }
 
     @Test
+    void createService_validDuration120mins_shouldSucceed() {
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> {
+                    MentorService service = inv.getArgument(0);
+                    service.setId(UUID.randomUUID());
+                    return service;
+                });
+
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
+                "Masterclass 2h",
+                "Mo ta chi tiet",
+                "Ket qua dat duoc",
+                120,
+                false,
+                150_000,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
+        );
+
+        var response = mentorServiceManagementService.createService(mentorUserId, request);
+
+        assertEquals(120, response.durationMinutes());
+        assertEquals(150_000, response.basePriceScoin());
+        verify(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
+        verify(mentorServiceRepository).save(org.mockito.ArgumentMatchers.any(MentorService.class));
+    }
+
+    @Test
     void createService_freeServiceShouldForceZeroPriceInResponse() {
         when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
                 .thenAnswer(inv -> {
@@ -203,13 +241,15 @@ class MentorServiceManagementServiceTest {
                     return service;
                 });
 
-        MentorServiceUpsertRequest request = new MentorServiceUpsertRequest(
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
                 "Quick answer",
                 "Mo ta",
                 "Ket qua",
-                15,
+                30,
                 true,
-                0
+                0,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE
         );
 
         var response = mentorServiceManagementService.createService(mentorUserId, request);

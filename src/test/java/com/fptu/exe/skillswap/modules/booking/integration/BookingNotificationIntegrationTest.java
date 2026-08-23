@@ -175,11 +175,12 @@ class BookingNotificationIntegrationTest {
                 .active(true)
                 .build());
 
+        LocalDateTime slotStart = LocalDateTime.now().plusDays(2).withMinute(0).withSecond(0).withNano(0);
         testSlot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
                 .mentorProfile(mentorProfile)
                 .rule(availabilityRule)
-                .startTime(LocalDateTime.now().plusDays(2))
-                .endTime(LocalDateTime.now().plusDays(2).plusHours(1))
+                .startTime(slotStart)
+                .endTime(slotStart.plusHours(1))
                 .isActive(true)
                 .isBooked(false)
                 .build());

@@ -26,7 +26,7 @@ public record CreateMentorServiceRequest(
         @Schema(description = "Dịch vụ miễn phí hay có phí", example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull Boolean isFree,
 
-        @Schema(description = "Giá dịch vụ theo SCoin (Nếu isFree=true thì giá phải bằng 0; nếu có phí thì tối thiểu = durationMinutes * 1200)", example = "72000", requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(description = "Giá dịch vụ theo SCoin (Nếu isFree=true thì giá phải bằng 0; nếu có phí thì tối thiểu = durationMinutes * 500)", example = "30000", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull @Min(0) @Max(45_000_000) Integer priceScoin,
 
         @Schema(description = "Duy trì kênh chat hỗ trợ sau buổi mentoring", example = "true")

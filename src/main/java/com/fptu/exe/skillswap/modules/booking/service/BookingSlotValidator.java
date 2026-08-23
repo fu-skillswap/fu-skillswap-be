@@ -6,6 +6,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 
+import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -15,7 +17,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,6 +38,7 @@ public class BookingSlotValidator {
     private final MentorBookingPolicyService mentorBookingPolicyService;
 
     private AvailabilityTemplateService availabilityTemplateService;
+    private GoogleCalendarBusyPort googleCalendarBusyPort;
 
     public BookingSlotValidator(AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
                                 BookingRepository bookingRepository) {
@@ -43,6 +48,11 @@ public class BookingSlotValidator {
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
+    }
+
+    @Autowired(required = false)
+    void setGoogleCalendarBusyPort(GoogleCalendarBusyPort googleCalendarBusyPort) {
+        this.googleCalendarBusyPort = googleCalendarBusyPort;
     }
 
     public void validateSelectedRange(
@@ -133,6 +143,20 @@ public class BookingSlotValidator {
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ đã chọn.");
+        }
+
+        if (googleCalendarBusyPort != null && slot.getMentorProfile() != null && slot.getMentorProfile().getUserId() != null) {
+            Instant startUtc = selectedStartTime.atZone(ZoneOffset.UTC).toInstant();
+            Instant endUtc = selectedEndTime.atZone(ZoneOffset.UTC).toInstant();
+            List<GoogleCalendarBusyInterval> busyIntervals = googleCalendarBusyPort.queryBusyIntervals(
+                    slot.getMentorProfile().getUserId(),
+                    startUtc,
+                    endUtc
+            );
+            if (busyIntervals != null && busyIntervals.stream().anyMatch(i -> i.overlaps(startUtc, endUtc))) {
+                throw new BaseException(ErrorCode.GOOGLE_CALENDAR_BUSY_CONFLICT,
+                        "Khung giờ đã chọn trùng với lịch bận trên Google Calendar của mentor.");
+            }
         }
     }
 }

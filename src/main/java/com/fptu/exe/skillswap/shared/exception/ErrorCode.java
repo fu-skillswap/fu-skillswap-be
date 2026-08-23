@@ -31,6 +31,7 @@ public enum ErrorCode {
     GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước"),
     GOOGLE_CALENDAR_MENTOR_VERIFICATION_REQUIRED(409, "CAL_4402", "error.calendar.mentor_verification_required", "Chỉ dành cho mentor đã được duyệt"),
     GOOGLE_CALENDAR_DISCONNECT_BLOCKED(409, "CAL_4403", "error.calendar.disconnect_blocked", "Phải tắt toàn bộ dịch vụ mentoring trước"),
+    GOOGLE_CALENDAR_BUSY_CONFLICT(409, "CAL_4404", "error.calendar.busy_conflict", "Khung giờ trùng lịch bận trên Google Calendar của mentor"),
 
     // Nghiệp vụ.
     USER_EXISTED(400, "USER_2001", "error.user.existed", "Người dùng đã tồn tại"),

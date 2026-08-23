@@ -99,10 +99,12 @@ public class AvailabilityTemplateService {
         lockMentor(mentorUserId);
         MentorProfile mentor = requireMentor(mentorUserId);
         LocalDate today = today();
-        validateCreate(request, today);
+        LocalTime startTime = request.startTime() == null ? null : request.startTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        LocalTime endTime = request.endTime() == null ? null : request.endTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        validateCreate(startTime, endTime, request.weekdays(), request.effectiveFrom(), request.effectiveTo(), today);
         validateActiveLimit(mentorUserId, null, today);
         AvailabilityTemplate template = AvailabilityTemplate.builder()
-                .mentorProfile(mentor).startTime(request.startTime()).endTime(request.endTime())
+                .mentorProfile(mentor).startTime(startTime).endTime(endTime)
                 .weekdays(encodeDays(request.weekdays())).effectiveFrom(request.effectiveFrom())
                 .effectiveTo(request.effectiveTo()).note(trimToNull(request.note()))
                 .configuredStatus(AvailabilityTemplateConfiguredStatus.ACTIVE)
@@ -159,8 +161,10 @@ public class AvailabilityTemplateService {
             if (request.effectiveFrom().isBefore(today)) throw invalid("AVAILABILITY_TEMPLATE_INVALID_SCHEDULE");
             effectiveFrom = request.effectiveFrom();
         }
-        validateSchedule(request.startTime(), request.endTime(), request.weekdays(), effectiveFrom, request.effectiveTo());
-        template.setStartTime(request.startTime()); template.setEndTime(request.endTime());
+        LocalTime startTime = request.startTime() == null ? null : request.startTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        LocalTime endTime = request.endTime() == null ? null : request.endTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        validateSchedule(startTime, endTime, request.weekdays(), effectiveFrom, request.effectiveTo());
+        template.setStartTime(startTime); template.setEndTime(endTime);
         template.setWeekdays(encodeDays(request.weekdays())); template.setEffectiveFrom(effectiveFrom);
         template.setEffectiveTo(request.effectiveTo()); template.setNote(trimToNull(request.note()));
         template.setServices(new LinkedHashSet<>(resolveActiveServices(mentorUserId, request.serviceIds())));
@@ -464,9 +468,9 @@ public class AvailabilityTemplateService {
         slotRepository.save(slot);
     }
 
-    private void validateCreate(CreateAvailabilityTemplateRequest request, LocalDate today) {
-        if (request.effectiveFrom().isBefore(today)) throw invalid("AVAILABILITY_TEMPLATE_INVALID_SCHEDULE");
-        validateSchedule(request.startTime(), request.endTime(), request.weekdays(), request.effectiveFrom(), request.effectiveTo());
+    private void validateCreate(LocalTime startTime, LocalTime endTime, List<DayOfWeek> weekdays, LocalDate effectiveFrom, LocalDate effectiveTo, LocalDate today) {
+        if (effectiveFrom == null || effectiveFrom.isBefore(today)) throw invalid("AVAILABILITY_TEMPLATE_INVALID_SCHEDULE");
+        validateSchedule(startTime, endTime, weekdays, effectiveFrom, effectiveTo);
     }
 
     private void validateSchedule(LocalTime start, LocalTime end, List<DayOfWeek> weekdays, LocalDate from, LocalDate to) {

@@ -12,7 +12,7 @@ public record AvailabilityTemplateProperties(
 ) {
     public AvailabilityTemplateProperties {
         generationMode = generationMode == null ? "TEMPLATES" : generationMode;
-        horizonDays = horizonDays <= 0 ? 14 : horizonDays;
+        horizonDays = horizonDays <= 0 ? 28 : horizonDays;
         schedulerBatchSize = schedulerBatchSize <= 0 ? 50 : schedulerBatchSize;
         schedulerMaxTemplatesPerRun = schedulerMaxTemplatesPerRun <= 0 ? 1000 : schedulerMaxTemplatesPerRun;
         claimLeaseSeconds = claimLeaseSeconds <= 0 ? 120 : claimLeaseSeconds;

@@ -16,13 +16,18 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleR
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
+import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -76,6 +81,12 @@ class MentorAvailabilityServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private MentorBookingPolicyService mentorBookingPolicyService;
+
+    @Mock
+    private GoogleCalendarBusyPort googleCalendarBusyPort;
+
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator = new AvailabilityCalendarWindowCalculator();
 
     private MentorAvailabilityService mentorAvailabilityService;
@@ -95,8 +106,10 @@ class MentorAvailabilityServiceTest {
                 bookingRepository,
                 notificationService,
                 calendarWindowCalculator,
-                new PaymentProperties()
+                new PaymentProperties(),
+                mentorBookingPolicyService
         );
+        mentorAvailabilityService.setGoogleCalendarBusyPort(googleCalendarBusyPort);
 
         mentorUserId = UUID.randomUUID();
         user = new User();
@@ -108,6 +121,9 @@ class MentorAvailabilityServiceTest {
         mentorProfile.setUser(user);
         mentorProfile.setStatus(MentorStatus.ACTIVE);
         mentorProfile.setVerifiedAt(LocalDateTime.now());
+
+        org.mockito.Mockito.lenient().when(mentorBookingPolicyService.getEffectivePolicy(any()))
+                .thenReturn(new MentorBookingPolicyService.MentorBookingPolicySnapshot(120, 30, "Asia/Ho_Chi_Minh"));
     }
 
     @Test
@@ -337,67 +353,6 @@ class MentorAvailabilityServiceTest {
     }
 
     @Test
-    void deleteSlotDirectly_success() {
-        // Arrange
-        UUID slotId = UUID.randomUUID();
-        MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
-        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
-                .id(slotId)
-                .mentorProfile(mentorProfile)
-                .rule(rule)
-                .isActive(true)
-                .isBooked(false)
-                .build();
-
-        User mentee = new User();
-        mentee.setId(UUID.randomUUID());
-        Booking pendingBooking = Booking.builder()
-                .id(UUID.randomUUID())
-                .mentee(mentee)
-                .status(BookingStatus.PENDING)
-                .build();
-
-        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-        when(bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING))
-                .thenReturn(List.of(pendingBooking));
-
-        // Act
-        mentorAvailabilityService.deleteSlotDirectly(mentorUserId, slotId);
-
-        // Assert
-        verify(bookingRepository).save(pendingBooking);
-        assertEquals(BookingStatus.REJECTED, pendingBooking.getStatus());
-        verify(notificationService).createNotification(
-                eq(mentee.getId()),
-                eq(NotificationType.BOOKING_REJECTED),
-                any(), any(), any(), any()
-        );
-        verify(mentorAvailabilitySlotRepository).save(slot);
-        assertEquals(false, slot.isActive());
-        verify(mentorAvailabilityRuleRepository).save(rule);
-        assertEquals(false, rule.isActive());
-    }
-
-    @Test
-    void deleteSlotDirectly_bookedSlot_throwsBadRequest() {
-        // Arrange
-        UUID slotId = UUID.randomUUID();
-        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
-                .id(slotId)
-                .mentorProfile(mentorProfile)
-                .isActive(true)
-                .isBooked(true)
-                .build();
-
-        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-
-        // Act & Assert
-        BaseException ex = assertThrows(BaseException.class, () ->
-                mentorAvailabilityService.deleteSlotDirectly(mentorUserId, slotId));
-        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
-    }
-
-    @Test
     void getMySlots_success() {
         // Arrange
         LocalDate fromDate = LocalDate.now();
@@ -407,10 +362,84 @@ class MentorAvailabilityServiceTest {
                 .thenReturn(new ArrayList<>());
 
         // Act
-        List<MentorManagedAvailabilitySlotResponse> responses = mentorAvailabilityService.getMySlots(mentorUserId, fromDate, toDate);
+        List<MentorManagedAvailabilitySlotResponse> responses = mentorAvailabilityService.getMySlots(mentorUserId, null, fromDate, toDate);
 
         // Assert
         assertNotNull(responses);
         assertTrue(responses.isEmpty());
+    }
+
+    @Test
+    void getServiceSlotCandidates_leadTimeAndGoogleBusy_shouldReflectAccurateBlockedReasons() {
+        // Arrange
+        UUID slotId = UUID.randomUUID();
+        UUID serviceId = UUID.randomUUID();
+
+        LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
+        LocalDateTime slotStart = now.plusHours(1); // 1 hour ahead (60 min)
+        LocalDateTime slotEnd = now.plusHours(4);   // 4 hours ahead (3 x 60min segments)
+
+        MentorService service = MentorService.builder()
+                .id(serviceId)
+                .mentorProfile(mentorProfile)
+                .title("1:1 Mentoring")
+                .durationMinutes(60)
+                .isActive(true)
+                .deliveryMode(MentorServiceDeliveryMode.ONE_TO_ONE)
+                .build();
+
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorProfile(mentorProfile)
+                .startTime(slotStart)
+                .endTime(slotEnd)
+                .isActive(true)
+                .isBooked(false)
+                .build();
+
+        AvailabilitySlotService binding = AvailabilitySlotService.builder()
+                .slot(slot)
+                .service(service)
+                .build();
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)).thenReturn(Optional.of(binding));
+        when(mentorBookingPolicyService.getEffectivePolicy(mentorUserId)).thenReturn(
+                new MentorBookingPolicyService.MentorBookingPolicySnapshot(90, 30, "Asia/Ho_Chi_Minh") // 90 min lead time
+        );
+
+        // Google busy on 3rd segment: slotStart + 2h (which is now + 3h) to slotStart + 3h (now + 4h)
+        java.time.Instant busyStartUtc = slotStart.plusHours(2).atZone(java.time.ZoneOffset.UTC).toInstant();
+        java.time.Instant busyEndUtc = slotEnd.atZone(java.time.ZoneOffset.UTC).toInstant();
+        when(googleCalendarBusyPort.queryBusyIntervals(eq(mentorUserId), any(), any()))
+                .thenReturn(List.of(new GoogleCalendarBusyInterval(busyStartUtc, busyEndUtc)));
+
+        when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
+        when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
+
+        // Act
+        ServiceSlotCandidatesResponse response = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(3, response.candidateServiceSlots().size());
+
+        // Candidate 1 (now + 1h to now + 2h): blocked by lead time (90min required, but only 60min away)
+        var candidate1 = response.candidateServiceSlots().get(0);
+        org.junit.jupiter.api.Assertions.assertFalse(candidate1.isSelectable());
+        assertEquals("Yêu cầu đặt trước tối thiểu", candidate1.reasonIfBlocked());
+        assertTrue(candidate1.bookingConflictNote().contains("90 phút"));
+
+        // Candidate 2 (now + 2h to now + 3h): valid and selectable (120min away > 90min required)
+        var candidate2 = response.candidateServiceSlots().get(1);
+        assertTrue(candidate2.isSelectable());
+        org.junit.jupiter.api.Assertions.assertNull(candidate2.reasonIfBlocked());
+        org.junit.jupiter.api.Assertions.assertFalse(candidate2.blockedByGoogleCalendar());
+
+        // Candidate 3 (now + 3h to now + 4h): blocked by Google Calendar busy overlay
+        var candidate3 = response.candidateServiceSlots().get(2);
+        org.junit.jupiter.api.Assertions.assertFalse(candidate3.isSelectable());
+        assertEquals("Trùng lịch bận trên Google Calendar của mentor", candidate3.reasonIfBlocked());
+        assertTrue(candidate3.blockedByGoogleCalendar());
     }
 }

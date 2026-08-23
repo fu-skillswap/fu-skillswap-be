@@ -1262,7 +1262,7 @@ class BookingServiceTest {
     }
 
     private LocalDateTime testNow() {
-        return DateTimeUtil.now();
+        return DateTimeUtil.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
     }
 
     @Test

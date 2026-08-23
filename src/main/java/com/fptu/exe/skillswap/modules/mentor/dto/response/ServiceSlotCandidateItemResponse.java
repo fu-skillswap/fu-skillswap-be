@@ -34,6 +34,8 @@ public record ServiceSlotCandidateItemResponse(
         @Schema(description = "true nếu booking ACCEPTED đang block thuộc service khác service mà FE đang query")
         boolean blockedByDifferentService,
         @Schema(description = "Note rõ nghĩa cho FE: segment đã bị đặt bởi cùng service hay service khác", nullable = true)
-        String bookingConflictNote
+        String bookingConflictNote,
+        @Schema(description = "true nếu segment đang bị trùng lịch bận trên Google Calendar của mentor", nullable = true)
+        Boolean blockedByGoogleCalendar
 ) {
 }
