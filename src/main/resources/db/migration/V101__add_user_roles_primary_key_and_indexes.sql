@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Deduplicate any duplicate (user_id, role) entries before adding primary key
 DELETE FROM user_roles a
 USING user_roles b
