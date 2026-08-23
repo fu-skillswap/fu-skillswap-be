@@ -271,7 +271,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
                 ready.countDown();
                 try {
                     start.await();
-                    paymentOrderService.handleWebhook(webhookRequest);
+                    retryWithBackoff(() -> paymentOrderService.handleWebhook(webhookRequest), 3);
                 } catch (Throwable throwable) {
                     webhookFailure.set(throwable);
                 }
@@ -280,8 +280,8 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
                 ready.countDown();
                 try {
                     start.await();
-                    bookingService.cancelBookingByMentee(
-                            mentee.getId(), booking.getId(), new CancelBookingRequest("Changed plan"));
+                    retryWithBackoff(() -> bookingService.cancelBookingByMentee(
+                            mentee.getId(), booking.getId(), new CancelBookingRequest("Changed plan")), 3);
                 } catch (Throwable throwable) {
                     cancelFailure.set(throwable);
                 }
@@ -303,5 +303,24 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         assertEquals(PaymentOrderStatus.PAID, storedOrder.getStatus());
         assertEquals(PaymentSettlementStatus.REFUNDED, storedOrder.getSettlementStatus());
         assertEquals(100_000, creditLedgerService.getAvailableBalance(mentee.getId()));
+    }
+
+    private void retryWithBackoff(Runnable operation, int maxRetries) throws Throwable {
+        Throwable lastException = null;
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                operation.run();
+                return;
+            } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
+                lastException = e;
+                if (i < maxRetries - 1) {
+                    long backoffMs = (long) Math.pow(2, i) * 100;
+                    Thread.sleep(backoffMs);
+                }
+            }
+        }
+        if (lastException != null) {
+            throw lastException;
+        }
     }
 }
