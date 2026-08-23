@@ -47,7 +47,8 @@ Hồ sơ học thuật (Academic Profile)
 | `POST /api/me/mentor-verification/request` | Bắt đầu wizard; trả về `201 Created` nếu tạo mới, `200 OK` nếu đã có request đang active |
 | `GET /api/me/mentor-verification` | Khôi phục thông tin request mới nhất, danh sách tài liệu, checklist, timeline và hành động tiếp theo |
 | `GET /api/me/mentor-verification/progress` | **Source of truth** để quyết định nút Call-to-Action (CTA) và thanh tiến độ của wizard |
-| `GET /api/me/mentor-verification/timeline` | Hiển thị lịch sử nộp/yêu cầu sửa/phê duyệt/từ chối/rút hồ sơ |
+| `GET /api/me/mentor-verification/timeline` | Hiển thị lịch sử nộp/yêu cầu sửa/phê duyệt/từ chối/rút hồ sơ/thu hồi đơn |
+| `POST /api/me/mentor-verification/unsubmit` | Thu hồi hồ sơ từ `PENDING_REVIEW` về `DRAFT` để chỉnh sửa lại trước khi Admin duyệt |
 
 ```typescript
 interface MentorVerificationProgressResponse {
@@ -91,26 +92,27 @@ interface VerificationStep {
 | `NOT_STARTED` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/request` | Mở wizard đăng ký lần đầu hoặc bắt đầu một hồ sơ mới. |
 | `DRAFT` | `PENDING_REVIEW` | Người dùng | `POST /api/me/mentor-verification/submit` | Hoàn thành checklist (Academic Profile, Mentor Profile, 1 Affiliation Proof, ≥ 1 Expertise Proof) và gửi `termsAccepted: true`. |
 | `DRAFT` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng chủ động hủy/rút bản nháp hiện tại. |
+| `PENDING_REVIEW` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/unsubmit` | Người dùng chủ động thu hồi đơn để sửa lại khi Admin chưa khóa duyệt (`hasActiveAdminLock === false`). |
 | `PENDING_REVIEW` | `NEEDS_REVISION` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/request-revision` | Admin kiểm tra hồ sơ, yêu cầu bổ sung/sửa đổi minh chứng kèm lý do (`note`). |
 | `PENDING_REVIEW` | `APPROVED` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/approve` | Admin duyệt hồ sơ. Hệ thống tự động cấp Role `MENTOR`. |
 | `PENDING_REVIEW` | `REJECTED` | Admin | `POST /api/admin/mentor-verification/requests/{requestId}/reject` | Admin từ chối hồ sơ kèm lý do (`note`). Đơn bị đóng. |
 | `PENDING_REVIEW` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng rút hồ sơ khi hồ sơ chưa bị Admin khóa xử lý (`hasActiveAdminLock === false`). Nếu Admin đang khóa xem xét, API trả `409 Conflict`. |
 | `NEEDS_REVISION` | `PENDING_REVIEW` | Người dùng | `POST /api/me/mentor-verification/submit` | Người dùng cập nhật lại tài liệu/thông tin và bấm nộp lại (`revisionCount` tăng thêm 1). |
 | `NEEDS_REVISION` | `WITHDRAWN` | Người dùng | `POST /api/me/mentor-verification/withdraw` | Người dùng không muốn tiếp tục bổ sung và chọn rút hồ sơ. |
-| `REJECTED` / `WITHDRAWN` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/request` | Người dùng muốn tạo hồ sơ mới sau khi đơn trước đó bị từ chối hoặc đã rút. |
+| `REJECTED` / `WITHDRAWN` | `DRAFT` | Người dùng | `POST /api/me/mentor-verification/request` | Người dùng muốn tạo hồ sơ mới sau khi đơn trước đó bị từ chối hoặc đã rút. Dữ liệu tài liệu hợp lệ từ đơn cũ được tự động kế thừa. |
 | `APPROVED` | *(Hoàn tất)* | Hệ thống | — | Trạng thái đích. Người dùng chuyển sang hoàn thiện dịch vụ và lịch rảnh ([mentor-service.md](mentor-service.md)). Không tạo lại request xác thực. |
 
 #### Bảng Quyền Hạn UI Tương Ứng Với Từng Trạng Thái (UI & Action Permissions)
 
-| Trạng thái (`applicationStatus`) | Upload / Xóa minh chứng | Sửa Mentor Profile | Nộp hồ sơ (`submit`) | Rút hồ sơ (`withdraw`) | Trạng thái hiển thị trên UI Frontend |
-|---|:---:|:---:|:---:|:---:|---|
-| `NOT_STARTED` | ❌ | ❌ | ❌ | ❌ | Hiển thị màn hình giới thiệu (Onboarding/Landing), nút CTA "Bắt đầu đăng ký" |
-| `DRAFT` | ✅ | ✅ | ✅ (khi đủ checklist) | ✅ | Mở đầy đủ wizard, cho phép upload/xóa file, điền form profile, checkbox điều khoản |
-| `PENDING_REVIEW` | ❌ | ❌ | ❌ | ✅ (khi chưa bị admin lock) | Khóa form, hiển thị timeline "Đang chờ Admin duyệt", hiển thị `estimatedReviewBy` |
-| `NEEDS_REVISION` | ✅ | ✅ | ✅ (sau khi sửa) | ✅ | Mở lại form wizard, hiển thị lý do cần sửa (`reviewNote` từ timeline), cho phép xóa file cũ và upload lại |
-| `APPROVED` | ❌ | ✅ (ở trang cá nhân) | ❌ | ❌ | Hiển thị thông báo chúc mừng, chuyển hướng sang CTA kết nối Calendar & tạo dịch vụ |
-| `REJECTED` | ❌ | ❌ | ❌ | ❌ | Hiển thị lý do từ chối, nút "Tạo hồ sơ mới" để bắt đầu lại |
-| `WITHDRAWN` | ❌ | ❌ | ❌ | ❌ | Hiển thị thông báo đã rút đơn, nút "Bắt đầu lại" |
+| Trạng thái (`applicationStatus`) | Upload / Xóa minh chứng | Sửa Mentor Profile | Nộp hồ sơ (`submit`) | Thu hồi (`unsubmit`) | Rút hồ sơ (`withdraw`) | Trạng thái hiển thị trên UI Frontend |
+|---|:---:|:---:|:---:|:---:|:---:|---|
+| `NOT_STARTED` | ❌ | ❌ | ❌ | ❌ | ❌ | Hiển thị màn hình giới thiệu (Onboarding/Landing), nút CTA "Bắt đầu đăng ký" |
+| `DRAFT` | ✅ | ✅ | ✅ (khi đủ checklist) | ❌ | ✅ | Mở đầy đủ wizard, cho phép upload/xóa file, điền form profile, checkbox điều khoản |
+| `PENDING_REVIEW` | ❌ | ❌ | ❌ | ✅ (khi chưa bị admin lock) | ✅ (khi chưa bị admin lock) | Khóa form, hiển thị timeline "Đang chờ Admin duyệt", nút "Thu hồi đơn để sửa" |
+| `NEEDS_REVISION` | ✅ | ✅ | ✅ (sau khi sửa) | ❌ | ✅ | Mở lại form wizard, hiển thị lý do cần sửa (`reviewNote` từ timeline), cho phép xóa file cũ và upload lại |
+| `APPROVED` | ❌ | ✅ (ở trang cá nhân) | ❌ | ❌ | ❌ | Hiển thị thông báo chúc mừng, chuyển hướng sang CTA kết nối Calendar & tạo dịch vụ |
+| `REJECTED` | ❌ | ❌ | ❌ | ❌ | ❌ | Hiển thị lý do từ chối, nút "Tạo hồ sơ mới" để bắt đầu lại |
+| `WITHDRAWN` | ❌ | ❌ | ❌ | ❌ | ❌ | Hiển thị thông báo đã rút đơn, nút "Bắt đầu lại" (tự động giữ lại thông tin & tài liệu đã có) |
 
 > [!TIP]
 > `estimatedReviewBy` là thời gian mục tiêu của hệ thống, không phải cam kết cứng. Sử dụng cờ `reviewOverdue` để hiển thị thông báo tiến độ phù hợp, **không tự ý đổi trạng thái request trên UI**.

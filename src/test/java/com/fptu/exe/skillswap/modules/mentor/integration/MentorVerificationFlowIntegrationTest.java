@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationEventType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
@@ -287,6 +288,63 @@ class MentorVerificationFlowIntegrationTest {
     }
 
     @Test
+    void unsubmit_whenPendingReview_shouldChangeToDraftAndRecordTimelineEvent() {
+        UUID mentorId = mentorUser.getId();
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        assertEquals(VerificationStatus.PENDING_REVIEW, pending.status());
+        assertTrue(pending.allowedActions().canUnsubmit());
+
+        MentorVerificationRequestResponse unsubmitted = mentorVerificationService.unsubmit(mentorId);
+        assertEquals(VerificationStatus.DRAFT, unsubmitted.status());
+        assertEquals(VerificationStatus.DRAFT, mentorVerificationService.getMyRequest(mentorId).status());
+
+        var timeline = mentorVerificationService.getTimeline(mentorId);
+        assertFalse(timeline.isEmpty());
+        assertEquals(MentorVerificationEventType.UNSUBMITTED, timeline.get(timeline.size() - 1).eventType());
+        assertEquals(VerificationStatus.PENDING_REVIEW, timeline.get(timeline.size() - 1).fromStatus());
+        assertEquals(VerificationStatus.DRAFT, timeline.get(timeline.size() - 1).toStatus());
+
+        MentorProfile profile = mentorProfileRepository.findWithUserByUserId(mentorId).orElseThrow();
+        assertEquals(MentorStatus.DRAFT, profile.getStatus());
+    }
+
+    @Test
+    void unsubmit_whenAdminHasActiveLock_shouldThrowConflict() {
+        UUID mentorId = mentorUser.getId();
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        adminMentorVerificationService.getRequestDetail(adminUser.getId(), pending.requestId());
+
+        var ex = assertThrows(BaseException.class, () -> mentorVerificationService.unsubmit(mentorId));
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, ex.getErrorCode());
+    }
+
+    @Test
+    void unsubmit_whenDraft_shouldThrowBadRequest() {
+        UUID mentorId = mentorUser.getId();
+
+        mentorVerificationService.requestToBecomeMentor(mentorId);
+
+        var ex = assertThrows(BaseException.class, () -> mentorVerificationService.unsubmit(mentorId));
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void requestToBecomeMentor_afterWithdrawnShouldPreserveDocuments() {
+        UUID mentorId = mentorUser.getId();
+
+        MentorVerificationRequestResponse pending = createSubmittedRequest(mentorId);
+        mentorVerificationService.withdraw(mentorId);
+        assertEquals(VerificationStatus.WITHDRAWN, mentorVerificationService.getMyRequest(mentorId).status());
+
+        MentorVerificationRequestResponse reopened = mentorVerificationService.requestToBecomeMentor(mentorId).data();
+        assertEquals(VerificationStatus.DRAFT, reopened.status());
+        assertFalse(reopened.documents().isEmpty());
+        assertEquals(pending.documents().size(), reopened.documents().size());
+    }
+
+    @Test
     void requestToBecomeMentor_afterRejectedShouldCreateNewRequestWithPreviousRequest() {
         UUID mentorId = mentorUser.getId();
 
@@ -307,6 +365,7 @@ class MentorVerificationFlowIntegrationTest {
         var latest = mentorVerificationRequestRepository.findById(reopened.requestId()).orElseThrow();
         assertNotNull(latest.getPreviousRequest());
         assertEquals(rejected.requestId(), latest.getPreviousRequest().getId());
+        assertFalse(reopened.documents().isEmpty());
     }
 
     @Test

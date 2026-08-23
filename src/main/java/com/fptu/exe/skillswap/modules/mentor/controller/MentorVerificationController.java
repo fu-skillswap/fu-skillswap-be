@@ -250,6 +250,29 @@ public class MentorVerificationController {
         return ApiResponse.success(mentorVerificationService.withdraw(principal.getPublicId()));
     }
 
+    @Operation(summary = "Thu hồi hồ sơ đăng ký mentor", description = "Chuyển hồ sơ từ PENDING_REVIEW về DRAFT để người dùng chỉnh sửa và nộp lại khi Admin chưa khóa duyệt.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Thu hồi hồ sơ thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Trạng thái hồ sơ hiện tại không cho phép thu hồi"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy hồ sơ đang hoạt động"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Hồ sơ đang được admin xử lý, hiện chưa thể thu hồi")
+    })
+    @PostMapping("/unsubmit")
+    public ApiResponse<MentorVerificationRequestResponse> unsubmit(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
+    ) {
+        ensureAuthenticated(principal);
+        rateLimitService.check(
+                com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
+                "mentor-verification:unsubmit:" + principal.getPublicId(),
+                10,
+                java.time.Duration.ofHours(1),
+                "Bạn đang thực hiện thu hồi hồ sơ quá thường xuyên, vui lòng thử lại sau"
+        );
+        return ApiResponse.success(mentorVerificationService.unsubmit(principal.getPublicId()));
+    }
+
     private void ensureAuthenticated(UserPrincipal principal) {
         if (principal == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");

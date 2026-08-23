@@ -7,5 +7,6 @@ public enum MentorVerificationEventType {
     RESUBMITTED,
     APPROVED,
     REJECTED,
-    WITHDRAWN
+    WITHDRAWN,
+    UNSUBMITTED
 }

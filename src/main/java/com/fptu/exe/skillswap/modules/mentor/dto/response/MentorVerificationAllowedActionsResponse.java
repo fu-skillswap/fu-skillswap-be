@@ -6,6 +6,7 @@ import lombok.Builder;
 public record MentorVerificationAllowedActionsResponse(
         boolean canUploadDocuments,
         boolean canSubmit,
-        boolean canWithdraw
+        boolean canWithdraw,
+        boolean canUnsubmit
 ) {
 }

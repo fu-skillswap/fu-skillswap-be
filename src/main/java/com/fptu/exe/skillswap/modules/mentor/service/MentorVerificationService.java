@@ -402,6 +402,46 @@ public class MentorVerificationService {
         return buildResponse(request);
     }
 
+    @Transactional
+    public MentorVerificationRequestResponse unsubmit(UUID userId) {
+        requireUserId(userId);
+        getRequiredUserForUpdate(userId);
+        UUID latestRequestId = findLatestRequest(userId)
+                .map(MentorVerificationRequest::getId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Chưa có hồ sơ xác thực mentor nào"));
+        MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(latestRequestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor để thu hồi"));
+
+        if (request.getStatus() != VerificationStatus.PENDING_REVIEW) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ có thể thu hồi hồ sơ khi đang chờ duyệt");
+        }
+        if (hasActiveAdminLock(request)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Hồ sơ đang được admin xử lý, hiện chưa thể thu hồi");
+        }
+
+        VerificationStatus previousStatus = request.getStatus();
+        request.setStatus(VerificationStatus.DRAFT);
+        mentorVerificationRequestRepository.save(request);
+        appendEvent(
+                request,
+                MentorVerificationEventType.UNSUBMITTED,
+                request.getMentor(),
+                previousStatus,
+                VerificationStatus.DRAFT,
+                "Người dùng chủ động thu hồi đơn để chỉnh sửa"
+        );
+
+        mentorProfileRepository.findWithUserByUserId(userId)
+                .ifPresent(profile -> {
+                    if (profile.getStatus() == MentorStatus.PENDING_VERIFICATION) {
+                        profile.setStatus(MentorStatus.DRAFT);
+                        mentorProfileRepository.save(profile);
+                    }
+                });
+
+        return buildResponse(request);
+    }
+
     private MentorVerificationRequest createDraftRequest(User user, MentorVerificationRequest previousRequest) {
         MentorVerificationRequest request = MentorVerificationRequest.builder()
                 .mentor(user)
@@ -411,6 +451,27 @@ public class MentorVerificationService {
                 .build();
         MentorVerificationRequest savedRequest = mentorVerificationRequestRepository.save(request);
         appendEvent(savedRequest, MentorVerificationEventType.REQUEST_CREATED, user, null, VerificationStatus.DRAFT, null);
+
+        if (previousRequest != null) {
+            List<MentorVerificationDocument> previousDocs = mentorVerificationDocumentRepository
+                    .findByRequestIdOrderByUploadedAtAsc(previousRequest.getId());
+            for (MentorVerificationDocument prevDoc : previousDocs) {
+                if (prevDoc.isActive() && prevDoc.getStatus() == VerificationDocumentStatus.UPLOADED) {
+                    MentorVerificationDocument clonedDoc = MentorVerificationDocument.builder()
+                            .request(savedRequest)
+                            .documentType(prevDoc.getDocumentType())
+                            .status(VerificationDocumentStatus.UPLOADED)
+                            .storageKind(prevDoc.getStorageKind())
+                            .storedFile(prevDoc.getStoredFile())
+                            .isActive(true)
+                            .version(prevDoc.getVersion())
+                            .uploadedBy(prevDoc.getUploadedBy())
+                            .build();
+                    mentorVerificationDocumentRepository.save(clonedDoc);
+                }
+            }
+        }
+
         return savedRequest;
     }
 
@@ -712,10 +773,12 @@ public class MentorVerificationService {
     private MentorVerificationAllowedActionsResponse buildAllowedActions(VerificationStatus status, boolean canSubmit) {
         boolean editable = status == VerificationStatus.DRAFT || status == VerificationStatus.NEEDS_REVISION;
         boolean withdrawable = editable || status == VerificationStatus.PENDING_REVIEW;
+        boolean unsubmittable = status == VerificationStatus.PENDING_REVIEW;
         return MentorVerificationAllowedActionsResponse.builder()
                 .canUploadDocuments(editable)
                 .canSubmit(editable && canSubmit)
                 .canWithdraw(withdrawable)
+                .canUnsubmit(unsubmittable)
                 .build();
     }
 

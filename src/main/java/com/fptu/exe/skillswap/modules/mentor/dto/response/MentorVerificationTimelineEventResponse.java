@@ -22,9 +22,10 @@ public record MentorVerificationTimelineEventResponse(
                         + "• `RESUBMITTED`: Nộp lại sau khi sửa<br/>"
                         + "• `APPROVED`: Phê duyệt thành công<br/>"
                         + "• `REJECTED`: Từ chối hồ sơ<br/>"
-                        + "• `WITHDRAWN`: Rút hồ sơ",
+                        + "• `WITHDRAWN`: Rút hồ sơ<br/>"
+                        + "• `UNSUBMITTED`: Thu hồi hồ sơ để chỉnh sửa",
                 example = "SUBMITTED",
-                allowableValues = {"REQUEST_CREATED", "SUBMITTED", "REVISION_REQUESTED", "RESUBMITTED", "APPROVED", "REJECTED", "WITHDRAWN"}
+                allowableValues = {"REQUEST_CREATED", "SUBMITTED", "REVISION_REQUESTED", "RESUBMITTED", "APPROVED", "REJECTED", "WITHDRAWN", "UNSUBMITTED"}
         )
         MentorVerificationEventType eventType,
 
