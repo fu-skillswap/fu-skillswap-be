@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,7 +26,10 @@ public class BookingReminderEmailService {
     // Reminder should cover both paid bookings and legacy accepted bookings that are already confirmed for scheduling.
     private static final List<BookingStatus> CONFIRMED_STATUSES = List.of(BookingStatus.PAID, BookingStatus.ACCEPTED);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
+    private static final DateTimeFormatter DAILY_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DIGEST_SLOT_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+    private static final DateTimeFormatter DAILY_DIGEST_SLOT_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
     private static final String DEFAULT_SERVICE_TITLE = "Dịch vụ mentoring";
 
@@ -77,6 +81,63 @@ public class BookingReminderEmailService {
                 sent++;
             }
         }
+        return sent;
+    }
+
+    public int sendDailyMentorScheduleDigests() {
+        LocalDateTime now = DateTimeUtil.now();
+        // Check for today's confirmed bookings starting from 02:00 to 23:59:59
+        LocalDateTime startInclusive = now.toLocalDate().atTime(2, 0);
+        LocalDateTime endExclusive = now.toLocalDate().plusDays(1).atStartOfDay();
+
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(
+                CONFIRMED_STATUSES,
+                startInclusive,
+                endExclusive
+        );
+
+        if (bookings.isEmpty()) {
+            return 0;
+        }
+
+        // Group by mentor (only for mentors with active email)
+        Map<UUID, List<Booking>> bookingsByMentor = bookings.stream()
+                .filter(b -> b.getMentorProfile() != null
+                        && b.getMentorProfile().getUser() != null
+                        && hasText(b.getMentorProfile().getUser().getEmail()))
+                .collect(Collectors.groupingBy(
+                        b -> b.getMentorProfile().getUserId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        String dateKey = now.format(DAILY_DIGEST_SLOT_FORMATTER);
+        String dateDisplay = now.format(DAILY_DATE_FORMATTER);
+
+        int sent = 0;
+        for (Map.Entry<UUID, List<Booking>> entry : bookingsByMentor.entrySet()) {
+            UUID mentorUserId = entry.getKey();
+            List<Booking> mentorBookings = entry.getValue();
+            if (mentorBookings.isEmpty()) {
+                continue;
+            }
+
+            Booking firstBooking = mentorBookings.get(0);
+            String mentorEmail = firstBooking.getMentorProfile().getUser().getEmail();
+            String mentorName = mentorName(firstBooking);
+
+            if (sendSingleMentorDailyDigest(mentorUserId, mentorEmail, mentorName, mentorBookings, dateKey, dateDisplay)) {
+                sent++;
+            }
+
+            // Pacing delay (50ms) to throttle and avoid bursting SMTP/API limits
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
         return sent;
     }
 
@@ -240,6 +301,79 @@ public class BookingReminderEmailService {
                 plainText,
                 "MENTOR_PENDING_REQUEST_DIGEST"
         );
+    }
+
+    private boolean sendSingleMentorDailyDigest(
+            UUID mentorUserId,
+            String mentorEmail,
+            String mentorName,
+            List<Booking> mentorBookings,
+            String dateKey,
+            String dateDisplay
+    ) {
+        int sessionCount = mentorBookings.size();
+        String subject = "[SkillSwap] Lịch mentoring của bạn hôm nay (" + dateDisplay + ") - " + sessionCount + " buổi học";
+        String intro = "Hôm nay (" + dateDisplay + "), bạn có " + sessionCount + " buổi mentoring đã được xác nhận trên SkillSwap.";
+
+        StringBuilder detailRowsBuilder = new StringBuilder();
+        StringBuilder plainTextSchedule = new StringBuilder();
+
+        for (int i = 0; i < mentorBookings.size(); i++) {
+            Booking b = mentorBookings.get(i);
+            String timeStr = formatTimeRange(b.getSelectedStartTime(), b.getSelectedEndTime());
+            String mentee = menteeName(b);
+            String sTitle = serviceTitle(b);
+            String goal = defaultText(b.getLearningGoalTitle(), "Mentoring session");
+            String meet = hasText(b.getMeetingLink()) ? b.getMeetingLink() : "";
+
+            String sessionSummary = "Ca " + (i + 1) + " (" + timeStr + ") | Học viên: " + mentee;
+            String sessionDetails = "Dịch vụ: " + sTitle + " - Mục tiêu: " + goal + (hasText(meet) ? " - Link: " + meet : "");
+
+            detailRowsBuilder.append(HtmlEmailTemplate.detailRow(sessionSummary, HtmlEmailTemplate.escape(sessionDetails)));
+
+            plainTextSchedule.append("- Ca ").append(i + 1).append(": ").append(timeStr)
+                    .append(" | Học viên: ").append(mentee)
+                    .append(" | Dịch vụ: ").append(sTitle)
+                    .append(hasText(meet) ? " | Link: " + meet : "")
+                    .append("\n");
+        }
+
+        String html = HtmlEmailTemplate.render(new HtmlEmailTemplate.Model(
+                subject,
+                intro,
+                "Lịch hôm nay",
+                "Tổng hợp lịch dạy hôm nay",
+                "Hệ thống tổng hợp toàn bộ các ca mentoring trong ngày để bạn dễ dàng sắp xếp thời gian.",
+                "SkillSwap",
+                "Daily Schedule",
+                mentorName,
+                intro,
+                detailRowsBuilder.toString(),
+                "Vui lòng kiểm tra lịch học, chuẩn bị tài liệu và tham gia phòng học đúng giờ.",
+                "Xem lịch mentoring",
+                PLATFORM_URL
+        ));
+
+        String plainText = "[SkillSwap] Lịch mentoring hôm nay (" + dateDisplay + ")\n\n"
+                + "Xin chào " + mentorName + ",\n\n"
+                + intro + "\n\n"
+                + plainTextSchedule.toString() + "\n"
+                + "Vui lòng chuẩn bị và tham gia đúng giờ.\n"
+                + "Truy cập SkillSwap: " + PLATFORM_URL + "\n";
+
+        return emailDispatchService.sendHtmlOnce(
+                "MENTOR_DAILY_SCHEDULE_DIGEST:" + mentorUserId + ":" + dateKey,
+                mentorEmail,
+                subject,
+                html,
+                plainText,
+                "MENTOR_DAILY_SCHEDULE_DIGEST"
+        );
+    }
+
+    private String formatTimeRange(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null) return "Chưa xác định";
+        return start.format(TIME_FORMATTER) + " - " + end.format(TIME_FORMATTER);
     }
 
     private EmailPayload buildSessionReminderPayload(

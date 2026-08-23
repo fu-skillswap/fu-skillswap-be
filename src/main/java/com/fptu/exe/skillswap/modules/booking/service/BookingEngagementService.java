@@ -24,11 +24,7 @@ public class BookingEngagementService {
     @Transactional
     public int sendScheduledReminders() {
         LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
-        int sent = 0;
-        sent += deliverReminderWindow(now, 24 * 60, BookingEngagementDeliveryType.REMINDER_24H, "Buổi học bắt đầu sau 24 giờ");
-        sent += deliverReminderWindow(now, 2 * 60, BookingEngagementDeliveryType.REMINDER_2H, "Buổi học bắt đầu sau 2 giờ");
-        sent += deliverReminderWindow(now, 15, BookingEngagementDeliveryType.REMINDER_15M, "Buổi học bắt đầu sau 15 phút");
-        return sent;
+        return deliverReminderWindow(now, 60, BookingEngagementDeliveryType.REMINDER_1H, "Buổi học bắt đầu sau 1 giờ");
     }
 
     @Transactional

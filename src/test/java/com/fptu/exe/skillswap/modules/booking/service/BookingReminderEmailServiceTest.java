@@ -100,6 +100,98 @@ class BookingReminderEmailServiceTest {
         verify(emailDispatchService, never()).sendHtmlOnce(any(), any(), any(), any(), any(), any());
     }
 
+    @Test
+    void sendDailyMentorScheduleDigests_shouldGroupAndSendDailyScheduleForMentorsWithBookings() {
+        UUID mentor1Id = UUID.randomUUID();
+        UUID mentor2Id = UUID.randomUUID();
+
+        User mentor1 = User.builder().id(mentor1Id).email("mentor1@test.com").fullName("Mentor One").build();
+        User mentor2 = User.builder().id(mentor2Id).email("mentor2@test.com").fullName("Mentor Two").build();
+
+        MentorProfile profile1 = MentorProfile.builder().userId(mentor1Id).user(mentor1).build();
+        MentorProfile profile2 = MentorProfile.builder().userId(mentor2Id).user(mentor2).build();
+
+        User mentee = User.builder().id(UUID.randomUUID()).email("mentee@test.com").fullName("Mentee X").build();
+
+        Booking booking1 = Booking.builder()
+                .id(UUID.randomUUID())
+                .status(BookingStatus.PAID)
+                .mentee(mentee)
+                .mentorProfile(profile1)
+                .serviceTitleSnapshot("Coding 1:1")
+                .selectedStartTime(LocalDateTime.now().withHour(9).withMinute(0))
+                .selectedEndTime(LocalDateTime.now().withHour(10).withMinute(0))
+                .meetingLink("https://meet.google.com/abc-defg-hij")
+                .build();
+
+        Booking booking2 = Booking.builder()
+                .id(UUID.randomUUID())
+                .status(BookingStatus.ACCEPTED)
+                .mentee(mentee)
+                .mentorProfile(profile1)
+                .serviceTitleSnapshot("CV Review")
+                .selectedStartTime(LocalDateTime.now().withHour(14).withMinute(0))
+                .selectedEndTime(LocalDateTime.now().withHour(15).withMinute(0))
+                .build();
+
+        Booking booking3 = Booking.builder()
+                .id(UUID.randomUUID())
+                .status(BookingStatus.PAID)
+                .mentee(mentee)
+                .mentorProfile(profile2)
+                .serviceTitleSnapshot("System Design")
+                .selectedStartTime(LocalDateTime.now().withHour(16).withMinute(0))
+                .selectedEndTime(LocalDateTime.now().withHour(17).withMinute(0))
+                .build();
+
+        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+                .thenReturn(List.of(booking1, booking2, booking3));
+        when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
+
+        int sent = service.sendDailyMentorScheduleDigests();
+
+        assertEquals(2, sent);
+
+        ArgumentCaptor<String> htmlCaptor1 = ArgumentCaptor.forClass(String.class);
+        verify(emailDispatchService).sendHtmlOnce(
+                org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:" + mentor1Id),
+                eq("mentor1@test.com"),
+                org.mockito.ArgumentMatchers.contains("2 buổi học"),
+                htmlCaptor1.capture(),
+                any(),
+                eq("MENTOR_DAILY_SCHEDULE_DIGEST")
+        );
+        assertTrue(htmlCaptor1.getValue().contains("Coding 1:1"));
+        assertTrue(htmlCaptor1.getValue().contains("CV Review"));
+
+        verify(emailDispatchService).sendHtmlOnce(
+                org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:" + mentor2Id),
+                eq("mentor2@test.com"),
+                org.mockito.ArgumentMatchers.contains("1 buổi học"),
+                any(),
+                any(),
+                eq("MENTOR_DAILY_SCHEDULE_DIGEST")
+        );
+    }
+
+    @Test
+    void sendDailyMentorScheduleDigests_shouldSkipWhenNoConfirmedBookingsForToday() {
+        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+                .thenReturn(List.of());
+
+        int sent = service.sendDailyMentorScheduleDigests();
+
+        assertEquals(0, sent);
+        verify(emailDispatchService, never()).sendHtmlOnce(
+                org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:"),
+                any(),
+                any(),
+                any(),
+                any(),
+                any()
+        );
+    }
+
     private Booking confirmedBooking(BookingStatus status) {
         User mentee = User.builder()
                 .id(UUID.randomUUID())

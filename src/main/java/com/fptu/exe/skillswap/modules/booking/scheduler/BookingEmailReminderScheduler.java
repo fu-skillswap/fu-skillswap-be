@@ -45,4 +45,16 @@ public class BookingEmailReminderScheduler {
             log.error("Error occurred while sending mentor pending request digest emails", ex);
         }
     }
+
+    @Scheduled(cron = "0 0 2 * * *", zone = "Asia/Ho_Chi_Minh")
+    public void sendDailyMentorScheduleDigests() {
+        try {
+            int sent = bookingReminderEmailService.sendDailyMentorScheduleDigests();
+            if (sent > 0) {
+                log.info("Sent {} daily mentor schedule digest emails.", sent);
+            }
+        } catch (Exception ex) {
+            log.error("Error occurred while sending daily mentor schedule digest emails", ex);
+        }
+    }
 }
