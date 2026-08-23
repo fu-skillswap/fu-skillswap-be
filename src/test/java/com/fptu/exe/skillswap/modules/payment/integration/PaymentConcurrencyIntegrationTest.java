@@ -73,6 +73,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
     @Autowired
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository;
 
+
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
@@ -91,15 +92,16 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
     @BeforeEach
     void setUp() {
         transactionTemplate.execute(status -> {
+            String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
             mentee = userRepository.save(User.builder()
                     .fullName("Concurrent Mentee")
-                    .email("c.mentee@test.com")
+                    .email("c.mentee." + uniqueSuffix + "@test.com")
                     .status(com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE)
                     .build());
 
             mentor = userRepository.save(User.builder()
                     .fullName("Concurrent Mentor")
-                    .email("c.mentor@test.com")
+                    .email("c.mentor." + uniqueSuffix + "@test.com")
                     .status(com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE)
                     .build());
 
@@ -139,7 +141,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
             order = PaymentOrder.builder()
                     .id(UUID.randomUUID())
-                    .orderCode("PAY-CONC-1")
+                    .orderCode("PAY-CONC-" + uniqueSuffix)
                     .targetType(PaymentTargetType.BOOKING).targetId(booking.getId())
                     .providerOrderCode("111")
                     .payerUserId(mentee.getId())
@@ -170,6 +172,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         jdbcTemplate.execute("DELETE FROM notifications");
         jdbcTemplate.execute("DELETE FROM conversation_booking_links");
         jdbcTemplate.execute("DELETE FROM conversation_participants");
+        jdbcTemplate.execute("DELETE FROM messages");
         jdbcTemplate.execute("DELETE FROM conversations");
         jdbcTemplate.execute("DELETE FROM sessions");
         jdbcTemplate.execute("DELETE FROM booking_events");
@@ -187,8 +190,6 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
     @Test
     void handleWebhook_concurrentSurplusPayment_shouldIssueCreditOnlyOnce() throws InterruptedException {
-        int threads = 5;
-        ExecutorService executor = Executors.newFixedThreadPool(threads);
         CountDownLatch latch = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(threads);
         AtomicInteger successCount = new AtomicInteger(0);
