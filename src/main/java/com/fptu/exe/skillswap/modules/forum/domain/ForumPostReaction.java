@@ -27,6 +27,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "forum_post_reactions", uniqueConstraints = {
         @UniqueConstraint(name = "uq_forum_post_reactions_post_user", columnNames = {"post_id", "user_id"})
+}, indexes = {
+        @Index(name = "idx_forum_post_reactions_user_post", columnList = "user_id, post_id")
 })
 @Getter
 @Setter

@@ -28,6 +28,9 @@ import java.util.UUID;
 @Table(name = "forum_comment_reactions",
         uniqueConstraints = {
                 @UniqueConstraint(name = "ux_forum_comment_reactions_comment_user", columnNames = {"comment_id", "user_id"})
+        },
+        indexes = {
+                @Index(name = "idx_forum_comment_reactions_user_comment", columnList = "user_id, comment_id")
         })
 @Getter
 @Setter

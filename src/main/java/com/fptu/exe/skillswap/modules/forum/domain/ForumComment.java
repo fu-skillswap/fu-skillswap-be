@@ -30,7 +30,8 @@ import java.util.UUID;
 @Table(name = "forum_comments", indexes = {
         @Index(name = "idx_forum_comments_post_status_created_id_asc", columnList = "post_id, status, created_at ASC, id"),
         @Index(name = "idx_forum_comments_post_created", columnList = "post_id, created_at"),
-        @Index(name = "idx_forum_comments_author_created", columnList = "author_user_id, created_at")
+        @Index(name = "idx_forum_comments_author_created", columnList = "author_user_id, created_at"),
+        @Index(name = "idx_forum_comments_reply_to", columnList = "reply_to_comment_id")
 })
 @SQLDelete(sql = "UPDATE forum_comments SET deleted_at = NOW(), updated_at = NOW() WHERE id = ?")
 @SQLRestriction("deleted_at IS NULL")
