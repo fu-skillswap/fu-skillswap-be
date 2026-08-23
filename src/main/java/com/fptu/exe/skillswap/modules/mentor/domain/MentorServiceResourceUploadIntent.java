@@ -6,7 +6,11 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity @Table(name = "mentor_service_resource_upload_intents")
+@Entity
+@Table(name = "mentor_service_resource_upload_intents", indexes = {
+    @Index(name = "idx_mentor_service_resource_intent_service", columnList = "service_id"),
+    @Index(name = "idx_mentor_service_resource_intent_expiry", columnList = "status, expires_at")
+})
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class MentorServiceResourceUploadIntent {
     public enum Status { PENDING_UPLOAD, CONFIRMED, EXPIRED, REJECTED }

@@ -19,7 +19,7 @@ public class MentorServiceResourceService {
   private static final int MAX_RESOURCES=20; private static final long MAX_MENTOR_BYTES=512L*1024*1024;
   private static final Duration UPLOAD_TTL=Duration.ofMinutes(15), DOWNLOAD_TTL=Duration.ofMinutes(10);
   private final MentorServiceRepository serviceRepository; private final MentorServiceResourceRepository resourceRepository;
-  private final MentorServiceResourceUploadIntentRepository intentRepository; private final MentorServiceResourceAccessLogRepository accessLogRepository;
+  private final MentorServiceResourceUploadIntentRepository intentRepository;
   private final ObjectProvider<StorageGateway> storageGatewayProvider; private final BookingEligibilityPolicy bookingEligibilityPolicy;
   private final InMemoryRateLimitService rateLimitService;
   private final ObjectProvider<LocalPrivateDownloadCredentialService> localCredentialProvider;
@@ -52,7 +52,6 @@ public class MentorServiceResourceService {
   @Transactional public MentorServiceResourceDownloadResponse download(UUID viewerId,UUID id){
     var x=resourceRepository.findById(id).filter(r->r.getDeletedAt()==null).orElseThrow(()->new ResourceNotFoundException("Không tìm thấy tài liệu"));
     boolean allowed=x.getVisibility()==MentorServiceResourceVisibility.AUTHENTICATED||bookingEligibilityPolicy.canAccessServiceResources(viewerId,x.getService().getId());
-    accessLogRepository.save(MentorServiceResourceAccessLog.builder().resource(x).userId(viewerId).success(allowed).failureReasonCode(allowed?null:"BOOKING_REQUIRED").build());
     if(!allowed) throw new ResourceNotFoundException("Không tìm thấy tài liệu");
     rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER, "mentor-resource-download:user:"+viewerId,12,Duration.ofMinutes(1),"Bạn tạo download URL quá nhanh");
     rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.TRANSFER, "mentor-resource-download:resource:"+id,60,Duration.ofMinutes(1),"Tài liệu đang được yêu cầu quá nhiều");

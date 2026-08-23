@@ -6,7 +6,11 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Entity @Table(name = "mentor_service_resources")
+@Entity
+@Table(name = "mentor_service_resources", indexes = {
+    @Index(name = "idx_mentor_service_resources_service_id", columnList = "service_id"),
+    @Index(name = "idx_mentor_service_resources_vis", columnList = "service_id, visibility, created_at")
+})
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class MentorServiceResource {
     @Id @GeneratedUuidV7 private UUID id;
