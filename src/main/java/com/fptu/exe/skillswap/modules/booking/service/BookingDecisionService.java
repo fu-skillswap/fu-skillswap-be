@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
@@ -140,8 +141,7 @@ public class BookingDecisionService {
                 selectedEndTime
         );
         if (!menteeOverlappingBookings.isEmpty()) {
-            booking.setStatus(BookingStatus.REJECTED);
-            booking.setRejectedAt(now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, now);
             booking.setRejectReason("Mentee đã có lịch học khác trùng thời gian này");
             bookingRepository.save(booking);
             return bookingResponseMapper.toBookingResponse(booking);
@@ -163,12 +163,8 @@ public class BookingDecisionService {
         boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
                 || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0);
 
-        if (isFree) {
-            booking.setStatus(BookingStatus.PAID);
-        } else {
-            booking.setStatus(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
-        }
-        booking.setAcceptedAt(now);
+        BookingTransitionExecutor.apply(booking,
+                isFree ? BookingTransitionCommand.ACCEPT_FREE : BookingTransitionCommand.ACCEPT_PAID, now);
         booking.setCalendarAvailabilityUnknown(calendarAvailabilityUnknown);
         booking.setCalendarAvailabilityCheckedAt(googleCalendarBusyPort == null ? null : now);
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
@@ -185,8 +181,7 @@ public class BookingDecisionService {
             if (pendingBooking.getId().equals(booking.getId())) {
                 continue;
             }
-            pendingBooking.setStatus(BookingStatus.REJECTED);
-            pendingBooking.setRejectedAt(now);
+            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, now);
             pendingBooking.setRejectReason(BookingQueueConstants.AUTO_REJECT_SLOT_ACCEPTED_REASON);
         }
 
@@ -194,8 +189,7 @@ public class BookingDecisionService {
             if (pendingBooking.getId().equals(booking.getId())) {
                 continue;
             }
-            pendingBooking.setStatus(BookingStatus.REJECTED);
-            pendingBooking.setRejectedAt(now);
+            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, now);
             pendingBooking.setRejectReason("MENTEE_TIME_LOCKED_BY_OTHER_BOOKING");
         }
 
@@ -353,8 +347,7 @@ public class BookingDecisionService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể từ chối booking đang chờ phản hồi");
         }
 
-        booking.setStatus(BookingStatus.REJECTED);
-        booking.setRejectedAt(DateTimeUtil.now());
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.REJECT, DateTimeUtil.now());
         booking.setRejectReason(trim(request.rejectReason()));
         booking.setMentorResponseNote(trimToNull(request.mentorResponseNote()));
 

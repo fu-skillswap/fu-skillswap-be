@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMachine;
 
 import java.time.LocalDateTime;
 
@@ -18,26 +19,17 @@ public final class BookingActionPolicy {
     }
 
     public static boolean isScheduled(BookingStatus status) {
-        return status == BookingStatus.PAID
-                || status == BookingStatus.AWAITING_MENTOR_COMPLETION
-                || status == BookingStatus.AWAITING_MENTEE_CONFIRMATION;
+        return BookingStateMachine.isScheduled(status);
     }
 
     public static boolean hasSession(BookingStatus status) {
         return isScheduled(status)
                 || status == BookingStatus.COMPLETED
-                || status == BookingStatus.AUTO_CLOSED
                 || status == BookingStatus.UNDER_REVIEW;
     }
 
     public static boolean isTerminal(BookingStatus status) {
-        return status == BookingStatus.REJECTED
-                || status == BookingStatus.EXPIRED
-                || status == BookingStatus.CANCELLED_BY_MENTEE
-                || status == BookingStatus.CANCELLED_BY_MENTOR
-                || status == BookingStatus.COMPLETED
-                || status == BookingStatus.AUTO_CLOSED
-                || status == BookingStatus.NO_SHOW;
+        return BookingStateMachine.isTerminal(status);
     }
 
     public static boolean canCancelByMentee(BookingStatus status, boolean beforeSession) {

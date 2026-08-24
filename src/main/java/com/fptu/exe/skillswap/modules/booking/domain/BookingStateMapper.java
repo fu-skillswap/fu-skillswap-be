@@ -36,7 +36,7 @@ public final class BookingStateMapper {
             case CANCELLED_BY_MENTEE -> BookingLifecycleStatus.CANCELED_BY_MENTEE;
             case CANCELLED_BY_MENTOR -> BookingLifecycleStatus.CANCELED_BY_MENTOR;
             case UNDER_REVIEW -> BookingLifecycleStatus.UNDER_REVIEW;
-            case COMPLETED, AUTO_CLOSED, NO_SHOW -> BookingLifecycleStatus.COMPLETED;
+            case COMPLETED -> BookingLifecycleStatus.COMPLETED;
         };
     }
 
@@ -66,8 +66,7 @@ public final class BookingStateMapper {
             case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;
             case REJECTED, EXPIRED -> BookingPaymentStatus.EXPIRED;
             case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.REFUNDED;
-            case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, AUTO_CLOSED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
-            case NO_SHOW -> BookingPaymentStatus.EXPIRED;
+            case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
         };
     }
 
@@ -79,14 +78,13 @@ public final class BookingStateMapper {
         if (outcome == null) {
             return switch (booking.getStatus()) {
                 case COMPLETED -> BookingCompletionOutcome.USER_CONFIRMED;
-                case AUTO_CLOSED -> BookingCompletionOutcome.AUTO_CLOSED;
                 default -> null;
             };
         }
         return switch (outcome) {
-            case COMPLETED_CONFIRMED, USER_CONFIRMED -> BookingCompletionOutcome.USER_CONFIRMED;
-            case COMPLETED_AUTO_CLOSED, AUTO_CLOSED -> BookingCompletionOutcome.AUTO_CLOSED;
-            case UNDER_REVIEW, REVIEW_PENDING_DECISION -> BookingCompletionOutcome.UNDER_REVIEW;
+            case USER_CONFIRMED -> BookingCompletionOutcome.USER_CONFIRMED;
+            case AUTO_CLOSED -> BookingCompletionOutcome.AUTO_CLOSED;
+            case UNDER_REVIEW -> BookingCompletionOutcome.UNDER_REVIEW;
             case NO_SHOW_MENTEE -> BookingCompletionOutcome.NO_SHOW_MENTEE;
             case NO_SHOW_MENTOR -> BookingCompletionOutcome.NO_SHOW_MENTOR;
         };

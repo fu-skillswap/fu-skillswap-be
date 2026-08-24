@@ -452,7 +452,8 @@ public class AvailabilityTemplateService {
 
     private void rejectPending(List<Booking> bookings, String reason) {
         for (Booking booking : bookings) {
-            booking.setStatus(BookingStatus.REJECTED); booking.setRejectedAt(now()); booking.setRejectReason(reason);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, now());
+            booking.setRejectReason(reason);
         }
         if (!bookings.isEmpty()) bookingRepository.saveAll(bookings);
     }

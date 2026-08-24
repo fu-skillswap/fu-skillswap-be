@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleActorRole;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
@@ -251,8 +252,7 @@ public class BookingRescheduleService {
 
         LocalDateTime now = DateTimeUtil.now();
         for (Booking pendingBooking : overlappingPendingBookings) {
-            pendingBooking.setStatus(BookingStatus.REJECTED);
-            pendingBooking.setRejectedAt(now);
+            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, now);
             pendingBooking.setRejectReason("Khung giờ này không còn khả dụng sau khi booking khác được dời lịch vào cùng segment.");
         }
         if (!overlappingPendingBookings.isEmpty()) {

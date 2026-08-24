@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
@@ -955,8 +956,7 @@ public class MentorAvailabilityService {
         }
 
         for (Booking pendingBooking : pendingBookings) {
-            pendingBooking.setStatus(BookingStatus.REJECTED);
-            pendingBooking.setRejectedAt(currentTime);
+            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, currentTime);
             pendingBooking.setRejectReason(reason);
         }
         bookingRepository.saveAll(pendingBookings);
@@ -1172,8 +1172,7 @@ public class MentorAvailabilityService {
             if (booking.getStatus() != BookingStatus.PENDING) {
                 continue;
             }
-            booking.setStatus(BookingStatus.REJECTED);
-            booking.setRejectedAt(currentTime);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, currentTime);
             booking.setRejectReason(reason);
         }
         bookingRepository.saveAll(bookings);

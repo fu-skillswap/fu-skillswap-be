@@ -1211,7 +1211,7 @@ class BookingServiceTest {
     void resolveBookingIssue_complete_shouldFinalizeBooking() {
         UUID adminUserId = UUID.randomUUID();
         Booking booking = bookingForDecision(BookingStatus.UNDER_REVIEW);
-        booking.setCompletionOutcome(BookingCompletionOutcome.REVIEW_PENDING_DECISION);
+        booking.setCompletionOutcome(BookingCompletionOutcome.UNDER_REVIEW);
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));

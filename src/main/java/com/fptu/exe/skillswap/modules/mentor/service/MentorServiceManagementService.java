@@ -3,10 +3,12 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -305,9 +307,8 @@ public class MentorServiceManagementService {
             if (booking.getStatus() != BookingStatus.PENDING) {
                 continue;
             }
-            booking.setStatus(BookingStatus.REJECTED);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, rejectedAt);
             booking.setRejectReason(reason);
-            booking.setRejectedAt(rejectedAt);
         }
         bookingRepository.saveAll(bookings);
     }

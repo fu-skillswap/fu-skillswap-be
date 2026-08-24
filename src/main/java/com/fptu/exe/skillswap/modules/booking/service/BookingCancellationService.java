@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -93,8 +94,7 @@ public class BookingCancellationService {
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);
 
-        booking.setStatus(BookingStatus.CANCELLED_BY_MENTOR);
-        booking.setCancelledAt(now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTOR, now);
         booking.setCancelReason(requiredCancelReason(request));
 
         refreshSlotBookedFlag(slot);
@@ -185,8 +185,7 @@ public class BookingCancellationService {
         boolean lateCancellation = currentStatus == BookingStatus.PAID
                 && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
 
-        booking.setStatus(BookingStatus.CANCELLED_BY_MENTEE);
-        booking.setCancelledAt(now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTEE, now);
         booking.setCancelReason(requiredCancelReason(request));
 
         if (slot != null && currentStatus != BookingStatus.PENDING) {

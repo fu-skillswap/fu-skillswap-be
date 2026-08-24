@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
@@ -84,8 +85,7 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentor của booking mới được xác nhận hoàn tất buổi mentoring");
         }
         if ((booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
-                || booking.getStatus() == BookingStatus.COMPLETED
-                || booking.getStatus() == BookingStatus.AUTO_CLOSED)
+                || booking.getStatus() == BookingStatus.COMPLETED)
                 && booking.getCompletedAt() != null) {
             return bookingResponseMapper.toBookingResponse(booking);
         }
@@ -104,8 +104,7 @@ public class BookingCompletionService {
         String completionNote = trimToNull(request == null ? null : request.completionNote());
         booking.setMentorNote(completionNote);
         BookingStatus oldStatus = booking.getStatus();
-        booking.setStatus(BookingStatus.AWAITING_MENTEE_CONFIRMATION);
-        booking.setCompletedAt(now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTOR_COMPLETED, now);
 
         sessionFinalizationService.recordMentorReportedCompletion(booking, now);
 
@@ -162,7 +161,7 @@ public class BookingCompletionService {
         ensureWithinPostSessionReviewWindow(booking, now);
 
         BookingStatus oldStatus = booking.getStatus();
-        booking.setStatus(BookingStatus.COMPLETED);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTEE_CONFIRMED, now);
         booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMenteeNote(trimToNull(request == null ? null : request.confirmationNote()));
 
@@ -233,7 +232,7 @@ public class BookingCompletionService {
         validateIssueReporter(booking, currentUserId, request.issueType());
 
         BookingStatus oldStatus = booking.getStatus();
-        booking.setStatus(BookingStatus.UNDER_REVIEW);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, now);
         booking.setIssueSubmittedAt(now);
         booking.setIssueSubmittedByUserId(currentUserId);
         booking.setIssueType(request.issueType());
@@ -324,25 +323,25 @@ public class BookingCompletionService {
 
         BookingStatus oldStatus = booking.getStatus();
         if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
-            booking.setStatus(BookingStatus.COMPLETED);
-            booking.setCompletedAt(booking.getCompletedAt() == null ? now : booking.getCompletedAt());
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, now);
+            if (booking.getCompletedAt() == null) {
+                booking.setCompletedAt(now);
+            }
             booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
             sessionFinalizationService.finalizeDeliveredSession(booking, now);
             if (settlementService != null) {
                 settlementService.releaseForBooking(booking);
             }
         } else if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
-            booking.setStatus(BookingStatus.COMPLETED);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTOR_NO_SHOW, now);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
-            booking.setFinalizedAt(now);
             sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
                 settlementService.refundForMentorNoShow(booking);
             }
             recordMentorNoShowViolation(booking);
         } else {
-            booking.setStatus(BookingStatus.COMPLETED);
-            booking.setFinalizedAt(now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW, now);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
             sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
@@ -400,7 +399,7 @@ public class BookingCompletionService {
         if (booking.getStatus() == BookingStatus.PAID) {
             LocalDateTime endTime = selectedEndTime(booking);
             if (endTime != null && !now.isBefore(endTime)) {
-                booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SESSION_ENDED, now);
             }
         }
     }

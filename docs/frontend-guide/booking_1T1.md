@@ -205,7 +205,7 @@ await apiClient.post(
 - **Query Parameters**:
   - `role`: `"MENTEE"` hoặc `"MENTOR"` (Mặc định: `"MENTEE"`).
   - `status` (Tùy chọn): Lọc theo trạng thái `BookingStatus`:
-    - `PENDING`, `ACCEPTED_AWAITING_PAYMENT`, `PAID`, `REJECTED`, `EXPIRED`, `CANCELLED_BY_MENTEE`, `CANCELLED_BY_MENTOR`, `AWAITING_MENTOR_COMPLETION`, `AWAITING_MENTEE_CONFIRMATION`, `COMPLETED`, `AUTO_CLOSED`, `UNDER_REVIEW`, `NO_SHOW`.
+    - `PENDING`, `ACCEPTED_AWAITING_PAYMENT`, `PAID`, `REJECTED`, `EXPIRED`, `CANCELLED_BY_MENTEE`, `CANCELLED_BY_MENTOR`, `AWAITING_MENTOR_COMPLETION`, `AWAITING_MENTEE_CONFIRMATION`, `COMPLETED`, `UNDER_REVIEW`. Những kết quả sau buổi học như tự đóng hoặc no-show nằm trong `completionOutcome`, không phải status riêng.
   - `page`: Số trang (Bắt đầu từ `0`).
   - `size`: Kích thước trang (Mặc định: `10`).
   - `sortBy`: Trường sắp xếp (Mặc định: `selectedStartTime`).

@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
@@ -326,7 +328,7 @@ public class PaymentWebhookService {
                     booking.getId(), booking.getStatus());
             return;
         }
-        booking.setStatus(BookingStatus.PAID);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.PAYMENT_CONFIRMED, DateTimeUtil.now());
         bookingQueryPort.save(booking);
         if (internalTelemetryService != null) {
             internalTelemetryService.record(

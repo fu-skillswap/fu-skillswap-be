@@ -279,7 +279,7 @@ public class BookingResponseMapper {
             return new BookingDisplayGuidance(BookingDisplayState.UNDER_REVIEW, BookingNextAction.VIEW_ISSUE, null);
         }
         if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR
-                || booking.getStatus() == BookingStatus.REJECTED || booking.getStatus() == BookingStatus.EXPIRED || booking.getStatus() == BookingStatus.NO_SHOW) {
+                || booking.getStatus() == BookingStatus.REJECTED || booking.getStatus() == BookingStatus.EXPIRED) {
             return new BookingDisplayGuidance(BookingDisplayState.CANCELED_OR_EXPIRED, BookingNextAction.NONE, null);
         }
         if (booking.getStatus() == BookingStatus.PENDING) {
@@ -328,7 +328,7 @@ public class BookingResponseMapper {
                     isMentee ? BookingNextAction.CONFIRM_SESSION : BookingNextAction.NONE,
                     endTime == null ? null : endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
         }
-        if (booking.getStatus() == BookingStatus.COMPLETED || booking.getStatus() == BookingStatus.AUTO_CLOSED) {
+        if (booking.getStatus() == BookingStatus.COMPLETED) {
             return canSubmitFeedback
                     ? new BookingDisplayGuidance(BookingDisplayState.FEEDBACK_REQUIRED, BookingNextAction.LEAVE_FEEDBACK, null)
                     : new BookingDisplayGuidance(BookingDisplayState.COMPLETED, BookingNextAction.NONE, null);

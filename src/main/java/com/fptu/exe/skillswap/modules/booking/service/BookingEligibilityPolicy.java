@@ -108,6 +108,6 @@ public class BookingEligibilityPolicy {
     private java.util.Set<BookingStatus> serviceResourceAccessStatuses() {
         return java.util.Set.of(BookingStatus.PAID,
                 BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION,
-                BookingStatus.COMPLETED, BookingStatus.AUTO_CLOSED);
+                BookingStatus.COMPLETED);
     }
 }
