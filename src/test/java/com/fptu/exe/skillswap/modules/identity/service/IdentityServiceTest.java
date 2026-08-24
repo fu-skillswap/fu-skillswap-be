@@ -11,6 +11,8 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -146,6 +149,24 @@ class IdentityServiceTest {
         verify(jwtTokenProvider, times(1)).generateRefreshToken();
         verify(refreshTokenReplayCryptoService, times(1)).encrypt(any(TokenResponse.class));
         verify(refreshTokenReplayCryptoService, times(1)).decrypt("cipher-1");
+    }
+
+    @Test
+    void refreshToken_usesInjectedClockForSessionExpiry() {
+        Instant fixedNow = Instant.parse("2040-01-01T00:00:00Z");
+        identityService.setTimeProvider(TimeProvider.fixedUtc(fixedNow));
+
+        UserSession expiredSession = new UserSession();
+        expiredSession.setUser(user);
+        expiredSession.setRefreshTokenHash("expired-hash");
+        expiredSession.setExpiresAt(LocalDateTime.of(2039, 12, 31, 23, 59, 59));
+        expiredSession.setSessionState(UserSessionState.ACTIVE);
+
+        when(jwtTokenProvider.hashToken("refresh-token-expired")).thenReturn("expired-hash");
+        when(userSessionRepository.findByRefreshTokenHashForUpdate("expired-hash"))
+                .thenReturn(Optional.of(expiredSession));
+
+        assertThrows(BaseException.class, () -> identityService.refreshToken("refresh-token-expired"));
     }
 
     @Test

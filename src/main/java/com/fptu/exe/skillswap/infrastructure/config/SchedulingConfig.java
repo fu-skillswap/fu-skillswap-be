@@ -17,6 +17,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.scheduling.config.ScheduledTaskRegistrar;
 
 import java.util.concurrent.ThreadPoolExecutor;
+import java.time.Clock;
 
 @Configuration
 @EnableAsync
@@ -26,6 +27,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
     private final RealtimeOutboxProperties realtimeOutboxProperties;
     private final ObjectProvider<DomainEventOutboxPublisherScheduler> outboxPublisherSchedulerProvider;
+    private final Clock applicationClock;
 
     @Bean
     public TaskDecorator mdcTaskDecorator() {
@@ -85,7 +87,8 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
         DynamicPeriodicTrigger trigger = new DynamicPeriodicTrigger(
                 realtimeOutboxProperties.getPollMs(),
-                realtimeOutboxProperties.getPollMs() * 20L
+                realtimeOutboxProperties.getPollMs() * 20L,
+                applicationClock
         );
         taskRegistrar.addTriggerTask(() -> {
             boolean hadWork = false;

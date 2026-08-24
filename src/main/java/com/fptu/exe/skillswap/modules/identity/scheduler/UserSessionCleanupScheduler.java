@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.scheduler;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageLifecycleProperties;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 
 @Component
 @RequiredArgsConstructor
@@ -19,6 +21,14 @@ public class UserSessionCleanupScheduler {
 
     private final UserSessionRepository userSessionRepository;
     private final StorageLifecycleProperties properties;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Scheduled(cron = "${application.storage.lifecycle.user-session-cleanup-cron:0 5 2 * * *}")
     @Transactional
@@ -28,7 +38,7 @@ public class UserSessionCleanupScheduler {
             return;
         }
 
-        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         LocalDateTime cutoff = now.minusDays(retentionDays);
         int totalDeleted = 0;
         int batchSize = Math.max(50, properties.getCleanupBatchSize());

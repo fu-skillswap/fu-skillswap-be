@@ -1,16 +1,19 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
 @Table(name = "google_calendar_sync_jobs", indexes = {
-        @Index(name = "idx_google_calendar_sync_jobs_poll", columnList = "status, run_after")
+        @Index(name = "idx_google_calendar_sync_jobs_poll", columnList = "status, run_after"),
+        @Index(name = "idx_google_calendar_sync_jobs_poll_utc", columnList = "status, run_after_utc")
 })
 @Getter
 @Setter
@@ -46,6 +49,9 @@ public class GoogleCalendarSyncJob {
     @Column(name = "run_after", nullable = false)
     private LocalDateTime runAfter;
 
+    @Column(name = "run_after_utc")
+    private Instant runAfterUtc;
+
     @Column(name = "idempotency_key", nullable = false, length = 200, unique = true)
     private String idempotencyKey;
 
@@ -58,23 +64,62 @@ public class GoogleCalendarSyncJob {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "completed_at_utc")
+    private Instant completedAtUtc;
+
     @PrePersist
     protected void onCreate() {
-        if (runAfter == null) {
-            runAfter = DateTimeUtil.now();
+        if (runAfterUtc == null) {
+            runAfterUtc = runAfter != null ? BookingTime.toInstant(runAfter) : DateTimeUtil.instantNow();
         }
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        if (runAfter == null) {
+            runAfter = BookingTime.fromInstant(runAfterUtc);
+        }
+        if (createdAtUtc == null) {
+            createdAtUtc = createdAt != null ? BookingTime.toInstant(createdAt) : DateTimeUtil.instantNow();
+        }
+        if (createdAt == null) {
+            createdAt = BookingTime.fromInstant(createdAtUtc);
+        }
+        if (updatedAtUtc == null) {
+            updatedAtUtc = updatedAt != null ? BookingTime.toInstant(updatedAt) : createdAtUtc;
+        }
+        if (updatedAt == null) {
+            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        }
+        syncDualWriteFields();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        syncDualWriteFields();
+    }
+
+    private void syncDualWriteFields() {
+        if (runAfterUtc != null && runAfter == null) {
+            runAfter = BookingTime.fromInstant(runAfterUtc);
+        } else if (runAfter != null && runAfterUtc == null) {
+            runAfterUtc = BookingTime.toInstant(runAfter);
+        }
+
+        if (completedAtUtc != null && completedAt == null) {
+            completedAt = BookingTime.fromInstant(completedAtUtc);
+        } else if (completedAt != null && completedAtUtc == null) {
+            completedAtUtc = BookingTime.toInstant(completedAt);
+        }
     }
 }

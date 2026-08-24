@@ -27,19 +27,21 @@ public class PayOsPaymentGatewayProvider implements PaymentGatewayProvider {
                                 .map(item -> new PayOsGateway.PaymentItem(item.name(), item.quantity(), item.priceVnd()))
                                 .toList()));
         return new CreatePaymentLinkResult(result.providerOrderCode(), result.providerPaymentLinkId(),
-                result.providerStatus(), result.checkoutUrl(), result.expiresAt());
+                result.providerStatus(), result.checkoutUrl(), result.expiresAtUtc(), result.expiresAt());
     }
 
     @Override
     public PaymentLinkDetails getPaymentLink(long providerOrderCode) {
         PayOsGateway.PaymentLinkDetails result = payOsGateway.getPaymentLink(providerOrderCode);
-        return new PaymentLinkDetails(result.providerPaymentLinkId(), result.providerStatus(), result.createdAt(), result.cancelledAt());
+        return new PaymentLinkDetails(result.providerPaymentLinkId(), result.providerStatus(),
+                result.createdAtUtc(), result.cancelledAtUtc(), result.createdAt(), result.cancelledAt());
     }
 
     @Override
     public VerifiedWebhook verifyWebhook(PaymentWebhookRequest request) {
         PayOsGateway.VerifiedWebhook result = payOsGateway.verifyWebhook(request);
         return new VerifiedWebhook(result.providerOrderCode(), result.providerPaymentLinkId(), result.providerEventId(),
-                result.providerTransactionId(), result.providerStatus(), result.success(), result.paidAt(), result.amount());
+                result.providerTransactionId(), result.providerStatus(), result.success(),
+                result.paidAtUtc(), result.paidAt(), result.amount());
     }
 }

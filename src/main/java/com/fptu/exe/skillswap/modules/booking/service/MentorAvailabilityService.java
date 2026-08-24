@@ -27,9 +27,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleR
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
@@ -47,7 +45,7 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,12 +56,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -92,8 +91,15 @@ public class MentorAvailabilityService {
     private static final String BLOCKED_BY_PAST_TIME_REASON = "Segment này đã bắt đầu hoặc đã trôi qua";
     private static final String BLOCKED_BY_LEAD_TIME_REASON = "Yêu cầu đặt trước tối thiểu";
     private static final String BLOCKED_BY_HORIZON_REASON = "Vượt quá thời hạn mở lịch cho phép";
-    private static final String BLOCKED_BY_GOOGLE_BUSY_REASON = "Trùng lịch bận trên Google Calendar của mentor";
     private static final int MAXIMUM_PARENT_SLOT_DURATION_MINUTES = 720;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.PAID
@@ -111,16 +117,10 @@ public class MentorAvailabilityService {
     private final MentorBookingPolicyService mentorBookingPolicyService;
 
     private AvailabilityTemplateService availabilityTemplateService;
-    private GoogleCalendarBusyPort googleCalendarBusyPort;
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
-    }
-
-    @Autowired(required = false)
-    void setGoogleCalendarBusyPort(GoogleCalendarBusyPort googleCalendarBusyPort) {
-        this.googleCalendarBusyPort = googleCalendarBusyPort;
     }
 
     public MentorAvailabilityService(
@@ -170,7 +170,7 @@ public class MentorAvailabilityService {
                     Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
                     request.expectedTemplateVersions());
         }
-        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, start, end)) {
+        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, toInstant(start), toInstant(end))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
         }
 
@@ -235,7 +235,7 @@ public class MentorAvailabilityService {
                     Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
                     request.expectedTemplateVersions());
         }
-        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, start, end)) {
+        if (mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, toInstant(start), toInstant(end))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã bị trùng lặp với lịch rảnh khác của bạn");
         }
 
@@ -356,7 +356,7 @@ public class MentorAvailabilityService {
         LocalDateTime start = fromDate.atStartOfDay();
         LocalDateTime end = toDate.plusDays(1).atStartOfDay();
 
-        return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, start, end).stream()
+        return mentorAvailabilitySlotRepository.findMyManagedSlotsWithServices(mentorUserId, toInstant(start), toInstant(end)).stream()
                 .filter(slot -> isActive == null || slot.isActive() == isActive)
                 .map(this::toManagedSlotResponse)
                 .toList();
@@ -408,8 +408,8 @@ public class MentorAvailabilityService {
 
         List<MentorAvailabilitySlot> slots = mentorAvailabilitySlotRepository.findVisibleSlotsByMentorUserId(
                 mentorProfile.getUserId(),
-                fromTime,
-                toTimeExclusive
+                toInstant(fromTime),
+                toInstant(toTimeExclusive)
         );
         if (slots.isEmpty()) {
             return List.of();
@@ -527,21 +527,6 @@ public class MentorAvailabilityService {
         int leadTimeMinutes = policy.minimumBookingLeadTimeMinutes();
         int horizonDays = policy.maximumBookingHorizonDays();
 
-        List<GoogleCalendarBusyInterval> googleBusyIntervals = List.of();
-        boolean calendarAvailabilityUnknown = false;
-        if (mentorUserId != null && googleCalendarBusyPort != null) {
-            Instant slotStartUtc = BookingTime.toInstant(slot.getStartTime());
-            Instant slotEndUtc = BookingTime.toInstant(slot.getEndTime());
-            try {
-                googleBusyIntervals = googleCalendarBusyPort.queryBusyIntervals(mentorUserId, slotStartUtc, slotEndUtc);
-            } catch (RuntimeException ex) {
-                // Candidate discovery must remain available when Google is slow/down. The
-                // definitive check happens again when the mentor accepts the request.
-                calendarAvailabilityUnknown = true;
-                log.warn("Google Calendar availability is unknown for mentorUserId={}: {}", mentorUserId, ex.getMessage());
-            }
-        }
-
         List<Booking> acceptedBookings = SLOT_LOCKING_STATUSES.stream()
                 .flatMap(status -> bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(slot.getId(), status).stream())
                 .toList();
@@ -580,11 +565,6 @@ public class MentorAvailabilityService {
             boolean blockedBySameService = blockedByAccepted && blockingServiceId != null && blockingServiceId.equals(service.getId());
             boolean blockedByDifferentService = blockedByAccepted && !blockedBySameService;
 
-            Instant candidateStartUtc = BookingTime.toInstant(candidateStart);
-            Instant candidateEndUtc = BookingTime.toInstant(candidateEnd);
-            boolean blockedByGoogleBusy = googleBusyIntervals != null && googleBusyIntervals.stream()
-                    .anyMatch(interval -> interval.overlaps(candidateStartUtc, candidateEndUtc));
-
             String reasonIfBlocked = null;
             String bookingConflictNote = null;
             boolean selectable = true;
@@ -609,10 +589,6 @@ public class MentorAvailabilityService {
                 bookingConflictNote = blockedBySameService
                         ? "Segment này đã có booking đã được xác nhận của cùng service"
                         : "Segment này đã có booking đã được xác nhận của service khác trong cùng slot";
-            } else if (blockedByGoogleBusy) {
-                selectable = false;
-                reasonIfBlocked = BLOCKED_BY_GOOGLE_BUSY_REASON;
-                bookingConflictNote = "Khung giờ này trùng với lịch bận trên Google Calendar của mentor";
             } else if (pendingCount >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_PENDING_QUOTA_REASON;
@@ -633,8 +609,6 @@ public class MentorAvailabilityService {
                     .blockedBySameService(blockedBySameService)
                     .blockedByDifferentService(blockedByDifferentService)
                     .bookingConflictNote(bookingConflictNote)
-                    .blockedByGoogleCalendar(blockedByGoogleBusy)
-                    .calendarAvailabilityUnknown(calendarAvailabilityUnknown)
                     .build());
             current = candidateEnd;
         }
@@ -839,7 +813,7 @@ public class MentorAvailabilityService {
     ) {
         return start.isAfter(now())
                 && !overlapsClosedRule(start, end, closedRules)
-                && !mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, start, end);
+                && !mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, toInstant(start), toInstant(end));
     }
 
     private void attachAllActiveServicesForGeneratedSlot(MentorAvailabilitySlot slot) {
@@ -925,20 +899,24 @@ public class MentorAvailabilityService {
 
     private void reconcileFutureWindowsForRule(MentorAvailabilityRule rule, String pendingRejectionReason) {
         LocalDateTime currentTime = now();
-        List<MentorAvailabilitySlot> futureWindows = mentorAvailabilitySlotRepository.findByRuleIdAndStartTimeGreaterThanEqualOrderByStartTimeAsc(
+        List<MentorAvailabilitySlot> futureWindows = mentorAvailabilitySlotRepository.findByRuleIdAndStartTimeUtcGreaterThanEqualOrderByStartTimeUtcAsc(
                 rule.getId(),
-                currentTime
+                toInstant(currentTime)
         );
 
         for (MentorAvailabilitySlot window : futureWindows) {
             if (!window.isActive()) {
                 continue;
             }
-            if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+            Instant startUtc = window.getStartTimeUtc() != null ? window.getStartTimeUtc()
+                    : (window.getStartTime() == null ? null : toInstant(window.getStartTime()));
+            Instant endUtc = window.getEndTimeUtc() != null ? window.getEndTimeUtc()
+                    : (window.getEndTime() == null ? null : toInstant(window.getEndTime()));
+            if (startUtc != null && endUtc != null && bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                     window.getId(),
                     SLOT_LOCKING_STATUSES,
-                    window.getStartTime(),
-                    window.getEndTime()
+                    startUtc,
+                    endUtc
             )) {
                 continue;
             }
@@ -1062,8 +1040,8 @@ public class MentorAvailabilityService {
                 .timezone(rule.getTimezone())
                 .active(rule.isActive())
                 .note(rule.getNote())
-                .createdAt(rule.getCreatedAt())
-                .updatedAt(rule.getUpdatedAt())
+                .createdAt(BookingTime.toOffsetDateTime(rule.getCreatedAt()))
+                .updatedAt(BookingTime.toOffsetDateTime(rule.getUpdatedAt()))
                 .build();
     }
 
@@ -1217,7 +1195,7 @@ public class MentorAvailabilityService {
     }
 
     private LocalDateTime now() {
-        return DateTimeUtil.now();
+        return timeProvider.nowBusiness();
     }
 
     private LocalDateTime max(LocalDateTime left, LocalDateTime right) {

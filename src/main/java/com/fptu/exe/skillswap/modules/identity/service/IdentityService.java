@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.config.RefreshTokenCookieProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
@@ -18,12 +16,15 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +43,14 @@ public class IdentityService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final RefreshTokenCookieProperties refreshTokenCookieProperties;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     public TokenResponse loginWithGoogle(GoogleLoginRequest request) {
         GoogleAuthService.GoogleUserInfo googleUser = googleLoginOAuthService.resolveUserInfo(request);
@@ -64,7 +73,7 @@ public class IdentityService {
             throw new BaseException(ErrorCode.SESSION_EXPIRED, "Phiên đăng nhập đã bị thu hồi");
         }
 
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
 
         if (sessionState == UserSessionState.ROTATING_GRACE) {
             UUID userId = session.getUser().getId();
@@ -180,7 +189,7 @@ public class IdentityService {
 
         // Save session
         long refreshExpirationMs = jwtProperties.getJwt().getRefreshToken().getExpiration();
-        LocalDateTime expiresAt = DateTimeUtil.now().plusNanos(refreshExpirationMs * 1_000_000);
+        LocalDateTime expiresAt = timeProvider.nowBusiness().plusNanos(refreshExpirationMs * 1_000_000);
 
         UserSession session = UserSession.builder()
                 .user(user)
@@ -250,7 +259,7 @@ public class IdentityService {
     private void markSessionRevoked(UserSession session) {
         session.setRevoked(true);
         session.setSessionState(UserSessionState.REVOKED);
-        session.setRevokedAt(DateTimeUtil.now());
+        session.setRevokedAt(timeProvider.nowBusiness());
         session.setGraceExpiresAt(null);
         session.setGraceReplayCiphertext(null);
         session.setGraceReplacementSessionId(null);
@@ -262,7 +271,7 @@ public class IdentityService {
         }
         session.setRevoked(true);
         session.setSessionState(terminalState);
-        session.setRevokedAt(terminalState == UserSessionState.REVOKED ? DateTimeUtil.now() : session.getRevokedAt());
+        session.setRevokedAt(terminalState == UserSessionState.REVOKED ? timeProvider.nowBusiness() : session.getRevokedAt());
         session.setGraceExpiresAt(null);
         session.setGraceReplayCiphertext(null);
         session.setGraceReplacementSessionId(null);

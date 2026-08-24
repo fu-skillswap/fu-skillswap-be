@@ -71,8 +71,8 @@ class SessionFinalizationServiceTest {
         service.finalizeDeliveredSession(booking, now);
 
         assertEquals(SessionStatus.COMPLETED, session.getStatus());
-        assertEquals(booking.getSelectedStartTime(), session.getActualStartTime());
-        assertEquals(booking.getSelectedEndTime(), session.getActualEndTime());
+        assertNull(session.getActualStartTime());
+        assertNull(session.getActualEndTime());
         assertEquals(now, booking.getFinalizedAt());
         assertEquals(now, booking.getCompletedAt());
         assertEquals(5, mentor.getTotalSessions());

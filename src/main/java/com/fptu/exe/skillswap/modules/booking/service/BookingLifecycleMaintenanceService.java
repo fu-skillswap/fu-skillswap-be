@@ -8,10 +8,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
@@ -19,17 +20,19 @@ import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.data.domain.Pageable;
 import java.util.stream.Collectors;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +60,9 @@ public class BookingLifecycleMaintenanceService {
     private AvailabilityTemplateService availabilityTemplateService;
     private MentorViolationService mentorViolationService;
     private SessionFinalizationService sessionFinalizationService;
+    private SessionAttendanceRepository sessionAttendanceRepository;
+
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     public BookingLifecycleMaintenanceService(
             BookingRepository bookingRepository,
@@ -83,6 +89,13 @@ public class BookingLifecycleMaintenanceService {
     }
 
     @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
+
+    @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
     }
@@ -97,6 +110,11 @@ public class BookingLifecycleMaintenanceService {
         this.sessionFinalizationService = sessionFinalizationService;
     }
 
+    @Autowired(required = false)
+    void setSessionAttendanceRepository(SessionAttendanceRepository sessionAttendanceRepository) {
+        this.sessionAttendanceRepository = sessionAttendanceRepository;
+    }
+
     @Transactional
     public void rejectAllPendingBookingsForMentor(UUID mentorUserId, String reason) {
         if (mentorUserId == null) {
@@ -106,8 +124,11 @@ public class BookingLifecycleMaintenanceService {
         if (pendingBookings.isEmpty()) {
             return;
         }
+        Instant nowUtc = timeProvider.instant();
         for (Booking booking : pendingBookings) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, DateTimeUtil.now());
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, nowUtc);
+            booking.setRejectedAtUtc(nowUtc);
+            booking.setRejectedAt(BookingTime.fromInstant(nowUtc));
             booking.setRejectReason(reason);
             if (booking.getSlot() != null) {
                 booking.getSlot().setBooked(false);
@@ -130,21 +151,23 @@ public class BookingLifecycleMaintenanceService {
                     booking.getMentorProfile().getUserId(),
                     booking.getStatus(),
                     "Yêu cầu đặt lịch không còn hiệu lực.",
-                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
             ));
         }
     }
 
     @Transactional
     public int expireStalePendingBookings() {
-        LocalDateTime now = DateTimeUtil.now();
-        List<Booking> staleBookings = bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
-                BookingStatus.PENDING, now);
+        Instant nowUtc = timeProvider.instant();
+        List<Booking> staleBookings = bookingRepository.findByStatusAndPendingExpireAtUtcLessThanEqualOrderByPendingExpireAtUtcAsc(
+                BookingStatus.PENDING, nowUtc);
         if (staleBookings.isEmpty()) {
             return 0;
         }
         for (Booking booking : staleBookings) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PENDING, now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PENDING, nowUtc);
+            booking.setRejectedAtUtc(nowUtc);
+            booking.setRejectedAt(BookingTime.fromInstant(nowUtc));
             booking.setRejectReason("Yêu cầu đặt lịch đã tự động hết hạn vì mentor chưa phản hồi đúng hạn.");
             if (booking.getSlot() != null) {
                 booking.getSlot().setBooked(false);
@@ -166,7 +189,7 @@ public class BookingLifecycleMaintenanceService {
             eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                     booking.getId(), booking.getMentee().getId(), booking.getMentorProfile().getUserId(),
                     booking.getStatus(), "Yêu cầu đặt lịch đã hết hạn.",
-                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()));
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()));
         }
         return staleBookings.size();
     }
@@ -179,23 +202,26 @@ public class BookingLifecycleMaintenanceService {
 
     @Transactional
     public int expireAwaitingPaymentBookings() {
-        LocalDateTime now = DateTimeUtil.now();
-        List<UUID> candidateIds = bookingRepository.findAwaitingPaymentExpiryCandidates(
-                BookingStatus.ACCEPTED_AWAITING_PAYMENT, now.minusMinutes(PAYMENT_WINDOW_MINUTES),
-                now.plusMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES))
+        Instant nowUtc = timeProvider.instant();
+        Instant acceptedCutoff = nowUtc.minus(Duration.ofMinutes(PAYMENT_WINDOW_MINUTES));
+        Instant startCutoff = nowUtc.plus(Duration.ofMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES));
+        List<UUID> candidateIds = bookingRepository.findAwaitingPaymentExpiryCandidatesUtc(
+                BookingStatus.ACCEPTED_AWAITING_PAYMENT, acceptedCutoff, startCutoff)
                 .stream().map(Booking::getId).toList();
         List<Booking> expiredBookings = new ArrayList<>();
         for (UUID bookingId : candidateIds) {
             Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
             if (booking == null || booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                    || !isPaymentDeadlineReached(booking, now)) {
+                    || !isPaymentDeadlineReached(booking, nowUtc)) {
                 continue;
             }
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PAYMENT, now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PAYMENT, nowUtc);
+            booking.setRejectedAtUtc(nowUtc);
+            booking.setRejectedAt(BookingTime.fromInstant(nowUtc));
             booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng "
                     + PAYMENT_DEADLINE_TEXT + ".");
-            if (booking.getSlot() != null && booking.getSlot().getStartTime() != null
-                    && now.isBefore(booking.getSlot().getStartTime())) {
+            Instant slotStartUtc = booking.getSlot() != null ? (booking.getSlot().getStartTimeUtc() != null ? booking.getSlot().getStartTimeUtc() : BookingTime.toInstant(booking.getSlot().getStartTime())) : null;
+            if (slotStartUtc != null && nowUtc.isBefore(slotStartUtc)) {
                 refreshSlotBookedFlag(booking.getSlot());
             }
             paymentOrderService.expireAwaitingPayment(booking);
@@ -220,60 +246,65 @@ public class BookingLifecycleMaintenanceService {
             eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                     booking.getId(), booking.getMentee().getId(), booking.getMentorProfile().getUserId(),
                     booking.getStatus(), "Yêu cầu đặt lịch đã hết hạn thanh toán.",
-                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()));
+                    booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()));
         }
         return expiredBookings.size();
     }
 
     @Transactional
     public int processPostSessionLifecycle() {
-        LocalDateTime now = DateTimeUtil.now();
+        Instant nowUtc = timeProvider.instant();
         int changed = 0;
         List<Booking> candidates = new ArrayList<>();
-        candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.PAID, now));
-        candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(BookingStatus.AWAITING_MENTOR_COMPLETION, now));
+        candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(BookingStatus.PAID, nowUtc));
+        candidates.addAll(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(BookingStatus.AWAITING_MENTOR_COMPLETION, nowUtc));
         for (Booking candidate : candidates) {
-            changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
+            changed += processPostSessionCandidate(candidate.getId(), nowUtc) ? 1 : 0;
         }
-        for (Booking candidate : bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
-                BookingStatus.AWAITING_MENTEE_CONFIRMATION, now.minusHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS))) {
-            changed += processPostSessionCandidate(candidate.getId(), now) ? 1 : 0;
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+                BookingStatus.AWAITING_MENTEE_CONFIRMATION, nowUtc.minus(Duration.ofHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS)))) {
+            changed += processPostSessionCandidate(candidate.getId(), nowUtc) ? 1 : 0;
         }
-        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
-                BookingStatus.UNDER_REVIEW, now.minusHours(12))) {
-            changed += processIssueDeadline(candidate.getId(), now) ? 1 : 0;
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(
+                BookingStatus.UNDER_REVIEW, nowUtc.minus(Duration.ofHours(12)))) {
+            changed += processIssueDeadline(candidate.getId(), nowUtc) ? 1 : 0;
         }
-        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
-                BookingStatus.UNDER_REVIEW, now.minusHours(48))) {
-            changed += processAdminDisputeSlaWarning(candidate.getId(), now) ? 1 : 0;
+        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
+                BookingStatus.UNDER_REVIEW, nowUtc.minus(Duration.ofHours(48)))) {
+            changed += processAdminDisputeSlaWarning(candidate.getId(), nowUtc) ? 1 : 0;
         }
         return changed;
     }
 
-    private boolean processPostSessionCandidate(UUID bookingId, LocalDateTime now) {
+    private boolean processPostSessionCandidate(UUID bookingId, Instant nowUtc) {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
         if (booking == null) return false;
 
         BookingStatus oldStatus = booking.getStatus();
+        Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
+
         if (oldStatus == BookingStatus.PAID
-                && selectedEndTime(booking) != null && !now.isBefore(selectedEndTime(booking))) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SESSION_ENDED, now);
-            booking.setPostSessionPromptedAt(now);
+                && endUtc != null && !nowUtc.isBefore(endUtc)) {
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SESSION_ENDED, nowUtc);
+            booking.setPostSessionPromptedAtUtc(nowUtc);
+            booking.setPostSessionPromptedAt(BookingTime.fromInstant(nowUtc));
             recordEvent(booking, BookingEventType.POST_SESSION_STARTED, oldStatus, BookingEventActorType.SYSTEM);
             notifyPostSessionPrompt(booking);
             return true;
         }
         if (oldStatus == BookingStatus.AWAITING_MENTOR_COMPLETION) {
-            LocalDateTime end = selectedEndTime(booking);
-            if (end == null) return false;
-            if (!now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
-                booking.setMentorCompletionOverdueAt(now);
-                recordMentorViolation(booking, MentorViolationType.COMPLETION_OVERDUE,
-                        "Mentor không xác nhận hoàn tất trong 24 giờ sau buổi học.");
+            if (endUtc == null) return false;
+            if (!nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))) {
+                if (booking.getMentorCompletionOverdueAtUtc() == null && booking.getMentorCompletionOverdueAt() == null) {
+                    booking.setMentorCompletionOverdueAtUtc(nowUtc);
+                    booking.setMentorCompletionOverdueAt(BookingTime.fromInstant(nowUtc));
+                    recordMentorViolation(booking, MentorViolationType.COMPLETION_OVERDUE,
+                            "Mentor không xác nhận hoàn tất trong 24 giờ sau buổi học.");
+                }
                 recordEvent(booking, BookingEventType.MENTOR_COMPLETION_OVERDUE, oldStatus, BookingEventActorType.SYSTEM);
-                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, now);
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
-                sessionFinalizationService.finalizeDeliveredSession(booking, now);
+                sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
                 settlementService.releaseForBooking(booking);
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 notifyMentor(booking, "Booking đã tự động hoàn tất",
@@ -282,36 +313,39 @@ public class BookingLifecycleMaintenanceService {
                         "Không có báo cáo vấn đề trong 24 giờ nên booking đã tự đóng và tiền được xử lý theo chính sách.");
                 return true;
             }
-            if (booking.getMentorCompletionReminder30mAt() == null && !now.isBefore(end.plusMinutes(30))) {
-                booking.setMentorCompletionReminder30mAt(now);
+            if (booking.getMentorCompletionReminder30mAtUtc() == null && booking.getMentorCompletionReminder30mAt() == null && !nowUtc.isBefore(endUtc.plus(Duration.ofMinutes(30)))) {
+                booking.setMentorCompletionReminder30mAtUtc(nowUtc);
+                booking.setMentorCompletionReminder30mAt(BookingTime.fromInstant(nowUtc));
                 notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Buổi mentoring đã kết thúc. Vui lòng xác nhận hoàn tất trong thời hạn cho phép.");
                 return true;
             }
-            if (booking.getMentorCompletionReminder1hAt() == null && !now.isBefore(end.plusHours(3))) {
-                booking.setMentorCompletionReminder1hAt(now);
+            if (booking.getMentorCompletionReminder1hAtUtc() == null && booking.getMentorCompletionReminder1hAt() == null && !nowUtc.isBefore(endUtc.plus(Duration.ofHours(3)))) {
+                booking.setMentorCompletionReminder1hAtUtc(nowUtc);
+                booking.setMentorCompletionReminder1hAt(BookingTime.fromInstant(nowUtc));
                 notifyMentor(booking, "Nhắc xác nhận hoàn tất", "Bạn vẫn chưa xác nhận hoàn tất buổi mentoring.");
                 return true;
             }
-            if (booking.getMenteeCompletionPromptedAt() == null && !now.isBefore(end.plusHours(2))) {
-                booking.setMenteeCompletionPromptedAt(now);
+            if (booking.getMenteeCompletionPromptedAtUtc() == null && booking.getMenteeCompletionPromptedAt() == null && !nowUtc.isBefore(endUtc.plus(Duration.ofHours(2)))) {
+                booking.setMenteeCompletionPromptedAtUtc(nowUtc);
+                booking.setMenteeCompletionPromptedAt(BookingTime.fromInstant(nowUtc));
                 notifyMentee(booking, "Chưa nhận được xác nhận từ mentor", "Bạn có thể tiếp tục chờ hoặc báo vấn đề nếu buổi mentoring không diễn ra.");
                 return true;
             }
             return false;
         }
-        if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION && booking.getCompletedAt() != null) {
-            LocalDateTime end = selectedEndTime(booking);
-            if (end == null) return false;
-            if (!now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
-                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, now);
+        if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION && (booking.getCompletedAtUtc() != null || booking.getCompletedAt() != null)) {
+            if (endUtc == null) return false;
+            if (!nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))) {
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
-                sessionFinalizationService.finalizeDeliveredSession(booking, now);
+                sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
                 settlementService.releaseForBooking(booking);
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 return true;
             }
-            if (booking.getAutoCloseWarningSentAt() == null && !now.isBefore(end.plusHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS))) {
-                booking.setAutoCloseWarningSentAt(now);
+            if (booking.getAutoCloseWarningSentAtUtc() == null && booking.getAutoCloseWarningSentAt() == null && !nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.AUTO_CLOSE_WARNING_HOURS)))) {
+                booking.setAutoCloseWarningSentAtUtc(nowUtc);
+                booking.setAutoCloseWarningSentAt(BookingTime.fromInstant(nowUtc));
                 notifyMentee(booking, "Buổi mentoring sắp tự đóng", "Bạn còn một giờ để xác nhận hoặc báo vấn đề.");
                 notifyMentor(booking, "Buổi mentoring sắp tự đóng", "Nếu không có issue, settlement sẽ được release khi booking tự đóng.");
                 return true;
@@ -320,49 +354,88 @@ public class BookingLifecycleMaintenanceService {
         return false;
     }
 
-    private boolean processIssueDeadline(UUID bookingId, LocalDateTime now) {
+    private boolean processIssueDeadline(UUID bookingId, Instant nowUtc) {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
-        if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW || booking.getIssueSubmittedAt() == null
+        if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW
+                || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)
                 || (booking.getIssueType() != BookingIssueType.MENTOR_NO_SHOW && booking.getIssueType() != BookingIssueType.MENTEE_NO_SHOW)
-                || booking.getIssueRespondedAt() != null) return false;
-        if (booking.getIssueEscalationSentAt() == null && !now.isBefore(booking.getIssueSubmittedAt().plusHours(12))) {
-            booking.setIssueEscalationSentAt(now);
-            if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) notifyMentor(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
-            else notifyMentee(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
-            return true;
-        }
-        if (!now.isBefore(booking.getIssueSubmittedAt().plusHours(24))) {
+                || booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null) return false;
+
+        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+
+        if (!nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(24)))) {
+            if (!hasOneSidedAttendanceSupportingIssue(booking)) {
+                if (!"SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW".equals(booking.getIssueResolutionNote())) {
+                    booking.setIssueResolutionNote("SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW");
+                    return true;
+                }
+                return false;
+            }
             BookingStatus old = booking.getStatus();
+            if (booking.getIssueResolvedAtUtc() == null && booking.getIssueResolvedAt() == null) {
+                booking.setIssueResolvedAtUtc(nowUtc);
+                booking.setIssueResolvedAt(BookingTime.fromInstant(nowUtc));
+                booking.setIssueResolutionNote("SYSTEM_AUTO_RESOLUTION_NO_COUNTERPARTY_RESPONSE");
+            }
             if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
-                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTOR_NO_SHOW, now);
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTOR_NO_SHOW, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
                 sessionFinalizationService.markSessionNotDelivered(booking);
                 settlementService.refundForMentorNoShow(booking);
                 recordMentorViolation(booking, MentorViolationType.MENTOR_NO_SHOW,
                         "Hệ thống xác nhận mentor no-show do không phản hồi báo cáo đúng hạn.");
             } else {
-                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTEE_NO_SHOW, now);
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTEE_NO_SHOW, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
                 sessionFinalizationService.markSessionNotDelivered(booking);
                 settlementService.releaseForBooking(booking);
             }
-            booking.setIssueResolvedAt(now);
-            booking.setIssueResolutionNote("SYSTEM_AUTO_RESOLUTION_NO_COUNTERPARTY_RESPONSE");
             recordEvent(booking, BookingEventType.ISSUE_RESOLVED, old, BookingEventActorType.SYSTEM);
+            return true;
+        }
+        if (booking.getIssueEscalationSentAtUtc() == null && booking.getIssueEscalationSentAt() == null && !nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(12)))) {
+            booking.setIssueEscalationSentAtUtc(nowUtc);
+            booking.setIssueEscalationSentAt(BookingTime.fromInstant(nowUtc));
+            if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) notifyMentor(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            else notifyMentee(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
             return true;
         }
         return false;
     }
 
-    private boolean processAdminDisputeSlaWarning(UUID bookingId, LocalDateTime now) {
+    /**
+     * Check-in is supporting evidence only. An unattended or contradictory case must remain
+     * with admin instead of automatically moving money based solely on an unanswered claim.
+     */
+    private boolean hasOneSidedAttendanceSupportingIssue(Booking booking) {
+        // Compatibility for isolated legacy unit tests that construct this service without Spring.
+        if (sessionAttendanceRepository == null) {
+            return true;
+        }
+        List<SessionAttendance> attendances = sessionAttendanceRepository.findByBookingId(booking.getId());
+        boolean mentorCheckedIn = attendances.stream()
+                .anyMatch(item -> item.getParticipantRole() == SessionParticipantRole.MENTOR);
+        boolean menteeCheckedIn = attendances.stream()
+                .anyMatch(item -> item.getParticipantRole() == SessionParticipantRole.MENTEE);
+        return booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW
+                ? menteeCheckedIn && !mentorCheckedIn
+                : mentorCheckedIn && !menteeCheckedIn;
+    }
+
+    private boolean processAdminDisputeSlaWarning(UUID bookingId, Instant nowUtc) {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
         if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW
-                || booking.getIssueSubmittedAt() == null || booking.getAdminSlaWarningSentAt() != null
-                || booking.getIssueResolvedAt() != null
-                || now.isBefore(booking.getIssueSubmittedAt().plusHours(48))) {
+                || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)
+                || (booking.getAdminSlaWarningSentAtUtc() != null || booking.getAdminSlaWarningSentAt() != null)
+                || (booking.getIssueResolvedAtUtc() != null || booking.getIssueResolvedAt() != null)) {
             return false;
         }
-        booking.setAdminSlaWarningSentAt(now);
+        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        if (nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(48)))) {
+            return false;
+        }
+        booking.setAdminSlaWarningSentAtUtc(nowUtc);
+        booking.setAdminSlaWarningSentAt(BookingTime.fromInstant(nowUtc));
         bookingRepository.save(booking);
         recordEvent(booking, BookingEventType.ADMIN_SLA_WARNING_SENT, booking.getStatus(), BookingEventActorType.SYSTEM);
         notifyAdminsDisputeSlaBreach(booking);
@@ -393,19 +466,19 @@ public class BookingLifecycleMaintenanceService {
 
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {
         if (slot == null || slot.getId() == null) return;
-        slot.setBooked(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
-                slot.getId(), SLOT_LOCKING_STATUSES, slot.getStartTime(), slot.getEndTime()));
+        Instant startUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc()
+                : (slot.getStartTime() == null ? null : BookingTime.toInstant(slot.getStartTime()));
+        Instant endUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc()
+                : (slot.getEndTime() == null ? null : BookingTime.toInstant(slot.getEndTime()));
+        slot.setBooked(startUtc != null && endUtc != null
+                && bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(slot.getId(), SLOT_LOCKING_STATUSES, startUtc, endUtc));
         if (availabilityTemplateService != null) {
             availabilityTemplateService.markSlotDue(slot.getId());
         }
     }
 
-    private boolean isPaymentDeadlineReached(Booking booking, LocalDateTime now) {
-
-        LocalDateTime startDeadline = booking.getSelectedStartTime() == null && booking.getSlot() != null
-                ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
-        LocalDateTime deadline = BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), startDeadline);
-        return deadline != null && !deadline.isAfter(now);
+    private boolean isPaymentDeadlineReached(Booking booking, Instant nowUtc) {
+        return BookingDeadlinePolicy.isPaymentDeadlineReachedUtc(booking, nowUtc);
     }
 
     private void recordMentorViolation(Booking booking, MentorViolationType type, String reason) {
@@ -432,8 +505,6 @@ public class BookingLifecycleMaintenanceService {
                 booking.getMentee().getId(), NotificationType.SESSION_COMPLETED, title, message, "BOOKING", booking.getId()));
     }
 
-    private int defaultInteger(Integer value) { return value == null ? 0 : value; }
-    private LocalDateTime selectedEndTime(Booking booking) { return booking.getSelectedEndTime(); }
     private String buildAutoRejectedMessage(String reason) {
         return reason == null || reason.isBlank()
                 ? "Yêu cầu đặt lịch của bạn đã bị từ chối do thay đổi về trạng thái nhận lịch của mentor."

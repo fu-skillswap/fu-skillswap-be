@@ -8,6 +8,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,6 +65,6 @@ public class UserMeResponse {
     @Schema(description = "Trạng thái sync gần nhất của Google Calendar", nullable = true, example = "SYNCED")
     private String googleCalendarLastSyncStatus;
 
-    @Schema(description = "Thời điểm sync gần nhất của Google Calendar", nullable = true)
-    private java.time.LocalDateTime googleCalendarLastSyncAt;
+    @Schema(description = "Thời điểm sync gần nhất của Google Calendar kèm offset múi giờ (+07:00)", nullable = true, example = "2026-08-24T19:00:00+07:00")
+    private OffsetDateTime googleCalendarLastSyncAt;
 }

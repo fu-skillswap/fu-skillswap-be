@@ -3,7 +3,10 @@ package com.fptu.exe.skillswap.modules.identity.service;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.identity.domain.*;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
@@ -11,11 +14,9 @@ import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarEventLinkRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarSyncJobRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -23,6 +24,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -43,6 +46,7 @@ public class GoogleCalendarSyncService {
     private final GoogleCalendarApiClient apiClient;
     private final ApplicationEventPublisher eventPublisher;
     private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    private final TimeProvider timeProvider;
 
     @Transactional
     public void enqueueCreate(UUID bookingId) {
@@ -61,10 +65,13 @@ public class GoogleCalendarSyncService {
     }
 
     public void processDueJobs() {
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowLegacy = BookingTime.fromInstant(nowUtc);
         List<UUID> jobIds = transactionTemplate.execute(status -> {
-            List<GoogleCalendarSyncJob> jobs = jobRepository.findTop20RunnableForUpdate(
+            List<GoogleCalendarSyncJob> jobs = jobRepository.findTop20RunnableForUpdateUtc(
                     List.of(GoogleCalendarSyncJobStatus.PENDING, GoogleCalendarSyncJobStatus.RETRYING),
-                    DateTimeUtil.now(),
+                    nowUtc,
+                    nowLegacy,
                     PageRequest.of(0, 20)
             );
             return jobs.stream().map(GoogleCalendarSyncJob::getId).toList();
@@ -78,12 +85,15 @@ public class GoogleCalendarSyncService {
     }
 
     public void processSingleJob(UUID jobId) {
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowLegacy = BookingTime.fromInstant(nowUtc);
         boolean claimed = Boolean.TRUE.equals(transactionTemplate.execute(status ->
-                jobRepository.claimForProcessing(
+                jobRepository.claimForProcessingUtc(
                         jobId,
                         List.of(GoogleCalendarSyncJobStatus.PENDING, GoogleCalendarSyncJobStatus.RETRYING),
                         GoogleCalendarSyncJobStatus.PROCESSING,
-                        DateTimeUtil.now()
+                        nowUtc,
+                        nowLegacy
                 ) == 1
         ));
         if (!claimed) {
@@ -121,8 +131,10 @@ public class GoogleCalendarSyncService {
             transactionTemplate.executeWithoutResult(status -> {
                 GoogleCalendarSyncJob j = jobRepository.findById(jobId).orElse(null);
                 if (j != null && j.getStatus() == GoogleCalendarSyncJobStatus.PROCESSING) {
+                    Instant doneUtc = timeProvider.instant();
                     j.setStatus(GoogleCalendarSyncJobStatus.SUCCEEDED);
-                    j.setCompletedAt(DateTimeUtil.now());
+                    j.setCompletedAtUtc(doneUtc);
+                    j.setCompletedAt(BookingTime.fromInstant(doneUtc));
                     j.setLastErrorCode(null);
                     j.setLastErrorMessage(null);
                     jobRepository.save(j);
@@ -220,11 +232,13 @@ public class GoogleCalendarSyncService {
     }
 
     private void handleCancel(GoogleCalendarSyncJob job, Booking booking, Session session) {
+        Instant nowUtc = timeProvider.instant();
         GoogleCalendarEventLink link = eventLinkRepository.findByBookingId(booking.getId()).orElse(null);
         if (link == null) {
             if (session != null) {
                 session.setCalendarSyncStatus(GoogleCalendarSyncStatus.CANCELLED);
-                session.setCalendarLastSyncedAt(DateTimeUtil.now());
+                session.setCalendarLastSyncedAtUtc(nowUtc);
+                session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
                 sessionService.save(session);
             }
             return;
@@ -233,7 +247,8 @@ public class GoogleCalendarSyncService {
         if (connection == null) {
             if (session != null) {
                 session.setCalendarSyncStatus(GoogleCalendarSyncStatus.CANCELLED);
-                session.setCalendarLastSyncedAt(DateTimeUtil.now());
+                session.setCalendarLastSyncedAtUtc(nowUtc);
+                session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
                 sessionService.save(session);
             }
             link.setEventStatus(GoogleCalendarEventStatus.CANCELLED);
@@ -254,11 +269,13 @@ public class GoogleCalendarSyncService {
             session.setCalendarSyncStatus(GoogleCalendarSyncStatus.CANCELLED);
             session.setCalendarSyncErrorCode(null);
             session.setCalendarSyncErrorMessage(null);
-            session.setCalendarLastSyncedAt(DateTimeUtil.now());
+            session.setCalendarLastSyncedAtUtc(nowUtc);
+            session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
             sessionService.save(session);
         }
         connection.setLastSyncStatus(GoogleCalendarSyncStatus.CANCELLED);
-        connection.setLastSyncAt(DateTimeUtil.now());
+        connection.setLastSyncAtUtc(nowUtc);
+        connection.setLastSyncAt(BookingTime.fromInstant(nowUtc));
         connection.setLastSyncErrorCode(null);
         connection.setLastSyncErrorMessage(null);
         connectionRepository.save(connection);
@@ -274,9 +291,11 @@ public class GoogleCalendarSyncService {
             handleTerminalFailure(job, booking, session, errorCode, errorMessage, "GOOGLE_CALENDAR_EXPIRED_SYNC");
             return;
         }
+        Instant retryAtUtc = timeProvider.instant().plus(Duration.ofMinutes(RETRY_MINUTES.get(nextAttemptIndex)));
         job.setAttemptCount(job.getAttemptCount() + 1);
         job.setStatus(GoogleCalendarSyncJobStatus.RETRYING);
-        job.setRunAfter(DateTimeUtil.now().plusMinutes(RETRY_MINUTES.get(nextAttemptIndex)));
+        job.setRunAfterUtc(retryAtUtc);
+        job.setRunAfter(BookingTime.fromInstant(retryAtUtc));
         job.setLastErrorCode(errorCode);
         job.setLastErrorMessage(errorMessage);
         jobRepository.save(job);
@@ -289,11 +308,12 @@ public class GoogleCalendarSyncService {
     }
 
     private void handleTerminalFailure(GoogleCalendarSyncJob job,
-                                       Booking booking,
-                                       Session session,
-                                       String errorCode,
-                                       String errorMessage,
-                                       String finalCode) {
+                                        Booking booking,
+                                        Session session,
+                                        String errorCode,
+                                        String errorMessage,
+                                        String finalCode) {
+        Instant nowUtc = timeProvider.instant();
         if ("GOOGLE_CALENDAR_EXPIRED_SYNC".equals(finalCode) && session != null) {
             markExpiredSync(job, booking, session);
             return;
@@ -302,13 +322,15 @@ public class GoogleCalendarSyncService {
         if (connection != null && ("invalid_grant".equalsIgnoreCase(errorCode) || "insufficient_scope".equalsIgnoreCase(errorCode) || "PERMISSION_DENIED".equalsIgnoreCase(errorCode))) {
             connection.setConnectionStatus(GoogleCalendarConnectionStatus.REQUIRES_RECONNECT);
             connection.setLastSyncStatus(GoogleCalendarSyncStatus.SYNC_ERROR);
-            connection.setLastSyncAt(DateTimeUtil.now());
+            connection.setLastSyncAtUtc(nowUtc);
+            connection.setLastSyncAt(BookingTime.fromInstant(nowUtc));
             connection.setLastSyncErrorCode(errorCode);
             connection.setLastSyncErrorMessage(errorMessage);
             connectionRepository.save(connection);
         }
         job.setStatus(GoogleCalendarSyncJobStatus.FAILED);
-        job.setCompletedAt(DateTimeUtil.now());
+        job.setCompletedAtUtc(nowUtc);
+        job.setCompletedAt(BookingTime.fromInstant(nowUtc));
         job.setLastErrorCode(errorCode);
         job.setLastErrorMessage(errorMessage);
         jobRepository.save(job);
@@ -316,7 +338,8 @@ public class GoogleCalendarSyncService {
             session.setCalendarSyncStatus(GoogleCalendarSyncStatus.SYNC_ERROR);
             session.setCalendarSyncErrorCode(errorCode);
             session.setCalendarSyncErrorMessage(errorMessage);
-            session.setCalendarLastSyncedAt(DateTimeUtil.now());
+            session.setCalendarLastSyncedAtUtc(nowUtc);
+            session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
             sessionService.save(session);
         }
         eventPublisher.publishEvent(new CalendarSyncFailedEvent(
@@ -335,6 +358,7 @@ public class GoogleCalendarSyncService {
         if (jobRepository.findByIdempotencyKey(idempotencyKey).isPresent()) {
             return;
         }
+        Instant nowUtc = timeProvider.instant();
         GoogleCalendarSyncJob job = GoogleCalendarSyncJob.builder()
                 .bookingId(bookingId)
                 .sessionId(session == null ? null : session.getId())
@@ -342,7 +366,8 @@ public class GoogleCalendarSyncService {
                 .jobType(jobType)
                 .status(GoogleCalendarSyncJobStatus.PENDING)
                 .attemptCount(0)
-                .runAfter(DateTimeUtil.now())
+                .runAfterUtc(nowUtc)
+                .runAfter(BookingTime.fromInstant(nowUtc))
                 .idempotencyKey(idempotencyKey)
                 .build();
         jobRepository.save(job);
@@ -358,13 +383,15 @@ public class GoogleCalendarSyncService {
         if (job.getJobType() == GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT) {
             return false;
         }
-        LocalDateTime startTime = booking.getSelectedStartTime();
-        return startTime != null && !DateTimeUtil.now().isBefore(startTime.minusMinutes(15));
+        Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
+        return startUtc != null && !timeProvider.instant().isBefore(startUtc.minus(Duration.ofMinutes(15)));
     }
 
     private void markExpiredSync(GoogleCalendarSyncJob job, Booking booking, Session session) {
+        Instant nowUtc = timeProvider.instant();
         job.setStatus(GoogleCalendarSyncJobStatus.ABORTED);
-        job.setCompletedAt(DateTimeUtil.now());
+        job.setCompletedAtUtc(nowUtc);
+        job.setCompletedAt(BookingTime.fromInstant(nowUtc));
         job.setLastErrorCode("GOOGLE_CALENDAR_EXPIRED_SYNC");
         job.setLastErrorMessage("Quá sát giờ bắt đầu nên hệ thống ngừng retry tạo lịch tự động.");
         jobRepository.save(job);
@@ -372,7 +399,8 @@ public class GoogleCalendarSyncService {
             session.setCalendarSyncStatus(GoogleCalendarSyncStatus.EXPIRED_SYNC);
             session.setCalendarSyncErrorCode("GOOGLE_CALENDAR_EXPIRED_SYNC");
             session.setCalendarSyncErrorMessage("Quá sát giờ bắt đầu nên hệ thống ngừng retry tạo lịch tự động.");
-            session.setCalendarLastSyncedAt(DateTimeUtil.now());
+            session.setCalendarLastSyncedAtUtc(nowUtc);
+            session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
             sessionService.save(session);
         }
         eventPublisher.publishEvent(new CalendarSyncAbortedNearStartTimeEvent(
@@ -383,21 +411,25 @@ public class GoogleCalendarSyncService {
     }
 
     private void markNotConnected(Session session, Booking booking, GoogleCalendarConnection connection) {
+        Instant nowUtc = timeProvider.instant();
         session.setGoogleCalendarManaged(false);
         session.setGoogleMeetAutoGenerated(false);
         session.setCalendarSyncStatus(GoogleCalendarSyncStatus.NOT_CONNECTED);
         session.setCalendarSyncErrorCode(null);
         session.setCalendarSyncErrorMessage(null);
-        session.setCalendarLastSyncedAt(DateTimeUtil.now());
+        session.setCalendarLastSyncedAtUtc(nowUtc);
+        session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
         sessionService.save(session);
         if (connection != null) {
             connection.setLastSyncStatus(GoogleCalendarSyncStatus.NOT_CONNECTED);
-            connection.setLastSyncAt(DateTimeUtil.now());
+            connection.setLastSyncAtUtc(nowUtc);
+            connection.setLastSyncAt(BookingTime.fromInstant(nowUtc));
             connectionRepository.save(connection);
         }
     }
 
     private void markSynced(Session session, GoogleCalendarConnection connection, String meetUrl) {
+        Instant nowUtc = timeProvider.instant();
         session.setMeetingPlatform(MeetingPlatform.GOOGLE_MEET);
         session.setMeetingLink(meetUrl);
         session.setGoogleCalendarManaged(true);
@@ -405,19 +437,23 @@ public class GoogleCalendarSyncService {
         session.setCalendarSyncStatus(GoogleCalendarSyncStatus.SYNCED);
         session.setCalendarSyncErrorCode(null);
         session.setCalendarSyncErrorMessage(null);
-        session.setCalendarLastSyncedAt(DateTimeUtil.now());
+        session.setCalendarLastSyncedAtUtc(nowUtc);
+        session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
         sessionService.save(session);
 
         connection.setLastSyncStatus(GoogleCalendarSyncStatus.SYNCED);
-        connection.setLastSyncAt(DateTimeUtil.now());
+        connection.setLastSyncAtUtc(nowUtc);
+        connection.setLastSyncAt(BookingTime.fromInstant(nowUtc));
         connection.setLastSyncErrorCode(null);
         connection.setLastSyncErrorMessage(null);
         connectionRepository.save(connection);
     }
 
     private void markRevoked(GoogleCalendarSyncJob job, Booking booking, Session session, GoogleCalendarConnection connection) {
+        Instant nowUtc = timeProvider.instant();
         job.setStatus(GoogleCalendarSyncJobStatus.FAILED);
-        job.setCompletedAt(DateTimeUtil.now());
+        job.setCompletedAtUtc(nowUtc);
+        job.setCompletedAt(BookingTime.fromInstant(nowUtc));
         job.setLastErrorCode("GOOGLE_CALENDAR_REVOKED");
         job.setLastErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
         jobRepository.save(job);
@@ -425,11 +461,13 @@ public class GoogleCalendarSyncService {
             session.setCalendarSyncStatus(GoogleCalendarSyncStatus.REVOKED);
             session.setCalendarSyncErrorCode("GOOGLE_CALENDAR_REVOKED");
             session.setCalendarSyncErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
-            session.setCalendarLastSyncedAt(DateTimeUtil.now());
+            session.setCalendarLastSyncedAtUtc(nowUtc);
+            session.setCalendarLastSyncedAt(BookingTime.fromInstant(nowUtc));
             sessionService.save(session);
         }
         connection.setLastSyncStatus(GoogleCalendarSyncStatus.REVOKED);
-        connection.setLastSyncAt(DateTimeUtil.now());
+        connection.setLastSyncAtUtc(nowUtc);
+        connection.setLastSyncAt(BookingTime.fromInstant(nowUtc));
         connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REVOKED");
         connection.setLastSyncErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
         connectionRepository.save(connection);

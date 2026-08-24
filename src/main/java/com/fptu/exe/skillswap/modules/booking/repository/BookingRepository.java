@@ -15,6 +15,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -58,6 +59,40 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
             @Param("startTimeStart") LocalDateTime startTimeStart,
             @Param("startTimeEnd") LocalDateTime startTimeEnd,
+            Pageable pageable
+    );
+
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+              and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
+            order by
+                case
+                    when booking.status in :primaryActionStatuses then 0
+                    when booking.status in :secondaryActionStatuses then 1
+                    when booking.status in :upcomingStatuses then 2
+                    when booking.status in :cancelledStatuses then 3
+                    else 4
+                end asc,
+                booking.selectedStartTimeUtc asc,
+                booking.createdAtUtc desc,
+                booking.id asc
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentee.id = :menteeUserId
+              and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    Page<Booking> findMyMenteeBookingsOrderedByDashboardPriorityUtc(
+            @Param("menteeUserId") UUID menteeUserId,
+            @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
+            @Param("secondaryActionStatuses") Collection<BookingStatus> secondaryActionStatuses,
+            @Param("upcomingStatuses") Collection<BookingStatus> upcomingStatuses,
+            @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            @Param("startTimeStartUtc") Instant startTimeStartUtc,
+            @Param("startTimeEndUtc") Instant startTimeEndUtc,
             Pageable pageable
     );
 
@@ -120,6 +155,40 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
             @Param("startTimeStart") LocalDateTime startTimeStart,
             @Param("startTimeEnd") LocalDateTime startTimeEnd,
+            Pageable pageable
+    );
+
+    @Query(value = """
+            select booking
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+              and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
+            order by
+                case
+                    when booking.status in :primaryActionStatuses then 0
+                    when booking.status in :secondaryActionStatuses then 1
+                    when booking.status in :upcomingStatuses then 2
+                    when booking.status in :cancelledStatuses then 3
+                    else 4
+                end asc,
+                booking.selectedStartTimeUtc asc,
+                booking.createdAtUtc desc,
+                booking.id asc
+            """, countQuery = """
+            select count(booking.id)
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+              and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    Page<Booking> findMyMentorBookingsOrderedByDashboardPriorityUtc(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
+            @Param("secondaryActionStatuses") Collection<BookingStatus> secondaryActionStatuses,
+            @Param("upcomingStatuses") Collection<BookingStatus> upcomingStatuses,
+            @Param("cancelledStatuses") Collection<BookingStatus> cancelledStatuses,
+            @Param("startTimeStartUtc") Instant startTimeStartUtc,
+            @Param("startTimeEndUtc") Instant startTimeEndUtc,
             Pageable pageable
     );
 
@@ -229,6 +298,19 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             LocalDateTime selectedStartTimeAfter
     );
 
+    @Query("""
+            select count(booking.id) > 0
+            from Booking booking
+            where booking.mentorProfile.userId = :mentorUserId
+              and booking.status = :status
+              and booking.selectedStartTimeUtc > :selectedStartTimeAfterUtc
+            """)
+    boolean existsByMentorProfileUserIdAndStatusAndSelectedStartTimeUtcAfter(
+            @Param("mentorUserId") UUID mentorUserId,
+            @Param("status") BookingStatus status,
+            @Param("selectedStartTimeAfterUtc") Instant selectedStartTimeAfterUtc
+    );
+
     boolean existsByMenteeIdAndSlotIdAndStatusIn(UUID menteeId, UUID slotId, Collection<BookingStatus> statuses);
 
     boolean existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
@@ -236,6 +318,14 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             UUID slotId,
             java.time.LocalDateTime selectedStartTime,
             java.time.LocalDateTime selectedEndTime,
+            Collection<BookingStatus> statuses
+    );
+
+    boolean existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
+            UUID menteeId,
+            UUID slotId,
+            Instant selectedStartTimeUtc,
+            Instant selectedEndTimeUtc,
             Collection<BookingStatus> statuses
     );
 
@@ -296,6 +386,25 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     );
 
     @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            where booking.status in :statuses
+              and booking.selectedStartTimeUtc >= :startInclusiveUtc
+              and booking.selectedStartTimeUtc < :endExclusiveUtc
+            order by booking.selectedStartTimeUtc asc, booking.id asc
+            """)
+    List<Booking> findConfirmedBookingsStartingBetweenUtc(
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startInclusiveUtc") Instant startInclusiveUtc,
+            @Param("endExclusiveUtc") Instant endExclusiveUtc
+    );
+
+    @Query("""
             select booking.mentorProfile.userId as mentorUserId,
                    mentorUser.email as mentorEmail,
                    mentorUser.fullName as mentorName,
@@ -333,6 +442,21 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     );
 
     @Query("""
+            select count(b.id)
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status = :status
+              and b.selectedStartTimeUtc = :selectedStartTimeUtc
+              and b.selectedEndTimeUtc = :selectedEndTimeUtc
+            """)
+    long countBySlotIdAndExactSegmentAndStatusUtc(
+            @Param("slotId") UUID slotId,
+            @Param("selectedStartTimeUtc") Instant selectedStartTimeUtc,
+            @Param("selectedEndTimeUtc") Instant selectedEndTimeUtc,
+            @Param("status") BookingStatus status
+    );
+
+    @Query("""
             select count(b.id) > 0
             from Booking b
             where b.slot.id = :slotId
@@ -360,6 +484,21 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("statuses") Collection<BookingStatus> statuses,
             @Param("startTime") java.time.LocalDateTime startTime,
             @Param("endTime") java.time.LocalDateTime endTime
+    );
+
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.slot.id = :slotId
+              and b.status in :statuses
+              and b.selectedStartTimeUtc < :endTimeUtc
+              and b.selectedEndTimeUtc > :startTimeUtc
+            """)
+    boolean existsOverlappingBySlotIdAndStatusInUtc(
+            @Param("slotId") UUID slotId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTimeUtc") Instant startTimeUtc,
+            @Param("endTimeUtc") Instant endTimeUtc
     );
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
@@ -406,6 +545,28 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             join fetch mentorProfile.user mentorUser
             left join fetch booking.service service
             left join fetch booking.slot slot
+            where booking.slot.id = :slotId
+              and booking.status = :status
+              and booking.selectedStartTimeUtc < :endTimeUtc
+              and booking.selectedEndTimeUtc > :startTimeUtc
+            order by booking.id asc
+            """)
+    List<Booking> findOverlappingBySlotIdAndStatusForUpdateUtc(
+            @Param("slotId") UUID slotId,
+            @Param("status") BookingStatus status,
+            @Param("startTimeUtc") Instant startTimeUtc,
+            @Param("endTimeUtc") Instant endTimeUtc
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
             where booking.mentee.id = :menteeId
               and booking.status in :statuses
               and booking.selectedStartTime < :endTime
@@ -419,10 +580,32 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endTime") java.time.LocalDateTime endTime
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select booking
+            from Booking booking
+            join fetch booking.mentee mentee
+            join fetch booking.mentorProfile mentorProfile
+            join fetch mentorProfile.user mentorUser
+            left join fetch booking.service service
+            left join fetch booking.slot slot
+            where booking.mentee.id = :menteeId
+              and booking.status in :statuses
+              and booking.selectedStartTimeUtc < :endTimeUtc
+              and booking.selectedEndTimeUtc > :startTimeUtc
+            order by booking.id asc
+            """)
+    List<Booking> findMenteeOverlappingBookingsForUpdateUtc(
+            @Param("menteeId") UUID menteeId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTimeUtc") Instant startTimeUtc,
+            @Param("endTimeUtc") Instant endTimeUtc
+    );
+
     @Query("""
             select b.selectedStartTime as startTime,
-                   b.selectedEndTime as endTime,
-                   count(b.id) as pendingCount
+            b.selectedEndTime as endTime,
+            count(b.id) as pendingCount
             from Booking b
             where b.slot.id = :slotId
               and b.status = :status
@@ -479,6 +662,21 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endTime") java.time.LocalDateTime endTime
     );
 
+    @Query("""
+            select count(b.id) > 0
+            from Booking b
+            where b.mentee.id = :menteeId
+              and b.status in :statuses
+              and b.selectedStartTimeUtc < :endTimeUtc
+              and b.selectedEndTimeUtc > :startTimeUtc
+            """)
+    boolean hasOverlappingBookingByStatusesUtc(
+            @Param("menteeId") UUID menteeId,
+            @Param("statuses") Collection<BookingStatus> statuses,
+            @Param("startTimeUtc") Instant startTimeUtc,
+            @Param("endTimeUtc") Instant endTimeUtc
+    );
+
     long countBySlotIdAndStatusIn(UUID slotId, Collection<BookingStatus> statuses);
 
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
@@ -531,6 +729,19 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endExclusive") LocalDateTime endExclusive
     );
 
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.selectedEndTimeUtc between :startInclusiveUtc and :endExclusiveUtc
+            """)
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
+    List<Booking> findBookingsAboutToAutoCloseUtc(
+            @Param("status") BookingStatus status,
+            @Param("startInclusiveUtc") Instant startInclusiveUtc,
+            @Param("endExclusiveUtc") Instant endExclusiveUtc
+    );
+
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
             BookingStatus status, LocalDateTime selectedEndTimeBefore);
@@ -546,5 +757,76 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
     List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
             BookingStatus status, LocalDateTime issueSubmittedAtBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    List<Booking> findByStatusAndPendingExpireAtUtcLessThanEqualOrderByPendingExpireAtUtcAsc(
+            BookingStatus status, Instant pendingExpireAtUtc);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and (
+                    booking.acceptedAtUtc <= :acceptedAtCutoff
+                    or booking.selectedStartTimeUtc <= :startTimeCutoff
+              )
+            order by booking.acceptedAtUtc asc, booking.selectedStartTimeUtc asc, booking.id asc
+            """)
+    List<Booking> findAwaitingPaymentExpiryCandidatesUtc(
+            @Param("status") BookingStatus status,
+            @Param("acceptedAtCutoff") Instant acceptedAtCutoff,
+            @Param("startTimeCutoff") Instant startTimeCutoff
+    );
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.selectedEndTimeUtc < :selectedEndTimeUtcBefore
+            order by booking.selectedEndTimeUtc asc
+            """)
+    List<Booking> findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+            @Param("status") BookingStatus status,
+            @Param("selectedEndTimeUtcBefore") Instant selectedEndTimeUtcBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.completedAtUtc < :completedAtUtcBefore
+            order by booking.completedAtUtc asc
+            """)
+    List<Booking> findTop100ByStatusAndCompletedAtUtcBeforeOrderByCompletedAtUtcAsc(
+            @Param("status") BookingStatus status,
+            @Param("completedAtUtcBefore") Instant completedAtUtcBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.issueSubmittedAtUtc < :issueSubmittedAtUtcBefore
+            order by booking.issueSubmittedAtUtc asc
+            """)
+    List<Booking> findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(
+            @Param("status") BookingStatus status,
+            @Param("issueSubmittedAtUtcBefore") Instant issueSubmittedAtUtcBefore);
+
+    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @Query("""
+            select booking
+            from Booking booking
+            where booking.status = :status
+              and booking.issueSubmittedAtUtc < :issueSubmittedAtUtcBefore
+              and booking.adminSlaWarningSentAtUtc is null
+              and booking.issueResolvedAtUtc is null
+            order by booking.issueSubmittedAtUtc asc
+            """)
+    List<Booking> findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
+            @Param("status") BookingStatus status,
+            @Param("issueSubmittedAtUtcBefore") Instant issueSubmittedAtUtcBefore);
 }
 

@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Builder
@@ -21,10 +21,15 @@ public record PayoutRequestResponse(
         String bankAccountNumberMaskedSnapshot,
         UUID adminUserId,
         String adminNote,
-        LocalDateTime requestedAt,
-        LocalDateTime reviewedAt,
-        LocalDateTime approvedAt,
-        LocalDateTime paidAt,
-        LocalDateTime rejectedAt
+        @Schema(description = "Thời điểm tạo payout request kèm offset +07:00", example = "2026-08-24T19:00:00+07:00")
+        OffsetDateTime requestedAt,
+        @Schema(description = "Thời điểm bắt đầu review kèm offset +07:00", nullable = true)
+        OffsetDateTime reviewedAt,
+        @Schema(description = "Thời điểm approve kèm offset +07:00", nullable = true)
+        OffsetDateTime approvedAt,
+        @Schema(description = "Thời điểm đã thanh toán kèm offset +07:00", nullable = true)
+        OffsetDateTime paidAt,
+        @Schema(description = "Thời điểm từ chối kèm offset +07:00", nullable = true)
+        OffsetDateTime rejectedAt
 ) {
 }

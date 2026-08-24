@@ -23,12 +23,11 @@ import com.fptu.exe.skillswap.shared.exception.GeneratedOccurrenceReplacementExc
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,7 +43,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AvailabilityTemplateService {
 
@@ -68,6 +66,14 @@ public class AvailabilityTemplateService {
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
     private final CursorCodec cursorCodec;
+    private TimeProvider timeProvider = TimeProvider.from(java.time.Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Autowired
     public AvailabilityTemplateService(AvailabilityTemplateRepository templateRepository,
@@ -86,11 +92,22 @@ public class AvailabilityTemplateService {
                                        ApplicationEventPublisher eventPublisher,
                                        CursorCodec cursorCodec,
                                        MeterRegistry meterRegistry) {
-        this(templateRepository, exceptionRepository, reconciliationRepository, mutationLockRepository, slotRepository,
-                slotServiceRepository, mentorProfileRepository, mentorServiceRepository, bookingRepository,
-                mentorBookingPolicyService, properties, entityManager, eventPublisher, cursorCodec);
+        this.templateRepository = templateRepository;
+        this.exceptionRepository = exceptionRepository;
+        this.reconciliationRepository = reconciliationRepository;
+        this.mutationLockRepository = mutationLockRepository;
+        this.slotRepository = slotRepository;
+        this.slotServiceRepository = slotServiceRepository;
+        this.mentorProfileRepository = mentorProfileRepository;
+        this.mentorServiceRepository = mentorServiceRepository;
+        this.bookingRepository = bookingRepository;
+        this.mentorBookingPolicyService = mentorBookingPolicyService;
+        this.properties = properties;
+        this.entityManager = entityManager;
+        this.eventPublisher = eventPublisher;
+        this.cursorCodec = cursorCodec;
         Gauge.builder("availability.template.reconciliation.backlog", reconciliationRepository,
-                        repo -> repo.countDue(DateTimeUtil.now()))
+                        repo -> repo.countDue(timeProvider.nowBusiness()))
                 .description("Availability templates waiting for reconciliation").register(meterRegistry);
     }
 
@@ -250,7 +267,7 @@ public class AvailabilityTemplateService {
                                             boolean requested, boolean rejectPending,
                                             List<ExpectedTemplateVersionRequest> expectedVersions) {
         lockMentor(mentorUserId);
-        List<MentorAvailabilitySlot> overlaps = slotRepository.findActiveGeneratedOverlaps(mentorUserId, start, end);
+        List<MentorAvailabilitySlot> overlaps = slotRepository.findActiveGeneratedOverlaps(mentorUserId, BookingTime.toInstant(start), BookingTime.toInstant(end));
         if (overlaps.isEmpty()) return;
         if (!requested) {
             throw new GeneratedOccurrenceReplacementException(overlaps.stream()
@@ -410,8 +427,8 @@ public class AvailabilityTemplateService {
             LocalDateTime start = toStored(date, template.getStartTime());
             LocalDateTime end = toStored(date, template.getEndTime());
             if (existing != null && existing.isActive() && start.equals(existing.getStartTime()) && end.equals(existing.getEndTime())) continue;
-            if (!slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), start, end).isEmpty()) continue;
-            if (existing == null && slotRepository.existsOverlappingActiveSlot(template.getMentorProfile().getUserId(), start, end)) continue;
+            if (!slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).isEmpty()) continue;
+            if (existing == null && slotRepository.existsOverlappingActiveSlot(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end))) continue;
             if (existing == null) existing = MentorAvailabilitySlot.builder().mentorProfile(template.getMentorProfile())
                     .template(template).templateOccurrenceDate(date).timezone("Asia/Ho_Chi_Minh").isBooked(false)
                     .recurrenceRule("TEMPLATE").note(template.getNote()).build();
@@ -441,7 +458,12 @@ public class AvailabilityTemplateService {
 
     private boolean isProtected(MentorAvailabilitySlot slot) {
         if (slot == null) return false;
-        if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(slot.getId(), LOCKING_STATUSES, slot.getStartTime(), slot.getEndTime())) return true;
+        Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc()
+                : (slot.getStartTime() == null ? null : BookingTime.toInstant(slot.getStartTime()));
+        Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc()
+                : (slot.getEndTime() == null ? null : BookingTime.toInstant(slot.getEndTime()));
+        if (slotStartUtc != null && slotEndUtc != null
+                && bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(slot.getId(), LOCKING_STATUSES, slotStartUtc, slotEndUtc)) return true;
         return false;
     }
 
@@ -545,7 +567,7 @@ public class AvailabilityTemplateService {
         List<AvailabilityTemplateBlockedOccurrenceResponse> blocked = new ArrayList<>();
         for (LocalDate date : dates(from, to)) if (appliesOn(template, date)) {
             LocalDateTime start = toStored(date, template.getStartTime()), end = toStored(date, template.getEndTime());
-            slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), start, end).stream().findFirst()
+            slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).stream().findFirst()
                     .ifPresent(slot -> blocked.add(new AvailabilityTemplateBlockedOccurrenceResponse(date, "MANUAL_SLOT_OVERLAP", slot.getId())));
         }
         return new AvailabilityTemplateResponse(template.getId(), template.getStartTime(), template.getEndTime(),
@@ -555,7 +577,7 @@ public class AvailabilityTemplateService {
                         service.getId(), service.getTitle(), service.getDurationMinutes(), service.isFree(),
                         service.isFree() ? 0 : service.getPriceScoin(), new SlotMutationCapabilityResponse(SlotMutationMode.ALLOWED, null, 0))).toList(),
                 hasActiveService(template) ? null : "NO_ACTIVE_SERVICE", exceptions.stream().map(AvailabilityTemplateException::getOccurrenceDate).sorted().toList(),
-                blocked, template.getCreatedAt(), template.getUpdatedAt());
+                blocked, BookingTime.toOffsetDateTime(template.getCreatedAt()), BookingTime.toOffsetDateTime(template.getUpdatedAt()));
     }
 
     private AvailabilityTemplateEffectiveStatus effectiveStatus(AvailabilityTemplate template) {
@@ -579,9 +601,9 @@ public class AvailabilityTemplateService {
     }
     private void markDue(UUID templateId) { reconciliationRepository.findById(templateId).ifPresent(state -> state.setNextReconcileAt(now())); }
     private LocalDate today() { return LocalDate.now(TEMPLATE_ZONE); }
-    private LocalDateTime now() { return DateTimeUtil.now(); }
+    private LocalDateTime now() { return timeProvider.nowBusiness(); }
     private LocalDateTime toStored(LocalDate date, LocalTime time) { return LocalDateTime.of(date, time); }
-    private LocalDateTime nextRollover() { return DateTimeUtil.now().plusDays(1).toLocalDate().atStartOfDay().plusMinutes(1); }
+    private LocalDateTime nextRollover() { return timeProvider.nowBusiness().plusDays(1).toLocalDate().atStartOfDay().plusMinutes(1); }
     private List<LocalDate> dates(LocalDate from, LocalDate to) { List<LocalDate> dates = new ArrayList<>(); for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) dates.add(date); return dates; }
     private String encodeDays(List<DayOfWeek> days) { return days.stream().distinct().sorted().map(Enum::name).collect(Collectors.joining(",")); }
     private Set<DayOfWeek> decodeDays(String encoded) { return Arrays.stream(encoded.split(",")).map(DayOfWeek::valueOf).collect(Collectors.toCollection(() -> EnumSet.noneOf(DayOfWeek.class))); }
@@ -628,7 +650,7 @@ public class AvailabilityTemplateService {
     private String encodeCursor(AvailabilityTemplate template, String filterHash) {
         return cursorCodec.encode(CursorTokenPayload.builder().sortKey(template.getEffectiveFrom().toString())
                 .secondaryKey(template.getId().toString()).direction("NEXT").filterHash(filterHash)
-                .issuedAt(Instant.now()).build());
+                .issuedAt(timeProvider.instant()).build());
     }
     private String hash(String value) {
         try {

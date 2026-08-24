@@ -12,7 +12,7 @@ import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.time.Clock;
 
 import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isScheduledBookingStatus;
 
@@ -32,6 +33,14 @@ public class BookingMeetingService {
     private final ApplicationEventPublisher eventPublisher;
     private final MeetingProviderFactory meetingProviderFactory;
     private final BookingResponseMapper bookingResponseMapper;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public BookingResponse saveMeetingLink(UUID mentorUserId, UUID bookingId, SaveMeetingLinkRequest request) {
@@ -84,7 +93,7 @@ public class BookingMeetingService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Thông tin phòng học đã được cập nhật.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
 
         return bookingResponseMapper.toBookingResponse(savedBooking);

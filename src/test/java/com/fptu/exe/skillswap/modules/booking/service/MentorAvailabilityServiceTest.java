@@ -16,10 +16,8 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleR
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
@@ -84,9 +82,6 @@ class MentorAvailabilityServiceTest {
     @Mock
     private MentorBookingPolicyService mentorBookingPolicyService;
 
-    @Mock
-    private GoogleCalendarBusyPort googleCalendarBusyPort;
-
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator = new AvailabilityCalendarWindowCalculator();
 
     private MentorAvailabilityService mentorAvailabilityService;
@@ -109,8 +104,6 @@ class MentorAvailabilityServiceTest {
                 new PaymentProperties(),
                 mentorBookingPolicyService
         );
-        mentorAvailabilityService.setGoogleCalendarBusyPort(googleCalendarBusyPort);
-
         mentorUserId = UUID.randomUUID();
         user = new User();
         user.setId(mentorUserId);
@@ -138,7 +131,7 @@ class MentorAvailabilityServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
                 .thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
 
         MentorAvailabilitySlot expectedSlot = MentorAvailabilitySlot.builder()
@@ -176,7 +169,7 @@ class MentorAvailabilityServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
                 .thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(true);
 
         // Act & Assert
@@ -202,7 +195,7 @@ class MentorAvailabilityServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
                 .thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
         when(mentorServiceRepository.findAllById(request.serviceIds()))
                 .thenReturn(List.of(mentorService));
@@ -241,7 +234,7 @@ class MentorAvailabilityServiceTest {
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId))
                 .thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
         when(mentorServiceRepository.findAllById(request.serviceIds()))
                 .thenReturn(List.of());
@@ -275,7 +268,7 @@ class MentorAvailabilityServiceTest {
                 .build();
 
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
 
         when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
@@ -341,7 +334,7 @@ class MentorAvailabilityServiceTest {
                 .build();
 
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, request.startTime(), request.endTime()))
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
         when(mentorServiceRepository.findAllById(request.serviceIds()))
                 .thenReturn(List.of());
@@ -370,7 +363,7 @@ class MentorAvailabilityServiceTest {
     }
 
     @Test
-    void getServiceSlotCandidates_leadTimeAndGoogleBusy_shouldReflectAccurateBlockedReasons() {
+    void getServiceSlotCandidates_shouldUseOnlyAppAvailabilityRules() {
         // Arrange
         UUID slotId = UUID.randomUUID();
         UUID serviceId = UUID.randomUUID();
@@ -408,12 +401,6 @@ class MentorAvailabilityServiceTest {
                 new MentorBookingPolicyService.MentorBookingPolicySnapshot(90, 30, "Asia/Ho_Chi_Minh") // 90 min lead time
         );
 
-        // Google busy on 3rd segment: slotStart + 2h (which is now + 3h) to slotStart + 3h (now + 4h)
-        java.time.Instant busyStartUtc = BookingTime.toInstant(slotStart.plusHours(2));
-        java.time.Instant busyEndUtc = BookingTime.toInstant(slotEnd);
-        when(googleCalendarBusyPort.queryBusyIntervals(eq(mentorUserId), any(), any()))
-                .thenReturn(List.of(new GoogleCalendarBusyInterval(busyStartUtc, busyEndUtc)));
-
         when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
         when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
 
@@ -434,52 +421,10 @@ class MentorAvailabilityServiceTest {
         var candidate2 = response.candidateServiceSlots().get(1);
         assertTrue(candidate2.isSelectable());
         org.junit.jupiter.api.Assertions.assertNull(candidate2.reasonIfBlocked());
-        org.junit.jupiter.api.Assertions.assertFalse(candidate2.blockedByGoogleCalendar());
 
-        // Candidate 3 (now + 3h to now + 4h): blocked by Google Calendar busy overlay
+        // Candidate 3 has no conflicting booking in SkillSwap, therefore stays selectable.
         var candidate3 = response.candidateServiceSlots().get(2);
-        org.junit.jupiter.api.Assertions.assertFalse(candidate3.isSelectable());
-        assertEquals("Trùng lịch bận trên Google Calendar của mentor", candidate3.reasonIfBlocked());
-        assertTrue(candidate3.blockedByGoogleCalendar());
-    }
-
-    @Test
-    void getServiceSlotCandidates_googleUnavailable_shouldRemainSelectableAndExposeUnknownFlag() {
-        UUID slotId = UUID.randomUUID();
-        UUID serviceId = UUID.randomUUID();
-        LocalDateTime slotStart = LocalDateTime.now().withSecond(0).withNano(0).plusHours(4);
-
-        MentorService service = MentorService.builder()
-                .id(serviceId)
-                .mentorProfile(mentorProfile)
-                .title("1:1 Mentoring")
-                .durationMinutes(60)
-                .isActive(true)
-                .deliveryMode(MentorServiceDeliveryMode.ONE_TO_ONE)
-                .build();
-        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
-                .id(slotId)
-                .mentorProfile(mentorProfile)
-                .startTime(slotStart)
-                .endTime(slotStart.plusHours(1))
-                .isActive(true)
-                .isBooked(false)
-                .build();
-        AvailabilitySlotService binding = AvailabilitySlotService.builder().slot(slot).service(service).build();
-
-        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-        when(availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)).thenReturn(Optional.of(binding));
-        when(googleCalendarBusyPort.queryBusyIntervals(eq(mentorUserId), any(), any()))
-                .thenThrow(new IllegalStateException("Google timeout"));
-        when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
-        when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
-
-        ServiceSlotCandidatesResponse response = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
-
-        assertEquals(1, response.candidateServiceSlots().size());
-        var candidate = response.candidateServiceSlots().getFirst();
-        assertTrue(candidate.isSelectable());
-        assertEquals(Boolean.TRUE, candidate.calendarAvailabilityUnknown());
-        assertEquals(Boolean.FALSE, candidate.blockedByGoogleCalendar());
+        assertTrue(candidate3.isSelectable());
+        org.junit.jupiter.api.Assertions.assertNull(candidate3.reasonIfBlocked());
     }
 }

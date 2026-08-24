@@ -13,23 +13,25 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequ
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleRequestRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.Map;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -48,6 +50,15 @@ public class BookingRescheduleService {
     private final UserRepository userRepository;
     private final SessionService sessionService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public BookingRescheduleRequestResponse createByMentee(UUID currentUserId, UUID bookingId, CreateBookingRescheduleRequest request) {
@@ -112,7 +123,8 @@ public class BookingRescheduleService {
 
     @Transactional
     public int expirePendingRequests() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
+        Instant nowUtc = timeProvider.instant();
         int expired = 0;
         for (BookingRescheduleRequest request : bookingRescheduleRequestRepository.findExpirablePendingRequests(
                 BookingRescheduleStatus.PENDING,
@@ -121,9 +133,11 @@ public class BookingRescheduleService {
             if (request.getStatus() != BookingRescheduleStatus.PENDING) {
                 continue;
             }
-            if (isPastResponseDeadline(request.getBooking(), now)) {
+            if (isPastResponseDeadline(request.getBooking(), nowUtc)) {
                 request.setStatus(BookingRescheduleStatus.EXPIRED);
+                request.setExpiredAtUtc(nowUtc);
                 request.setExpiredAt(now);
+                request.setRespondedAtUtc(nowUtc);
                 request.setRespondedAt(now);
                 request.setResponseNote("Reschedule request đã hết hạn do đã qua mốc 2 giờ trước giờ học cũ.");
                 bookingRescheduleRequestRepository.save(request);
@@ -159,18 +173,23 @@ public class BookingRescheduleService {
         MentorAvailabilitySlot proposedSlot = mentorAvailabilitySlotRepository.findById(request.proposedSlotId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy slot mới được đề xuất"));
         validateProposedSlotForBooking(booking, proposedSlot);
+        Instant proposedStartUtc = request.proposedSelectedStartTime().toInstant();
+        Instant proposedEndUtc = request.proposedSelectedEndTime().toInstant();
         bookingSlotValidator.validateSelectedRange(
                 proposedSlot,
                 booking.getService(),
-                request.proposedSelectedStartTime(),
-                request.proposedSelectedEndTime(),
-                DateTimeUtil.now()
+                proposedStartUtc,
+                proposedEndUtc,
+                timeProvider.instant()
         );
         bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getService().getId());
 
-        if (sameSegment(booking, proposedSlot, request.proposedSelectedStartTime(), request.proposedSelectedEndTime())) {
+        if (sameSegment(booking, proposedSlot, BookingTime.fromInstant(proposedStartUtc), BookingTime.fromInstant(proposedEndUtc))) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Lịch mới phải khác lịch hiện tại của booking");
         }
+
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
+        Instant nowUtc = timeProvider.instant();
 
         BookingRescheduleRequest entity = bookingRescheduleRequestRepository.save(BookingRescheduleRequest.builder()
                 .booking(booking)
@@ -181,10 +200,15 @@ public class BookingRescheduleService {
                 .status(BookingRescheduleStatus.PENDING)
                 .requestReason(request.reason().trim())
                 .previousSelectedStartTime(booking.getSelectedStartTime())
+                .previousSelectedStartTimeUtc(BookingTime.resolveSelectedStartUtc(booking))
                 .previousSelectedEndTime(booking.getSelectedEndTime())
-                .proposedSelectedStartTime(request.proposedSelectedStartTime())
-                .proposedSelectedEndTime(request.proposedSelectedEndTime())
-                .requestedAt(DateTimeUtil.now())
+                .previousSelectedEndTimeUtc(BookingTime.resolveSelectedEndUtc(booking))
+                .proposedSelectedStartTime(BookingTime.fromInstant(proposedStartUtc))
+                .proposedSelectedStartTimeUtc(proposedStartUtc)
+                .proposedSelectedEndTime(BookingTime.fromInstant(proposedEndUtc))
+                .proposedSelectedEndTimeUtc(proposedEndUtc)
+                .requestedAt(nowBusiness)
+                .requestedAtUtc(nowUtc)
                 .build());
         notifyCreate(entity);
         return toResponse(entity);
@@ -218,7 +242,7 @@ public class BookingRescheduleService {
                 booking.getService(),
                 rescheduleRequest.getProposedSelectedStartTime(),
                 rescheduleRequest.getProposedSelectedEndTime(),
-                DateTimeUtil.now()
+                timeProvider.nowBusiness()
         );
         bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getService().getId());
         bookingSlotValidator.validateCandidateSelection(
@@ -229,30 +253,34 @@ public class BookingRescheduleService {
                 rescheduleRequest.getProposedSelectedEndTime()
         );
 
-        List<Booking> overlappingPendingBookings = bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        List<Booking> overlappingPendingBookings = bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 proposedSlot.getId(),
                 BookingStatus.PENDING,
-                rescheduleRequest.getProposedSelectedStartTime(),
-                rescheduleRequest.getProposedSelectedEndTime()
+                BookingTime.toInstant(rescheduleRequest.getProposedSelectedStartTime()),
+                BookingTime.toInstant(rescheduleRequest.getProposedSelectedEndTime())
         );
+
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
 
         booking.setSlot(proposedSlot);
         booking.setSelectedStartTime(rescheduleRequest.getProposedSelectedStartTime());
+        booking.setSelectedStartTimeUtc(BookingTime.toInstant(rescheduleRequest.getProposedSelectedStartTime()));
         booking.setSelectedEndTime(rescheduleRequest.getProposedSelectedEndTime());
+        booking.setSelectedEndTimeUtc(BookingTime.toInstant(rescheduleRequest.getProposedSelectedEndTime()));
         booking.setRequestedStartTime(rescheduleRequest.getProposedSelectedStartTime());
         booking.setRequestedEndTime(rescheduleRequest.getProposedSelectedEndTime());
-        booking.setUpdatedAt(DateTimeUtil.now());
+        booking.setUpdatedAt(nowBusiness);
         booking.setRescheduleCount((booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) + 1);
         bookingRepository.save(booking);
         sessionService.updateScheduleForBooking(
                 booking.getId(),
-                rescheduleRequest.getProposedSelectedStartTime(),
-                rescheduleRequest.getProposedSelectedEndTime()
+                BookingTime.toInstant(rescheduleRequest.getProposedSelectedStartTime()),
+                BookingTime.toInstant(rescheduleRequest.getProposedSelectedEndTime())
         );
 
-        LocalDateTime now = DateTimeUtil.now();
         for (Booking pendingBooking : overlappingPendingBookings) {
-            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, now);
+            BookingTransitionExecutor.apply(pendingBooking, BookingTransitionCommand.SYSTEM_REJECT, nowUtc);
             pendingBooking.setRejectReason("Khung giờ này không còn khả dụng sau khi booking khác được dời lịch vào cùng segment.");
         }
         if (!overlappingPendingBookings.isEmpty()) {
@@ -262,7 +290,8 @@ public class BookingRescheduleService {
         rescheduleRequest.setStatus(BookingRescheduleStatus.ACCEPTED);
         rescheduleRequest.setRespondedByUserId(responderUserId);
         rescheduleRequest.setResponderRole(responderRole);
-        rescheduleRequest.setRespondedAt(DateTimeUtil.now());
+        rescheduleRequest.setRespondedAt(nowBusiness);
+        rescheduleRequest.setRespondedAtUtc(nowUtc);
         rescheduleRequest.setResponseNote(trimReason(reason, adminOverride
                 ? "Admin đã force approve reschedule request."
                 : "Đồng ý dời lịch."));
@@ -282,11 +311,14 @@ public class BookingRescheduleService {
                                                             BookingRescheduleActorRole responderRole,
                                                             String reason,
                                                             boolean adminOverride) {
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
+        Instant nowUtc = timeProvider.instant();
         BookingRescheduleStatus previousStatus = rescheduleRequest.getStatus();
         rescheduleRequest.setStatus(BookingRescheduleStatus.REJECTED);
         rescheduleRequest.setRespondedByUserId(responderUserId);
         rescheduleRequest.setResponderRole(responderRole);
-        rescheduleRequest.setRespondedAt(DateTimeUtil.now());
+        rescheduleRequest.setRespondedAt(nowBusiness);
+        rescheduleRequest.setRespondedAtUtc(nowUtc);
         rescheduleRequest.setResponseNote(trimReason(reason, adminOverride
                 ? "Admin đã force reject reschedule request."
                 : "Từ chối dời lịch."));
@@ -302,10 +334,14 @@ public class BookingRescheduleService {
         if (request.getStatus() != BookingRescheduleStatus.PENDING) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Reschedule request hiện không còn ở trạng thái chờ phản hồi");
         }
-        if (isPastResponseDeadline(request.getBooking(), DateTimeUtil.now())) {
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
+        if (isPastResponseDeadline(request.getBooking(), nowUtc)) {
             request.setStatus(BookingRescheduleStatus.EXPIRED);
-            request.setExpiredAt(DateTimeUtil.now());
-            request.setRespondedAt(DateTimeUtil.now());
+            request.setExpiredAtUtc(nowUtc);
+            request.setExpiredAt(nowBusiness);
+            request.setRespondedAtUtc(nowUtc);
+            request.setRespondedAt(nowBusiness);
             request.setResponseNote("Reschedule request đã hết hạn do đã qua mốc 2 giờ trước giờ học cũ.");
             bookingRescheduleRequestRepository.save(request);
             notifyExpire(request);
@@ -360,26 +396,32 @@ public class BookingRescheduleService {
     }
 
     private void ensureWithinRescheduleWindow(Booking booking) {
-        if (booking.getSelectedStartTime() == null) {
+        Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
+        if (startUtc == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking hiện không có thời gian bắt đầu hợp lệ");
         }
-        long minutesUntilStart = Duration.between(DateTimeUtil.now(), booking.getSelectedStartTime()).toMinutes();
+        long minutesUntilStart = Duration.between(timeProvider.instant(), startUtc).toMinutes();
         if (minutesUntilStart < RESCHEDULE_DEADLINE_MINUTES) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ được reschedule trước giờ học ít nhất 6 giờ");
         }
     }
 
     private void ensureWithinRescheduleResponseWindow(Booking booking) {
-        if (isPastResponseDeadline(booking, DateTimeUtil.now())) {
+        if (isPastResponseDeadline(booking, timeProvider.instant())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Reschedule request đã quá hạn phản hồi vì đã qua mốc 2 giờ trước giờ học cũ");
         }
     }
 
-    private boolean isPastResponseDeadline(Booking booking, LocalDateTime now) {
-        if (booking == null || booking.getSelectedStartTime() == null) {
+    private boolean isPastResponseDeadline(Booking booking, Instant nowUtc) {
+        Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
+        if (startUtc == null) {
             return true;
         }
-        return !now.isBefore(booking.getSelectedStartTime().minusHours(2));
+        return !nowUtc.isBefore(startUtc.minus(Duration.ofHours(2)));
+    }
+
+    private boolean isPastResponseDeadline(Booking booking, LocalDateTime now) {
+        return isPastResponseDeadline(booking, now != null ? BookingTime.toInstant(now) : timeProvider.instant());
     }
 
     private void validateProposedSlotForBooking(Booking booking, MentorAvailabilitySlot proposedSlot) {
@@ -411,11 +453,16 @@ public class BookingRescheduleService {
         if (slot == null || slot.getId() == null) {
             return;
         }
-        boolean hasAcceptedBookings = bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        Instant startUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc()
+                : (slot.getStartTime() == null ? null : BookingTime.toInstant(slot.getStartTime()));
+        Instant endUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc()
+                : (slot.getEndTime() == null ? null : BookingTime.toInstant(slot.getEndTime()));
+        boolean hasAcceptedBookings = startUtc != null && endUtc != null
+                && bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 slot.getId(),
                 List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID),
-                slot.getStartTime(),
-                slot.getEndTime()
+                startUtc,
+                endUtc
         );
         slot.setBooked(hasAcceptedBookings);
     }
@@ -458,10 +505,10 @@ public class BookingRescheduleService {
         Booking booking = request.getBooking();
         if (request.isAdminOverride()) {
             notifyBothParticipants(
-                    booking,
-                    NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
-                    "Đề xuất dời lịch đã được chấp nhận",
-                    "Booking của bạn đã được dời sang lịch mới."
+                booking,
+                NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
+                "Đề xuất dời lịch đã được chấp nhận",
+                "Booking của bạn đã được dời sang lịch mới."
             );
             return;
         }
@@ -483,7 +530,7 @@ public class BookingRescheduleService {
                 booking.getMentorProfile().getUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã được chấp nhận.",
-                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
     }
 
@@ -491,10 +538,10 @@ public class BookingRescheduleService {
         Booking booking = request.getBooking();
         if (request.isAdminOverride()) {
             notifyBothParticipants(
-                    booking,
-                    NotificationType.BOOKING_RESCHEDULE_REJECTED,
-                    "Đề xuất dời lịch đã bị từ chối",
-                    "Reschedule request của booking đã bị từ chối. Lịch cũ vẫn được giữ nguyên."
+                booking,
+                NotificationType.BOOKING_RESCHEDULE_REJECTED,
+                "Đề xuất dời lịch đã bị từ chối",
+                "Reschedule request của booking đã bị từ chối. Lịch cũ vẫn được giữ nguyên."
             );
             return;
         }
@@ -516,12 +563,11 @@ public class BookingRescheduleService {
                 booking.getMentorProfile().getUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã bị từ chối.",
-                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
     }
 
     private void notifyExpire(BookingRescheduleRequest request) {
-
         Booking booking = request.getBooking();
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
                 booking.getMentee().getId(),
@@ -546,7 +592,7 @@ public class BookingRescheduleService {
                 booking.getMentorProfile().getUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã hết hạn.",
-                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : DateTimeUtil.now()
+                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
     }
 
@@ -595,10 +641,10 @@ public class BookingRescheduleService {
                 .bookingId(request.getBooking().getId())
                 .currentSlotId(request.getCurrentSlot().getId())
                 .proposedSlotId(request.getProposedSlot().getId())
-                .previousSelectedStartTime(request.getPreviousSelectedStartTime())
-                .previousSelectedEndTime(request.getPreviousSelectedEndTime())
-                .proposedSelectedStartTime(request.getProposedSelectedStartTime())
-                .proposedSelectedEndTime(request.getProposedSelectedEndTime())
+                .previousSelectedStartTime(toOdt(request.getPreviousSelectedStartTimeUtc(), request.getPreviousSelectedStartTime()))
+                .previousSelectedEndTime(toOdt(request.getPreviousSelectedEndTimeUtc(), request.getPreviousSelectedEndTime()))
+                .proposedSelectedStartTime(toOdt(request.getProposedSelectedStartTimeUtc(), request.getProposedSelectedStartTime()))
+                .proposedSelectedEndTime(toOdt(request.getProposedSelectedEndTimeUtc(), request.getProposedSelectedEndTime()))
                 .requesterRole(request.getRequesterRole() == null ? null : request.getRequesterRole().name())
                 .requestedByUserId(request.getRequestedByUserId())
                 .responderRole(request.getResponderRole() == null ? null : request.getResponderRole().name())
@@ -607,9 +653,14 @@ public class BookingRescheduleService {
                 .requestReason(request.getRequestReason())
                 .responseNote(request.getResponseNote())
                 .adminOverride(request.isAdminOverride())
-                .requestedAt(request.getRequestedAt())
-                .respondedAt(request.getRespondedAt())
-                .expiredAt(request.getExpiredAt())
+                .requestedAt(toOdt(request.getRequestedAtUtc(), request.getRequestedAt()))
+                .respondedAt(toOdt(request.getRespondedAtUtc(), request.getRespondedAt()))
+                .expiredAt(toOdt(request.getExpiredAtUtc(), request.getExpiredAt()))
                 .build();
+    }
+    private static OffsetDateTime toOdt(Instant utc, LocalDateTime legacy) {
+        if (utc != null) return BookingTime.toOffsetDateTime(utc);
+        if (legacy != null) return BookingTime.toOffsetDateTime(legacy);
+        return null;
     }
 }

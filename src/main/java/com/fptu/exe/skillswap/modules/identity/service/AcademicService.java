@@ -27,7 +27,9 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import java.time.Clock;
 import java.time.Year;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +44,14 @@ public class AcademicService {
     private final SpecializationRepository specializationRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = "catalog", key = "'campuses'")
@@ -182,7 +192,7 @@ public class AcademicService {
 
     @Transactional
     public int incrementEligibleSemesters() {
-        int updatedCount = studentProfileRepository.incrementEligibleSemesters(DateTimeUtil.now());
+        int updatedCount = studentProfileRepository.incrementEligibleSemesters(timeProvider.nowBusiness());
         if (updatedCount > 0) {
             log.info("Incremented semester for {} eligible student profiles", updatedCount);
         } else {

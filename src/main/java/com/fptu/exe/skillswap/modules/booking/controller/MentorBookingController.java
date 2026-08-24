@@ -49,6 +49,7 @@ public class MentorBookingController {
                     Chấp nhận một booking request đang PENDING thuộc về mentor hiện tại.
                     FE dùng khi mentor quyết định xác nhận một mentee cho slot đã chọn.
                     Khi accept thành công, slot sẽ được chốt, các request pending khác cùng slot sẽ bị auto reject, hệ thống đồng thời tạo session, tạo conversation và gửi notification cho các user liên quan.
+                    Lịch trên SkillSwap là nguồn sự thật: lỗi hoặc trùng lịch trên Google Calendar không chặn accept. Google Calendar chỉ được đồng bộ bất đồng bộ sau đó; nếu đồng bộ lỗi, backend giữ nguyên booking và gửi thông báo.
                     """
     )
     @ApiResponses({

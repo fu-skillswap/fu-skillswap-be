@@ -10,14 +10,13 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -30,17 +29,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BookingResponseMapperTest {
 
-    private static final ZoneId APP_ZONE = ZoneId.of(DateTimeUtil.ZONE_HCM);
+    private static final ZoneId APP_ZONE = TimeProvider.BUSINESS_ZONE;
     private static final Instant FIXED_NOW = Instant.parse("2026-08-23T03:00:00Z");
 
+    private TimeProvider timeProvider;
     private BookingResponseMapper mapper;
     private UUID menteeId;
     private UUID mentorId;
 
     @BeforeEach
     void setUp() {
-        DateTimeUtil.setClock(Clock.fixed(FIXED_NOW, APP_ZONE));
-        mapper = new BookingResponseMapper(null, null, null, new PaymentProperties());
+        timeProvider = TimeProvider.fixed(FIXED_NOW, APP_ZONE);
+        mapper = new BookingResponseMapper(null, null, null, new PaymentProperties(), timeProvider);
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
     }
@@ -48,13 +48,12 @@ class BookingResponseMapperTest {
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
-        DateTimeUtil.setClock(Clock.systemUTC());
     }
 
     @Test
     void paidSessionJustEnded_menteeGetsConfirmAndIssueActionsWithoutWaitingForScheduler() {
         authenticate(menteeId, RoleCode.MENTEE);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.PAID, now.minusHours(1), now.minusMinutes(5));
 
         BookingResponse response = mapper.toBookingResponse(booking);
@@ -70,7 +69,7 @@ class BookingResponseMapperTest {
     @Test
     void confirmedSessionWithinJoinWindow_exposesJoinCta() {
         authenticate(menteeId, RoleCode.MENTEE);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.PAID, now.plusMinutes(10), now.plusMinutes(70));
         booking.setMeetingLink("https://meet.google.com/test-room");
 
@@ -84,7 +83,7 @@ class BookingResponseMapperTest {
     @Test
     void pendingRequest_mentorGetsExplicitDecisionCapabilities() {
         authenticate(mentorId, RoleCode.MENTOR);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.PENDING, now.plusDays(1), now.plusDays(1).plusHours(1));
         booking.setPendingExpireAt(now.plusHours(1));
 
@@ -99,7 +98,7 @@ class BookingResponseMapperTest {
     @Test
     void acceptedPaidRequest_menteeGetsPaymentCapabilityAndOneHourDeadline() {
         authenticate(menteeId, RoleCode.MENTEE);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT, now.plusDays(1), now.plusDays(1).plusHours(1));
         booking.setAcceptedAt(now);
 
@@ -113,7 +112,7 @@ class BookingResponseMapperTest {
     @Test
     void expiredPendingRequest_doesNotExposeStaleDecisionCtaBeforeSchedulerRuns() {
         authenticate(mentorId, RoleCode.MENTOR);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.PENDING, now.plusDays(1), now.plusDays(1).plusHours(1));
         booking.setPendingExpireAt(now.minusSeconds(1));
 
@@ -127,7 +126,7 @@ class BookingResponseMapperTest {
     @Test
     void expiredPaymentWindow_doesNotExposeStalePaymentCtaBeforeSchedulerRuns() {
         authenticate(menteeId, RoleCode.MENTEE);
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                 now.plusDays(1), now.plusDays(1).plusHours(1));
         booking.setAcceptedAt(now.minusMinutes(61));
@@ -152,8 +151,8 @@ class BookingResponseMapperTest {
                 .serviceIsFreeSnapshot(false)
                 .servicePriceScoinSnapshot(30_000)
                 .learningGoalTitle("Production booking flow")
-                .createdAt(DateTimeUtil.now())
-                .updatedAt(DateTimeUtil.now())
+                .createdAt(timeProvider.nowBusiness())
+                .updatedAt(timeProvider.nowBusiness())
                 .build();
     }
 

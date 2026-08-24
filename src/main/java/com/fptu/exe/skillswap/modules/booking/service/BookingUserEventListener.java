@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.shared.event.UserBannedEvent;
 import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -12,7 +12,8 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Clock;
 
 @Component
 @RequiredArgsConstructor
@@ -21,6 +22,14 @@ public class BookingUserEventListener {
 
     private final BookingService bookingService;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -48,7 +57,7 @@ public class BookingUserEventListener {
         bookingService.rejectAllPendingBookingsForMentor(event.getUserId(), "Tài khoản mentor đã bị xóa khỏi hệ thống");
     }
 
-    private LocalDateTime currentTime() {
-        return DateTimeUtil.now();
+    private Instant currentTime() {
+        return timeProvider.instant();
     }
 }

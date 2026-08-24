@@ -15,6 +15,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -135,17 +136,32 @@ public class PaymentOrder {
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
+    @Column(name = "expires_at_utc")
+    private Instant expiresAtUtc;
+
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+
+    @Column(name = "paid_at_utc")
+    private Instant paidAtUtc;
 
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
+    @Column(name = "cancelled_at_utc")
+    private Instant cancelledAtUtc;
+
     @Column(name = "failed_at")
     private LocalDateTime failedAt;
 
+    @Column(name = "failed_at_utc")
+    private Instant failedAtUtc;
+
     @Column(name = "credit_finalized_at")
     private LocalDateTime creditFinalizedAt;
+
+    @Column(name = "credit_finalized_at_utc")
+    private Instant creditFinalizedAtUtc;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "settlement_status", length = 20)
@@ -154,8 +170,14 @@ public class PaymentOrder {
     @Column(name = "released_at")
     private LocalDateTime releasedAt;
 
+    @Column(name = "released_at_utc")
+    private Instant releasedAtUtc;
+
     @Column(name = "refunded_at")
     private LocalDateTime refundedAt;
+
+    @Column(name = "refunded_at_utc")
+    private Instant refundedAtUtc;
 
     @Column(name = "refunded_scoin")
     private Integer refundedScoin;
@@ -166,17 +188,80 @@ public class PaymentOrder {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
+
     @jakarta.persistence.PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        Instant nowUtc = DateTimeUtil.instantNow();
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
+        if (createdAt == null && createdAtUtc == null) {
+            createdAtUtc = nowUtc;
+            createdAt = nowHcm;
+        } else if (createdAtUtc != null && createdAt == null) {
+            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
+        } else if (createdAt != null && createdAtUtc == null) {
+            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
+        }
+        updatedAtUtc = nowUtc;
+        updatedAt = nowHcm;
+        syncShadowFields();
     }
 
     @jakarta.persistence.PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(updatedAtUtc);
+        syncShadowFields();
+    }
+
+    private void syncShadowFields() {
+        if (expiresAtUtc != null) {
+            expiresAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(expiresAtUtc);
+        } else if (expiresAt != null) {
+            expiresAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(expiresAt);
+        }
+
+        if (paidAtUtc != null) {
+            paidAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(paidAtUtc);
+        } else if (paidAt != null) {
+            paidAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(paidAt);
+        }
+
+        if (cancelledAtUtc != null) {
+            cancelledAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(cancelledAtUtc);
+        } else if (cancelledAt != null) {
+            cancelledAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(cancelledAt);
+        }
+
+        if (failedAtUtc != null) {
+            failedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(failedAtUtc);
+        } else if (failedAt != null) {
+            failedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(failedAt);
+        }
+
+        if (creditFinalizedAtUtc != null) {
+            creditFinalizedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(creditFinalizedAtUtc);
+        } else if (creditFinalizedAt != null) {
+            creditFinalizedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(creditFinalizedAt);
+        }
+
+        if (releasedAtUtc != null) {
+            releasedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(releasedAtUtc);
+        } else if (releasedAt != null) {
+            releasedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(releasedAt);
+        }
+
+        if (refundedAtUtc != null) {
+            refundedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(refundedAtUtc);
+        } else if (refundedAt != null) {
+            refundedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(refundedAt);
+        }
     }
 }

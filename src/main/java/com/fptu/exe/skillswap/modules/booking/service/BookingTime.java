@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -16,7 +17,7 @@ import java.time.ZoneId;
  */
 public final class BookingTime {
 
-    public static final ZoneId BUSINESS_ZONE = ZoneId.of(DateTimeUtil.ZONE_HCM);
+    public static final ZoneId BUSINESS_ZONE = TimeProvider.BUSINESS_ZONE;
 
     private BookingTime() {
     }
@@ -29,11 +30,44 @@ public final class BookingTime {
         return value == null ? null : value.atZone(BUSINESS_ZONE).toInstant();
     }
 
+    public static OffsetDateTime toOffsetDateTime(Instant value) {
+        return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
+    }
+
     public static OffsetDateTime toOffsetDateTime(LocalDateTime value) {
         return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
     }
 
-    public static LocalDateTime now() {
-        return DateTimeUtil.now();
+    public static Instant resolveSelectedStartUtc(Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+        if (booking.getSelectedStartTimeUtc() != null) {
+            return booking.getSelectedStartTimeUtc();
+        }
+        if (booking.getSlot() != null && booking.getSlot().getStartTimeUtc() != null) {
+            return booking.getSlot().getStartTimeUtc();
+        }
+        if (booking.getSelectedStartTime() != null) {
+            return toInstant(booking.getSelectedStartTime());
+        }
+        return booking.getSlot() != null ? toInstant(booking.getSlot().getStartTime()) : null;
     }
+
+    public static Instant resolveSelectedEndUtc(Booking booking) {
+        if (booking == null) {
+            return null;
+        }
+        if (booking.getSelectedEndTimeUtc() != null) {
+            return booking.getSelectedEndTimeUtc();
+        }
+        if (booking.getSlot() != null && booking.getSlot().getEndTimeUtc() != null) {
+            return booking.getSlot().getEndTimeUtc();
+        }
+        if (booking.getSelectedEndTime() != null) {
+            return toInstant(booking.getSelectedEndTime());
+        }
+        return booking.getSlot() != null ? toInstant(booking.getSlot().getEndTime()) : null;
+    }
+
 }

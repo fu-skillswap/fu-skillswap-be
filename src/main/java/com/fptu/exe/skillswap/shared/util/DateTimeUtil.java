@@ -7,6 +7,14 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 
+/**
+ * @deprecated Legacy static time facade. New code in booking, payment, and subsequent
+ *             slices must inject {@link com.fptu.exe.skillswap.shared.time.TimeProvider} or
+ *             {@link Clock} directly instead of calling static DateTimeUtil.
+ *             This class is maintained solely for JPA PrePersist/PreUpdate entity listeners
+ *             and legacy un-migrated modules.
+ */
+@Deprecated(since = "2.0", forRemoval = false)
 public class DateTimeUtil {
     public static final String DEFAULT_FORMAT = "yyyy-MM-dd HH:mm:ss";
     public static final String ZONE_HCM = "Asia/Ho_Chi_Minh";

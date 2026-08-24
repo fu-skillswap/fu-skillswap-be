@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Builder
@@ -20,6 +20,7 @@ public record WalletTransactionResponse(
         Integer amountScoin,
         Integer balanceEffectScoin,
         String memo,
-        LocalDateTime createdAt
+        @Schema(description = "Thời điểm tạo giao dịch kèm offset +07:00", example = "2026-08-24T19:00:00+07:00")
+        OffsetDateTime createdAt
 ) {
 }

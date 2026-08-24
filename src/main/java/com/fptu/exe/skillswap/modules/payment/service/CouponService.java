@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionReposit
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.time.Clock;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +33,14 @@ public class CouponService {
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
     private final DiscountStrategyRegistry discountStrategyRegistry;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public Coupon resolveCoupon(String couponCode) {
@@ -65,10 +74,10 @@ public class CouponService {
         if (coupon == null) {
             return;
         }
-        if (coupon.getStartAt() != null && DateTimeUtil.now().isBefore(coupon.getStartAt())) {
+        if (coupon.getStartAt() != null && timeProvider.nowBusiness().isBefore(coupon.getStartAt())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon chưa bắt đầu");
         }
-        if (coupon.getEndAt() != null && DateTimeUtil.now().isAfter(coupon.getEndAt())) {
+        if (coupon.getEndAt() != null && timeProvider.nowBusiness().isAfter(coupon.getEndAt())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon đã hết hạn");
         }
         if (coupon.getMinOrderValueScoin() != null && grossScoin < coupon.getMinOrderValueScoin()) {

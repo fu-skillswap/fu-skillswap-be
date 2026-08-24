@@ -58,17 +58,34 @@ public class CreditLedgerAccount {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private java.time.Instant createdAtUtc;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private java.time.Instant updatedAtUtc;
+
     @jakarta.persistence.PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        java.time.Instant nowUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
+        if (createdAt == null && createdAtUtc == null) {
+            createdAtUtc = nowUtc;
+            createdAt = nowHcm;
+        } else if (createdAtUtc != null && createdAt == null) {
+            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
+        } else if (createdAt != null && createdAtUtc == null) {
+            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
+        }
+        updatedAtUtc = nowUtc;
+        updatedAt = nowHcm;
     }
 
     @jakarta.persistence.PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAtUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
+        updatedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(updatedAtUtc);
     }
 }

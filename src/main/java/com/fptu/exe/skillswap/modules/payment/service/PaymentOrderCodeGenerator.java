@@ -1,9 +1,11 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.time.ZoneId;
 import java.util.Locale;
 import java.util.UUID;
@@ -15,12 +17,20 @@ public class PaymentOrderCodeGenerator {
 
     public static final long PAYOS_MAX_SAFE_ORDER_CODE = 9_007_199_254_740_991L;
     private static final long PROVIDER_ORDER_CODE_EPOCH_MILLIS = LocalDateTime.of(2025, 1, 1, 0, 0)
-            .atZone(ZoneId.of(DateTimeUtil.ZONE_HCM))
+            .atZone(TimeProvider.BUSINESS_ZONE)
             .toInstant()
             .toEpochMilli();
     private static final int PROVIDER_ORDER_CODE_SEQUENCE_MOD = 10_000;
     private static final AtomicLong PROVIDER_ORDER_CODE_LAST_BUCKET = new AtomicLong(-1L);
     private static final AtomicInteger PROVIDER_ORDER_CODE_SEQUENCE = new AtomicInteger(0);
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     public String generateOrderCode(UUID id) {
         if (id == null) {
@@ -31,7 +41,7 @@ public class PaymentOrderCodeGenerator {
 
     public long generateProviderOrderCode(UUID id, int attemptNo) {
         while (true) {
-            long bucket = Math.max(0L, System.currentTimeMillis() - PROVIDER_ORDER_CODE_EPOCH_MILLIS);
+            long bucket = Math.max(0L, timeProvider.instant().toEpochMilli() - PROVIDER_ORDER_CODE_EPOCH_MILLIS);
             int sequence = nextProviderOrderCodeSequence(bucket);
             if (sequence < 0) {
                 Thread.onSpinWait();

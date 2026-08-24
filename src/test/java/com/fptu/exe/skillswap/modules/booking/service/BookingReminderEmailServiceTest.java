@@ -34,7 +34,7 @@ class BookingReminderEmailServiceTest {
     @Test
     void sendUpcomingSessionReminders_shouldSendMenteeAndMentorEmailsForConfirmedBookings() {
         Booking booking = confirmedBooking(BookingStatus.PAID);
-        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any())).thenReturn(List.of(booking));
+        when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any())).thenReturn(List.of(booking));
         when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         int sent = service.sendUpcomingSessionReminders();
@@ -42,7 +42,7 @@ class BookingReminderEmailServiceTest {
         assertEquals(2, sent);
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<BookingStatus>> statusesCaptor = ArgumentCaptor.forClass(Collection.class);
-        verify(bookingRepository).findConfirmedBookingsStartingBetween(statusesCaptor.capture(), any(), any());
+        verify(bookingRepository).findConfirmedBookingsStartingBetweenUtc(statusesCaptor.capture(), any(), any());
         assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
         assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
         verify(emailDispatchService).sendHtmlOnce(
@@ -144,7 +144,7 @@ class BookingReminderEmailServiceTest {
                 .selectedEndTime(LocalDateTime.now().withHour(17).withMinute(0))
                 .build();
 
-        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+        when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any()))
                 .thenReturn(List.of(booking1, booking2, booking3));
         when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
@@ -176,7 +176,7 @@ class BookingReminderEmailServiceTest {
 
     @Test
     void sendDailyMentorScheduleDigests_shouldSkipWhenNoConfirmedBookingsForToday() {
-        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+        when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any()))
                 .thenReturn(List.of());
 
         int sent = service.sendDailyMentorScheduleDigests();

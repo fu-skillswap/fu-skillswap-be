@@ -18,6 +18,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -374,16 +375,22 @@ class CoreMentorshipFlowSmokeTest {
         paymentOrderService.checkout(mentee.getId(), new PaymentCheckoutRequest(bk.bookingId(), null));
 
         // Fast-forward time so we can complete it
-        slot.setStartTime(DateTimeUtil.now().minusHours(2));
-        slot.setEndTime(DateTimeUtil.now().minusHours(1));
+        LocalDateTime pastStart = DateTimeUtil.now().minusHours(2);
+        LocalDateTime pastEnd = DateTimeUtil.now().minusHours(1);
+        slot.setStartTime(pastStart);
+        slot.setStartTimeUtc(BookingTime.toInstant(pastStart));
+        slot.setEndTime(pastEnd);
+        slot.setEndTimeUtc(BookingTime.toInstant(pastEnd));
         slot = slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
         booking.setStatus(BookingStatus.PAID);
-        booking.setSelectedStartTime(DateTimeUtil.now().minusHours(2));
-        booking.setSelectedEndTime(DateTimeUtil.now().minusHours(1));
-        booking.setRequestedStartTime(DateTimeUtil.now().minusHours(2));
-        booking.setRequestedEndTime(DateTimeUtil.now().minusHours(1));
+        booking.setSelectedStartTime(pastStart);
+        booking.setSelectedStartTimeUtc(BookingTime.toInstant(pastStart));
+        booking.setSelectedEndTime(pastEnd);
+        booking.setSelectedEndTimeUtc(BookingTime.toInstant(pastEnd));
+        booking.setRequestedStartTime(pastStart);
+        booking.setRequestedEndTime(pastEnd);
         bookingRepository.saveAndFlush(booking);
 
         // Complete booking

@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -20,10 +22,16 @@ public class BookingEngagementService {
     private final BookingRepository bookingRepository;
     private final BookingEngagementDeliveryRepository deliveryRepository;
     private final NotificationService notificationService;
+    private com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider = com.fptu.exe.skillswap.shared.time.TimeProvider.from(java.time.Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setTimeProvider(com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider) {
+        if (timeProvider != null) this.timeProvider = timeProvider;
+    }
 
     @Transactional
     public int sendScheduledReminders() {
-        LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
+        Instant now = timeProvider.instant();
         return deliverReminderWindow(now, 60, BookingEngagementDeliveryType.REMINDER_1H, "Buổi học bắt đầu sau 1 giờ");
     }
 
@@ -37,9 +45,9 @@ public class BookingEngagementService {
         });
     }
 
-    private int deliverReminderWindow(LocalDateTime now, int minutes, BookingEngagementDeliveryType type, String title) {
-        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(REMINDABLE,
-                now.plusMinutes(minutes).minusSeconds(30), now.plusMinutes(minutes).plusSeconds(30));
+    private int deliverReminderWindow(Instant now, int minutes, BookingEngagementDeliveryType type, String title) {
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetweenUtc(REMINDABLE,
+                now.plus(Duration.ofMinutes(minutes)).minusSeconds(30), now.plus(Duration.ofMinutes(minutes)).plusSeconds(30));
         int count = 0;
         for (Booking booking : bookings) {
             count += deliver(booking, booking.getMentee().getId(), type, NotificationType.BOOKING_REMINDER, title, "Kiểm tra lịch học và chuẩn bị trước giờ bắt đầu.") ? 1 : 0;

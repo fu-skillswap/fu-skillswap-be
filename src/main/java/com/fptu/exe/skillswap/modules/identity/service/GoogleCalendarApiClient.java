@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
 @Component
@@ -118,62 +118,6 @@ public class GoogleCalendarApiClient {
         sendNoContent(request);
     }
 
-    public List<GoogleCalendarBusyInterval> queryFreeBusy(String accessToken,
-                                                          String calendarId,
-                                                          java.time.Instant timeMin,
-                                                          java.time.Instant timeMax) {
-        if (!StringUtils.hasText(accessToken) || timeMin == null || timeMax == null) {
-            return List.of();
-        }
-        String primaryCalendarId = StringUtils.hasText(calendarId) ? calendarId : "primary";
-        Map<String, Object> body = Map.of(
-                "timeMin", timeMin.toString(),
-                "timeMax", timeMax.toString(),
-                "items", List.of(Map.of("id", primaryCalendarId))
-        );
-        String url = "https://www.googleapis.com/calendar/v3/freeBusy";
-        try {
-            String json = objectMapper.writeValueAsString(body);
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofSeconds(4))
-                    .header("Authorization", "Bearer " + accessToken)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json))
-                    .build();
-            Map<String, Object> payload = sendJson(request, new TypeReference<>() {});
-            if (payload == null || !payload.containsKey("calendars")) {
-                return List.of();
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> calendars = (Map<String, Object>) payload.get("calendars");
-            if (calendars == null || !calendars.containsKey(primaryCalendarId)) {
-                return List.of();
-            }
-            @SuppressWarnings("unchecked")
-            Map<String, Object> primaryData = (Map<String, Object>) calendars.get(primaryCalendarId);
-            if (primaryData == null || !primaryData.containsKey("busy")) {
-                return List.of();
-            }
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> busyList = (List<Map<String, Object>>) primaryData.get("busy");
-            if (busyList == null || busyList.isEmpty()) {
-                return List.of();
-            }
-            List<GoogleCalendarBusyInterval> results = new ArrayList<>();
-            for (Map<String, Object> item : busyList) {
-                String startStr = stringValue(item.get("start"));
-                String endStr = stringValue(item.get("end"));
-                if (StringUtils.hasText(startStr) && StringUtils.hasText(endStr)) {
-                    results.add(new GoogleCalendarBusyInterval(java.time.Instant.parse(startStr), java.time.Instant.parse(endStr)));
-                }
-            }
-            return results;
-        } catch (Exception ex) {
-            log.warn("Querying Google FreeBusy API failed gracefully for calendarId={}: {}", primaryCalendarId, ex.getMessage());
-            return List.of();
-        }
-    }
-
     public void revokeToken(String token) {
         if (!StringUtils.hasText(token)) {
             return;
@@ -213,11 +157,22 @@ public class GoogleCalendarApiClient {
         if (booking.getMentee() != null && StringUtils.hasText(booking.getMentee().getEmail())) {
             attendees.add(Map.of("email", booking.getMentee().getEmail()));
         }
+        Instant startUtc = session != null && session.getScheduledStartTimeUtc() != null
+                ? session.getScheduledStartTimeUtc()
+                : (session != null && session.getScheduledStartTime() != null
+                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledStartTime())
+                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedStartUtc(booking));
+        Instant endUtc = session != null && session.getScheduledEndTimeUtc() != null
+                ? session.getScheduledEndTimeUtc()
+                : (session != null && session.getScheduledEndTime() != null
+                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledEndTime())
+                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedEndUtc(booking));
+
         return new LinkedHashMap<>(Map.of(
                 "summary", defaultText(serviceTitle, "SkillSwap Mentoring Session"),
                 "description", description,
-                "start", dateTimeMapper.toGoogleDateTime(session.getScheduledStartTime()),
-                "end", dateTimeMapper.toGoogleDateTime(session.getScheduledEndTime()),
+                "start", dateTimeMapper.toGoogleDateTime(startUtc),
+                "end", dateTimeMapper.toGoogleDateTime(endUtc),
                 "attendees", attendees
         ));
     }

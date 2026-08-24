@@ -8,8 +8,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleCalendarConnectRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleAuthorizationContextResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleCalendarStatusResponse;
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
-import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.MentorCalendarEligibilityPort;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
@@ -19,7 +17,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -36,7 +37,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class GoogleCalendarConnectionService implements GoogleCalendarConnectionPort, GoogleCalendarBusyPort {
+public class GoogleCalendarConnectionService implements GoogleCalendarConnectionPort {
 
     private final UserRepository userRepository;
     private final GoogleCalendarConnectionRepository connectionRepository;
@@ -47,6 +48,14 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
     private final GoogleApiProperties googleApiProperties;
     private final MentorCalendarEligibilityPort mentorCalendarEligibilityPort;
     private BookingRepository bookingRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Autowired(required = false)
     void setBookingRepository(BookingRepository bookingRepository) {
@@ -139,8 +148,8 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
                         "Cần tắt toàn bộ dịch vụ mentoring trước khi ngắt Google Calendar"
                 );
             }
-            if (bookingRepository != null && bookingRepository.existsByMentorProfileUserIdAndStatusAndSelectedStartTimeAfter(
-                    userId, BookingStatus.PAID, DateTimeUtil.now())) {
+            if (bookingRepository != null && bookingRepository.existsByMentorProfileUserIdAndStatusAndSelectedStartTimeUtcAfter(
+                    userId, BookingStatus.PAID, timeProvider.instant())) {
                 throw new BaseException(
                         ErrorCode.GOOGLE_CALENDAR_DISCONNECT_BLOCKED,
                         "Không thể ngắt Google Calendar khi còn booking đã thanh toán trong tương lai"
@@ -155,7 +164,7 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
             connection.setRefreshTokenCiphertext(null);
             connection.setTokenExpiresAt(null);
             connection.setLastSyncStatus(GoogleCalendarSyncStatus.REVOKED);
-            connection.setLastSyncAt(DateTimeUtil.now());
+            connection.setLastSyncAt(timeProvider.nowBusiness());
             connection.setLastSyncErrorCode("GOOGLE_CALENDAR_REVOKED");
             connection.setLastSyncErrorMessage("Mentor đã ngắt kết nối Google Calendar.");
             connectionRepository.save(connection);
@@ -227,7 +236,7 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
                         409
                 );
             }
-            if (conn.getTokenExpiresAt() == null || conn.getTokenExpiresAt().isAfter(DateTimeUtil.now().plusMinutes(2))) {
+            if (conn.getTokenExpiresAt() == null || conn.getTokenExpiresAt().isAfter(timeProvider.nowBusiness().plusMinutes(2))) {
                 return googleTokenCryptoService.decrypt(conn.getAccessTokenCiphertext());
             }
             return null; // Token is expired, need refresh
@@ -284,19 +293,25 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         }
         boolean connected = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.ACTIVE;
         boolean needsReconnect = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.REQUIRES_RECONNECT;
+        OffsetDateTime lastSyncAtOffset = connection.getLastSyncAtUtc() != null
+                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAtUtc())
+                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
         return new UserMeGoogleCalendarView(
                 connected,
                 connected,
                 connection.getGoogleEmail(),
                 needsReconnect,
                 connection.getLastSyncStatus() == null ? null : connection.getLastSyncStatus().name(),
-                connection.getLastSyncAt()
+                lastSyncAtOffset
         );
     }
 
     private GoogleCalendarStatusResponse toStatusResponse(GoogleCalendarConnection connection, boolean connectedOverride) {
         boolean connected = connectedOverride && connection.getConnectionStatus() == GoogleCalendarConnectionStatus.ACTIVE;
         boolean needsReconnect = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.REQUIRES_RECONNECT;
+        OffsetDateTime lastSyncAtOffset = connection.getLastSyncAtUtc() != null
+                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAtUtc())
+                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
         return new GoogleCalendarStatusResponse(
                 connected,
                 connected,
@@ -304,7 +319,7 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
                 splitScopes(connection.getGrantedScopes()),
                 needsReconnect,
                 connection.getLastSyncStatus() == null ? null : connection.getLastSyncStatus().name(),
-                connection.getLastSyncAt(),
+                lastSyncAtOffset,
                 connection.getLastSyncErrorCode(),
                 connection.getLastSyncErrorMessage()
         );
@@ -321,7 +336,7 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         if (expiresInSeconds == null || expiresInSeconds <= 0) {
             return null;
         }
-        return DateTimeUtil.now().plusSeconds(expiresInSeconds);
+        return timeProvider.nowBusiness().plusSeconds(expiresInSeconds);
     }
 
     private String decryptQuietly(String ciphertext) {
@@ -348,35 +363,13 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         }
     }
 
-    @Override
-    public List<GoogleCalendarBusyInterval> queryBusyIntervals(UUID mentorUserId, java.time.Instant timeMin, java.time.Instant timeMax) {
-        if (mentorUserId == null || timeMin == null || timeMax == null) {
-            return List.of();
-        }
-        try {
-            GoogleCalendarConnection connection = connectionRepository.findByUserId(mentorUserId).orElse(null);
-            if (connection == null || connection.getConnectionStatus() != GoogleCalendarConnectionStatus.ACTIVE) {
-                return List.of();
-            }
-            String accessToken = resolveAccessTokenForSync(connection.getId());
-            if (!StringUtils.hasText(accessToken)) {
-                return List.of();
-            }
-            String calendarId = StringUtils.hasText(connection.getCalendarId()) ? connection.getCalendarId() : "primary";
-            return googleCalendarApiClient.queryFreeBusy(accessToken, calendarId, timeMin, timeMax);
-        } catch (Exception ex) {
-            log.warn("Querying Google Calendar busy intervals failed for mentorUserId={}: {}", mentorUserId, ex.getMessage());
-            throw new IllegalStateException("Không thể kiểm tra lịch Google Calendar của mentor", ex);
-        }
-    }
-
     public record UserMeGoogleCalendarView(
             boolean connected,
             boolean syncEnabled,
             String email,
             boolean needsReconnect,
             String lastSyncStatus,
-            LocalDateTime lastSyncAt
+            OffsetDateTime lastSyncAt
     ) {
     }
 }

@@ -61,12 +61,15 @@ public class SdkPayOsGateway implements PayOsGateway {
                     .build();
 
             CreatePaymentLinkResponse response = createClient().paymentRequests().create(sdkRequest);
+            Instant expiresAtUtc = toInstant(response.getExpiredAt());
+            LocalDateTime expiresAt = toLocalDateTime(response.getExpiredAt());
             return new CreatePaymentLinkResult(
                     String.valueOf(response.getOrderCode()),
                     response.getPaymentLinkId(),
                     response.getStatus() == null ? null : response.getStatus().name(),
                     response.getCheckoutUrl(),
-                    toLocalDateTime(response.getExpiredAt())
+                    expiresAtUtc,
+                    expiresAt
             );
         } catch (PayOSException ex) {
             throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
@@ -79,11 +82,17 @@ public class SdkPayOsGateway implements PayOsGateway {
         validateClientConfig();
         try {
             PaymentLink paymentLink = createClient().paymentRequests().get(providerOrderCode);
+            Instant createdAtUtc = parseInstant(paymentLink.getCreatedAt());
+            Instant cancelledAtUtc = parseInstant(paymentLink.getCanceledAt());
+            LocalDateTime createdAt = parseDateTime(paymentLink.getCreatedAt());
+            LocalDateTime cancelledAt = parseDateTime(paymentLink.getCanceledAt());
             return new PaymentLinkDetails(
                     paymentLink.getId(),
                     paymentLink.getStatus() == null ? null : paymentLink.getStatus().name(),
-                    parseDateTime(paymentLink.getCreatedAt()),
-                    parseDateTime(paymentLink.getCanceledAt())
+                    createdAtUtc,
+                    cancelledAtUtc,
+                    createdAt,
+                    cancelledAt
             );
         } catch (PayOSException ex) {
             throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
@@ -96,6 +105,8 @@ public class SdkPayOsGateway implements PayOsGateway {
         validateClientConfig();
         try {
             WebhookData verified = createClient().webhooks().verify(toSdkWebhook(request));
+            Instant paidAtUtc = parseInstant(verified.getTransactionDateTime());
+            LocalDateTime paidAt = parseWebhookPaidAt(verified.getTransactionDateTime());
             return new VerifiedWebhook(
                     verified.getOrderCode() == null ? null : String.valueOf(verified.getOrderCode()),
                     verified.getPaymentLinkId(),
@@ -103,7 +114,8 @@ public class SdkPayOsGateway implements PayOsGateway {
                     normalizeText(verified.getReference()),
                     normalizeText(verified.getCode()),
                     Boolean.TRUE.equals(request.success()),
-                    parseWebhookPaidAt(verified.getTransactionDateTime()),
+                    paidAtUtc,
+                    paidAt,
                     verified.getAmount() == null ? 0L : verified.getAmount().longValue()
             );
         } catch (PayOSException ex) {
@@ -216,11 +228,30 @@ public class SdkPayOsGateway implements PayOsGateway {
                 .build();
     }
 
+    private Instant toInstant(Long epochSeconds) {
+        if (epochSeconds == null) {
+            return null;
+        }
+        return Instant.ofEpochSecond(epochSeconds);
+    }
+
     private LocalDateTime toLocalDateTime(Long epochSeconds) {
         if (epochSeconds == null) {
             return null;
         }
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(epochSeconds), VIETNAM_ZONE);
+    }
+
+    private Instant parseInstant(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException ignored) {
+            LocalDateTime ldt = parseDateTime(value);
+            return ldt != null ? ldt.atZone(VIETNAM_ZONE).toInstant() : null;
+        }
     }
 
     private LocalDateTime parseDateTime(String value) {

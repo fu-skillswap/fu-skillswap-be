@@ -1,0 +1,363 @@
+-- rollout: CONTRACT (Slice 8)
+-- Drop legacy TIMESTAMP WITHOUT TIME ZONE columns and dual-write triggers.
+-- After at least one stable production release with dual-write, this migration
+-- completes the UTC contract: only TIMESTAMPTZ columns remain for booking/payment/session/calendar.
+-- LocalDate/LocalTime for recurrence patterns are NOT touched.
+--
+-- Safety: All _utc columns must be populated (dual-write has been running) before executing.
+-- Run AFTER confirming dashboard/monitoring shows _utc columns fully populated.
+
+-- =============================================================================
+-- STEP 1: DROP ALL DUAL-WRITE TRIGGERS (V111-V114)
+-- =============================================================================
+
+-- V111 triggers
+DROP TRIGGER IF EXISTS trg_bookings_sync_utc ON bookings;
+DROP FUNCTION IF EXISTS trg_sync_bookings_utc();
+
+DROP TRIGGER IF EXISTS trg_mentor_availability_slots_sync_utc ON mentor_availability_slots;
+DROP FUNCTION IF EXISTS trg_sync_mentor_availability_slots_utc();
+
+-- V112 triggers
+DROP TRIGGER IF EXISTS trg_payment_orders_sync_utc ON payment_orders;
+DROP FUNCTION IF EXISTS trg_sync_payment_orders_utc();
+
+DROP TRIGGER IF EXISTS trg_payment_attempts_sync_utc ON payment_attempts;
+DROP FUNCTION IF EXISTS trg_sync_payment_attempts_utc();
+
+DROP TRIGGER IF EXISTS trg_settlement_entries_sync_utc ON settlement_entries;
+DROP FUNCTION IF EXISTS trg_sync_settlement_entries_utc();
+
+DROP TRIGGER IF EXISTS trg_credit_ledger_entries_sync_utc ON credit_ledger_entries;
+DROP FUNCTION IF EXISTS trg_sync_credit_ledger_entries_utc();
+
+DROP TRIGGER IF EXISTS trg_payout_requests_sync_utc ON payout_requests;
+DROP FUNCTION IF EXISTS trg_sync_payout_requests_utc();
+
+-- V113 triggers
+DROP TRIGGER IF EXISTS trg_sessions_utc_sync ON sessions;
+DROP FUNCTION IF EXISTS trg_sessions_utc_sync();
+
+DROP TRIGGER IF EXISTS trg_booking_reschedule_requests_utc_sync ON booking_reschedule_requests;
+DROP FUNCTION IF EXISTS trg_booking_reschedule_requests_utc_sync();
+
+DROP TRIGGER IF EXISTS trg_booking_events_utc_sync ON booking_events;
+DROP FUNCTION IF EXISTS trg_booking_events_utc_sync();
+
+-- V114 triggers
+DROP TRIGGER IF EXISTS trg_google_calendar_connections_sync_utc ON google_calendar_connections;
+DROP FUNCTION IF EXISTS trg_sync_google_calendar_connections_utc();
+
+DROP TRIGGER IF EXISTS trg_google_calendar_sync_jobs_sync_utc ON google_calendar_sync_jobs;
+DROP FUNCTION IF EXISTS trg_sync_google_calendar_sync_jobs_utc();
+
+DROP TRIGGER IF EXISTS trg_google_calendar_event_links_sync_utc ON google_calendar_event_links;
+DROP FUNCTION IF EXISTS trg_sync_google_calendar_event_links_utc();
+
+DROP TRIGGER IF EXISTS trg_oauth_accounts_sync_utc ON oauth_accounts;
+DROP FUNCTION IF EXISTS trg_sync_oauth_accounts_utc();
+
+-- =============================================================================
+-- STEP 2: ENSURE ALL _utc COLUMNS ARE NOT NULL WHERE REQUIRED
+-- Backfill any remaining NULLs from legacy columns before dropping them.
+-- =============================================================================
+
+-- bookings
+UPDATE bookings SET
+    selected_start_time_utc = selected_start_time AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE selected_start_time_utc IS NULL AND selected_start_time IS NOT NULL;
+UPDATE bookings SET
+    selected_end_time_utc = selected_end_time AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE selected_end_time_utc IS NULL AND selected_end_time IS NOT NULL;
+UPDATE bookings SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE bookings SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- mentor_availability_slots
+UPDATE mentor_availability_slots SET
+    start_time_utc = start_time AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE start_time_utc IS NULL AND start_time IS NOT NULL;
+UPDATE mentor_availability_slots SET
+    end_time_utc = end_time AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE end_time_utc IS NULL AND end_time IS NOT NULL;
+UPDATE mentor_availability_slots SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE mentor_availability_slots SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- payment_orders
+UPDATE payment_orders SET
+    expires_at_utc = expires_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE expires_at_utc IS NULL AND expires_at IS NOT NULL;
+UPDATE payment_orders SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE payment_orders SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- payout_requests
+UPDATE payout_requests SET
+    requested_at_utc = requested_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE requested_at_utc IS NULL AND requested_at IS NOT NULL;
+UPDATE payout_requests SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE payout_requests SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- credit_ledger_entries
+UPDATE credit_ledger_entries SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+
+-- sessions
+UPDATE sessions SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE sessions SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- booking_reschedule_requests
+UPDATE booking_reschedule_requests SET
+    requested_at_utc = requested_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE requested_at_utc IS NULL AND requested_at IS NOT NULL;
+UPDATE booking_reschedule_requests SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE booking_reschedule_requests SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- google_calendar_connections
+UPDATE google_calendar_connections SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE google_calendar_connections SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- =============================================================================
+-- STEP 3: ADD _utc COLUMNS TO TABLES NOT COVERED IN V111-V114
+-- (mentor_payout_profiles had no _utc columns yet)
+-- =============================================================================
+
+ALTER TABLE mentor_payout_profiles
+    ADD COLUMN IF NOT EXISTS created_at_utc TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS updated_at_utc TIMESTAMPTZ;
+
+UPDATE mentor_payout_profiles SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+UPDATE mentor_payout_profiles SET
+    updated_at_utc = updated_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE updated_at_utc IS NULL AND updated_at IS NOT NULL;
+
+-- Also for settlement_entries (only has legacy createdAt)
+ALTER TABLE settlement_entries
+    ADD COLUMN IF NOT EXISTS created_at_utc TIMESTAMPTZ;
+
+UPDATE settlement_entries SET
+    created_at_utc = created_at AT TIME ZONE 'Asia/Ho_Chi_Minh'
+    WHERE created_at_utc IS NULL AND created_at IS NOT NULL;
+
+-- =============================================================================
+-- STEP 4: DROP LEGACY TIMESTAMP WITHOUT TIME ZONE COLUMNS
+-- =============================================================================
+
+-- bookings
+ALTER TABLE bookings
+    DROP COLUMN IF EXISTS selected_start_time,
+    DROP COLUMN IF EXISTS selected_end_time,
+    DROP COLUMN IF EXISTS accepted_at,
+    DROP COLUMN IF EXISTS pending_expire_at,
+    DROP COLUMN IF EXISTS cancelled_at,
+    DROP COLUMN IF EXISTS completed_at,
+    DROP COLUMN IF EXISTS rejected_at,
+    DROP COLUMN IF EXISTS finalized_at,
+    DROP COLUMN IF EXISTS auto_closed_at,
+    DROP COLUMN IF EXISTS issue_submitted_at,
+    DROP COLUMN IF EXISTS issue_responded_at,
+    DROP COLUMN IF EXISTS issue_resolved_at,
+    DROP COLUMN IF EXISTS mentor_completion_overdue_at,
+    DROP COLUMN IF EXISTS post_session_prompted_at,
+    DROP COLUMN IF EXISTS mentor_completion_reminder_30m_at,
+    DROP COLUMN IF EXISTS mentor_completion_reminder_1h_at,
+    DROP COLUMN IF EXISTS mentee_completion_prompted_at,
+    DROP COLUMN IF EXISTS auto_close_warning_sent_at,
+    DROP COLUMN IF EXISTS issue_escalation_sent_at,
+    DROP COLUMN IF EXISTS admin_sla_warning_sent_at,
+    DROP COLUMN IF EXISTS calendar_availability_checked_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- mentor_availability_slots
+ALTER TABLE mentor_availability_slots
+    DROP COLUMN IF EXISTS start_time,
+    DROP COLUMN IF EXISTS end_time,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- sessions
+ALTER TABLE sessions
+    DROP COLUMN IF EXISTS scheduled_start_time,
+    DROP COLUMN IF EXISTS scheduled_end_time,
+    DROP COLUMN IF EXISTS actual_start_time,
+    DROP COLUMN IF EXISTS actual_end_time,
+    DROP COLUMN IF EXISTS calendar_last_synced_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- booking_reschedule_requests
+ALTER TABLE booking_reschedule_requests
+    DROP COLUMN IF EXISTS previous_selected_start_time,
+    DROP COLUMN IF EXISTS previous_selected_end_time,
+    DROP COLUMN IF EXISTS proposed_selected_start_time,
+    DROP COLUMN IF EXISTS proposed_selected_end_time,
+    DROP COLUMN IF EXISTS requested_at,
+    DROP COLUMN IF EXISTS responded_at,
+    DROP COLUMN IF EXISTS expired_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- payment_orders
+ALTER TABLE payment_orders
+    DROP COLUMN IF EXISTS expires_at,
+    DROP COLUMN IF EXISTS paid_at,
+    DROP COLUMN IF EXISTS cancelled_at,
+    DROP COLUMN IF EXISTS failed_at,
+    DROP COLUMN IF EXISTS credit_finalized_at,
+    DROP COLUMN IF EXISTS released_at,
+    DROP COLUMN IF EXISTS refunded_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- payment_attempts
+ALTER TABLE payment_attempts
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- payout_requests
+ALTER TABLE payout_requests
+    DROP COLUMN IF EXISTS requested_at,
+    DROP COLUMN IF EXISTS reviewed_at,
+    DROP COLUMN IF EXISTS approved_at,
+    DROP COLUMN IF EXISTS paid_at,
+    DROP COLUMN IF EXISTS rejected_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- credit_ledger_entries
+ALTER TABLE credit_ledger_entries
+    DROP COLUMN IF EXISTS created_at;
+
+-- settlement_entries
+ALTER TABLE settlement_entries
+    DROP COLUMN IF EXISTS created_at;
+
+-- mentor_payout_profiles
+ALTER TABLE mentor_payout_profiles
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- google_calendar_connections
+ALTER TABLE google_calendar_connections
+    DROP COLUMN IF EXISTS token_expires_at,
+    DROP COLUMN IF EXISTS last_sync_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- google_calendar_sync_jobs
+ALTER TABLE google_calendar_sync_jobs
+    DROP COLUMN IF EXISTS run_after,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at,
+    DROP COLUMN IF EXISTS completed_at;
+
+-- google_calendar_event_links
+ALTER TABLE google_calendar_event_links
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- oauth_accounts
+ALTER TABLE oauth_accounts
+    DROP COLUMN IF EXISTS provider_token_expires_at,
+    DROP COLUMN IF EXISTS created_at,
+    DROP COLUMN IF EXISTS updated_at;
+
+-- booking_events (only has created_at legacy)
+ALTER TABLE booking_events
+    DROP COLUMN IF EXISTS created_at;
+
+-- =============================================================================
+-- STEP 5: RENAME _utc COLUMNS TO CANONICAL NAMES
+-- Strategy: rename *_utc → original name (no suffix) so entity @Column annotations 
+-- don't need to change (they already use _utc column names post-dual-write).
+-- We KEEP _utc suffix in DB matching existing @Column(name="..._utc") annotations.
+-- No rename needed – column names already match entity @Column annotations.
+-- =============================================================================
+
+-- =============================================================================
+-- STEP 6: SET NOT NULL ON REQUIRED _utc COLUMNS
+-- =============================================================================
+
+-- bookings: non-nullable
+ALTER TABLE bookings
+    ALTER COLUMN selected_start_time_utc SET NOT NULL,
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- mentor_availability_slots
+ALTER TABLE mentor_availability_slots
+    ALTER COLUMN start_time_utc SET NOT NULL,
+    ALTER COLUMN end_time_utc SET NOT NULL,
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- payment_orders
+ALTER TABLE payment_orders
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- payout_requests
+ALTER TABLE payout_requests
+    ALTER COLUMN requested_at_utc SET NOT NULL,
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- sessions
+ALTER TABLE sessions
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- booking_reschedule_requests
+ALTER TABLE booking_reschedule_requests
+    ALTER COLUMN requested_at_utc SET NOT NULL,
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- credit_ledger_entries
+ALTER TABLE credit_ledger_entries
+    ALTER COLUMN created_at_utc SET NOT NULL;
+
+-- mentor_payout_profiles
+ALTER TABLE mentor_payout_profiles
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+-- google_calendar_connections
+ALTER TABLE google_calendar_connections
+    ALTER COLUMN created_at_utc SET NOT NULL,
+    ALTER COLUMN updated_at_utc SET NOT NULL;
+
+COMMENT ON TABLE bookings IS 'UTC-only after the approved contract release: all timestamps are TIMESTAMPTZ. Legacy TIMESTAMP WITHOUT TIME ZONE columns dropped.';
+COMMENT ON TABLE mentor_availability_slots IS 'UTC-only after the approved contract release.';
+COMMENT ON TABLE payment_orders IS 'UTC-only after the approved contract release.';
+COMMENT ON TABLE sessions IS 'UTC-only after the approved contract release.';

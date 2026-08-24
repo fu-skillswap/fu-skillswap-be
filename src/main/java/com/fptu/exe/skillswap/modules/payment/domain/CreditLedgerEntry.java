@@ -68,8 +68,20 @@ public class CreditLedgerEntry {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private java.time.Instant createdAtUtc;
+
     @jakarta.persistence.PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
+        java.time.Instant nowUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
+        if (createdAt == null && createdAtUtc == null) {
+            createdAtUtc = nowUtc;
+            createdAt = nowHcm;
+        } else if (createdAtUtc != null && createdAt == null) {
+            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
+        } else if (createdAt != null && createdAtUtc == null) {
+            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
+        }
     }
 }

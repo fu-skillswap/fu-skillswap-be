@@ -6,8 +6,6 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEventService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -25,10 +23,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -42,9 +43,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
-import org.mockito.quality.Strictness;
-import org.mockito.junit.jupiter.MockitoSettings;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -95,13 +93,15 @@ class BookingLifecycleMaintenanceServiceTest {
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
         org.mockito.Mockito.doAnswer(invocation -> {
             Booking booking = invocation.getArgument(0);
-            LocalDateTime finalizedAt = invocation.getArgument(1);
-            booking.setFinalizedAt(finalizedAt);
+            Instant finalizedAtUtc = invocation.getArgument(1);
+            booking.setFinalizedAtUtc(finalizedAtUtc);
+            booking.setFinalizedAt(BookingTime.fromInstant(finalizedAtUtc));
             if (booking.getCompletedAt() == null) {
-                booking.setCompletedAt(finalizedAt);
+                booking.setCompletedAtUtc(finalizedAtUtc);
+                booking.setCompletedAt(BookingTime.fromInstant(finalizedAtUtc));
             }
             return null;
-        }).when(sessionFinalizationService).finalizeDeliveredSession(any(Booking.class), any(LocalDateTime.class));
+        }).when(sessionFinalizationService).finalizeDeliveredSession(any(Booking.class), any(Instant.class));
 
         UUID menteeId = UUID.randomUUID();
         UUID mentorId = UUID.randomUUID();
@@ -152,8 +152,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 .mentorCompletionReminder1hAt(null)
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
-                eq(BookingStatus.AWAITING_MENTOR_COMPLETION), any(LocalDateTime.class)))
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+                eq(BookingStatus.AWAITING_MENTOR_COMPLETION), any(Instant.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
@@ -178,8 +178,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 .autoCloseWarningSentAt(null)
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
-                eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(LocalDateTime.class)))
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+                eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(Instant.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
@@ -206,8 +206,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 .autoCloseWarningSentAt(now.minusHours(1))
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
-                eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(LocalDateTime.class)))
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+                eq(BookingStatus.AWAITING_MENTEE_CONFIRMATION), any(Instant.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
@@ -218,7 +218,7 @@ class BookingLifecycleMaintenanceServiceTest {
         assertEquals(BookingCompletionOutcome.AUTO_CLOSED, booking.getCompletionOutcome());
         assertNotNull(booking.getAutoClosedAt());
         assertNotNull(booking.getFinalizedAt());
-        verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), any(LocalDateTime.class));
+        verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), any(Instant.class));
         verify(settlementService).releaseForBooking(eq(booking));
     }
 
@@ -245,8 +245,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 .roles(Set.of(RoleCode.ADMIN))
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
-                eq(BookingStatus.UNDER_REVIEW), any(LocalDateTime.class)))
+        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
+                eq(BookingStatus.UNDER_REVIEW), any(Instant.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(userRepository.findUsersByRole(eq(RoleCode.ADMIN), any(Pageable.class)))

@@ -12,12 +12,15 @@ import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutPrevie
 import com.fptu.exe.skillswap.modules.payment.dto.response.ServicePricingPreviewResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import java.time.Instant;
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +44,14 @@ public class BookingPricingPreviewService {
     private final CreditLedgerService creditLedgerService;
     private final PaymentProperties paymentProperties;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional(readOnly = true)
     public ServicePricingPreviewResponse previewDiscovery(UUID viewerUserId, UUID serviceId) {
@@ -72,7 +83,7 @@ public class BookingPricingPreviewService {
         int campaignDiscount = Math.max(0, Math.min(beforeCampaign, campaign.appliedScoin()));
         return new ServicePricingPreviewResponse(
                 PRICING_VERSION,
-                DateTimeUtil.now(),
+                BookingTime.toOffsetDateTime(timeProvider.instant()),
                 service.getId(),
                 beforeCampaign,
                 beforeCampaign,
@@ -89,7 +100,7 @@ public class BookingPricingPreviewService {
             UUID viewerUserId,
             Booking booking,
             String couponCode,
-            LocalDateTime paymentDeadlineAt
+            OffsetDateTime paymentDeadlineAt
     ) {
         if (booking == null || booking.getService() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không có service hợp lệ để tính giá");

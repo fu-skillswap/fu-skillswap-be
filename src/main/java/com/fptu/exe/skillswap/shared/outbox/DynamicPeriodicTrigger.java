@@ -4,6 +4,7 @@ import org.springframework.scheduling.Trigger;
 import org.springframework.scheduling.TriggerContext;
 
 import java.time.Instant;
+import java.time.Clock;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DynamicPeriodicTrigger implements Trigger {
@@ -12,11 +13,17 @@ public class DynamicPeriodicTrigger implements Trigger {
 
     private final long baseDelayMs;
     private final long maxDelayMs;
+    private final Clock clock;
     private final AtomicInteger backoffStep = new AtomicInteger(0);
 
     public DynamicPeriodicTrigger(long baseDelayMs, long maxDelayMs) {
+        this(baseDelayMs, maxDelayMs, Clock.systemUTC());
+    }
+
+    public DynamicPeriodicTrigger(long baseDelayMs, long maxDelayMs, Clock clock) {
         this.baseDelayMs = Math.max(100L, baseDelayMs);
         this.maxDelayMs = Math.max(this.baseDelayMs, maxDelayMs);
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
     public void recordPollResult(boolean hadWork) {
@@ -34,7 +41,7 @@ public class DynamicPeriodicTrigger implements Trigger {
     @Override
     public Instant nextExecution(TriggerContext triggerContext) {
         Instant lastCompletion = triggerContext.lastCompletion();
-        Instant reference = lastCompletion != null ? lastCompletion : Instant.now();
+        Instant reference = lastCompletion != null ? lastCompletion : clock.instant();
         return reference.plusMillis(currentDelayMs());
     }
 }

@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentProvider;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Builder
@@ -29,6 +29,7 @@ import java.util.UUID;
         String providerStatus,
         String checkoutUrl,
         String paymentLink,
-        LocalDateTime expiresAt
+        @Schema(description = "Thời điểm hết hạn thanh toán kèm offset +07:00", example = "2026-08-24T20:00:00+07:00")
+        OffsetDateTime expiresAt
 ) {
 }

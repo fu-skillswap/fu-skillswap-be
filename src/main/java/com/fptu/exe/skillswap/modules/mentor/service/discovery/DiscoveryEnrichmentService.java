@@ -67,7 +67,7 @@ public class DiscoveryEnrichmentService {
 
     private Set<UUID> loadMentorsWithAvailability(Collection<UUID> mentorUserIds, LocalDateTime now) {
         return new java.util.HashSet<>(Optional.ofNullable(
-                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, now)
+                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(now))
         ).orElse(List.of()));
     }
 

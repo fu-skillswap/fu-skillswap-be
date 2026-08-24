@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.shared.outbox;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.time.Clock;
 
 @Component
 @RequiredArgsConstructor
@@ -18,6 +19,14 @@ public class DomainEventOutboxTxHelper {
 
     private final DomainEventOutboxPollingRepository pollingRepository;
     private final DomainEventOutboxRepository domainEventOutboxRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public List<DomainEventOutbox> reserveNextBatch(int limit) {
@@ -26,7 +35,7 @@ public class DomainEventOutboxTxHelper {
             return List.of();
         }
 
-        LocalDateTime reserveUntil = DateTimeUtil.now().plusMinutes(5);
+        LocalDateTime reserveUntil = timeProvider.nowBusiness().plusMinutes(5);
         int reservedCount = pollingRepository.reserveBatch(pendingIds, reserveUntil);
         
         if (reservedCount == 0) {
@@ -40,7 +49,7 @@ public class DomainEventOutboxTxHelper {
     public void markAsPublished(UUID outboxId) {
         domainEventOutboxRepository.findById(outboxId).ifPresent(outbox -> {
             outbox.setStatus(DomainEventOutboxStatus.PUBLISHED);
-            outbox.setPublishedAt(DateTimeUtil.now());
+            outbox.setPublishedAt(timeProvider.nowBusiness());
             outbox.setLastError(null);
             domainEventOutboxRepository.save(outbox);
         });
@@ -65,7 +74,7 @@ public class DomainEventOutboxTxHelper {
     private LocalDateTime nextRetryAt(int attemptCount) {
         long[] backoffSeconds = {5L, 15L, 30L, 60L, 300L, 900L};
         long seconds = backoffSeconds[Math.min(Math.max(attemptCount - 1, 0), backoffSeconds.length - 1)];
-        return DateTimeUtil.now().plusSeconds(seconds);
+        return timeProvider.nowBusiness().plusSeconds(seconds);
     }
 
     private String trimError(String raw) {

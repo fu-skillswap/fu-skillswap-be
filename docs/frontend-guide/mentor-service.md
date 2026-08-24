@@ -286,12 +286,13 @@ interface ServiceSlotCandidateItemResponse {
   blockedBySameService: boolean;      // true nếu booking chốt slot thuộc cùng service
   blockedByDifferentService: boolean; // true nếu booking chốt slot thuộc service khác
   bookingConflictNote: string | null; // Tooltip giải thích chi tiết cho UI
-  blockedByGoogleCalendar?: boolean;      // true nếu trùng lịch bận trên Google Calendar của mentor
-  calendarAvailabilityUnknown?: boolean;  // Google tạm không kiểm tra được; vẫn cho chọn, mentor accept sẽ kiểm tra lại
 }
 ```
 
 ### Các Mã `reasonIfBlocked` & Hướng Dẫn Hiển Thị UI:
+
+> [!NOTE]
+> Candidate chỉ được tính từ lịch, booking và quota trên SkillSwap. Google Calendar là tiện ích đồng bộ sau khi booking được xác nhận; không khóa segment và không quyết định mentor có thể accept hay không.
 
 | `reasonIfBlocked` | Ý nghĩa | Trạng thái hiển thị trên FE |
 |---|---|---|
@@ -300,7 +301,6 @@ interface ServiceSlotCandidateItemResponse {
 | `"Yêu cầu đặt trước tối thiểu"` | Vi phạm Lead Time của mentor (vd: đặt trước < 2 giờ) | Render ô xám (disabled), tooltip: `bookingConflictNote` (vd: *"Khung giờ này yêu cầu đặt trước tối thiểu 2 giờ"*) |
 | `"Vượt quá thời hạn mở lịch cho phép"` | Vi phạm Horizon của mentor (vd: đặt trước > 30 ngày) | Render ô xám (disabled), tooltip: `bookingConflictNote` |
 | `"Đã có booking được mentor chấp nhận trùng với khoảng thời gian này"` | Đã có mentee khác được chấp nhận | Render ô đỏ/xám (disabled), tooltip: `bookingConflictNote` |
-| `"Trùng lịch bận trên Google Calendar của mentor"` | Mentor có lịch bận cá nhân trên Google Calendar (FreeBusy Overlay) | Render ô xám (disabled) có icon Google Calendar, tooltip: *"Trùng lịch bận trên Google Calendar của mentor"* |
 | `"Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận"` | Hết hàng đợi PENDING (3/3) | Render ô vàng/xám (disabled), tooltip: *"Đã đủ 3 yêu cầu chờ xác nhận"* |
 
 ---
@@ -314,5 +314,4 @@ interface ServiceSlotCandidateItemResponse {
 | `403 Forbidden` | API này chỉ dành cho tài khoản có Role `MENTOR`. Ẩn các thao tác nếu user chưa được duyệt. |
 | `404 Not Found` | Dịch vụ, slot rảnh hoặc template không còn tồn tại hoặc không thuộc quyền sở hữu của mentor hiện tại. |
 | `409 Conflict` | Xung đột phiên bản (Optimistic Locking) hoặc slot bị khóa bởi booking đang xử lý. Tải lại dữ liệu và dùng version mới nhất. |
-| `409 CAL_4404 (GOOGLE_CALENDAR_BUSY_CONFLICT)` | Khung giờ bị trùng lịch bận phát sinh đột xuất trên Google Calendar của mentor. Hiển thị thông báo yêu cầu mentee chọn khung giờ khác. |
 | `429 Too Many Requests` | Đọc `retryAfterSeconds`, khóa nút thao tác và hiển thị đếm ngược thời gian chờ. |

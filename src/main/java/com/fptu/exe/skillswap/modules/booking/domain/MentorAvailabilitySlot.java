@@ -1,12 +1,13 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -15,10 +16,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "mentor_availability_slots", indexes = {
     @Index(name = "idx_availability_mentor_id", columnList = "mentor_user_id"),
-    @Index(name = "idx_availability_start_time", columnList = "start_time"),
-    @Index(name = "idx_availability_end_time", columnList = "end_time"),
     @Index(name = "idx_availability_booked", columnList = "is_booked"),
-    @Index(name = "idx_availability_active", columnList = "is_active")
+    @Index(name = "idx_availability_active", columnList = "is_active"),
+    @Index(name = "idx_availability_slots_start_utc", columnList = "start_time_utc"),
+    @Index(name = "idx_availability_slots_end_utc", columnList = "end_time_utc"),
+    @Index(name = "idx_availability_slots_mentor_start_utc", columnList = "mentor_user_id, is_active, is_booked, start_time_utc, end_time_utc")
 })
 @Getter
 @Setter
@@ -46,9 +48,17 @@ public class MentorAvailabilitySlot {
     @Column(name = "template_occurrence_date")
     private java.time.LocalDate templateOccurrenceDate;
 
+    @Column(name = "start_time_utc", nullable = false)
+    private Instant startTimeUtc;
+
+    @Deprecated
     @Column(name = "start_time", nullable = false)
     private LocalDateTime startTime;
 
+    @Column(name = "end_time_utc", nullable = false)
+    private Instant endTimeUtc;
+
+    @Deprecated
     @Column(name = "end_time", nullable = false)
     private LocalDateTime endTime;
 
@@ -79,24 +89,39 @@ public class MentorAvailabilitySlot {
     @Builder.Default
     private Set<AvailabilitySlotService> slotServices = new LinkedHashSet<>();
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
+
+    @Deprecated
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
+
+    @Deprecated
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        syncTimestampPairs();
+        Instant nowUtc = DateTimeUtil.instantNow();
+        if (createdAtUtc == null) createdAtUtc = nowUtc;
+        if (createdAt == null) createdAt = BookingTime.fromInstant(createdAtUtc);
+        if (updatedAtUtc == null) updatedAtUtc = nowUtc;
+        if (updatedAt == null) updatedAt = BookingTime.fromInstant(updatedAtUtc);
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        syncTimestampPairs();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+    }
+
+    private void syncTimestampPairs() {
+        if (startTimeUtc == null) startTimeUtc = BookingTime.toInstant(startTime); else if (startTime == null) startTime = BookingTime.fromInstant(startTimeUtc);
+        if (endTimeUtc == null) endTimeUtc = BookingTime.toInstant(endTime); else if (endTime == null) endTime = BookingTime.fromInstant(endTimeUtc);
     }
 }
-
-
-
-

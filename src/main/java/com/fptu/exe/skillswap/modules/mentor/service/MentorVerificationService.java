@@ -130,7 +130,7 @@ public class MentorVerificationService {
         boolean hasActiveService = mentorServiceRepository.existsByMentorProfileUserIdAndIsActiveTrueAndDeliveryMode(
                 userId, MentorServiceDeliveryMode.ONE_TO_ONE);
         LocalDateTime now = DateTimeUtil.now();
-        boolean hasFutureSlot = mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(List.of(userId), now)
+        boolean hasFutureSlot = mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(List.of(userId), DateTimeUtil.instantNow())
                 .contains(userId);
         boolean offerReady = approved && hasFutureSlot && bookingEligibilityPolicy
                 .isPublicBookingOfferAvailable(profile, hasActiveService, now);

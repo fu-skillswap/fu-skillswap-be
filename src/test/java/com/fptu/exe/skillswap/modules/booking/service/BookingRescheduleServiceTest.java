@@ -137,8 +137,8 @@ class BookingRescheduleServiceTest {
                 booking.getId(),
                 new CreateBookingRescheduleRequest(
                         proposedSlot.getId(),
-                        proposedSlot.getStartTime(),
-                        proposedSlot.getEndTime(),
+                        BookingTime.toOffsetDateTime(proposedSlot.getStartTimeUtc()),
+                        BookingTime.toOffsetDateTime(proposedSlot.getEndTimeUtc()),
                         "Muốn dời lịch"
                 )
         ));

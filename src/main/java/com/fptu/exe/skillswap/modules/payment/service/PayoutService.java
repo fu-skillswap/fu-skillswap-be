@@ -10,8 +10,9 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +34,15 @@ public class PayoutService {
     private final PayoutRequestRepository payoutRequestRepository;
     private final MentorPayoutProfileService payoutProfileService;
 
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
+
     @Transactional
     public PayoutRequestResponse createRequest(UUID mentorUserId, PayoutRequestCreateRequest request) {
         if (mentorUserId == null) {
@@ -39,6 +52,7 @@ public class PayoutService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "amountScoin phải lớn hơn 0");
         }
         MentorPayoutProfile payoutProfile = payoutProfileService.getActiveProfileForPayout(mentorUserId, request.payoutProfileId());
+        Instant nowUtc = timeProvider.instant();
         PayoutRequest payoutRequest = payoutRequestRepository.save(PayoutRequest.builder()
                 .mentorUserId(mentorUserId)
                 .settlementAccountId(settlementService.ensureMentorAccount(mentorUserId).getId())
@@ -48,7 +62,8 @@ public class PayoutService {
                 .bankAccountNameSnapshot(payoutProfile.getAccountHolderName())
                 .bankNameSnapshot(payoutProfile.getBankName())
                 .bankAccountNumberMaskedSnapshot(MentorPayoutProfileService.maskAccountNumber(payoutProfile.getAccountNumber()))
-                .requestedAt(DateTimeUtil.now())
+                .requestedAtUtc(nowUtc)
+                .requestedAt(timeProvider.nowBusiness())
                 .build());
         // A REQUESTED payout already reserves funds; otherwise concurrent requests can over-commit the ledger.
         settlementService.holdPayout(mentorUserId, payoutRequest.getId(), payoutRequest.getAmountScoin(), request.note());
@@ -66,8 +81,11 @@ public class PayoutService {
         payoutRequest.setStatus(PayoutRequestStatus.APPROVED);
         payoutRequest.setAdminUserId(adminUserId);
         payoutRequest.setAdminNote(note);
-        payoutRequest.setReviewedAt(DateTimeUtil.now());
-        payoutRequest.setApprovedAt(DateTimeUtil.now());
+        Instant nowUtc = timeProvider.instant();
+        payoutRequest.setReviewedAtUtc(nowUtc);
+        payoutRequest.setReviewedAt(timeProvider.nowBusiness());
+        payoutRequest.setApprovedAtUtc(nowUtc);
+        payoutRequest.setApprovedAt(timeProvider.nowBusiness());
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
 
@@ -81,8 +99,11 @@ public class PayoutService {
         payoutRequest.setStatus(PayoutRequestStatus.REJECTED);
         payoutRequest.setAdminUserId(adminUserId);
         payoutRequest.setAdminNote(note);
-        payoutRequest.setReviewedAt(DateTimeUtil.now());
-        payoutRequest.setRejectedAt(DateTimeUtil.now());
+        Instant nowUtc = timeProvider.instant();
+        payoutRequest.setReviewedAtUtc(nowUtc);
+        payoutRequest.setReviewedAt(timeProvider.nowBusiness());
+        payoutRequest.setRejectedAtUtc(nowUtc);
+        payoutRequest.setRejectedAt(timeProvider.nowBusiness());
         settlementService.voidPayoutHold(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Rollback payout request " + payoutRequest.getId());
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
@@ -96,7 +117,8 @@ public class PayoutService {
         payoutRequest.setStatus(PayoutRequestStatus.PAID);
         payoutRequest.setAdminUserId(adminUserId);
         payoutRequest.setAdminNote(note);
-        payoutRequest.setPaidAt(DateTimeUtil.now());
+        payoutRequest.setPaidAtUtc(timeProvider.instant());
+        payoutRequest.setPaidAt(timeProvider.nowBusiness());
         settlementService.finalizePayout(payoutRequest.getMentorUserId(), payoutRequest.getId(), "Finalize payout request " + payoutRequest.getId());
         return toResponse(payoutRequestRepository.save(payoutRequest));
     }
@@ -173,11 +195,17 @@ public class PayoutService {
                 .bankAccountNumberMaskedSnapshot(payoutRequest.getBankAccountNumberMaskedSnapshot())
                 .adminUserId(payoutRequest.getAdminUserId())
                 .adminNote(payoutRequest.getAdminNote())
-                .requestedAt(payoutRequest.getRequestedAt())
-                .reviewedAt(payoutRequest.getReviewedAt())
-                .approvedAt(payoutRequest.getApprovedAt())
-                .paidAt(payoutRequest.getPaidAt())
-                .rejectedAt(payoutRequest.getRejectedAt())
+                .requestedAt(toOffset(payoutRequest.getRequestedAtUtc(), payoutRequest.getRequestedAt()))
+                .reviewedAt(toOffset(payoutRequest.getReviewedAtUtc(), payoutRequest.getReviewedAt()))
+                .approvedAt(toOffset(payoutRequest.getApprovedAtUtc(), payoutRequest.getApprovedAt()))
+                .paidAt(toOffset(payoutRequest.getPaidAtUtc(), payoutRequest.getPaidAt()))
+                .rejectedAt(toOffset(payoutRequest.getRejectedAtUtc(), payoutRequest.getRejectedAt()))
                 .build();
+    }
+
+    private static OffsetDateTime toOffset(Instant utc, java.time.LocalDateTime legacy) {
+        if (utc != null) return com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(utc);
+        if (legacy != null) return com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(legacy);
+        return null;
     }
 }

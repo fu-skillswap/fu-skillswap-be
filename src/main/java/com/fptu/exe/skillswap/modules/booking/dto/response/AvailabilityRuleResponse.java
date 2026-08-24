@@ -7,7 +7,7 @@ import lombok.Builder;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
@@ -38,9 +38,9 @@ public record AvailabilityRuleResponse(
         boolean active,
         @Schema(description = "Ghi chú nội bộ", nullable = true)
         String note,
-        @Schema(description = "Thời điểm tạo")
-        LocalDateTime createdAt,
-        @Schema(description = "Thời điểm cập nhật gần nhất")
-        LocalDateTime updatedAt
+        @Schema(description = "Thời điểm tạo kèm offset +07:00", example = "2026-08-24T19:00:00+07:00")
+        OffsetDateTime createdAt,
+        @Schema(description = "Thời điểm cập nhật gần nhất kèm offset +07:00")
+        OffsetDateTime updatedAt
 ) {
 }

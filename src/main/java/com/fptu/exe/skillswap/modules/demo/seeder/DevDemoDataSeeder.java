@@ -291,10 +291,10 @@ public class DevDemoDataSeeder implements CommandLineRunner {
         for (SlotSeed slotSeed : slots) {
             LocalDateTime start = DateTimeUtil.now().toLocalDate().plusDays(slotSeed.dayOffset()).atTime(slotSeed.hour(), slotSeed.minute());
             LocalDateTime end = start.plusMinutes(slotSeed.durationMinutes());
-            boolean exists = mentorAvailabilitySlotRepository.existsByMentorProfileUserIdAndStartTimeAndEndTimeAndIsActiveTrue(
+            boolean exists = mentorAvailabilitySlotRepository.existsByMentorProfileUserIdAndStartTimeUtcAndEndTimeUtcAndIsActiveTrue(
                     mentorUserId,
-                    start,
-                    end
+                    com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(start),
+                    com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(end)
             );
             if (exists) {
                 continue;

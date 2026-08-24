@@ -4,10 +4,12 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
@@ -15,16 +17,19 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,9 +70,18 @@ public class BookingQueryService {
 
     private final BookingRepository bookingRepository;
     private final SessionService sessionService;
+    private final SessionAttendanceRepository sessionAttendanceRepository;
     private final ConversationService conversationService;
     private final PaymentOrderRepository paymentOrderRepository;
     private final BookingResponseMapper bookingResponseMapper;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional(readOnly = true)
     public PageResponse<BookingResponse> getMyBookings(UUID currentUserId, BookingListRequest request) {
@@ -81,31 +95,31 @@ public class BookingQueryService {
                 ? bookingPriorityPageable(safeRequest)
                 : bookingPageable(safeRequest);
 
-        LocalDateTime startTimeStart = DateTimeUtil.now().minusDays(7);
-        LocalDateTime startTimeEnd = DateTimeUtil.now().plusDays(90);
+        Instant startTimeStartUtc = timeProvider.instant().minus(java.time.Duration.ofDays(7));
+        Instant startTimeEndUtc = timeProvider.instant().plus(java.time.Duration.ofDays(90));
 
         Page<Booking> page = switch (role) {
             case MENTEE -> safeRequest.getStatus() == null
-                    ? bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+                    ? bookingRepository.findMyMenteeBookingsOrderedByDashboardPriorityUtc(
                             currentUserId,
                             MENTEE_PRIMARY_ACTION_STATUSES,
                             MENTEE_SECONDARY_ACTION_STATUSES,
                             MENTEE_UPCOMING_STATUSES,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
-                            startTimeStart,
-                            startTimeEnd,
+                            startTimeStartUtc,
+                            startTimeEndUtc,
                             pageable
                     )
                     : bookingRepository.findByMenteeIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
             case MENTOR -> safeRequest.getStatus() == null
-                    ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
+                    ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriorityUtc(
                             currentUserId,
                             MENTOR_PRIMARY_ACTION_STATUSES,
                             MENTOR_SECONDARY_ACTION_STATUSES,
                             MENTOR_UPCOMING_STATUSES,
                             BOOKING_LIST_CANCELLED_PRIORITY_STATUSES,
-                            startTimeStart,
-                            startTimeEnd,
+                            startTimeStartUtc,
+                            startTimeEndUtc,
                             pageable
                     )
                     : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
@@ -118,6 +132,7 @@ public class BookingQueryService {
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
                 : Collections.emptyMap();
+        Map<UUID, List<SessionAttendance>> attendancesBySessionId = findAttendancesBySessionId(sessionsByBookingId);
         Map<UUID, PaymentOrder> paymentOrdersByBookingId =
                 bookingIds.isEmpty() || paymentOrderRepository == null
                         ? Collections.emptyMap()
@@ -131,7 +146,8 @@ public class BookingQueryService {
 
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream()
-                        .map(b -> bookingResponseMapper.toBookingResponse(b, bookingToConvMap, sessionsByBookingId, paymentOrdersByBookingId))
+                        .map(b -> bookingResponseMapper.toBookingResponse(
+                                b, bookingToConvMap, sessionsByBookingId, paymentOrdersByBookingId, attendancesBySessionId))
                         .toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -173,9 +189,11 @@ public class BookingQueryService {
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
                 : Collections.emptyMap();
+        Map<UUID, List<SessionAttendance>> attendancesBySessionId = findAttendancesBySessionId(sessionsByBookingId);
 
         return PageResponse.<BookingResponse>builder()
-                .content(page.getContent().stream().map(b -> bookingResponseMapper.toBookingResponse(b, bookingToConvMap, sessionsByBookingId)).toList())
+                .content(page.getContent().stream().map(b -> bookingResponseMapper.toBookingResponse(
+                        b, bookingToConvMap, sessionsByBookingId, null, attendancesBySessionId)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -200,6 +218,21 @@ public class BookingQueryService {
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem booking này");
         }
+    }
+
+    private Map<UUID, List<SessionAttendance>> findAttendancesBySessionId(Map<UUID, Session> sessionsByBookingId) {
+        if (sessionAttendanceRepository == null || sessionsByBookingId == null || sessionsByBookingId.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<UUID> sessionIds = sessionsByBookingId.values().stream()
+                .map(Session::getId)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        if (sessionIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return sessionAttendanceRepository.findBySessionIdIn(sessionIds).stream()
+                .collect(Collectors.groupingBy(attendance -> attendance.getSession().getId()));
     }
 
     private Pageable bookingPriorityPageable(BookingListRequest request) {

@@ -9,11 +9,14 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.Clock;
 
 /**
  * Keeps the delivery record ({@link Session}) and mentor completion counters aligned with a
@@ -27,14 +30,26 @@ public class SessionFinalizationService {
     private final SessionRepository sessionRepository;
     private final SessionService sessionService;
     private final MentorProfileRepository mentorProfileRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     /** Records the mentor's declaration without finalizing the booking or incrementing counters. */
     @Transactional
-    public void recordMentorReportedCompletion(Booking booking, LocalDateTime reportedAt) {
+    public void recordMentorReportedCompletion(Booking booking, Instant reportedAtUtc) {
         Session session = findOrCreateForUpdate(booking);
         markCompleted(session, booking);
-        copyActualTimesToBookingIfMissing(booking);
-        touchMentorActivity(booking, reportedAt);
+        touchMentorActivity(booking, reportedAtUtc);
+    }
+
+    @Transactional
+    public void recordMentorReportedCompletion(Booking booking, LocalDateTime reportedAt) {
+        recordMentorReportedCompletion(booking, reportedAt != null ? BookingTime.toInstant(reportedAt) : timeProvider.instant());
     }
 
     /**
@@ -42,24 +57,30 @@ public class SessionFinalizationService {
      * by product policy when no issue was raised before the review deadline.
      */
     @Transactional
-    public void finalizeDeliveredSession(Booking booking, LocalDateTime finalizedAt) {
+    public void finalizeDeliveredSession(Booking booking, Instant finalizedAtUtc) {
         if (booking == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không hợp lệ");
         }
 
         Session session = findOrCreateForUpdate(booking);
         markCompleted(session, booking);
-        copyActualTimesToBookingIfMissing(booking);
 
         // finalizedAt is the durable idempotency boundary for mentor counters. A repeated API
         // request or scheduler run may repair the Session but must never increment again.
-        if (booking.getFinalizedAt() == null) {
-            incrementMentorCompletionCounters(booking, finalizedAt);
-            booking.setFinalizedAt(finalizedAt);
+        if (booking.getFinalizedAtUtc() == null && booking.getFinalizedAt() == null) {
+            incrementMentorCompletionCounters(booking, finalizedAtUtc);
+            booking.setFinalizedAtUtc(finalizedAtUtc);
+            booking.setFinalizedAt(BookingTime.fromInstant(finalizedAtUtc));
         }
-        if (booking.getCompletedAt() == null) {
-            booking.setCompletedAt(finalizedAt);
+        if (booking.getCompletedAtUtc() == null && booking.getCompletedAt() == null) {
+            booking.setCompletedAtUtc(finalizedAtUtc);
+            booking.setCompletedAt(BookingTime.fromInstant(finalizedAtUtc));
         }
+    }
+
+    @Transactional
+    public void finalizeDeliveredSession(Booking booking, LocalDateTime finalizedAt) {
+        finalizeDeliveredSession(booking, finalizedAt != null ? BookingTime.toInstant(finalizedAt) : timeProvider.instant());
     }
 
     /** A confirmed no-show means the session did not take place and must not count for the mentor. */
@@ -72,12 +93,15 @@ public class SessionFinalizationService {
                 .ifPresent(session -> {
                     session.setStatus(SessionStatus.CANCELLED);
                     session.setActualStartTime(null);
+                    session.setActualStartTimeUtc(null);
                     session.setActualEndTime(null);
+                    session.setActualEndTimeUtc(null);
                     sessionRepository.save(session);
                 });
         booking.setActualStartTime(null);
         booking.setActualEndTime(null);
         booking.setCompletedAt(null);
+        booking.setCompletedAtUtc(null);
     }
 
     private Session findOrCreateForUpdate(Booking booking) {
@@ -99,25 +123,10 @@ public class SessionFinalizationService {
                     "Session đã bị hủy nên không thể xác nhận hoàn tất");
         }
         session.setStatus(SessionStatus.COMPLETED);
-        if (session.getActualStartTime() == null) {
-            session.setActualStartTime(booking.getSelectedStartTime());
-        }
-        if (session.getActualEndTime() == null) {
-            session.setActualEndTime(booking.getSelectedEndTime());
-        }
         sessionRepository.save(session);
     }
 
-    private void copyActualTimesToBookingIfMissing(Booking booking) {
-        if (booking.getActualStartTime() == null) {
-            booking.setActualStartTime(booking.getSelectedStartTime());
-        }
-        if (booking.getActualEndTime() == null) {
-            booking.setActualEndTime(booking.getSelectedEndTime());
-        }
-    }
-
-    private void incrementMentorCompletionCounters(Booking booking, LocalDateTime finalizedAt) {
+    private void incrementMentorCompletionCounters(Booking booking, Instant finalizedAtUtc) {
         if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
             return;
         }
@@ -125,17 +134,17 @@ public class SessionFinalizationService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
         mentor.setTotalCompletedSessions(defaultInteger(mentor.getTotalCompletedSessions()) + 1);
         mentor.setTotalSessions(defaultInteger(mentor.getTotalSessions()) + 1);
-        mentor.setLastActiveAt(finalizedAt);
+        mentor.setLastActiveAt(BookingTime.fromInstant(finalizedAtUtc));
         mentorProfileRepository.save(mentor);
     }
 
-    private void touchMentorActivity(Booking booking, LocalDateTime activityAt) {
+    private void touchMentorActivity(Booking booking, Instant activityAtUtc) {
         if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
             return;
         }
         MentorProfile mentor = mentorProfileRepository.findByIdForUpdate(booking.getMentorProfile().getUserId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-        mentor.setLastActiveAt(activityAt);
+        mentor.setLastActiveAt(BookingTime.fromInstant(activityAtUtc));
         mentorProfileRepository.save(mentor);
     }
 

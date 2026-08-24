@@ -13,8 +13,7 @@ import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import org.junit.jupiter.api.AfterEach;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,7 +21,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -39,7 +37,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class BookingCompletionServiceTest {
 
-    private static final ZoneId APP_ZONE = ZoneId.of(DateTimeUtil.ZONE_HCM);
+    private static final ZoneId APP_ZONE = TimeProvider.BUSINESS_ZONE;
     private static final Instant FIXED_NOW = Instant.parse("2026-08-23T03:00:00Z");
 
     @Mock private BookingRepository bookingRepository;
@@ -50,6 +48,7 @@ class BookingCompletionServiceTest {
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private BookingResponseMapper bookingResponseMapper;
 
+    private TimeProvider timeProvider;
     private BookingCompletionService service;
     private UUID bookingId;
     private UUID menteeId;
@@ -57,7 +56,7 @@ class BookingCompletionServiceTest {
 
     @BeforeEach
     void setUp() {
-        DateTimeUtil.setClock(Clock.fixed(FIXED_NOW, APP_ZONE));
+        timeProvider = TimeProvider.fixed(FIXED_NOW, APP_ZONE);
         service = new BookingCompletionService(
                 bookingRepository,
                 sessionFinalizationService,
@@ -65,16 +64,12 @@ class BookingCompletionServiceTest {
                 bookingEventService,
                 eventPublisher,
                 internalTelemetryService,
-                bookingResponseMapper
+                bookingResponseMapper,
+                timeProvider
         );
         bookingId = UUID.randomUUID();
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
-    }
-
-    @AfterEach
-    void restoreClock() {
-        DateTimeUtil.setClock(Clock.system(APP_ZONE));
     }
 
     @Test
@@ -148,7 +143,7 @@ class BookingCompletionServiceTest {
         service.completeBookingByMentor(mentorId, bookingId, new CompleteBookingRequest("Đã hoàn tất"));
 
         verify(sessionFinalizationService).recordMentorReportedCompletion(
-                org.mockito.ArgumentMatchers.eq(booking), any(LocalDateTime.class));
+                org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
     }
 
     @Test
@@ -160,7 +155,7 @@ class BookingCompletionServiceTest {
         service.confirmBookingByParticipant(menteeId, bookingId, new ConfirmBookingRequest("Đã học xong"));
 
         verify(sessionFinalizationService).finalizeDeliveredSession(
-                org.mockito.ArgumentMatchers.eq(booking), any(LocalDateTime.class));
+                org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
         verify(settlementService).releaseForBooking(booking);
     }
 

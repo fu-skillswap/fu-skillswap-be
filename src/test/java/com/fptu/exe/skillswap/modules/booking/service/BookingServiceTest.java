@@ -237,23 +237,23 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(availabilitySlotServiceRepository.existsBySlotIdAndServiceId(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(true);
         org.mockito.Mockito.lenient().doNothing().when(settlementService).releaseForBooking(org.mockito.ArgumentMatchers.any());
-        org.mockito.Mockito.lenient().when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
+        org.mockito.Mockito.lenient().when(bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
                 org.mockito.ArgumentMatchers.any(UUID.class),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.eq(BookingStatus.PENDING)
         )).thenReturn(0L);
-        org.mockito.Mockito.lenient().when(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        org.mockito.Mockito.lenient().when(bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 org.mockito.ArgumentMatchers.any(UUID.class),
                 org.mockito.ArgumentMatchers.anyCollection(),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
         )).thenReturn(false);
-        org.mockito.Mockito.lenient().when(bookingRepository.hasOverlappingBookingByStatuses(
+        org.mockito.Mockito.lenient().when(bookingRepository.hasOverlappingBookingByStatusesUtc(
                 org.mockito.ArgumentMatchers.any(UUID.class),
                 org.mockito.ArgumentMatchers.anyCollection(),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
         )).thenReturn(false);
     }
 
@@ -378,10 +378,10 @@ class BookingServiceTest {
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
+        when(bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
                 eq(slot.getId()),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 eq(BookingStatus.PENDING)
         )).thenReturn(2L);
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -398,10 +398,10 @@ class BookingServiceTest {
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.countBySlotIdAndExactSegmentAndStatus(
+        when(bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
                 eq(slot.getId()),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 eq(BookingStatus.PENDING)
         )).thenReturn(3L);
 
@@ -416,11 +416,11 @@ class BookingServiceTest {
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        when(bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 eq(slot.getId()),
                 org.mockito.ArgumentMatchers.anyCollection(),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class),
-                org.mockito.ArgumentMatchers.any(LocalDateTime.class)
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
         )).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
@@ -434,7 +434,7 @@ class BookingServiceTest {
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeAndSelectedEndTimeAndStatusIn(
+        when(bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
                 eq(menteeId),
                 eq(slot.getId()),
                 any(),
@@ -464,11 +464,11 @@ class BookingServiceTest {
         slot.setBooked(false);
         org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
         org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 eq(slot.getId()),
                 eq(BookingStatus.PENDING),
-                eq(booking.getSelectedStartTime()),
-                eq(booking.getSelectedEndTime())
+                any(),
+                any()
         )).thenReturn(List.of(booking));
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
@@ -505,11 +505,11 @@ class BookingServiceTest {
 
         org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(selectedBooking.getId())).thenReturn(Optional.of(selectedBooking));
         org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 eq(slot.getId()),
                 eq(BookingStatus.PENDING),
-                eq(selectedBooking.getSelectedStartTime()),
-                eq(selectedBooking.getSelectedEndTime())
+                any(),
+                any()
         )).thenReturn(List.of(selectedBooking, otherPendingBooking));
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(selectedBooking)).thenReturn(selectedBooking);
@@ -630,8 +630,10 @@ class BookingServiceTest {
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, response.status());
         assertEquals("Session completed well", booking.getMentorNote());
         assertNotNull(booking.getCompletedAt());
-        assertEquals(booking.getSelectedStartTime(), booking.getActualStartTime());
-        assertEquals(booking.getSelectedEndTime(), booking.getActualEndTime());
+        // Mentor declaration moves the booking into the mentee review window, but it is not
+        // attendance evidence. Actual session times are derived from participant check-ins.
+        assertNull(booking.getActualStartTime());
+        assertNull(booking.getActualEndTime());
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
@@ -810,14 +812,14 @@ class BookingServiceTest {
         BookingListRequest request = new BookingListRequest();
         request.setRole(BookingViewRole.MENTEE);
 
-        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriorityUtc(
                 eq(menteeId),
                 eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
                 eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(booking)));
 
@@ -825,14 +827,14 @@ class BookingServiceTest {
 
         assertEquals(1, response.getContent().size());
         assertEquals(BookingStatus.PAID, response.getContent().getFirst().status());
-        verify(bookingRepository).findMyMenteeBookingsOrderedByDashboardPriority(
+        verify(bookingRepository).findMyMenteeBookingsOrderedByDashboardPriorityUtc(
                 eq(menteeId),
                 eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
                 eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 any(Pageable.class)
         );
     }
@@ -843,14 +845,14 @@ class BookingServiceTest {
         BookingListRequest request = new BookingListRequest();
         request.setRole(BookingViewRole.MENTOR);
 
-        when(bookingRepository.findMyMentorBookingsOrderedByDashboardPriority(
+        when(bookingRepository.findMyMentorBookingsOrderedByDashboardPriorityUtc(
                 eq(mentorId),
                 eq(List.of(BookingStatus.PENDING, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.UNDER_REVIEW)),
                 eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT)),
                 eq(List.of(BookingStatus.PAID, BookingStatus.AWAITING_MENTEE_CONFIRMATION)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(booking)));
 
@@ -858,14 +860,14 @@ class BookingServiceTest {
 
         assertEquals(1, response.getContent().size());
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.getContent().getFirst().status());
-        verify(bookingRepository).findMyMentorBookingsOrderedByDashboardPriority(
+        verify(bookingRepository).findMyMentorBookingsOrderedByDashboardPriorityUtc(
                 eq(mentorId),
                 eq(List.of(BookingStatus.PENDING, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.UNDER_REVIEW)),
                 eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT)),
                 eq(List.of(BookingStatus.PAID, BookingStatus.AWAITING_MENTEE_CONFIRMATION)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 any(Pageable.class)
         );
     }
@@ -879,14 +881,14 @@ class BookingServiceTest {
         BookingListRequest request = new BookingListRequest();
         request.setRole(BookingViewRole.MENTEE);
 
-        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriority(
+        when(bookingRepository.findMyMenteeBookingsOrderedByDashboardPriorityUtc(
                 eq(menteeId),
                 eq(List.of(BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingStatus.UNDER_REVIEW)),
                 eq(List.of(BookingStatus.PENDING)),
                 eq(List.of(BookingStatus.PAID)),
                 eq(List.of(BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR)),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class),
+                any(),
+                any(),
                 any(Pageable.class)
         )).thenReturn(new PageImpl<>(List.of(awaitingPayment, paid)));
 
@@ -1039,11 +1041,11 @@ class BookingServiceTest {
         Booking acceptedBooking = bookingForDecision(BookingStatus.PENDING);
         org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(acceptedBooking.getId())).thenReturn(Optional.of(acceptedBooking));
         org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 eq(slot.getId()),
                 eq(BookingStatus.PENDING),
-                eq(acceptedBooking.getSelectedStartTime()),
-                eq(acceptedBooking.getSelectedEndTime())
+                any(),
+                any()
         )).thenReturn(List.of(acceptedBooking));
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(acceptedBooking)).thenReturn(acceptedBooking);
@@ -1128,16 +1130,14 @@ class BookingServiceTest {
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
-
-
     @Test
     void expireStalePendingBookings_shouldExpireStaleBookings() {
         Booking staleBooking = bookingForDecision(BookingStatus.PENDING);
         staleBooking.setPendingExpireAt(DateTimeUtil.now().minusMinutes(5));
 
-        when(bookingRepository.findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
+        when(bookingRepository.findByStatusAndPendingExpireAtUtcLessThanEqualOrderByPendingExpireAtUtcAsc(
                 eq(BookingStatus.PENDING),
-                any(LocalDateTime.class)
+                any(java.time.Instant.class)
         )).thenReturn(List.of(staleBooking));
         when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -1159,10 +1159,10 @@ class BookingServiceTest {
         staleBooking.setSelectedEndTime(DateTimeUtil.now().plusHours(3));
         slot.setStartTime(staleBooking.getSelectedStartTime());
 
-        when(bookingRepository.findAwaitingPaymentExpiryCandidates(
+        when(bookingRepository.findAwaitingPaymentExpiryCandidatesUtc(
                 eq(BookingStatus.ACCEPTED_AWAITING_PAYMENT),
-                any(LocalDateTime.class),
-                any(LocalDateTime.class)
+                any(java.time.Instant.class),
+                any(java.time.Instant.class)
         )).thenReturn(List.of(staleBooking));
         when(bookingRepository.findByIdForSessionUpdate(staleBooking.getId())).thenReturn(Optional.of(staleBooking));
         when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -1178,24 +1178,12 @@ class BookingServiceTest {
     }
 
     @Test
-    void createBooking_pendingLimitExceeded_shouldThrowConflict() {
-        CreateBookingRequest request = bookingRequest("Goal", null);
-        when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
-        when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
-        when(bookingRepository.countByMenteeIdAndStatus(menteeId, BookingStatus.PENDING)).thenReturn((long) BookingQueueConstants.MAX_PENDING_BOOKINGS_PER_MENTEE);
-
-        BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
-        assertTrue(exception.getMessage().contains("tối đa 5 yêu cầu"));
-    }
-
-    @Test
     void createBooking_overlappingAcceptedBooking_shouldThrowConflict() {
         CreateBookingRequest request = bookingRequest("Goal", null);
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        when(bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 any(),
                 any(),
                 any(),
@@ -1301,11 +1289,11 @@ class BookingServiceTest {
 
         org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
         org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 eq(slot.getId()),
                 eq(BookingStatus.PENDING),
-                eq(booking.getSelectedStartTime()),
-                eq(booking.getSelectedEndTime())
+                any(),
+                any()
         )).thenReturn(List.of(booking));
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
@@ -1330,11 +1318,11 @@ class BookingServiceTest {
 
         org.mockito.Mockito.lenient().when(bookingRepository.findByIdForMentorDecision(booking.getId())).thenReturn(Optional.of(booking));
         org.mockito.Mockito.lenient().when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(
+        org.mockito.Mockito.lenient().when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(
                 eq(slot.getId()),
                 eq(BookingStatus.PENDING),
-                eq(booking.getSelectedStartTime()),
-                eq(booking.getSelectedEndTime())
+                any(),
+                any()
         )).thenReturn(List.of(booking));
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);

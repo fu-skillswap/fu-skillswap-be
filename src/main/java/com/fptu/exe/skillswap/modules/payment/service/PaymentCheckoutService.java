@@ -25,7 +25,6 @@ import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +34,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -62,10 +67,18 @@ public class PaymentCheckoutService {
     private final InternalTelemetryService internalTelemetryService;
     private final TransactionTemplate transactionTemplate;
     private BookingPricingPreviewService bookingPricingPreviewService;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
     void setBookingPricingPreviewService(BookingPricingPreviewService bookingPricingPreviewService) {
         this.bookingPricingPreviewService = bookingPricingPreviewService;
+    }
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
     }
 
     @Transactional(readOnly = true)
@@ -236,6 +249,7 @@ public class PaymentCheckoutService {
             order.setProviderPaymentLinkId(createResult.providerPaymentLinkId());
             order.setProviderStatus(createResult.providerStatus());
             order.setPaymentLink(createResult.checkoutUrl());
+            order.setExpiresAtUtc(createResult.expiresAtUtc());
             order.setExpiresAt(createResult.expiresAt());
             paymentAttemptRepository.save(attempt);
             paymentOrderRepository.save(order);
@@ -289,16 +303,21 @@ public class PaymentCheckoutService {
         if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.getStatus() + ")");
         }
-        LocalDateTime deadline = paymentDeadline(booking);
-        if (deadline != null && !deadline.isAfter(DateTimeUtil.now())) {
+        Instant deadlineUtc = paymentDeadlineUtc(booking);
+        if (deadlineUtc != null && !deadlineUtc.isAfter(timeProvider.instant())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã quá hạn thanh toán");
         }
     }
 
-    private LocalDateTime paymentDeadline(Booking booking) {
-        LocalDateTime start = booking.getSelectedStartTime() == null && booking.getSlot() != null
-                ? booking.getSlot().getStartTime() : booking.getSelectedStartTime();
-        return BookingDeadlinePolicy.resolvePaymentDeadline(booking.getAcceptedAt(), start);
+    private Instant paymentDeadlineUtc(Booking booking) {
+        return BookingDeadlinePolicy.resolvePaymentDeadlineUtc(booking);
+    }
+
+    private OffsetDateTime paymentDeadline(Booking booking) {
+        Instant deadlineUtc = paymentDeadlineUtc(booking);
+        return deadlineUtc != null
+                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(deadlineUtc)
+                : null;
     }
 
     private int resolveBasePriceScoin(Booking booking) {
@@ -406,15 +425,16 @@ public class PaymentCheckoutService {
     private PaymentGatewayProvider.CreatePaymentLinkCommand buildCreatePaymentLinkCommand(Booking booking,
                                                                                 PaymentOrder order,
                                                                                 long providerOrderCode) {
+        long expiredAtEpoch = timeProvider.instant()
+                .plus(Duration.ofMinutes(paymentProperties.getPaymentLinkExpiryMinutes()))
+                .getEpochSecond();
         return new PaymentGatewayProvider.CreatePaymentLinkCommand(
                 providerOrderCode,
                 PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties),
                 buildProviderDescription(order),
                 paymentProperties.getPayos().getReturnUrl(),
                 paymentProperties.getPayos().getCancelUrl(),
-                DateTimeUtil.now().plusMinutes(paymentProperties.getPaymentLinkExpiryMinutes())
-                        .atZone(java.time.ZoneId.of(DateTimeUtil.ZONE_HCM))
-                        .toEpochSecond(),
+                expiredAtEpoch,
                 booking.getMentee() == null ? null : booking.getMentee().getFullName(),
                 booking.getMentee() == null ? null : booking.getMentee().getEmail(),
                 null,
@@ -450,7 +470,10 @@ public class PaymentCheckoutService {
     }
 
     private boolean isExpired(PaymentOrder order) {
-        return order.getExpiresAt() != null && order.getExpiresAt().isBefore(DateTimeUtil.now());
+        if (order.getExpiresAtUtc() != null) {
+            return order.getExpiresAtUtc().isBefore(timeProvider.instant());
+        }
+        return order.getExpiresAt() != null && order.getExpiresAt().isBefore(timeProvider.nowBusiness());
     }
 
     private long parseProviderOrderCode(String providerOrderCode) {

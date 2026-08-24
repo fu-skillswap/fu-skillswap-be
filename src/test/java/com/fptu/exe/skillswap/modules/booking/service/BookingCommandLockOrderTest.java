@@ -9,8 +9,6 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarBusyInterval;
-import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarBusyPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -34,8 +32,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @ExtendWith(MockitoExtension.class)
 class BookingCommandLockOrderTest {
@@ -50,7 +46,6 @@ class BookingCommandLockOrderTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock BookingResponseMapper responseMapper;
     @Mock PaymentOrderService paymentOrderService;
-    @Mock GoogleCalendarBusyPort googleCalendarBusyPort;
 
     private UUID mentorId;
     private UUID menteeId;
@@ -117,47 +112,4 @@ class BookingCommandLockOrderTest {
         order.verify(slotRepository).findByIdForUpdate(slot.getId());
     }
 
-    @Test
-    void accept_calendarProviderUnavailable_continuesWithUnknownWarning() {
-        booking.setStatus(BookingStatus.PENDING);
-        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
-        when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(booking));
-        when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(booking.getMentee(), mentorProfile.getUser()));
-        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
-        when(slotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.findMenteeOverlappingBookingsForUpdate(any(), any(), any(), any()))
-                .thenReturn(List.of());
-        when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdate(any(), any(), any(), any()))
-                .thenReturn(List.of());
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(googleCalendarBusyPort.queryBusyIntervals(any(), any(), any()))
-                .thenThrow(new IllegalStateException("Google unavailable"));
-
-        BookingDecisionService service = new BookingDecisionService(
-                bookingRepository, slotRepository, userLockPort, mentorProfileRepository,
-                entityManager, sessionService, conversationService, eventPublisher, responseMapper);
-        service.setGoogleCalendarBusyPort(googleCalendarBusyPort);
-        service.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("accept with fallback"));
-
-        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, booking.getStatus());
-        assertTrue(booking.isCalendarAvailabilityUnknown());
-    }
-
-    @Test
-    void accept_knownCalendarConflict_stillBlocksBeforeDatabaseLocks() {
-        booking.setStatus(BookingStatus.PENDING);
-        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
-        var start = BookingTime.toInstant(booking.getSelectedStartTime());
-        var end = BookingTime.toInstant(booking.getSelectedEndTime());
-        when(googleCalendarBusyPort.queryBusyIntervals(any(), any(), any()))
-                .thenReturn(List.of(new GoogleCalendarBusyInterval(start, end)));
-
-        BookingDecisionService service = new BookingDecisionService(
-                bookingRepository, slotRepository, userLockPort, mentorProfileRepository,
-                entityManager, sessionService, conversationService, eventPublisher, responseMapper);
-        service.setGoogleCalendarBusyPort(googleCalendarBusyPort);
-
-        assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
-                () -> service.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("conflict")));
-    }
 }

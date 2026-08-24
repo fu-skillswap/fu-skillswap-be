@@ -177,7 +177,7 @@ public class MentorServiceManagementService {
                     .collect(java.util.stream.Collectors.toSet());
             if (!futureBindings.isEmpty()) {
                 availabilitySlotServiceRepository.deleteAll(futureBindings);
-                mentorAvailabilitySlotRepository.bumpVersions(changedSlotIds, now);
+                mentorAvailabilitySlotRepository.bumpVersions(changedSlotIds, DateTimeUtil.instantNow());
             }
         }
         service.setActive(request.isActive());

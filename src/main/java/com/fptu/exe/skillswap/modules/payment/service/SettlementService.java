@@ -15,7 +15,6 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerEntryRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementAccountRepository;
@@ -30,7 +29,11 @@ import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.util.UUID;
 
 @Service
@@ -49,6 +52,15 @@ public class SettlementService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
     private final CreditLedgerService creditLedgerService;
+
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
@@ -145,7 +157,8 @@ public class SettlementService {
                 .memo("Platform commission for booking " + booking.getId())
                 .build());
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.RELEASED);
-        paymentOrder.setReleasedAt(DateTimeUtil.now());
+        paymentOrder.setReleasedAtUtc(timeProvider.instant());
+        paymentOrder.setReleasedAt(timeProvider.nowBusiness());
         paymentOrderRepository.save(paymentOrder);
     }
 
@@ -224,7 +237,8 @@ public class SettlementService {
         int amount = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
         if (amount == 0) {
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
-            paymentOrder.setRefundedAt(DateTimeUtil.now());
+            paymentOrder.setRefundedAtUtc(timeProvider.instant());
+            paymentOrder.setRefundedAt(timeProvider.nowBusiness());
             paymentOrder.setRefundedScoin(0);
             paymentOrder.setRefundReason("MENTOR_NO_SHOW");
             paymentOrderRepository.save(paymentOrder);
@@ -235,7 +249,8 @@ public class SettlementService {
                 booking.getMentee().getId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
                 booking.getId(), amount, "Full refund for mentor no-show booking " + booking.getId(), operationKey);
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
-        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedAtUtc(timeProvider.instant());
+        paymentOrder.setRefundedAt(timeProvider.nowBusiness());
         paymentOrder.setRefundedScoin(amount);
         paymentOrder.setRefundReason("MENTOR_NO_SHOW");
         paymentOrderRepository.save(paymentOrder);
@@ -279,7 +294,8 @@ public class SettlementService {
                     "Full refund for early mentee cancellation of booking " + booking.getId()
             );
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
-            paymentOrder.setRefundedAt(DateTimeUtil.now());
+            paymentOrder.setRefundedAtUtc(timeProvider.instant());
+            paymentOrder.setRefundedAt(timeProvider.nowBusiness());
             paymentOrder.setRefundedScoin(grossScoin);
             paymentOrder.setRefundReason("EARLY_MENTEE_CANCELLATION");
             paymentOrderRepository.save(paymentOrder);
@@ -339,7 +355,8 @@ public class SettlementService {
                     .build());
         }
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.PARTIALLY_SETTLED);
-        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedAtUtc(timeProvider.instant());
+        paymentOrder.setRefundedAt(timeProvider.nowBusiness());
         paymentOrder.setRefundedScoin(refundShare);
         paymentOrder.setRefundReason("LATE_MENTEE_CANCELLATION");
         paymentOrderRepository.save(paymentOrder);
@@ -382,7 +399,8 @@ public class SettlementService {
                 "Full refund because mentor cancelled booking " + booking.getId()
         );
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
-        paymentOrder.setRefundedAt(DateTimeUtil.now());
+        paymentOrder.setRefundedAtUtc(timeProvider.instant());
+        paymentOrder.setRefundedAt(timeProvider.nowBusiness());
         paymentOrder.setRefundedScoin(grossScoin);
         paymentOrder.setRefundReason("MENTOR_CANCELLATION");
         paymentOrderRepository.save(paymentOrder);

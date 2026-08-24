@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityTemplateEffecti
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +26,6 @@ public record AvailabilityTemplateResponse(
         String generationBlockedReason,
         List<LocalDate> skippedDates,
         List<AvailabilityTemplateBlockedOccurrenceResponse> blockedOccurrences,
-        LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        OffsetDateTime createdAt,
+        OffsetDateTime updatedAt
 ) {}

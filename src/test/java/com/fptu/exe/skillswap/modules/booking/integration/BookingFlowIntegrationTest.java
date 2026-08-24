@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotService
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
@@ -36,7 +37,10 @@ import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendanceSummary;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.UUID;
@@ -93,6 +98,9 @@ class BookingFlowIntegrationTest {
 
     @Autowired
     private SessionRepository sessionRepository;
+
+    @Autowired
+    private SessionAttendanceRepository sessionAttendanceRepository;
 
     @Autowired
     private ConversationRepository conversationRepository;
@@ -263,10 +271,15 @@ class BookingFlowIntegrationTest {
         // Modify booking selected/requested time to past so we can complete it
         com.fptu.exe.skillswap.modules.booking.domain.Booking dbBooking = bookingRepository
                 .findById(booking.bookingId()).orElseThrow();
-        dbBooking.setSelectedStartTime(LocalDateTime.now().minusHours(2));
-        dbBooking.setSelectedEndTime(LocalDateTime.now().minusHours(1));
-        dbBooking.setRequestedStartTime(LocalDateTime.now().minusHours(2));
-        dbBooking.setRequestedEndTime(LocalDateTime.now().minusHours(1));
+        LocalDateTime pastStart = LocalDateTime.now().minusHours(2);
+        LocalDateTime pastEnd = LocalDateTime.now().minusHours(1);
+        dbBooking.setSelectedStartTime(pastStart);
+        dbBooking.setSelectedStartTimeUtc(BookingTime.toInstant(pastStart));
+        dbBooking.setSelectedEndTime(pastEnd);
+        dbBooking.setSelectedEndTimeUtc(BookingTime.toInstant(pastEnd));
+        dbBooking.setRequestedStartTime(pastStart);
+        dbBooking.setRequestedEndTime(pastEnd);
+        bookingRepository.saveAndFlush(dbBooking);
 
         BookingResponse mentorCompleted = bookingService.completeBooking(
                 mentorId, booking.bookingId(), new CompleteBookingRequest("Good session, code works")
@@ -280,6 +293,41 @@ class BookingFlowIntegrationTest {
         assertEquals(BookingStatus.COMPLETED, completed.status());
         assertEquals(SessionStatus.COMPLETED, completed.actualSessionStatus());
         assertNotNull(completed.completedAt());
+    }
+
+    @Test
+    void checkIn_persistsAttendanceAndStartsSessionWithoutChangingBookingSettlement() {
+        Instant nowUtc = Instant.now();
+        var booking = bookingRepository.saveAndFlush(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                .mentee(menteeUser)
+                .mentorProfile(mentorProfile)
+                .service(mentorService)
+                .status(BookingStatus.PAID)
+                .learningGoalTitle("Attendance evidence")
+                .selectedStartTimeUtc(nowUtc.minusSeconds(30))
+                .selectedStartTime(BookingTime.fromInstant(nowUtc.minusSeconds(30)))
+                .selectedEndTimeUtc(nowUtc.plusSeconds(600))
+                .selectedEndTime(BookingTime.fromInstant(nowUtc.plusSeconds(600)))
+                .build());
+        Session session = sessionRepository.saveAndFlush(Session.builder()
+                .mentor(mentorUser)
+                .service(mentorService)
+                .sourceType(SessionSourceType.BOOKING)
+                .sourceId(booking.getId())
+                .scheduledStartTimeUtc(nowUtc.minusSeconds(30))
+                .scheduledStartTime(BookingTime.fromInstant(nowUtc.minusSeconds(30)))
+                .scheduledEndTimeUtc(nowUtc.plusSeconds(600))
+                .scheduledEndTime(BookingTime.fromInstant(nowUtc.plusSeconds(600)))
+                .status(SessionStatus.SCHEDULED)
+                .build());
+
+        BookingResponse response = bookingService.checkIn(menteeUser.getId(), booking.getId());
+
+        assertEquals(BookingStatus.PAID, bookingRepository.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(SessionStatus.IN_PROGRESS, sessionRepository.findById(session.getId()).orElseThrow().getStatus());
+        assertEquals(1, sessionAttendanceRepository.findBySessionId(session.getId()).size());
+        assertEquals(SessionAttendanceSummary.MENTEE_ONLY, response.attendance().summary());
+        assertNull(response.actualStartTime());
     }
 
     private void completeAcademicProfile(UUID userId, String studentCode) {

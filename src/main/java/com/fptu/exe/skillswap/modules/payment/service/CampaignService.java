@@ -15,7 +15,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.Builder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.Clock;
 
 @Service
 @RequiredArgsConstructor
@@ -35,6 +36,14 @@ public class CampaignService {
     private final CampaignBenefitRepository campaignBenefitRepository;
     private final PaymentOrderRepository paymentOrderRepository;
     private final UserQueryPort userQueryPort;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public CampaignCreditApplication resolveCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
@@ -103,10 +112,10 @@ public class CampaignService {
     }
 
     private boolean isWithinWindow(Campaign campaign) {
-        if (campaign.getStartAt() != null && DateTimeUtil.now().isBefore(campaign.getStartAt())) {
+        if (campaign.getStartAt() != null && timeProvider.nowBusiness().isBefore(campaign.getStartAt())) {
             return false;
         }
-        return campaign.getEndAt() == null || !DateTimeUtil.now().isAfter(campaign.getEndAt());
+        return campaign.getEndAt() == null || !timeProvider.nowBusiness().isAfter(campaign.getEndAt());
     }
 
     private boolean matchesAudience(Campaign campaign, User user, StudentProfile studentProfile, Booking booking) {

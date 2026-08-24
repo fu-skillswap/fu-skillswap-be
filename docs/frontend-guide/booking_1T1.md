@@ -47,6 +47,7 @@ Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact C
     └─ Dịch vụ có phí (Paid): Chuyển sang WAITING_PAYMENT
         ➔ Mentee thanh toán và cổng thanh toán xác nhận thành công
         ➔ Booking chuyển sang CONFIRMED
+ ➔ Đến giờ học: mentor và mentee check-in độc lập
  ➔ Buổi học diễn ra và kết thúc
  ➔ Mentor bấm hoàn thành (Complete Session)
  ➔ Mentee xác nhận (Confirm) hoặc Báo cáo sự cố (Submit Issue)
@@ -59,7 +60,18 @@ Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact C
 
 ---
 
-### 2.1 Bảng Trạng thái Hiển thị (State & Action Mapping)
+### 2.1 Check-in / Attendance
+
+- Khi đến đúng `selectedStartTime`, hiển thị nút **Check-in** nếu `attendance.canCheckIn = true`.
+- Gọi `POST /api/me/bookings/{bookingId}/check-in` với header `Idempotency-Key`; request **không có body**.
+- Nút chỉ mở từ giờ bắt đầu đến trước giờ kết thúc. `canJoin` có thể mở sớm 15 phút nhưng không thay thế check-in.
+- Sau khi thành công, dùng `attendance.currentUserCheckedIn`, `mentorCheckedInAt`, `menteeCheckedInAt` và `summary` từ response để cập nhật màn hình. Không tự tính từ thời gian trên client.
+- Check-in là xác nhận có mặt được ghi thời gian bởi server, là evidence hỗ trợ khi có no-show; nó **không** tự hoàn tiền, release tiền hoặc kết luận buổi học đã diễn ra.
+- Nếu timeout, retry bằng cùng `Idempotency-Key`. Nếu nhận `409`, tải lại booking detail vì có thể đã hết cửa sổ check-in hoặc session đã đóng.
+
+---
+
+### 2.2 Bảng Trạng thái Hiển thị (State & Action Mapping)
 
 | Field | Giá trị quan trọng | Ý nghĩa & Hướng xử lý cho Frontend |
 |---|---|---|
@@ -76,7 +88,7 @@ Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact C
 
 > [!TIP]
 > - Sử dụng `actionDeadlineAt` khi có giá trị để hiển thị đồng hồ đếm ngược (Countdown).
-> - FE mới dùng các cờ rõ vai trò: `canPay`, `canAccept`, `canReject`, `canCancel`, `canJoin`, `canCompleteByMentor`, `canConfirmByMentee`, `canReportIssue`, `canRespondIssue`, `canSubmitFeedback`.
+> - FE mới dùng các cờ rõ vai trò: `canPay`, `canAccept`, `canReject`, `canCancel`, `canJoin`, `attendance.canCheckIn`, `canCompleteByMentor`, `canConfirmByMentee`, `canReportIssue`, `canRespondIssue`, `canSubmitFeedback`.
 > - `canComplete` chỉ là alias legacy; không dùng cho màn hình mới.
 > - Luôn phải xử lý mã lỗi `409 Conflict` vì trạng thái dữ liệu có thể thay đổi giữa lúc render và lúc người dùng nhấn nút.
 
@@ -231,6 +243,15 @@ interface BookingResponse {
   bookingId: string;
   actualSessionId: string | null;
   actualSessionStatus: string | null;
+  attendance: {
+    mentorCheckedInAt: string | null;
+    menteeCheckedInAt: string | null;
+    summary: "NONE" | "MENTOR_ONLY" | "MENTEE_ONLY" | "BOTH";
+    currentUserCheckedIn: boolean;
+    canCheckIn: boolean;
+    checkInOpensAt: string | null;
+    checkInClosesAt: string | null;
+  };
   mentorUserId: string;
   mentorDisplayName: string;
   mentorAvatarUrl: string | null;
@@ -270,7 +291,6 @@ interface BookingResponse {
   calendarSyncStatus: string | null;
   calendarSyncErrorCode: string | null;
   calendarSyncErrorMessage: string | null;
-  calendarAvailabilityUnknown: boolean;
 
   selectedStartTime: string | null;
   selectedEndTime: string | null;
@@ -300,6 +320,7 @@ interface BookingResponse {
   canCompleteByMentor: boolean;
   canConfirmByMentee: boolean;
   canJoin: boolean;
+  // POST /api/me/bookings/{bookingId}/check-in, không có request body
   canReportIssue: boolean;
   canRespondIssue: boolean;
   joinAvailableAt: string | null; // selectedStartTime - 15 phút
@@ -336,7 +357,7 @@ Tất cả endpoint trong phần này yêu cầu Role `MENTOR`. Backend sẽ t�
 > [!IMPORTANT]
 > - Chỉ hiển thị nút Accept/Reject theo `canAccept` và `canReject`; `nextAction === "ACCEPT_OR_REJECT"` dùng để chọn CTA nổi bật.
 > - Chấp nhận một booking sẽ tự động từ chối (Auto Reject) các yêu cầu pending khác bị trùng lịch.
-> - Nếu Google Calendar tạm lỗi, backend vẫn có thể accept theo lịch trong database và trả `calendarAvailabilityUnknown = true`. FE hiển thị cảnh báo nhẹ để mentor tự kiểm tra lại lịch; không xem đây là booking lỗi.
+> - Lịch và khả năng accept chỉ dựa trên dữ liệu SkillSwap. Google Calendar không thể chặn accept hoặc làm booking thất bại. Khi đồng bộ Calendar lỗi, FE hiển thị `calendarSyncStatus` và hướng mentor kiểm tra lịch/link trong app.
 > - Đối với dịch vụ có phí: Sau khi Accept, booking sẽ chuyển sang `WAITING_PAYMENT`; **chưa mở chat/session cho đến khi mentee thanh toán thành công**.
 > - Đối với dịch vụ miễn phí: Booking được xác nhận (`CONFIRMED`) ngay lập tức.
 
@@ -459,7 +480,7 @@ Chính sách hủy booking đã thanh toán: hủy trước giờ học ít nh�
 - **Thanh toán**: Khi `canPay === true` (thường đi cùng `nextAction === "PAY_NOW"`), chuyển hướng người dùng sang luồng thanh toán trong [payment.md](payment.md). Mentee có tối đa 60 phút từ lúc mentor accept, nhưng FE luôn đếm ngược theo `actionDeadlineAt`. Sau khi PayOS chuyển hướng về, dùng API trạng thái/sync có chủ đích rồi tải lại booking; API GET danh sách booking không tự gọi PayOS.
 - **Phòng Chat**: Trường `conversationId` có thể mang giá trị `null` khi booking chưa được xác nhận (`CONFIRMED`). Frontend **không tự ý tạo conversation**; chỉ mở khung chat khi backend đã trả về ID hợp lệ theo [realtime-chat-notification.md](realtime-chat-notification.md).
 - **Tham gia buổi học**: Chỉ bật CTA khi `canJoin === true`; cửa sổ mặc định là từ 15 phút trước giờ bắt đầu đến 15 phút sau giờ kết thúc. Online mở `meetingLink`; offline hiển thị `location`.
-- **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`. Khi sync lỗi, booking và thanh toán vẫn hợp lệ; hiển thị CTA cho mentor nhập link/địa điểm thủ công. Backend nhắc mentor trước 2 giờ và cả hai bên trước 30 phút nếu vẫn chưa có thông tin tham gia hợp lệ.
+- **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`. Lịch trong SkillSwap luôn là nguồn sự thật: lỗi hoặc trùng lịch Google không thể làm accept thất bại, hủy booking hay đổi payment. Khi sync lỗi, booking và thanh toán vẫn hợp lệ; hiển thị CTA cho mentor nhập link/địa điểm thủ công. Backend nhắc mentor trước 2 giờ và cả hai bên trước 30 phút nếu vẫn chưa có thông tin tham gia hợp lệ.
 
 ---
 

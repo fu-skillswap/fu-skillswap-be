@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.Base64;
 
 @Service
@@ -24,23 +25,26 @@ public class GoogleLoginNonceService {
 
     private final Duration nonceTtl;
     private final Cache<String, Boolean> pendingNonces;
+    private final Clock clock;
 
     @Autowired
-    public GoogleLoginNonceService(CacheProperties cacheProperties, MeterRegistry meterRegistry) {
-        this(cacheProperties, meterRegistry, true);
+    public GoogleLoginNonceService(CacheProperties cacheProperties, MeterRegistry meterRegistry, Clock clock) {
+        this(cacheProperties, meterRegistry, clock, true);
     }
 
     GoogleLoginNonceService(CacheProperties cacheProperties) {
-        this(cacheProperties, null, false);
+        this(cacheProperties, null, Clock.systemUTC(), false);
     }
 
     private GoogleLoginNonceService(
             CacheProperties cacheProperties,
             MeterRegistry meterRegistry,
+            Clock clock,
             boolean monitorMetrics
     ) {
         CacheProperties.TimedCache settings = cacheProperties.getGoogleOauthState();
         nonceTtl = settings.getTtl();
+        this.clock = clock != null ? clock : Clock.systemUTC();
         pendingNonces = Caffeine.newBuilder()
                 .maximumSize(settings.getMaximumSize())
                 .expireAfterWrite(nonceTtl)
@@ -56,7 +60,7 @@ public class GoogleLoginNonceService {
         SECURE_RANDOM.nextBytes(bytes);
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         pendingNonces.put(nonce, Boolean.TRUE);
-        return new GoogleLoginNonceResponse(nonce, Instant.now().plus(nonceTtl));
+        return new GoogleLoginNonceResponse(nonce, clock.instant().plus(nonceTtl));
     }
 
     public void consume(String nonce) {

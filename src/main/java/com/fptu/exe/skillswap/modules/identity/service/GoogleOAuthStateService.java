@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.Clock;
 import java.util.Base64;
 import java.util.Objects;
 import java.util.UUID;
@@ -29,19 +30,21 @@ public class GoogleOAuthStateService {
 
     private final Duration stateTtl;
     private final Cache<String, PendingAuthorization> pendingAuthorizations;
+    private final Clock clock;
 
     @Autowired
-    public GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry) {
-        this(cacheProperties, meterRegistry, true);
+    public GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry, Clock clock) {
+        this(cacheProperties, meterRegistry, clock, true);
     }
 
     GoogleOAuthStateService(CacheProperties cacheProperties) {
-        this(cacheProperties, null, false);
+        this(cacheProperties, null, Clock.systemUTC(), false);
     }
 
-    private GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry, boolean monitorMetrics) {
+    private GoogleOAuthStateService(CacheProperties cacheProperties, MeterRegistry meterRegistry, Clock clock, boolean monitorMetrics) {
         CacheProperties.TimedCache settings = cacheProperties.getGoogleOauthState();
         this.stateTtl = settings.getTtl();
+        this.clock = clock != null ? clock : Clock.systemUTC();
         this.pendingAuthorizations = Caffeine.newBuilder()
                 .maximumSize(settings.getMaximumSize())
                 .expireAfterWrite(stateTtl)
@@ -86,7 +89,7 @@ public class GoogleOAuthStateService {
         byte[] stateBytes = new byte[32];
         SECURE_RANDOM.nextBytes(stateBytes);
         String state = Base64.getUrlEncoder().withoutPadding().encodeToString(stateBytes);
-        Instant expiresAt = Instant.now().plus(stateTtl);
+        Instant expiresAt = clock.instant().plus(stateTtl);
         pendingAuthorizations.put(state, new PendingAuthorization(
                 purpose,
                 userId,

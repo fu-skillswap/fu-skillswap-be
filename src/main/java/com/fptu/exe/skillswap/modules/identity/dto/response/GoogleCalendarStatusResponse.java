@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.dto.response;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 @Schema(description = "Trạng thái kết nối Google Calendar của user hiện tại")
@@ -19,8 +19,8 @@ public record GoogleCalendarStatusResponse(
         boolean needsReconnect,
         @Schema(description = "Trạng thái sync gần nhất", nullable = true, example = "SYNCED")
         String lastSyncStatus,
-        @Schema(description = "Thời điểm sync gần nhất", nullable = true)
-        LocalDateTime lastSyncAt,
+        @Schema(description = "Thời điểm sync gần nhất kèm offset múi giờ (+07:00)", nullable = true, example = "2026-08-24T19:00:00+07:00")
+        OffsetDateTime lastSyncAt,
         @Schema(description = "Mã lỗi sync gần nhất", nullable = true)
         String lastSyncErrorCode,
         @Schema(description = "Thông điệp lỗi sync gần nhất", nullable = true)

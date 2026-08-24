@@ -20,7 +20,7 @@ import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +28,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -59,6 +61,15 @@ public class BookingCancellationService {
     private AvailabilityTemplateService availabilityTemplateService;
     private MentorViolationService mentorViolationService;
 
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
+
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
@@ -83,8 +94,9 @@ public class BookingCancellationService {
             return bookingResponseMapper.toBookingResponse(booking);
         }
 
-        LocalDateTime now = DateTimeUtil.now();
-        long minutesUntilStart = minutesUntilStart(booking, now);
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
+        long minutesUntilStart = minutesUntilStart(booking, nowUtc);
         if (!BookingActionPolicy.canCancelByMentor(booking.getStatus(), minutesUntilStart > 0)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
         }
@@ -94,7 +106,7 @@ public class BookingCancellationService {
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);
 
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTOR, now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTOR, nowUtc);
         booking.setCancelReason(requiredCancelReason(request));
 
         refreshSlotBookedFlag(slot);
@@ -103,7 +115,7 @@ public class BookingCancellationService {
             entityManager.refresh(lockedMentorProfile);
         }
         lockedMentorProfile.setTotalMentorCancelledBookings(defaultInteger(lockedMentorProfile.getTotalMentorCancelledBookings()) + 1);
-        touchMentorActivity(lockedMentorProfile, now);
+        touchMentorActivity(lockedMentorProfile, nowBusiness);
         mentorProfileRepository.save(lockedMentorProfile);
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -146,7 +158,7 @@ public class BookingCancellationService {
                 .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                 .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .reason(savedBooking.getCancelReason())
-                .createdAt(DateTimeUtil.now())
+                .createdAt(nowBusiness)
                 .build());
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
@@ -155,7 +167,7 @@ public class BookingCancellationService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã hủy lịch học.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
         ));
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
@@ -173,9 +185,10 @@ public class BookingCancellationService {
         if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE && booking.getCancelledAt() != null) {
             return bookingResponseMapper.toBookingResponse(booking);
         }
-        LocalDateTime now = DateTimeUtil.now();
+        Instant nowUtc = timeProvider.instant();
+        LocalDateTime nowBusiness = timeProvider.nowBusiness();
         BookingStatus currentStatus = booking.getStatus();
-        long minutesUntilStart = minutesUntilStart(booking, now);
+        long minutesUntilStart = minutesUntilStart(booking, nowUtc);
         if (!BookingActionPolicy.canCancelByMentee(currentStatus, minutesUntilStart > 0)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hủy booking đang chờ phản hồi hoặc đã được chấp nhận");
         }
@@ -185,7 +198,7 @@ public class BookingCancellationService {
         boolean lateCancellation = currentStatus == BookingStatus.PAID
                 && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
 
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTEE, now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTEE, nowUtc);
         booking.setCancelReason(requiredCancelReason(request));
 
         if (slot != null && currentStatus != BookingStatus.PENDING) {
@@ -228,7 +241,7 @@ public class BookingCancellationService {
                 .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                 .mentorResponseNote(savedBooking.getMentorResponseNote())
                 .reason(savedBooking.getCancelReason())
-                .createdAt(DateTimeUtil.now())
+                .createdAt(nowBusiness)
                 .build());
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
@@ -237,41 +250,47 @@ public class BookingCancellationService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Mentee đã hủy lịch học.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
         ));
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
 
     private Booking getBookingForCancellation(UUID bookingId) {
-        if (bookingId == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
-        }
         return bookingRepository.findByIdForCancellation(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
     }
 
     private boolean isMentorOfBooking(Booking booking, UUID mentorUserId) {
-        return booking != null && booking.getMentorProfile() != null
-                && mentorUserId != null && mentorUserId.equals(booking.getMentorProfile().getUserId());
+        return booking.getMentorProfile() != null
+                && mentorUserId != null
+                && mentorUserId.equals(booking.getMentorProfile().getUserId());
     }
 
-    private long minutesUntilStart(Booking booking, LocalDateTime now) {
-        LocalDateTime startTime = selectedStartTime(booking);
-        if (startTime == null) {
+    private long minutesUntilStart(Booking booking, Instant nowUtc) {
+        Instant startUtc = booking.getSelectedStartTimeUtc() != null ? booking.getSelectedStartTimeUtc()
+                : (booking.getSelectedStartTime() != null ? BookingTime.toInstant(booking.getSelectedStartTime())
+                : (booking.getSlot() != null && booking.getSlot().getStartTimeUtc() != null ? booking.getSlot().getStartTimeUtc()
+                : (booking.getSlot() != null && booking.getSlot().getStartTime() != null ? BookingTime.toInstant(booking.getSlot().getStartTime()) : null)));
+        if (startUtc == null) {
             return 0;
         }
-        return Duration.between(now, startTime).toMinutes();
+        return Duration.between(nowUtc, startUtc).toMinutes();
     }
 
     private void refreshSlotBookedFlag(MentorAvailabilitySlot slot) {
         if (slot == null || slot.getId() == null) {
             return;
         }
-        boolean hasConfirmedOverlap = bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        Instant startUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc()
+                : (slot.getStartTime() == null ? null : BookingTime.toInstant(slot.getStartTime()));
+        Instant endUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc()
+                : (slot.getEndTime() == null ? null : BookingTime.toInstant(slot.getEndTime()));
+        boolean hasConfirmedOverlap = startUtc != null && endUtc != null
+                && bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 slot.getId(),
                 SLOT_LOCKING_STATUSES,
-                slot.getStartTime(),
-                slot.getEndTime()
+                startUtc,
+                endUtc
         );
         slot.setBooked(hasConfirmedOverlap);
         if (availabilityTemplateService != null) {
@@ -283,7 +302,7 @@ public class BookingCancellationService {
         if (profile == null) {
             return;
         }
-        profile.setLastActiveAt(activityAt != null ? activityAt : DateTimeUtil.now());
+        profile.setLastActiveAt(activityAt != null ? activityAt : timeProvider.nowBusiness());
     }
 
     private int defaultInteger(Integer value) {

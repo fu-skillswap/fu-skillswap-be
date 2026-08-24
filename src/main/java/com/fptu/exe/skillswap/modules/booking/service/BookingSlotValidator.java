@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -47,29 +48,34 @@ public class BookingSlotValidator {
     public void validateSelectedRange(
             MentorAvailabilitySlot slot,
             MentorService mentorService,
-            LocalDateTime selectedStartTime,
-            LocalDateTime selectedEndTime,
-            LocalDateTime now
+            Instant selectedStartAt,
+            Instant selectedEndAt,
+            Instant nowUtc
     ) {
-        if (selectedStartTime == null || selectedEndTime == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime và selectedEndTime là bắt buộc");
+        if (selectedStartAt == null || selectedEndAt == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "startAt và endAt là bắt buộc");
         }
-        if (!selectedEndTime.isAfter(selectedStartTime)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "selectedEndTime phải sau selectedStartTime");
+        if (!selectedEndAt.isAfter(selectedStartAt)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "endAt phải sau startAt");
         }
-        if (slot == null || slot.getStartTime() == null || slot.getEndTime() == null) {
+        if (slot == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring không hợp lệ");
+        }
+        Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
+        Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc() : BookingTime.toInstant(slot.getEndTime());
+        if (slotStartUtc == null || slotEndUtc == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring không hợp lệ");
         }
         if (availabilityTemplateService != null && !availabilityTemplateService.isGeneratedSlotEligible(slot)) {
             throw new BaseException(ErrorCode.AVAILABILITY_TEMPLATE_OCCURRENCE_UNAVAILABLE);
         }
-        if (selectedStartTime.isBefore(slot.getStartTime()) || selectedEndTime.isAfter(slot.getEndTime())) {
+        if (selectedStartAt.isBefore(slotStartUtc) || selectedEndAt.isAfter(slotEndUtc)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải nằm hoàn toàn trong khung giờ của mentor");
         }
-        if (!selectedStartTime.isAfter(now)) {
+        if (!selectedStartAt.isAfter(nowUtc)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khoảng thời gian đã chọn đã bắt đầu hoặc đã trôi qua");
         }
-        long durationMinutes = Duration.between(selectedStartTime, selectedEndTime).toMinutes();
+        long durationMinutes = Duration.between(selectedStartAt, selectedEndAt).toMinutes();
         if (mentorService == null || mentorService.getDurationMinutes() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring không hợp lệ");
         }
@@ -79,8 +85,25 @@ public class BookingSlotValidator {
         if (mentorBookingPolicyService != null
                 && slot.getMentorProfile() != null
                 && slot.getMentorProfile().getUserId() != null) {
-            mentorBookingPolicyService.validateBookingWindow(slot.getMentorProfile().getUserId(), selectedStartTime, now);
+            mentorBookingPolicyService.validateBookingWindow(
+                    slot.getMentorProfile().getUserId(),
+                    BookingTime.fromInstant(selectedStartAt),
+                    BookingTime.fromInstant(nowUtc)
+            );
         }
+    }
+
+    public void validateSelectedRange(
+            MentorAvailabilitySlot slot,
+            MentorService mentorService,
+            LocalDateTime selectedStartTime,
+            LocalDateTime selectedEndTime,
+            LocalDateTime now
+    ) {
+        Instant selectedStartAt = BookingTime.toInstant(selectedStartTime);
+        Instant selectedEndAt = BookingTime.toInstant(selectedEndTime);
+        Instant nowUtc = BookingTime.toInstant(now);
+        validateSelectedRange(slot, mentorService, selectedStartAt, selectedEndAt, nowUtc);
     }
 
     public void validateServiceAttachedToSlot(UUID slotId, UUID serviceId) {
@@ -93,30 +116,29 @@ public class BookingSlotValidator {
             MentorAvailabilitySlot slot,
             MentorService mentorService,
             UUID menteeUserId,
-            LocalDateTime selectedStartTime,
-            LocalDateTime selectedEndTime
+            Instant selectedStartAt,
+            Instant selectedEndAt
     ) {
-        long offsetMinutes = Duration.between(slot.getStartTime(), selectedStartTime).toMinutes();
+        Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
+        long offsetMinutes = Duration.between(slotStartUtc, selectedStartAt).toMinutes();
         if (offsetMinutes < 0 || offsetMinutes % mentorService.getDurationMinutes() != 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime phải khớp với candidate segment hợp lệ của service trong slot");
         }
 
-        if (bookingRepository.existsOverlappingBySlotIdAndStatusIn(
+        if (bookingRepository.existsOverlappingBySlotIdAndStatusInUtc(
                 slot.getId(),
                 SLOT_LOCKING_STATUSES,
-                selectedStartTime,
-                selectedEndTime
+                selectedStartAt,
+                selectedEndAt
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Segment đã chọn đã có booking được mentor chấp nhận trùng thời gian.");
         }
 
-
-
-        long pendingCount = bookingRepository.countBySlotIdAndExactSegmentAndStatus(
+        long pendingCount = bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
                 slot.getId(),
-                selectedStartTime,
-                selectedEndTime,
+                selectedStartAt,
+                selectedEndAt,
                 BookingStatus.PENDING
         );
         if (pendingCount >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
@@ -124,18 +146,30 @@ public class BookingSlotValidator {
                     "Segment đã chọn đã đạt tối đa 3 yêu cầu chờ xác nhận.");
         }
 
-        if (bookingRepository.hasOverlappingBookingByStatuses(
+        if (bookingRepository.hasOverlappingBookingByStatusesUtc(
                 menteeUserId,
                 SLOT_LOCKING_STATUSES,
-                selectedStartTime,
-                selectedEndTime
+                selectedStartAt,
+                selectedEndAt
         )) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đã có lịch học khác đã được chấp nhận trùng với khung giờ đã chọn.");
         }
+    }
 
-        // Calendar is intentionally not queried here. This validator is called after the booking
-        // creation flow takes row locks; mentor acceptance performs the definitive fresh check
-        // before it acquires locks, while candidate discovery remains fail-soft.
+    public void validateCandidateSelection(
+            MentorAvailabilitySlot slot,
+            MentorService mentorService,
+            UUID menteeUserId,
+            LocalDateTime selectedStartTime,
+            LocalDateTime selectedEndTime
+    ) {
+        validateCandidateSelection(
+                slot,
+                mentorService,
+                menteeUserId,
+                BookingTime.toInstant(selectedStartTime),
+                BookingTime.toInstant(selectedEndTime)
+        );
     }
 }

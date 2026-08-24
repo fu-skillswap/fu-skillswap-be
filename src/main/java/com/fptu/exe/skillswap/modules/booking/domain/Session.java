@@ -1,14 +1,15 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -44,15 +45,31 @@ public class Session {
     @Column(name = "source_id", nullable = false)
     private UUID sourceId;
 
+    @Column(name = "scheduled_start_time_utc", nullable = false)
+    private Instant scheduledStartTimeUtc;
+
+    @Deprecated
     @Column(name = "scheduled_start_time", nullable = false)
     private LocalDateTime scheduledStartTime;
 
+    @Column(name = "scheduled_end_time_utc", nullable = false)
+    private Instant scheduledEndTimeUtc;
+
+    @Deprecated
     @Column(name = "scheduled_end_time", nullable = false)
     private LocalDateTime scheduledEndTime;
 
+    @Column(name = "actual_start_time_utc")
+    private Instant actualStartTimeUtc;
+
+    @Deprecated
     @Column(name = "actual_start_time")
     private LocalDateTime actualStartTime;
 
+    @Column(name = "actual_end_time_utc")
+    private Instant actualEndTimeUtc;
+
+    @Deprecated
     @Column(name = "actual_end_time")
     private LocalDateTime actualEndTime;
 
@@ -81,6 +98,10 @@ public class Session {
     @Column(name = "calendar_sync_error_message", columnDefinition = "TEXT")
     private String calendarSyncErrorMessage;
 
+    @Column(name = "calendar_last_synced_at_utc")
+    private Instant calendarLastSyncedAtUtc;
+
+    @Deprecated
     @Column(name = "calendar_last_synced_at")
     private LocalDateTime calendarLastSyncedAt;
 
@@ -89,20 +110,42 @@ public class Session {
     @Builder.Default
     private SessionStatus status = SessionStatus.SCHEDULED;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
+
+    @Deprecated
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
+
+    @Deprecated
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist
-    protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+    public void onCreate() {
+        syncTimestampPairs();
+        Instant nowUtc = DateTimeUtil.instantNow();
+        if (createdAtUtc == null) createdAtUtc = nowUtc;
+        if (createdAt == null) createdAt = BookingTime.fromInstant(createdAtUtc);
+        if (updatedAtUtc == null) updatedAtUtc = nowUtc;
+        if (updatedAt == null) updatedAt = BookingTime.fromInstant(updatedAtUtc);
     }
 
     @PreUpdate
-    protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+    public void onUpdate() {
+        syncTimestampPairs();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+    }
+
+    private void syncTimestampPairs() {
+        if (scheduledStartTimeUtc == null) scheduledStartTimeUtc = BookingTime.toInstant(scheduledStartTime); else if (scheduledStartTime == null) scheduledStartTime = BookingTime.fromInstant(scheduledStartTimeUtc);
+        if (scheduledEndTimeUtc == null) scheduledEndTimeUtc = BookingTime.toInstant(scheduledEndTime); else if (scheduledEndTime == null) scheduledEndTime = BookingTime.fromInstant(scheduledEndTimeUtc);
+        if (actualStartTimeUtc == null) actualStartTimeUtc = BookingTime.toInstant(actualStartTime); else if (actualStartTime == null) actualStartTime = BookingTime.fromInstant(actualStartTimeUtc);
+        if (actualEndTimeUtc == null) actualEndTimeUtc = BookingTime.toInstant(actualEndTime); else if (actualEndTime == null) actualEndTime = BookingTime.fromInstant(actualEndTimeUtc);
+        if (calendarLastSyncedAtUtc == null) calendarLastSyncedAtUtc = BookingTime.toInstant(calendarLastSyncedAt); else if (calendarLastSyncedAt == null) calendarLastSyncedAt = BookingTime.fromInstant(calendarLastSyncedAtUtc);
     }
 }

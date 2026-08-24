@@ -1,10 +1,12 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -45,6 +47,9 @@ public class GoogleCalendarConnection {
     @Column(name = "token_expires_at")
     private LocalDateTime tokenExpiresAt;
 
+    @Column(name = "token_expires_at_utc")
+    private Instant tokenExpiresAtUtc;
+
     @Column(name = "granted_scopes", columnDefinition = "TEXT")
     private String grantedScopes;
 
@@ -62,6 +67,9 @@ public class GoogleCalendarConnection {
     @Column(name = "last_sync_at")
     private LocalDateTime lastSyncAt;
 
+    @Column(name = "last_sync_at_utc")
+    private Instant lastSyncAtUtc;
+
     @Column(name = "last_sync_error_code", length = 100)
     private String lastSyncErrorCode;
 
@@ -71,17 +79,50 @@ public class GoogleCalendarConnection {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
+
     @PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        if (createdAtUtc == null) {
+            createdAtUtc = createdAt != null ? BookingTime.toInstant(createdAt) : DateTimeUtil.instantNow();
+        }
+        if (createdAt == null) {
+            createdAt = BookingTime.fromInstant(createdAtUtc);
+        }
+        if (updatedAtUtc == null) {
+            updatedAtUtc = updatedAt != null ? BookingTime.toInstant(updatedAt) : createdAtUtc;
+        }
+        if (updatedAt == null) {
+            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        }
+        syncDualWriteFields();
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        syncDualWriteFields();
+    }
+
+    private void syncDualWriteFields() {
+        if (tokenExpiresAtUtc != null && tokenExpiresAt == null) {
+            tokenExpiresAt = BookingTime.fromInstant(tokenExpiresAtUtc);
+        } else if (tokenExpiresAt != null && tokenExpiresAtUtc == null) {
+            tokenExpiresAtUtc = BookingTime.toInstant(tokenExpiresAt);
+        }
+
+        if (lastSyncAtUtc != null && lastSyncAt == null) {
+            lastSyncAt = BookingTime.fromInstant(lastSyncAtUtc);
+        } else if (lastSyncAt != null && lastSyncAtUtc == null) {
+            lastSyncAtUtc = BookingTime.toInstant(lastSyncAt);
+        }
     }
 }

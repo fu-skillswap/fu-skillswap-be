@@ -1,11 +1,12 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -39,26 +40,37 @@ public class OauthAccount {
     @Column(name = "provider_email")
     private String providerEmail;
 
-
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    private Instant createdAtUtc;
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "updated_at_utc", nullable = false)
+    private Instant updatedAtUtc;
+
     @PrePersist
     protected void onCreate() {
-        createdAt = DateTimeUtil.now();
-        updatedAt = DateTimeUtil.now();
+        if (createdAtUtc == null) {
+            createdAtUtc = createdAt != null ? BookingTime.toInstant(createdAt) : DateTimeUtil.instantNow();
+        }
+        if (createdAt == null) {
+            createdAt = BookingTime.fromInstant(createdAtUtc);
+        }
+        if (updatedAtUtc == null) {
+            updatedAtUtc = updatedAt != null ? BookingTime.toInstant(updatedAt) : createdAtUtc;
+        }
+        if (updatedAt == null) {
+            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        }
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAtUtc = DateTimeUtil.instantNow();
+        updatedAt = BookingTime.fromInstant(updatedAtUtc);
     }
 }
-
-
-
-

@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.payment.scheduler;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
 import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.time.Clock;
 
 @Component
 @ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -21,6 +22,14 @@ import java.util.List;
 public class CampaignLifecycleScheduler {
 
     private final CampaignRepository campaignRepository;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     /**
      * Tự động kích hoạt các chiến dịch SCHEDULED khi tới thời điểm startAt.
@@ -29,7 +38,7 @@ public class CampaignLifecycleScheduler {
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void activateScheduledCampaigns() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         List<Campaign> readyCampaigns = campaignRepository.findScheduledReadyToActivate(CampaignStatus.SCHEDULED, now);
 
         for (Campaign campaign : readyCampaigns) {
@@ -50,7 +59,7 @@ public class CampaignLifecycleScheduler {
     @Scheduled(cron = "0 0 * * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void endExpiredCampaigns() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         List<Campaign> expiredCampaigns = campaignRepository.findActiveExpired(CampaignStatus.ACTIVE, now);
 
         for (Campaign campaign : expiredCampaigns) {

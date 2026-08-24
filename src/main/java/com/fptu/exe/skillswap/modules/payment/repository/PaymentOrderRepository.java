@@ -83,4 +83,19 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
             @Param("updatedBefore") LocalDateTime updatedBefore,
             org.springframework.data.domain.Pageable pageable
     );
+
+    @Query("""
+            select po
+            from PaymentOrder po
+            where po.status in :statuses
+              and (po.updatedAtUtc <= :updatedBeforeUtc or (po.updatedAtUtc is null and po.updatedAt <= :updatedBeforeLegacy))
+              and po.providerOrderCode is not null
+            order by coalesce(po.updatedAtUtc, po.createdAtUtc) asc
+            """)
+    List<PaymentOrder> findTop50ByStatusInAndUpdatedAtUtcBeforeOrderByUpdatedAtUtcAsc(
+            @Param("statuses") Collection<PaymentOrderStatus> statuses,
+            @Param("updatedBeforeUtc") java.time.Instant updatedBeforeUtc,
+            @Param("updatedBeforeLegacy") LocalDateTime updatedBeforeLegacy,
+            org.springframework.data.domain.Pageable pageable
+    );
 }

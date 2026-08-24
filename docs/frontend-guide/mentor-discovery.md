@@ -357,8 +357,6 @@ interface ServiceSlotCandidatesResponse {
     blockedBySameService: boolean;
     blockedByDifferentService: boolean;
     bookingConflictNote: string | null;
-    blockedByGoogleCalendar?: boolean;
-    calendarAvailabilityUnknown?: boolean; // vẫn có thể chọn; mentor accept sẽ kiểm tra lại
   }>;
 }
 ```
@@ -367,6 +365,7 @@ interface ServiceSlotCandidatesResponse {
 > - Mã lỗi `404 Not Found`: Mentor, slot hoặc dịch vụ không còn tồn tại.
 > - Mã lỗi `409 Conflict`: Khung giờ vừa bị người khác đặt hoặc đã bị khóa.
 > Trong cả hai trường hợp, hãy đóng lựa chọn cũ và tải lại lịch khả dụng thay vì retry tự động.
+> - Lịch SkillSwap là nguồn sự thật. Google Calendar chỉ đồng bộ sau khi booking được xác nhận, nên không dùng trạng thái Google để khóa candidate hoặc chặn thao tác đặt lịch.
 
 ---
 

@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
@@ -57,6 +58,7 @@ public class BookingService {
     private final BookingCancellationService bookingCancellationService;
     private final BookingCompletionService bookingCompletionService;
     private final BookingMeetingService bookingMeetingService;
+    private final SessionAttendanceService sessionAttendanceService;
     private final BookingQueryService bookingQueryService;
     private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
     private final BookingResponseMapper bookingResponseMapper;
@@ -147,9 +149,15 @@ public class BookingService {
                 meetingFactory,
                 mapper
         );
+        this.sessionAttendanceService = new SessionAttendanceService(
+                bookingRepository,
+                sessionRepository,
+                null
+        );
         this.bookingQueryService = new BookingQueryService(
                 bookingRepository,
                 sessionService,
+                null,
                 conversationService,
                 paymentOrderRepo,
                 mapper
@@ -202,6 +210,12 @@ public class BookingService {
     @Transactional
     public BookingResponse confirmBookingByParticipant(UUID currentUserId, UUID bookingId, ConfirmBookingRequest request) {
         return bookingCompletionService.confirmBookingByParticipant(currentUserId, bookingId, request);
+    }
+
+    @Transactional
+    public BookingResponse checkIn(UUID currentUserId, UUID bookingId) {
+        Booking booking = sessionAttendanceService.checkIn(currentUserId, bookingId);
+        return bookingResponseMapper.toBookingResponse(booking);
     }
 
     @Transactional

@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
 import com.fptu.exe.skillswap.infrastructure.config.JwtProperties;
 import com.fptu.exe.skillswap.infrastructure.config.SystemAdminProperties;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
@@ -16,11 +14,14 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -35,6 +36,14 @@ public class IdentityLoginTransactionService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final SystemAdminProperties systemAdminProperties;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public TokenResponse loginWithVerifiedGoogleUser(GoogleAuthService.GoogleUserInfo googleUser) {
@@ -45,7 +54,7 @@ public class IdentityLoginTransactionService {
         checkUserStatus(user);
         assignSystemAdminRoleIfWhitelisted(user);
 
-        user.setLastLoginAt(DateTimeUtil.now());
+        user.setLastLoginAt(timeProvider.nowBusiness());
         userRepository.save(user);
 
         return generateTokensAndCreateSession(user);
@@ -142,7 +151,7 @@ public class IdentityLoginTransactionService {
         String hashedRefresh = jwtTokenProvider.hashToken(refreshToken);
 
         long refreshExpirationMs = jwtProperties.getJwt().getRefreshToken().getExpiration();
-        LocalDateTime expiresAt = DateTimeUtil.now().plusNanos(refreshExpirationMs * 1_000_000);
+        LocalDateTime expiresAt = timeProvider.nowBusiness().plusNanos(refreshExpirationMs * 1_000_000);
 
         UserSession session = UserSession.builder()
                 .user(user)

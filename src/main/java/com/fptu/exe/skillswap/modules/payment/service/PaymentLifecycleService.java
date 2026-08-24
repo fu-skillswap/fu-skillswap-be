@@ -6,10 +6,14 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +23,15 @@ public class PaymentLifecycleService {
     private final CreditLedgerService creditLedgerService;
     private final CouponService couponService;
     private final SettlementService settlementService;
+
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
 
     @Transactional
     public void handleMenteeCancellation(Booking booking, boolean lateCancellation) {
@@ -36,8 +49,10 @@ public class PaymentLifecycleService {
         if (order.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
-        if (order.getCancelledAt() == null) {
-            order.setCancelledAt(DateTimeUtil.now());
+        if (order.getCancelledAtUtc() == null && order.getCancelledAt() == null) {
+            Instant nowUtc = timeProvider.instant();
+            order.setCancelledAtUtc(nowUtc);
+            order.setCancelledAt(timeProvider.nowBusiness());
             paymentOrderRepository.save(order);
         }
         if (settlementService != null) {
@@ -61,8 +76,10 @@ public class PaymentLifecycleService {
         if (order.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
-        if (order.getCancelledAt() == null) {
-            order.setCancelledAt(DateTimeUtil.now());
+        if (order.getCancelledAtUtc() == null && order.getCancelledAt() == null) {
+            Instant nowUtc = timeProvider.instant();
+            order.setCancelledAtUtc(nowUtc);
+            order.setCancelledAt(timeProvider.nowBusiness());
             paymentOrderRepository.save(order);
         }
         if (settlementService != null) {
@@ -89,7 +106,8 @@ public class PaymentLifecycleService {
             return;
         }
         order.setStatus(PaymentOrderStatus.CANCELLED);
-        order.setCancelledAt(DateTimeUtil.now());
+        order.setCancelledAtUtc(timeProvider.instant());
+        order.setCancelledAt(timeProvider.nowBusiness());
         rollbackReservedCredit(order);
         if (couponService != null) {
             couponService.voidRedemption(order.getId());
@@ -102,7 +120,8 @@ public class PaymentLifecycleService {
             return;
         }
         order.setStatus(PaymentOrderStatus.EXPIRED);
-        order.setFailedAt(DateTimeUtil.now());
+        order.setFailedAtUtc(timeProvider.instant());
+        order.setFailedAt(timeProvider.nowBusiness());
         rollbackReservedCredit(order);
         if (couponService != null) {
             couponService.voidRedemption(order.getId());

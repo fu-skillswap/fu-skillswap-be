@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -101,6 +102,44 @@ class FlywayMigrationNamingTest {
         assertTrue(
                 migrationSql.contains("on payment_orders(target_type, target_id)"),
                 "PaymentOrder typed target lookup requires its unique target index");
+    }
+
+    @Test
+    void utcRolloutMigrations_shouldBeExpandOnlyAndReleaseVisible() throws IOException {
+        List<String> expected = List.of(
+                "V111__expand_utc_columns_booking_slot.sql",
+                "V112__expand_utc_columns_payment.sql",
+                "V113__expand_utc_columns_session_reschedule.sql",
+                "V114__expand_utc_columns_google_calendar.sql"
+        );
+        for (String filename : expected) {
+            Path migration = MIGRATION_DIR.resolve(filename);
+            assertTrue(Files.isRegularFile(migration), () -> "Missing UTC rollout migration: " + filename);
+            String sql = Files.readString(migration).toLowerCase();
+            assertTrue(sql.contains("timestamptz"), () -> filename + " must add UTC timestamptz columns");
+            assertFalse(sql.contains("drop column"), () -> filename + " must remain expand-only");
+        }
+
+        // The destructive contract migration is deliberately outside Flyway's version sequence
+        // until the dual-write rollout is proven. Deferred work must not reserve a V-number:
+        // otherwise a later normal migration would make the contract impossible to apply in order.
+        assertTrue(Files.isRegularFile(Path.of(
+                "src/main/resources/db/deferred-migrations/contract__drop_legacy_timestamp_columns_and_triggers.sql.disabled")));
+    }
+
+    @Test
+    void utcRolloutMigrations_shouldCoverCoreLifecycleTables() throws IOException {
+        String sql = readAllMigrationSql().toLowerCase();
+        for (String table : List.of(
+                "bookings", "mentor_availability_slots", "payment_orders", "payment_attempts",
+                "sessions", "booking_events", "google_calendar_connections", "google_calendar_sync_jobs")) {
+            assertTrue(sql.contains("alter table " + table), () -> "UTC rollout must alter table " + table);
+        }
+        for (String column : List.of(
+                "selected_start_time_utc", "pending_expire_at_utc", "expires_at_utc",
+                "scheduled_start_time_utc", "created_at_utc", "run_after_utc")) {
+            assertTrue(sql.contains(column), () -> "UTC rollout is missing " + column);
+        }
     }
 
     private static String extractVersion(String filename) {

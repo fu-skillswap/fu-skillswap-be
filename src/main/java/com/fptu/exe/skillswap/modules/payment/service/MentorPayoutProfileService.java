@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -99,8 +100,8 @@ public class MentorPayoutProfileService {
                 .accountNumberMasked(maskAccountNumber(profile.getAccountNumber()))
                 .isDefault(profile.isDefault())
                 .isActive(profile.isActive())
-                .createdAt(profile.getCreatedAt())
-                .updatedAt(profile.getUpdatedAt())
+                .createdAt(profile.getCreatedAt() != null ? BookingTime.toOffsetDateTime(profile.getCreatedAt()) : null)
+                .updatedAt(profile.getUpdatedAt() != null ? BookingTime.toOffsetDateTime(profile.getUpdatedAt()) : null)
                 .build();
     }
 

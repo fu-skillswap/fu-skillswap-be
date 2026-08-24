@@ -50,7 +50,7 @@ class BookingEngagementServiceTest {
                 .selectedEndTime(LocalDateTime.now().plusHours(2))
                 .build();
 
-        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+        when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any()))
                 .thenReturn(List.of(booking));
         when(deliveryRepository.existsByBookingIdAndRecipientUserIdAndDeliveryType(any(), any(), any()))
                 .thenReturn(false);
@@ -60,7 +60,7 @@ class BookingEngagementServiceTest {
         assertEquals(2, sent); // 1 for mentee, 1 for mentor
 
         // Verify repository query was called exactly ONCE (for the 60 min window)
-        verify(bookingRepository, times(1)).findConfirmedBookingsStartingBetween(any(), any(), any());
+        verify(bookingRepository, times(1)).findConfirmedBookingsStartingBetweenUtc(any(), any(), any());
 
         // Verify delivery records saved for REMINDER_1H
         verify(deliveryRepository, times(2)).save(any());
@@ -105,7 +105,7 @@ class BookingEngagementServiceTest {
                 .selectedEndTime(LocalDateTime.now().plusHours(2))
                 .build();
 
-        when(bookingRepository.findConfirmedBookingsStartingBetween(any(), any(), any()))
+        when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any()))
                 .thenReturn(List.of(booking));
         when(deliveryRepository.existsByBookingIdAndRecipientUserIdAndDeliveryType(eq(booking.getId()), any(), eq(BookingEngagementDeliveryType.REMINDER_1H)))
                 .thenReturn(true);

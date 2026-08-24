@@ -166,6 +166,26 @@ public class MyBookingController {
     }
 
     @Operation(
+            summary = "Check-in buổi mentoring",
+            description = "Mentor hoặc mentee tự xác nhận có mặt từ đúng giờ bắt đầu đến trước giờ kết thúc. Backend tự nhận diện vai trò và ghi thời gian server; check-in chỉ là evidence hỗ trợ khi xử lý no-show, không tự release tiền. Gửi Idempotency-Key để retry an toàn khi mạng lỗi."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Check-in thành công hoặc replay lần check-in trước"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không thuộc booking"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Chưa đến giờ, đã hết giờ hoặc booking/session không thể check-in")
+    })
+    @PostMapping("/{bookingId}/check-in")
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
+    public ApiResponse<BookingResponse> checkIn(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(bookingService.checkIn(principal.getPublicId(), bookingId));
+    }
+
+    @Operation(
             summary = "Participant báo vấn đề sau buổi mentoring",
             description = "Participant hợp lệ báo vấn đề trong cửa sổ 24 giờ tính từ selectedEndTime, không phụ thuộc lúc mentor bấm complete."
     )

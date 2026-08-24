@@ -495,7 +495,7 @@ class PaymentOrderServiceTest {
                 String.valueOf(orderCode), "pl-111", "evt-111", "txn-111",
                 "CANCELLED",
                 false,
-                null,
+                (java.time.Instant) null,
                 0L
         );
         when(payOsGateway.verifyWebhook(request)).thenReturn(notPaid);

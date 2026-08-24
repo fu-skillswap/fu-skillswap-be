@@ -8,12 +8,12 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
@@ -39,17 +39,25 @@ public class BookingReminderEmailService {
     private final BookingRepository bookingRepository;
     private final EmailDispatchService emailDispatchService;
     private SessionService sessionService;
+    private com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider = com.fptu.exe.skillswap.shared.time.TimeProvider.from(java.time.Clock.systemUTC());
 
     @Autowired(required = false)
     void setSessionService(SessionService sessionService) {
         this.sessionService = sessionService;
     }
 
+    @Autowired(required = false)
+    public void setTimeProvider(com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
+
     public int sendUpcomingSessionReminders() {
-        LocalDateTime now = DateTimeUtil.now();
-        LocalDateTime startInclusive = now.plusMinutes(29);
-        LocalDateTime endExclusive = now.plusMinutes(31);
-        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(
+        Instant now = timeProvider.instant();
+        Instant startInclusive = now.plus(Duration.ofMinutes(29));
+        Instant endExclusive = now.plus(Duration.ofMinutes(31));
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetweenUtc(
                 CONFIRMED_STATUSES,
                 startInclusive,
                 endExclusive
@@ -69,15 +77,15 @@ public class BookingReminderEmailService {
 
     /** Calendar is optional. This warns participants when a confirmed booking has no usable meeting access. */
     public int sendMeetingAccessFallbackWarnings() {
-        LocalDateTime now = DateTimeUtil.now();
-        int sent = sendMeetingAccessFallbackWarnings(now.plusMinutes(119), now.plusMinutes(121), false);
-        return sent + sendMeetingAccessFallbackWarnings(now.plusMinutes(29), now.plusMinutes(31), true);
+        Instant now = timeProvider.instant();
+        int sent = sendMeetingAccessFallbackWarnings(now.plus(Duration.ofMinutes(119)), now.plus(Duration.ofMinutes(121)), false);
+        return sent + sendMeetingAccessFallbackWarnings(now.plus(Duration.ofMinutes(29)), now.plus(Duration.ofMinutes(31)), true);
     }
 
-    private int sendMeetingAccessFallbackWarnings(LocalDateTime startInclusive,
-                                                   LocalDateTime endExclusive,
+    private int sendMeetingAccessFallbackWarnings(Instant startInclusive,
+                                                   Instant endExclusive,
                                                    boolean notifyMentee) {
-        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetweenUtc(
                 CONFIRMED_STATUSES, startInclusive, endExclusive);
         int sent = 0;
         for (Booking booking : bookings) {
@@ -101,7 +109,7 @@ public class BookingReminderEmailService {
             digest.add(defaultText(row.getServiceTitle(), DEFAULT_SERVICE_TITLE), row.getPendingCount());
         }
 
-        String slotKey = DateTimeUtil.now().format(DIGEST_SLOT_FORMATTER);
+        String slotKey = timeProvider.nowBusiness().format(DIGEST_SLOT_FORMATTER);
         int sent = 0;
         for (PendingDigest digest : digests.values()) {
             if (digest.totalCount() <= 0) {
@@ -115,15 +123,15 @@ public class BookingReminderEmailService {
     }
 
     public int sendDailyMentorScheduleDigests() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         // Check for today's confirmed bookings starting from 02:00 to 23:59:59
         LocalDateTime startInclusive = now.toLocalDate().atTime(2, 0);
         LocalDateTime endExclusive = now.toLocalDate().plusDays(1).atStartOfDay();
 
-        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetween(
+        List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetweenUtc(
                 CONFIRMED_STATUSES,
-                startInclusive,
-                endExclusive
+                BookingTime.toInstant(startInclusive),
+                BookingTime.toInstant(endExclusive)
         );
 
         if (bookings.isEmpty()) {
@@ -172,14 +180,15 @@ public class BookingReminderEmailService {
     }
 
     public int sendAutoCloseWarningEmails() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = timeProvider.nowBusiness();
         // Auto-close is anchored to selectedEndTime + 24 hours; this query targets the one-hour warning.
         LocalDateTime endExclusive = now.plusHours(1);
         LocalDateTime startInclusive = endExclusive.minusMinutes(1);
 
         int sent = 0;
         for (BookingStatus status : List.of(BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION)) {
-            for (Booking booking : bookingRepository.findBookingsAboutToAutoClose(status, startInclusive, endExclusive)) {
+            for (Booking booking : bookingRepository.findBookingsAboutToAutoCloseUtc(status,
+                    BookingTime.toInstant(startInclusive), BookingTime.toInstant(endExclusive))) {
                 if (sendMenteeAutoCloseWarning(booking)) sent++;
                 if (sendMentorAutoCloseWarning(booking)) sent++;
             }

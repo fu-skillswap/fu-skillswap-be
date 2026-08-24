@@ -26,22 +26,20 @@ import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import lombok.RequiredArgsConstructor;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedEndTime;
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedStartTime;
-
 @Service
-@RequiredArgsConstructor
 public class BookingCompletionService {
 
     private final BookingRepository bookingRepository;
@@ -51,7 +49,42 @@ public class BookingCompletionService {
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
+    private final TimeProvider timeProvider;
     private MentorViolationService mentorViolationService;
+
+    @Autowired
+    public BookingCompletionService(
+            BookingRepository bookingRepository,
+            SessionFinalizationService sessionFinalizationService,
+            SettlementService settlementService,
+            BookingEventService bookingEventService,
+            ApplicationEventPublisher eventPublisher,
+            InternalTelemetryService internalTelemetryService,
+            BookingResponseMapper bookingResponseMapper,
+            TimeProvider timeProvider
+    ) {
+        this.bookingRepository = bookingRepository;
+        this.sessionFinalizationService = sessionFinalizationService;
+        this.settlementService = settlementService;
+        this.bookingEventService = bookingEventService;
+        this.eventPublisher = eventPublisher;
+        this.internalTelemetryService = internalTelemetryService;
+        this.bookingResponseMapper = bookingResponseMapper;
+        this.timeProvider = timeProvider != null ? timeProvider : TimeProvider.from(Clock.systemUTC());
+    }
+
+    public BookingCompletionService(
+            BookingRepository bookingRepository,
+            SessionFinalizationService sessionFinalizationService,
+            SettlementService settlementService,
+            BookingEventService bookingEventService,
+            ApplicationEventPublisher eventPublisher,
+            InternalTelemetryService internalTelemetryService,
+            BookingResponseMapper bookingResponseMapper
+    ) {
+        this(bookingRepository, sessionFinalizationService, settlementService, bookingEventService,
+                eventPublisher, internalTelemetryService, bookingResponseMapper, null);
+    }
 
     @Autowired(required = false)
     void setMentorViolationService(MentorViolationService mentorViolationService) {
@@ -78,7 +111,7 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
 
-        LocalDateTime now = DateTimeUtil.now();
+        Instant nowUtc = timeProvider.instant();
         Booking booking = getBookingForSessionAction(mentorUserId, bookingId);
         requireDirectBooking(booking);
         if (!isMentorOfBooking(booking, mentorUserId)) {
@@ -86,17 +119,18 @@ public class BookingCompletionService {
         }
         if ((booking.getStatus() == BookingStatus.AWAITING_MENTEE_CONFIRMATION
                 || booking.getStatus() == BookingStatus.COMPLETED)
-                && booking.getCompletedAt() != null) {
+                && (booking.getCompletedAtUtc() != null || booking.getCompletedAt() != null)) {
             return bookingResponseMapper.toBookingResponse(booking);
         }
-        synchronizePostSessionStatusForPhaseOne(booking, now);
+        synchronizePostSessionStatusForPhaseOne(booking, nowUtc);
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ mentor hoàn tất");
         }
-        if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
+        Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
+        if (endUtc == null || nowUtc.isBefore(endUtc)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chưa thể hoàn tất booking trước khi buổi mentoring kết thúc");
         }
-        if (!now.isBefore(selectedEndTime(booking).plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+        if (!nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Đã quá thời hạn mentor xác nhận; booking sẽ được hệ thống tự động hoàn tất");
         }
@@ -104,9 +138,9 @@ public class BookingCompletionService {
         String completionNote = trimToNull(request == null ? null : request.completionNote());
         booking.setMentorNote(completionNote);
         BookingStatus oldStatus = booking.getStatus();
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTOR_COMPLETED, now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTOR_COMPLETED, nowUtc);
 
-        sessionFinalizationService.recordMentorReportedCompletion(booking, now);
+        sessionFinalizationService.recordMentorReportedCompletion(booking, nowUtc);
 
         Booking savedBooking = bookingRepository.save(booking);
         recordBookingEvent(savedBooking, BookingEventType.MENTOR_COMPLETED,
@@ -126,7 +160,7 @@ public class BookingCompletionService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã xác nhận hoàn tất buổi học.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
 
         return bookingResponseMapper.toBookingResponse(savedBooking);
@@ -141,9 +175,9 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
 
+        Instant nowUtc = timeProvider.instant();
         Booking booking = getBookingForSessionAction(currentUserId, bookingId);
-        LocalDateTime now = DateTimeUtil.now();
-        synchronizePostSessionStatusForPhaseOne(booking, now);
+        synchronizePostSessionStatusForPhaseOne(booking, nowUtc);
         assertBookingAccess(booking, currentUserId);
 
         if (isMentorOfBooking(booking, currentUserId)) {
@@ -158,14 +192,14 @@ public class BookingCompletionService {
                 && booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ xác nhận sau buổi học");
         }
-        ensureWithinPostSessionReviewWindow(booking, now);
+        ensureWithinPostSessionReviewWindow(booking, nowUtc);
 
         BookingStatus oldStatus = booking.getStatus();
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTEE_CONFIRMED, now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.MENTEE_CONFIRMED, nowUtc);
         booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMenteeNote(trimToNull(request == null ? null : request.confirmationNote()));
 
-        sessionFinalizationService.finalizeDeliveredSession(booking, now);
+        sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
         Booking savedBooking = bookingRepository.save(booking);
         if (settlementService != null) {
             settlementService.releaseForBooking(savedBooking);
@@ -190,7 +224,7 @@ public class BookingCompletionService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Mentee xác nhận hoàn tất buổi học thành công.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
@@ -207,9 +241,9 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu báo vấn đề");
         }
 
+        Instant nowUtc = timeProvider.instant();
         Booking booking = getBookingForSessionAction(currentUserId, bookingId);
-        LocalDateTime now = DateTimeUtil.now();
-        synchronizePostSessionStatusForPhaseOne(booking, now);
+        synchronizePostSessionStatusForPhaseOne(booking, nowUtc);
         assertBookingAccess(booking, currentUserId);
 
         if (booking.getStatus() == BookingStatus.UNDER_REVIEW
@@ -217,23 +251,27 @@ public class BookingCompletionService {
                 && request.issueType() == booking.getIssueType()) {
             return BookingIssueResponse.builder()
                     .bookingId(booking.getId()).status(booking.getStatus())
-                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt())).issueType(booking.getIssueType())
-                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt())).build();
+                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
+                    .issueType(booking.getIssueType())
+                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : (booking.getIssueRespondedAt() != null ? BookingTime.toInstant(booking.getIssueRespondedAt()) : null)))
+                    .build();
         }
 
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
                 && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái cho phép báo vấn đề");
         }
-        if (selectedEndTime(booking) == null || now.isBefore(selectedEndTime(booking))) {
+        Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
+        if (endUtc == null || nowUtc.isBefore(endUtc)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể báo vấn đề sau khi buổi mentoring đã kết thúc");
         }
-        ensureWithinIssueWindow(booking, now);
+        ensureWithinIssueWindow(booking, nowUtc);
         validateIssueReporter(booking, currentUserId, request.issueType());
 
         BookingStatus oldStatus = booking.getStatus();
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, now);
-        booking.setIssueSubmittedAt(now);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, nowUtc);
+        booking.setIssueSubmittedAtUtc(nowUtc);
+        booking.setIssueSubmittedAt(BookingTime.fromInstant(nowUtc));
         booking.setIssueSubmittedByUserId(currentUserId);
         booking.setIssueType(request.issueType());
         booking.setIssueDescription(trim(request.description()));
@@ -248,14 +286,14 @@ public class BookingCompletionService {
                 savedBooking.getMentorProfile().getUserId(),
                 savedBooking.getStatus(),
                 "Buổi học đã được báo cáo vấn đề và đang được xem xét.",
-                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : DateTimeUtil.now()
+                savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
         return BookingIssueResponse.builder()
                 .bookingId(savedBooking.getId())
                 .status(savedBooking.getStatus())
-                .issueSubmittedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueSubmittedAt()))
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueSubmittedAtUtc() != null ? savedBooking.getIssueSubmittedAtUtc() : BookingTime.toInstant(savedBooking.getIssueSubmittedAt())))
                 .issueType(savedBooking.getIssueType())
-                .issueRespondedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueRespondedAt()))
+                .issueRespondedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueRespondedAtUtc() != null ? savedBooking.getIssueRespondedAtUtc() : (savedBooking.getIssueRespondedAt() != null ? BookingTime.toInstant(savedBooking.getIssueRespondedAt()) : null)))
                 .build();
     }
 
@@ -269,33 +307,39 @@ public class BookingCompletionService {
         }
         Booking booking = getBookingForSessionAction(currentUserId, bookingId);
         assertBookingAccess(booking, currentUserId);
-        if (booking.getStatus() != BookingStatus.UNDER_REVIEW || booking.getIssueSubmittedAt() == null) {
+        if (booking.getStatus() != BookingStatus.UNDER_REVIEW || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện không có issue đang mở");
         }
-        if (currentUserId.equals(booking.getIssueRespondedByUserId()) && booking.getIssueRespondedAt() != null) {
+        if (currentUserId.equals(booking.getIssueRespondedByUserId()) && (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null)) {
             return BookingIssueResponse.builder().bookingId(booking.getId()).status(booking.getStatus())
-                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt())).issueType(booking.getIssueType())
-                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt())).build();
+                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
+                    .issueType(booking.getIssueType())
+                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt())))
+                    .build();
         }
-        if (booking.getIssueRespondedAt() != null) {
+        if (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Issue này đã có phản hồi từ counterparty");
         }
         if (currentUserId.equals(booking.getIssueSubmittedByUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ counterparty của người báo issue mới được phản hồi");
         }
-        LocalDateTime now = DateTimeUtil.now();
-        if (now.isAfter(booking.getIssueSubmittedAt().plusHours(24))) {
+        Instant nowUtc = timeProvider.instant();
+        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        if (nowUtc.isAfter(submittedUtc.plus(Duration.ofHours(24)))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn phản hồi issue");
         }
-        booking.setIssueRespondedAt(now);
+        booking.setIssueRespondedAtUtc(nowUtc);
+        booking.setIssueRespondedAt(BookingTime.fromInstant(nowUtc));
         booking.setIssueRespondedByUserId(currentUserId);
         booking.setIssueResponseNote(trimToNull(request.responseNote()));
         Booking saved = bookingRepository.save(booking);
         recordBookingEvent(saved, BookingEventType.ISSUE_RESPONDED,
                 BookingStatus.UNDER_REVIEW, BookingEventActorType.USER, currentUserId, null);
         return BookingIssueResponse.builder().bookingId(saved.getId()).status(saved.getStatus())
-                .issueSubmittedAt(BookingTime.toOffsetDateTime(saved.getIssueSubmittedAt())).issueType(saved.getIssueType())
-                .issueRespondedAt(BookingTime.toOffsetDateTime(saved.getIssueRespondedAt())).build();
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(saved.getIssueSubmittedAtUtc() != null ? saved.getIssueSubmittedAtUtc() : BookingTime.toInstant(saved.getIssueSubmittedAt())))
+                .issueType(saved.getIssueType())
+                .issueRespondedAt(BookingTime.toOffsetDateTime(saved.getIssueRespondedAtUtc() != null ? saved.getIssueRespondedAtUtc() : BookingTime.toInstant(saved.getIssueRespondedAt())))
+                .build();
     }
 
     @Transactional
@@ -316,24 +360,26 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể resolve booking đang UNDER_REVIEW");
         }
 
-        LocalDateTime now = DateTimeUtil.now();
-        booking.setIssueResolvedAt(now);
+        Instant nowUtc = timeProvider.instant();
+        booking.setIssueResolvedAtUtc(nowUtc);
+        booking.setIssueResolvedAt(BookingTime.fromInstant(nowUtc));
         booking.setIssueResolvedByUserId(adminUserId);
         booking.setIssueResolutionNote(trimToNull(request.adminNote()));
 
         BookingStatus oldStatus = booking.getStatus();
         if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, now);
-            if (booking.getCompletedAt() == null) {
-                booking.setCompletedAt(now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, nowUtc);
+            if (booking.getCompletedAtUtc() == null && booking.getCompletedAt() == null) {
+                booking.setCompletedAtUtc(nowUtc);
+                booking.setCompletedAt(BookingTime.fromInstant(nowUtc));
             }
             booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
-            sessionFinalizationService.finalizeDeliveredSession(booking, now);
+            sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
             if (settlementService != null) {
                 settlementService.releaseForBooking(booking);
             }
         } else if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTOR_NO_SHOW, now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTOR_NO_SHOW, nowUtc);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
             sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
@@ -341,7 +387,7 @@ public class BookingCompletionService {
             }
             recordMentorNoShowViolation(booking);
         } else {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW, now);
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW, nowUtc);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
             sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
@@ -392,29 +438,29 @@ public class BookingCompletionService {
         }
     }
 
-    private void synchronizePostSessionStatusForPhaseOne(Booking booking, LocalDateTime now) {
+    private void synchronizePostSessionStatusForPhaseOne(Booking booking, Instant nowUtc) {
         if (booking == null) {
             return;
         }
         if (booking.getStatus() == BookingStatus.PAID) {
-            LocalDateTime endTime = selectedEndTime(booking);
-            if (endTime != null && !now.isBefore(endTime)) {
-                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SESSION_ENDED, now);
+            Instant endTime = BookingTime.resolveSelectedEndUtc(booking);
+            if (endTime != null && !nowUtc.isBefore(endTime)) {
+                BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SESSION_ENDED, nowUtc);
             }
         }
     }
 
-    private void ensureWithinPostSessionReviewWindow(Booking booking, LocalDateTime now) {
-        LocalDateTime end = selectedEndTime(booking);
-        if (end != null && !now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
+    private void ensureWithinPostSessionReviewWindow(Booking booking, Instant nowUtc) {
+        Instant end = BookingTime.resolveSelectedEndUtc(booking);
+        if (end != null && !nowUtc.isBefore(end.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn xác nhận buổi học (" + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ)");
         }
     }
 
-    private void ensureWithinIssueWindow(Booking booking, LocalDateTime now) {
-        LocalDateTime end = selectedEndTime(booking);
-        LocalDateTime issueDeadline = end == null ? null : end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS);
-        if (issueDeadline != null && !now.isBefore(issueDeadline)) {
+    private void ensureWithinIssueWindow(Booking booking, Instant nowUtc) {
+        Instant end = BookingTime.resolveSelectedEndUtc(booking);
+        Instant issueDeadline = end == null ? null : end.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
+        if (issueDeadline != null && !nowUtc.isBefore(issueDeadline)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn báo cáo vấn đề (" + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ)");
         }
     }

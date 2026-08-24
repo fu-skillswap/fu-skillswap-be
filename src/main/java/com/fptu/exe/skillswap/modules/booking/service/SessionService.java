@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType;
@@ -9,11 +8,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
@@ -41,13 +40,18 @@ public class SessionService {
             return existingSession.get(); // Idempotency
         }
 
+        Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
+        Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
+
         Session session = Session.builder()
                 .service(booking.getService())
                 .mentor(booking.getMentorProfile().getUser())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(booking.getId())
-                .scheduledStartTime(booking.getSelectedStartTime())
-                .scheduledEndTime(booking.getSelectedEndTime())
+                .scheduledStartTimeUtc(startUtc)
+                .scheduledStartTime(booking.getSelectedStartTime() != null ? booking.getSelectedStartTime() : BookingTime.fromInstant(startUtc))
+                .scheduledEndTimeUtc(endUtc)
+                .scheduledEndTime(booking.getSelectedEndTime() != null ? booking.getSelectedEndTime() : BookingTime.fromInstant(endUtc))
                 .calendarSyncStatus(GoogleCalendarSyncStatus.NOT_CONNECTED)
                 .status(SessionStatus.SCHEDULED)
                 .build();
@@ -61,8 +65,6 @@ public class SessionService {
                     .orElseThrow(() -> ex);
         }
     }
-
-
 
     @Transactional(readOnly = true)
     public Session findByBookingId(UUID bookingId) {
@@ -104,11 +106,24 @@ public class SessionService {
     }
 
     @Transactional
+    public Session updateScheduleForBooking(UUID bookingId, Instant scheduledStartTimeUtc, Instant scheduledEndTimeUtc) {
+        Session session = sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy session của booking"));
+        session.setScheduledStartTimeUtc(scheduledStartTimeUtc);
+        session.setScheduledStartTime(BookingTime.fromInstant(scheduledStartTimeUtc));
+        session.setScheduledEndTimeUtc(scheduledEndTimeUtc);
+        session.setScheduledEndTime(BookingTime.fromInstant(scheduledEndTimeUtc));
+        return sessionRepository.save(session);
+    }
+
+    @Transactional
     public Session updateScheduleForBooking(UUID bookingId, LocalDateTime scheduledStartTime, LocalDateTime scheduledEndTime) {
         Session session = sessionRepository.findBySourceTypeAndSourceId(SessionSourceType.BOOKING, bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy session của booking"));
         session.setScheduledStartTime(scheduledStartTime);
+        session.setScheduledStartTimeUtc(BookingTime.toInstant(scheduledStartTime));
         session.setScheduledEndTime(scheduledEndTime);
+        session.setScheduledEndTimeUtc(BookingTime.toInstant(scheduledEndTime));
         return sessionRepository.save(session);
     }
 }
