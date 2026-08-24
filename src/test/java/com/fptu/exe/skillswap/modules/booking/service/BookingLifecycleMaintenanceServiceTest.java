@@ -69,6 +69,9 @@ class BookingLifecycleMaintenanceServiceTest {
     private BookingEventService bookingEventService;
 
     @Mock
+    private SessionFinalizationService sessionFinalizationService;
+
+    @Mock
     private UserRepository userRepository;
 
     private BookingLifecycleMaintenanceService maintenanceService;
@@ -89,6 +92,16 @@ class BookingLifecycleMaintenanceServiceTest {
                 bookingEventService,
                 userRepository
         );
+        maintenanceService.setSessionFinalizationService(sessionFinalizationService);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            Booking booking = invocation.getArgument(0);
+            LocalDateTime finalizedAt = invocation.getArgument(1);
+            booking.setFinalizedAt(finalizedAt);
+            if (booking.getCompletedAt() == null) {
+                booking.setCompletedAt(finalizedAt);
+            }
+            return null;
+        }).when(sessionFinalizationService).finalizeDeliveredSession(any(Booking.class), any(LocalDateTime.class));
 
         UUID menteeId = UUID.randomUUID();
         UUID mentorId = UUID.randomUUID();
@@ -205,6 +218,7 @@ class BookingLifecycleMaintenanceServiceTest {
         assertEquals(BookingCompletionOutcome.AUTO_CLOSED, booking.getCompletionOutcome());
         assertNotNull(booking.getAutoClosedAt());
         assertNotNull(booking.getFinalizedAt());
+        verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), any(LocalDateTime.class));
         verify(settlementService).releaseForBooking(eq(booking));
     }
 

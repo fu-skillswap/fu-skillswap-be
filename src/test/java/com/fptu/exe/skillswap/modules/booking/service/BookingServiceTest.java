@@ -111,6 +111,9 @@ class BookingServiceTest {
     private com.fptu.exe.skillswap.modules.booking.service.SessionService sessionService;
 
     @Mock
+    private com.fptu.exe.skillswap.modules.booking.repository.SessionRepository sessionRepository;
+
+    @Mock
     private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
 
     @Mock
@@ -156,7 +159,8 @@ class BookingServiceTest {
                 bookingSlotValidator,
                 bookingEligibilityPolicy,
                 new PaymentProperties(),
-                internalTelemetryService
+                internalTelemetryService,
+                sessionRepository
         );
 
         menteeId = UUID.randomUUID();
@@ -615,6 +619,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
+        stubSessionFinalization(booking);
 
         BookingResponse response = bookingService.completeBooking(
                 mentorId,
@@ -641,6 +646,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
+        stubSessionFinalization(booking);
 
         BookingResponse mentorCompleted = bookingService.completeBooking(
                 mentorId,
@@ -1076,6 +1082,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubSessionFinalization(booking);
 
         // 1. Mentor completes first
         BookingResponse response1 = bookingService.completeBooking(mentorId, booking.getId(), new CompleteBookingRequest("Mentor completion note"));
@@ -1208,6 +1215,7 @@ class BookingServiceTest {
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        stubSessionFinalization(booking);
 
         BookingResponse response = bookingService.resolveBookingIssue(
                 adminUserId,
@@ -1243,6 +1251,19 @@ class BookingServiceTest {
                 .requestedStartTime(slot.getStartTime())
                 .requestedEndTime(slot.getEndTime())
                 .build();
+    }
+
+    private void stubSessionFinalization(Booking booking) {
+        com.fptu.exe.skillswap.modules.booking.domain.Session session = com.fptu.exe.skillswap.modules.booking.domain.Session.builder()
+                .id(UUID.randomUUID())
+                .sourceType(com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType.BOOKING)
+                .sourceId(booking.getId())
+                .status(com.fptu.exe.skillswap.modules.booking.domain.SessionStatus.SCHEDULED)
+                .build();
+        when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(
+                com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType.BOOKING, booking.getId()))
+                .thenReturn(Optional.of(session));
+        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
     }
 
     private CreateBookingRequest bookingRequest(String title, String description) {

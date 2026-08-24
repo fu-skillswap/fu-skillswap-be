@@ -55,6 +55,7 @@ public class BookingLifecycleMaintenanceService {
     private final com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplinePort mentorDisciplinePort;
     private AvailabilityTemplateService availabilityTemplateService;
     private MentorViolationService mentorViolationService;
+    private SessionFinalizationService sessionFinalizationService;
 
     public BookingLifecycleMaintenanceService(
             BookingRepository bookingRepository,
@@ -88,6 +89,11 @@ public class BookingLifecycleMaintenanceService {
     @Autowired(required = false)
     void setMentorViolationService(MentorViolationService mentorViolationService) {
         this.mentorViolationService = mentorViolationService;
+    }
+
+    @Autowired
+    void setSessionFinalizationService(SessionFinalizationService sessionFinalizationService) {
+        this.sessionFinalizationService = sessionFinalizationService;
     }
 
     @Transactional
@@ -269,8 +275,8 @@ public class BookingLifecycleMaintenanceService {
                 recordEvent(booking, BookingEventType.MENTOR_COMPLETION_OVERDUE, oldStatus, BookingEventActorType.SYSTEM);
                 booking.setStatus(BookingStatus.COMPLETED);
                 booking.setAutoClosedAt(now);
-                booking.setFinalizedAt(now);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
+                sessionFinalizationService.finalizeDeliveredSession(booking, now);
                 settlementService.releaseForBooking(booking);
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 notifyMentor(booking, "Booking đã tự động hoàn tất",
@@ -302,8 +308,8 @@ public class BookingLifecycleMaintenanceService {
             if (!now.isBefore(end.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS))) {
                 booking.setStatus(BookingStatus.COMPLETED);
                 booking.setAutoClosedAt(now);
-                booking.setFinalizedAt(now);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
+                sessionFinalizationService.finalizeDeliveredSession(booking, now);
                 settlementService.releaseForBooking(booking);
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 return true;
@@ -335,11 +341,13 @@ public class BookingLifecycleMaintenanceService {
             booking.setFinalizedAt(now);
             if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
+                sessionFinalizationService.markSessionNotDelivered(booking);
                 settlementService.refundForMentorNoShow(booking);
                 recordMentorViolation(booking, MentorViolationType.MENTOR_NO_SHOW,
                         "Hệ thống xác nhận mentor no-show do không phản hồi báo cáo đúng hạn.");
             } else {
                 booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
+                sessionFinalizationService.markSessionNotDelivered(booking);
                 settlementService.releaseForBooking(booking);
             }
             booking.setIssueResolvedAt(now);

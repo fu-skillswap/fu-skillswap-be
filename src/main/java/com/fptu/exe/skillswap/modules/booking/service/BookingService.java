@@ -17,6 +17,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
@@ -79,7 +80,8 @@ public class BookingService {
             BookingSlotValidator bookingSlotValidator,
             BookingEligibilityPolicy bookingEligibilityPolicy,
             PaymentProperties paymentProperties,
-            InternalTelemetryService internalTelemetryService
+            InternalTelemetryService internalTelemetryService,
+            SessionRepository sessionRepository
     ) {
         UserQueryPortImpl userPort = new UserQueryPortImpl(userRepository, entityManager);
         com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort mentorPort =
@@ -124,11 +126,14 @@ public class BookingService {
                 eventPublisher,
                 mapper
         );
+        SessionFinalizationService sessionFinalizationService = new SessionFinalizationService(
+                sessionRepository,
+                sessionService,
+                mentorProfileRepository
+        );
         this.bookingCompletionService = new BookingCompletionService(
                 bookingRepository,
-                mentorProfileRepository,
-                entityManager,
-                sessionService,
+                sessionFinalizationService,
                 settlementService,
                 bookingEventService,
                 eventPublisher,
@@ -156,6 +161,7 @@ public class BookingService {
                 eventPublisher,
                 bookingEventService
         );
+        this.bookingLifecycleMaintenanceService.setSessionFinalizationService(sessionFinalizationService);
     }
 
     @Transactional

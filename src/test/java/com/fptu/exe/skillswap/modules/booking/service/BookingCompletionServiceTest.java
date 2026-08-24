@@ -3,17 +3,17 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,9 +43,7 @@ class BookingCompletionServiceTest {
     private static final Instant FIXED_NOW = Instant.parse("2026-08-23T03:00:00Z");
 
     @Mock private BookingRepository bookingRepository;
-    @Mock private MentorProfileRepository mentorProfileRepository;
-    @Mock private EntityManager entityManager;
-    @Mock private SessionService sessionService;
+    @Mock private SessionFinalizationService sessionFinalizationService;
     @Mock private SettlementService settlementService;
     @Mock private BookingEventService bookingEventService;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -62,9 +60,7 @@ class BookingCompletionServiceTest {
         DateTimeUtil.setClock(Clock.fixed(FIXED_NOW, APP_ZONE));
         service = new BookingCompletionService(
                 bookingRepository,
-                mentorProfileRepository,
-                entityManager,
-                sessionService,
+                sessionFinalizationService,
                 settlementService,
                 bookingEventService,
                 eventPublisher,
@@ -141,6 +137,31 @@ class BookingCompletionServiceTest {
 
         assertEquals(BookingStatus.UNDER_REVIEW, response.status());
         assertEquals(BookingIssueType.TECHNICAL_PROBLEM, response.issueType());
+    }
+
+    @Test
+    void completeBookingByMentor_shouldDelegateSessionRecordingToFinalizationService() {
+        Booking booking = eligibleBooking();
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        service.completeBookingByMentor(mentorId, bookingId, new CompleteBookingRequest("Đã hoàn tất"));
+
+        verify(sessionFinalizationService).recordMentorReportedCompletion(
+                org.mockito.ArgumentMatchers.eq(booking), any(LocalDateTime.class));
+    }
+
+    @Test
+    void confirmBookingByParticipant_shouldDelegateFinalizationBeforeSettlementRelease() {
+        Booking booking = eligibleBooking();
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+
+        service.confirmBookingByParticipant(menteeId, bookingId, new ConfirmBookingRequest("Đã học xong"));
+
+        verify(sessionFinalizationService).finalizeDeliveredSession(
+                org.mockito.ArgumentMatchers.eq(booking), any(LocalDateTime.class));
+        verify(settlementService).releaseForBooking(booking);
     }
 
     private void stubSave(Booking booking) {

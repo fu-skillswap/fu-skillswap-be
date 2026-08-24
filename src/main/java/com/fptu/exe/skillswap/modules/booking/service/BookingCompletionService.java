@@ -9,8 +9,6 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
-import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
@@ -19,9 +17,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
@@ -30,7 +26,6 @@ import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -49,9 +44,7 @@ import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapp
 public class BookingCompletionService {
 
     private final BookingRepository bookingRepository;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final EntityManager entityManager;
-    private final SessionService sessionService;
+    private final SessionFinalizationService sessionFinalizationService;
     private final SettlementService settlementService;
     private final BookingEventService bookingEventService;
     private final ApplicationEventPublisher eventPublisher;
@@ -114,36 +107,7 @@ public class BookingCompletionService {
         booking.setStatus(BookingStatus.AWAITING_MENTEE_CONFIRMATION);
         booking.setCompletedAt(now);
 
-        if (booking.getActualStartTime() == null) {
-            booking.setActualStartTime(selectedStartTime(booking));
-        }
-        if (booking.getActualEndTime() == null) {
-            booking.setActualEndTime(selectedEndTime(booking));
-        }
-
-        if (sessionService != null) {
-            Session session = sessionService.findByBookingId(bookingId);
-            if (session != null) {
-                session.setStatus(SessionStatus.COMPLETED);
-                if (session.getActualStartTime() == null) {
-                    session.setActualStartTime(selectedStartTime(booking));
-                }
-                if (session.getActualEndTime() == null) {
-                    session.setActualEndTime(selectedEndTime(booking));
-                }
-            }
-        }
-
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        if (mentorProfile != null) {
-            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-            if (entityManager != null) {
-                entityManager.refresh(lockedProfile);
-            }
-            touchMentorActivity(lockedProfile, now);
-            mentorProfileRepository.save(lockedProfile);
-        }
+        sessionFinalizationService.recordMentorReportedCompletion(booking, now);
 
         Booking savedBooking = bookingRepository.save(booking);
         recordBookingEvent(savedBooking, BookingEventType.MENTOR_COMPLETED,
@@ -199,23 +163,10 @@ public class BookingCompletionService {
 
         BookingStatus oldStatus = booking.getStatus();
         booking.setStatus(BookingStatus.COMPLETED);
-        booking.setFinalizedAt(now);
         booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMenteeNote(trimToNull(request == null ? null : request.confirmationNote()));
 
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        if (mentorProfile != null) {
-            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-            if (entityManager != null) {
-                entityManager.refresh(lockedProfile);
-            }
-            lockedProfile.setTotalCompletedSessions(defaultInteger(lockedProfile.getTotalCompletedSessions()) + 1);
-            lockedProfile.setTotalSessions(defaultInteger(lockedProfile.getTotalSessions()) + 1);
-            touchMentorActivity(lockedProfile, now);
-            mentorProfileRepository.save(lockedProfile);
-        }
-
+        sessionFinalizationService.finalizeDeliveredSession(booking, now);
         Booking savedBooking = bookingRepository.save(booking);
         if (settlementService != null) {
             settlementService.releaseForBooking(savedBooking);
@@ -375,15 +326,16 @@ public class BookingCompletionService {
         if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setCompletedAt(booking.getCompletedAt() == null ? now : booking.getCompletedAt());
-            booking.setFinalizedAt(now);
             booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
+            sessionFinalizationService.finalizeDeliveredSession(booking, now);
             if (settlementService != null) {
                 settlementService.releaseForBooking(booking);
             }
         } else if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
             booking.setStatus(BookingStatus.COMPLETED);
-            booking.setFinalizedAt(now);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
+            booking.setFinalizedAt(now);
+            sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
                 settlementService.refundForMentorNoShow(booking);
             }
@@ -392,6 +344,7 @@ public class BookingCompletionService {
             booking.setStatus(BookingStatus.COMPLETED);
             booking.setFinalizedAt(now);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
+            sessionFinalizationService.markSessionNotDelivered(booking);
             if (settlementService != null) {
                 settlementService.releaseForBooking(booking);
             }
@@ -491,17 +444,6 @@ public class BookingCompletionService {
         if (bookingEventService != null) {
             bookingEventService.record(booking, type, oldStatus, actorType, actorUserId, reason);
         }
-    }
-
-    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityAt) {
-        if (profile == null) {
-            return;
-        }
-        profile.setLastActiveAt(activityAt != null ? activityAt : DateTimeUtil.now());
-    }
-
-    private int defaultInteger(Integer value) {
-        return value == null ? 0 : value;
     }
 
     private String trim(String value) {
