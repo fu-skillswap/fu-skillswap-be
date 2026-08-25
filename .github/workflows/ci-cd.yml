@@ -131,18 +131,37 @@ jobs:
         if-no-files-found: ignore
 
   security-scan:
+    # Trivy resolves missing Java POMs from Maven Central. Starting after the
+    # Maven build lets setup-java restore the same dependency cache instead of
+    # three cold jobs downloading the dependency graph at once.
+    needs: integration-test
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
+    - name: Set up JDK 21 and restore Maven cache
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+
+    - name: Resolve Maven dependencies for Trivy
+      run: |
+        chmod +x mvnw
+        ./mvnw -B -ntp dependency:resolve -DincludeScope=test
+
     - name: Run Trivy vulnerability scanner in repo mode
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@v0.36.0
       with:
         scan-type: 'fs'
+        scan-ref: '.'
         ignore-unfixed: true
         format: 'table'
         severity: 'CRITICAL,HIGH'
+        cache: 'true'
+        timeout: '10m'
 
   release-preflight:
     runs-on: ubuntu-latest
