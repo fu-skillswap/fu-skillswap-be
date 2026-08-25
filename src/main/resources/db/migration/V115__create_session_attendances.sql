@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Attendance is an append-only, server-timestamped declaration by a mentoring participant.
 -- It is intentionally independent from settlement and does not backfill historical sessions.
 CREATE TABLE IF NOT EXISTS session_attendances (

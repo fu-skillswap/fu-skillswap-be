@@ -4,3 +4,4 @@ V97__remove_help_topic_commerce_tables.sql
 V98__cleanup_unused_user_columns.sql
 V102__remove_mentor_service_resource_access_logs.sql
 V107__drop_legacy_mentor_penalty_counters.sql
+V110__normalize_booking_terminal_outcomes.sql

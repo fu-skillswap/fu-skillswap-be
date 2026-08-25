@@ -7,8 +7,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -18,8 +20,14 @@ class FlywayMigrationNamingTest {
 
     private static final Path MIGRATION_DIR = Path.of("src/main/resources/db/migration");
     private static final Path MAIN_JAVA_DIR = Path.of("src/main/java");
+    private static final Path APPROVED_CONTRACT_MIGRATIONS = Path.of("scripts/approved-contract-migrations.txt");
+    private static final int ROLLOUT_POLICY_MIN_VERSION = 69;
     private static final Pattern VERSIONED_SQL = Pattern.compile("^V(\\d+)__.+\\.sql$");
     private static final Pattern ENTITY_TABLE = Pattern.compile("@Table\\s*\\(\\s*name\\s*=\\s*\"([^\"]+)\"");
+    private static final Pattern ROLLOUT_POLICY = Pattern.compile(
+            "^\\s*--\\s*rollout:\\s*(EXPAND|CONTRACT)\\s*$",
+            Pattern.CASE_INSENSITIVE
+    );
 
     @Test
     void migrationVersions_shouldBeUniqueAndWellFormed() throws IOException {
@@ -47,6 +55,43 @@ class FlywayMigrationNamingTest {
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
         assertTrue(duplicates.isEmpty(), () -> "Duplicate Flyway migration versions: " + duplicates);
+    }
+
+    @Test
+    void governedMigrations_shouldDeclareAnApprovedRolloutPolicy() throws IOException {
+        Set<String> approvedContracts = readApprovedContractMigrations();
+        Set<String> declaredContracts = new HashSet<>();
+        List<String> violations = new ArrayList<>();
+
+        try (var stream = Files.list(MIGRATION_DIR)) {
+            for (Path migration : stream.filter(Files::isRegularFile)
+                    .filter(path -> VERSIONED_SQL.matcher(path.getFileName().toString()).matches())
+                    .toList()) {
+                String filename = migration.getFileName().toString();
+                int version = Integer.parseInt(extractVersion(filename));
+                if (version < ROLLOUT_POLICY_MIN_VERSION) {
+                    continue;
+                }
+
+                String policy = readRolloutPolicy(migration);
+                if (policy == null) {
+                    violations.add(filename + " is missing EXPAND/CONTRACT in its first eight lines");
+                } else if ("CONTRACT".equals(policy)) {
+                    declaredContracts.add(filename);
+                    if (!approvedContracts.contains(filename)) {
+                        violations.add(filename + " is CONTRACT but is not approved");
+                    }
+                }
+            }
+        }
+
+        Set<String> staleApprovals = new HashSet<>(approvedContracts);
+        staleApprovals.removeAll(declaredContracts);
+        if (!staleApprovals.isEmpty()) {
+            violations.add("Approved CONTRACT entries without matching CONTRACT migrations: " + staleApprovals);
+        }
+
+        assertTrue(violations.isEmpty(), () -> "Migration rollout policy violations: " + violations);
     }
 
     @Test
@@ -148,6 +193,27 @@ class FlywayMigrationNamingTest {
             return filename;
         }
         return matcher.group(1);
+    }
+
+    private static String readRolloutPolicy(Path migration) throws IOException {
+        List<String> lines = Files.readAllLines(migration);
+        for (int index = 0; index < Math.min(8, lines.size()); index++) {
+            Matcher matcher = ROLLOUT_POLICY.matcher(lines.get(index));
+            if (matcher.matches()) {
+                return matcher.group(1).toUpperCase();
+            }
+        }
+        return null;
+    }
+
+    private static Set<String> readApprovedContractMigrations() throws IOException {
+        if (!Files.isRegularFile(APPROVED_CONTRACT_MIGRATIONS)) {
+            return Set.of();
+        }
+        return Files.readAllLines(APPROVED_CONTRACT_MIGRATIONS).stream()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .collect(Collectors.toSet());
     }
 
     private static String readAllMigrationSql() throws IOException {

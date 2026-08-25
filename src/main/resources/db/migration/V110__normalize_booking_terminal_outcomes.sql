@@ -1,3 +1,4 @@
+-- rollout: CONTRACT
 -- Historical status and outcome variants are normalized to one lifecycle vocabulary.
 ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_completion_outcome_check;
 
