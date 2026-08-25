@@ -14,7 +14,8 @@ public class BookingEmailNotificationEvent {
         BOOKING_PAID_CONFIRMED_EMAIL,
         BOOKING_REJECTED_EMAIL,
         BOOKING_CANCELLED_BY_MENTEE_EMAIL,
-        BOOKING_CANCELLED_BY_MENTOR_EMAIL
+        BOOKING_CANCELLED_BY_MENTOR_EMAIL,
+        BOOKING_ISSUE_REPORTED_EMAIL
     }
 
     private final UUID bookingId;

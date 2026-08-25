@@ -261,7 +261,7 @@ application:
     submit-requirements:
       student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
-  payment:
+payment:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
     mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
     scoin-to-vnd-rate: ${PAYMENT_SCOIN_TO_VND_RATE:1}
@@ -278,6 +278,16 @@ application:
       cancel-url: ${PAYOS_CANCEL_URL:http://localhost:3000/payment/cancel}
       webhook-url: ${PAYOS_WEBHOOK_URL:}
       webhook-secret: ${PAYOS_WEBHOOK_SECRET:}
+booking:
+  dispute-evidence:
+    max-files-per-action: ${BOOKING_DISPUTE_EVIDENCE_MAX_FILES_PER_ACTION:5}
+    max-file-size-bytes: ${BOOKING_DISPUTE_EVIDENCE_MAX_FILE_SIZE_BYTES:10485760}
+    upload-intent-ttl-minutes: ${BOOKING_DISPUTE_EVIDENCE_UPLOAD_INTENT_TTL_MINUTES:15}
+    download-url-ttl-minutes: ${BOOKING_DISPUTE_EVIDENCE_DOWNLOAD_URL_TTL_MINUTES:10}
+    retention-days: ${BOOKING_DISPUTE_EVIDENCE_RETENTION_DAYS:180}
+    upload-intent-rate-limit: ${BOOKING_DISPUTE_EVIDENCE_UPLOAD_INTENT_RATE_LIMIT:12}
+    upload-intent-rate-limit-window-minutes: ${BOOKING_DISPUTE_EVIDENCE_UPLOAD_INTENT_RATE_LIMIT_WINDOW_MINUTES:15}
+    cleanup-cron: ${BOOKING_DISPUTE_EVIDENCE_CLEANUP_CRON:0 10 3 * * *}
   mail:
     enabled: ${APPLICATION_MAIL_ENABLED:false}
     from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}

@@ -18,6 +18,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequ
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
+import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
@@ -38,6 +39,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -52,6 +54,7 @@ public class BookingCompletionService {
     private final BookingResponseMapper bookingResponseMapper;
     private final TimeProvider timeProvider;
     private MentorViolationService mentorViolationService;
+    private BookingIssueEvidenceService bookingIssueEvidenceService;
 
     @Autowired
     public BookingCompletionService(
@@ -90,6 +93,11 @@ public class BookingCompletionService {
     @Autowired(required = false)
     void setMentorViolationService(MentorViolationService mentorViolationService) {
         this.mentorViolationService = mentorViolationService;
+    }
+
+    @Autowired
+    void setBookingIssueEvidenceService(BookingIssueEvidenceService bookingIssueEvidenceService) {
+        this.bookingIssueEvidenceService = bookingIssueEvidenceService;
     }
 
     @Transactional
@@ -250,6 +258,10 @@ public class BookingCompletionService {
         if (booking.getStatus() == BookingStatus.UNDER_REVIEW
                 && currentUserId.equals(booking.getIssueSubmittedByUserId())
                 && request.issueType() == booking.getIssueType()) {
+            if (!trim(request.description()).equals(booking.getIssueDescription())) {
+                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Nội dung retry không khớp với issue đã gửi");
+            }
+            requireEvidenceService().assertReporterReplayMatches(booking, currentUserId, request.evidenceIds());
             return BookingIssueResponse.builder()
                     .bookingId(booking.getId()).status(booking.getStatus())
                     .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
@@ -268,6 +280,7 @@ public class BookingCompletionService {
         }
         ensureWithinIssueWindow(booking, nowUtc);
         validateIssueReporter(booking, currentUserId, request.issueType());
+        requireEvidenceService().attachReporterEvidence(booking, currentUserId, request.evidenceIds(), nowUtc);
 
         BookingStatus oldStatus = booking.getStatus();
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, nowUtc);
@@ -281,6 +294,7 @@ public class BookingCompletionService {
         Booking savedBooking = bookingRepository.save(booking);
         recordBookingEvent(savedBooking, BookingEventType.ISSUE_CREATED,
                 oldStatus, BookingEventActorType.USER, currentUserId, null);
+        publishIssueReportedNotifications(savedBooking, currentUserId);
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
@@ -312,6 +326,7 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện không có issue đang mở");
         }
         if (currentUserId.equals(booking.getIssueRespondedByUserId()) && (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null)) {
+            requireEvidenceService().assertResponderReplayMatches(booking, currentUserId, request.evidenceIds());
             return BookingIssueResponse.builder().bookingId(booking.getId()).status(booking.getStatus())
                     .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
                     .issueType(booking.getIssueType())
@@ -333,6 +348,7 @@ public class BookingCompletionService {
         booking.setIssueRespondedAt(BookingTime.fromInstant(nowUtc));
         booking.setIssueRespondedByUserId(currentUserId);
         booking.setIssueResponseNote(trimToNull(request.responseNote()));
+        requireEvidenceService().attachResponderEvidence(booking, currentUserId, request.evidenceIds(), nowUtc);
         Booking saved = bookingRepository.save(booking);
         recordBookingEvent(saved, BookingEventType.ISSUE_RESPONDED,
                 BookingStatus.UNDER_REVIEW, BookingEventActorType.USER, currentUserId, null);
@@ -403,6 +419,37 @@ public class BookingCompletionService {
         if (mentorViolationService == null || booking == null || booking.getMentorProfile() == null) return;
         mentorViolationService.record(booking.getMentorProfile().getUserId(), booking.getId(),
                 MentorViolationType.MENTOR_NO_SHOW, "Admin xác nhận mentor không có mặt trong buổi học.");
+    }
+
+    private BookingIssueEvidenceService requireEvidenceService() {
+        if (bookingIssueEvidenceService == null) {
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Dịch vụ minh chứng dispute chưa sẵn sàng");
+        }
+        return bookingIssueEvidenceService;
+    }
+
+    private void publishIssueReportedNotifications(Booking booking, UUID reporterUserId) {
+        UUID mentorUserId = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUserId();
+        UUID menteeUserId = booking.getMentee() == null ? null : booking.getMentee().getId();
+        UUID recipientUserId = reporterUserId != null && reporterUserId.equals(mentorUserId) ? menteeUserId : mentorUserId;
+        if (recipientUserId == null) return;
+        eventPublisher.publishEvent(new NotificationEvent(recipientUserId, NotificationType.BOOKING_ISSUE_REPORTED,
+                "Có tranh chấp booking cần phản hồi", "Đối tác đã báo vấn đề. Hãy xem minh chứng và phản hồi trong 24 giờ.", "BOOKING", booking.getId()));
+        String recipientEmail = reporterUserId != null && reporterUserId.equals(mentorUserId)
+                ? booking.getMentee().getEmail() : booking.getMentorProfile().getUser().getEmail();
+        String recipientName = reporterUserId != null && reporterUserId.equals(mentorUserId)
+                ? booking.getMentee().getFullName() : booking.getMentorProfile().getUser().getFullName();
+        String actorName = reporterUserId != null && reporterUserId.equals(mentorUserId)
+                ? booking.getMentorProfile().getUser().getFullName() : booking.getMentee().getFullName();
+        eventPublisher.publishEvent(BookingEmailNotificationEvent.builder().bookingId(booking.getId())
+                .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_REPORTED_EMAIL)
+                .recipientEmail(recipientEmail).recipientName(recipientName).actorName(actorName)
+                .bookingStartTime(booking.getSelectedStartTime()).bookingEndTime(booking.getSelectedEndTime())
+                .serviceTitle(booking.getServiceTitleSnapshot()).serviceDurationMinutes(booking.getServiceDurationSnapshot())
+                .serviceFree(booking.getServiceIsFreeSnapshot()).servicePriceScoin(booking.getServicePriceScoinSnapshot())
+                .learningGoalTitle(booking.getLearningGoalTitle()).learningGoalDescription(booking.getLearningGoalDescription())
+                .serviceExpectedOutcome(booking.getServiceExpectedOutcomeSnapshot())
+                .reason("Loại vấn đề: " + booking.getIssueType()).createdAt(timeProvider.nowBusiness()).build());
     }
 
     private Booking getBookingForSessionAction(UUID currentUserId, UUID bookingId) {

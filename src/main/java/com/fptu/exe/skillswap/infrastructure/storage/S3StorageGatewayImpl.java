@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
@@ -174,6 +175,28 @@ public class S3StorageGatewayImpl implements StorageGateway {
                 .build();
         PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(request);
         return new PrivatePresignedDownload(presigned.url().toString(), java.time.Instant.now().plus(ttl));
+    }
+
+    @Override
+    public void copyPrivateObject(String sourceObjectKey, String targetObjectKey, String contentType) {
+        try {
+            s3Client.copyObject(CopyObjectRequest.builder()
+                    .sourceBucket(properties.getBucket())
+                    .sourceKey(sourceObjectKey)
+                    .destinationBucket(properties.getBucket())
+                    .destinationKey(targetObjectKey)
+                    .metadataDirective("REPLACE")
+                    .contentType(contentType)
+                    .build());
+        } catch (S3Exception ex) {
+            log.error("Không thể promote private storage object. source={}, target={}", sourceObjectKey, targetObjectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể hoàn tất lưu file minh chứng");
+        }
+    }
+
+    @Override
+    public void deletePrivateObject(String objectKey) {
+        deleteFile(objectKey);
     }
 
     @Override

@@ -82,6 +82,11 @@ public enum ErrorCode {
     CHAT_UPLOAD_INTENT_INVALID(400, "CHAT_4112", "error.chat.upload_intent_invalid", "Upload intent không hợp lệ"),
     CHAT_CONVERSATION_LOCKED(403, "CHAT_4113", "error.chat.conversation_locked", "Cuộc hội thoại đang bị khóa"),
 
+    // Minh chứng booking dispute.
+    BOOKING_ISSUE_EVIDENCE_INVALID(400, "BOOKING_4501", "error.booking.issue_evidence_invalid", "File minh chứng dispute không hợp lệ"),
+    BOOKING_ISSUE_EVIDENCE_INTENT_INVALID(400, "BOOKING_4502", "error.booking.issue_evidence_intent_invalid", "Upload intent minh chứng dispute không hợp lệ"),
+    BOOKING_ISSUE_EVIDENCE_HIDDEN(404, "BOOKING_4503", "error.booking.issue_evidence_hidden", "File minh chứng hiện không khả dụng"),
+
     // Kiểm tra dữ liệu.
     INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
 

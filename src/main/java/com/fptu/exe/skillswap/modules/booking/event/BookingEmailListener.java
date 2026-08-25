@@ -116,6 +116,14 @@ public class BookingEmailListener {
                     "Chọn mentor hoặc khung giờ khác để tiếp tục mục tiêu mentoring của bạn.",
                     "Đặt lịch khác"
             );
+            case BOOKING_ISSUE_REPORTED_EMAIL -> new EmailContent(
+                    "[SkillSwap] Có vấn đề booking cần bạn phản hồi",
+                    "Đối tác đã báo vấn đề về buổi mentoring",
+                    "Một vấn đề đã được gửi kèm minh chứng. Khoản thanh toán đang được giữ lại để bảo vệ quyền lợi hai bên.",
+                    "Đang xem xét",
+                    "Mở SkillSwap để xem minh chứng và phản hồi trong vòng 24 giờ.",
+                    "Xem tranh chấp"
+            );
         };
     }
 

@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -48,6 +49,7 @@ class BookingCompletionServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private BookingResponseMapper bookingResponseMapper;
+    @Mock private BookingIssueEvidenceService bookingIssueEvidenceService;
 
     private TimeProvider timeProvider;
     private BookingCompletionService service;
@@ -68,6 +70,7 @@ class BookingCompletionServiceTest {
                 bookingResponseMapper,
                 timeProvider
         );
+        service.setBookingIssueEvidenceService(bookingIssueEvidenceService);
         bookingId = UUID.randomUUID();
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
@@ -81,7 +84,7 @@ class BookingCompletionServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> service.submitBookingIssue(
                 menteeId,
                 bookingId,
-                new SubmitBookingIssueRequest(BookingIssueType.MENTEE_NO_SHOW, "Mentee không tham gia")
+                new SubmitBookingIssueRequest(BookingIssueType.MENTEE_NO_SHOW, "Mentee không tham gia", List.of(UUID.randomUUID()))
         ));
 
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
@@ -97,7 +100,7 @@ class BookingCompletionServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> service.submitBookingIssue(
                 mentorId,
                 bookingId,
-                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia")
+                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia", List.of(UUID.randomUUID()))
         ));
 
         assertEquals(ErrorCode.BAD_REQUEST, exception.getErrorCode());
@@ -113,7 +116,7 @@ class BookingCompletionServiceTest {
         var response = service.submitBookingIssue(
                 menteeId,
                 bookingId,
-                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia")
+                new SubmitBookingIssueRequest(BookingIssueType.MENTOR_NO_SHOW, "Mentor không tham gia", List.of(UUID.randomUUID()))
         );
 
         assertEquals(BookingStatus.UNDER_REVIEW, response.status());
@@ -128,7 +131,7 @@ class BookingCompletionServiceTest {
         var response = service.submitBookingIssue(
                 mentorId,
                 bookingId,
-                new SubmitBookingIssueRequest(BookingIssueType.TECHNICAL_PROBLEM, "Không thể kết nối cuộc gọi")
+                new SubmitBookingIssueRequest(BookingIssueType.TECHNICAL_PROBLEM, "Không thể kết nối cuộc gọi", List.of(UUID.randomUUID()))
         );
 
         assertEquals(BookingStatus.UNDER_REVIEW, response.status());

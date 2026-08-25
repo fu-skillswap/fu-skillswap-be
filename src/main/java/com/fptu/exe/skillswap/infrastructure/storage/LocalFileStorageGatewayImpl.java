@@ -159,10 +159,37 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
     }
 
     @Override
+    public void copyPrivateObject(String sourceObjectKey, String targetObjectKey, String contentType) {
+        Path source = resolvePrivatePath(sourceObjectKey);
+        Path target = resolvePrivatePath(targetObjectKey);
+        try {
+            Files.createDirectories(target.getParent());
+            Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(
+                    com.fptu.exe.skillswap.shared.exception.ErrorCode.STORAGE_ERROR,
+                    "Không thể hoàn tất lưu file minh chứng"
+            );
+        }
+    }
+
+    @Override
+    public void deletePrivateObject(String objectKey) {
+        deleteFile(objectKey);
+    }
+
+    @Override
     public InputStream openObject(String objectKey) throws IOException {
+        return Files.newInputStream(resolvePrivatePath(objectKey));
+    }
+
+    private Path resolvePrivatePath(String objectKey) {
         Path target = rootDir.resolve(objectKey).normalize();
-        if (!target.startsWith(rootDir)) throw new IOException("Invalid object key");
-        return Files.newInputStream(target);
+        if (!target.startsWith(rootDir)) {
+            throw new com.fptu.exe.skillswap.shared.exception.BaseException(
+                    com.fptu.exe.skillswap.shared.exception.ErrorCode.BAD_REQUEST, "objectKey không hợp lệ");
+        }
+        return target;
     }
 
     /**

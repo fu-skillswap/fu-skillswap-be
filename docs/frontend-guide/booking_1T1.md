@@ -436,6 +436,10 @@ Nếu quyết định bị xác định là sai, admin dùng `POST /api/admin/me
 | Xác nhận (Confirm) | `POST /api/me/bookings/{bookingId}/confirm` | Mentee xác nhận buổi học đã diễn ra, kể cả khi mentor chưa bấm complete |
 | Báo cáo sự cố (Issue) | `POST /api/me/bookings/{bookingId}/issue` | Người tham gia báo cáo vấn đề trong khung giờ cho phép sau buổi học |
 | Phản hồi sự cố (Respond Issue) | `POST /api/me/bookings/{bookingId}/issue/respond` | Bên còn lại phản hồi khiếu nại (tối đa 1 lần phản hồi) |
+| Tạo upload intent minh chứng | `POST /api/me/bookings/{bookingId}/issue/evidence/upload-intents` | Tạo URL upload private cho từng file JPG/PNG/PDF |
+| Confirm minh chứng | `POST /api/me/bookings/{bookingId}/issue/evidence/upload-intents/{intentId}/confirm` | Kiểm tra file và nhận `evidenceId` để gắn vào issue |
+| Xem dispute | `GET /api/me/bookings/{bookingId}/issue/detail` | Xem nội dung dispute và metadata file được phép truy cập |
+| Lấy URL tải minh chứng | `GET /api/me/bookings/{bookingId}/issue/evidence/{evidenceId}/download` | Trả URL private ngắn hạn sau khi kiểm tra quyền |
 | Đánh giá (Feedback) | `POST /api/bookings/{bookingId}/feedback` | Dành riêng cho mentee khi `canSubmitFeedback === true` |
 
 ```typescript
@@ -455,10 +459,18 @@ interface SubmitBookingIssueRequest {
     | "TECHNICAL_PROBLEM"   // Sự cố kỹ thuật/đường truyền
     | "OTHER";              // Lý do khác
   description: string;      // 1 - 2000 ký tự
+  evidenceIds: string[];    // Bắt buộc 1 - 5 evidenceId đã confirm
 }
 
 interface RespondBookingIssueRequest {
   responseNote: string;     // 1 - 2000 ký tự
+  evidenceIds?: string[];   // Tùy chọn 0 - 5 evidenceId đã confirm
+}
+
+interface BookingIssueEvidenceUploadIntentRequest {
+  filename: string;
+  contentType: "image/jpeg" | "image/png" | "application/pdf";
+  sizeBytes: number; // 1 - 10 * 1024 * 1024
 }
 
 interface SubmitFeedbackRequest {
@@ -472,6 +484,17 @@ interface SubmitFeedbackRequest {
 
 > [!NOTE]
 > Sự cố khiếu nại không tự động được đóng sau khi bên còn lại phản hồi. Nếu `bookingStatus === "UNDER_REVIEW"` hoặc `nextAction === "VIEW_ISSUE"`, hãy hiển thị chi tiết khiếu nại để người dùng theo dõi; **không tự đưa ra kết luận hoàn tiền trước khi có quyết định chính thức**.
+
+### Upload minh chứng dispute: luồng bắt buộc
+
+1. FE tạo upload intent cho từng file (tối đa 5) và nhận `uploadUrl`, `uploadIntentId`.
+2. FE upload trực tiếp vào URL private, rồi gọi `confirm` để backend kiểm tra extension, MIME type, dung lượng và chữ ký file. Chỉ `evidenceId` từ bước confirm mới hợp lệ.
+3. Reporter chỉ gửi `POST .../issue` sau khi có ít nhất 1 `evidenceId`; counterparty phản hồi text một lần và có thể đính kèm 0–5 file.
+
+Chỉ nhận JPG/JPEG, PNG và PDF, tối đa 10 MB/file. Mentor, mentee và admin được xem evidence trong 180 ngày từ lúc dispute resolve. Admin có thể ẩn file không phù hợp nhưng audit vẫn giữ; chat vẫn read-only trong `UNDER_REVIEW`.
+
+> [!IMPORTANT]
+> Ngay khi dispute được tạo, bên còn lại nhận đồng thời notification trong app và email. FE nên mở lại dispute detail từ notification, không gửi lại issue khi refresh.
 
 > [!IMPORTANT]
 > Deadline xác nhận hoặc báo vấn đề luôn là `selectedEndTime + 24 giờ`, không tính từ lúc mentor bấm complete. Nếu cả hai bên không thao tác, backend tự đóng booking và release tiền bình thường; mentor bị ghi nhận `COMPLETION_OVERDUE`.
