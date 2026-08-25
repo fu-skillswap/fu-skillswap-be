@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -77,7 +78,9 @@ class SessionAttendanceServiceTest {
                 .status(SessionStatus.SCHEDULED)
                 .build();
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId))
+        // The outsider authorization path rejects before loading the session.
+        // Keep this shared fixture lenient without weakening the whole test class.
+        lenient().when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId))
                 .thenReturn(Optional.of(session));
     }
 

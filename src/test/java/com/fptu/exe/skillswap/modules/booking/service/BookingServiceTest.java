@@ -608,7 +608,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void completeBooking_asMentor_shouldUpdateCompletionAndCounters() {
+    void completeBooking_asMentor_shouldRecordDeclarationAndAwaitMenteeConfirmation() {
         Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().minusHours(1));
         booking.setSelectedEndTime(testNow().minusMinutes(10));
@@ -629,7 +629,9 @@ class BookingServiceTest {
 
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, response.status());
         assertEquals("Session completed well", booking.getMentorNote());
-        assertNotNull(booking.getCompletedAt());
+        // A mentor declaration only opens the review window. Delivery is finalized
+        // after mentee confirmation or the lifecycle auto-close policy.
+        assertNull(booking.getCompletedAt());
         // Mentor declaration moves the booking into the mentee review window, but it is not
         // attendance evidence. Actual session times are derived from participant check-ins.
         assertNull(booking.getActualStartTime());
