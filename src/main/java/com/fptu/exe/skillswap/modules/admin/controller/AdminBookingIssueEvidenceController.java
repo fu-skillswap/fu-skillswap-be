@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceD
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
 import com.fptu.exe.skillswap.modules.booking.service.BookingIssueEvidenceService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -36,17 +37,20 @@ public class AdminBookingIssueEvidenceController {
     private final AdminAuditWriterService auditWriter;
 
     @GetMapping("/{bookingId}/issue/detail")
+    @Operation(summary = "Xem dispute và minh chứng", description = "Lấy toàn bộ dispute của booking cho vận hành, bao gồm file đang active, bị ẩn hoặc đã hết hạn lưu trữ.")
     public ApiResponse<BookingIssueDetailResponse> detail(@PathVariable UUID bookingId) {
         return ApiResponse.success(evidenceService.getForAdmin(bookingId));
     }
 
     @GetMapping("/{bookingId}/issue/evidence/{evidenceId}/download")
+    @Operation(summary = "Tải minh chứng dispute", description = "Trả URL private ngắn hạn để admin xem file minh chứng, kể cả file đã bị ẩn với participant.")
     public ApiResponse<BookingIssueEvidenceDownloadResponse> download(@PathVariable UUID bookingId, @PathVariable UUID evidenceId) {
         return ApiResponse.success(evidenceService.downloadForAdmin(bookingId, evidenceId));
     }
 
     @PostMapping("/{bookingId}/issue/evidence/{evidenceId}/visibility")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
+    @Operation(summary = "Ẩn hoặc khôi phục minh chứng", description = "Admin ẩn file không phù hợp khỏi mentor/mentee hoặc khôi phục lại. Thao tác luôn được lưu audit và không xóa dấu vết evidence.")
     public ApiResponse<BookingIssueEvidenceResponse> visibility(@AuthenticationPrincipal UserPrincipal principal,
                                                                   @PathVariable UUID bookingId, @PathVariable UUID evidenceId,
                                                                   @Valid @RequestBody AdminBookingIssueEvidenceVisibilityRequest request) {
