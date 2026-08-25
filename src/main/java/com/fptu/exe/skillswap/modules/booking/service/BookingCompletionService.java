@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
@@ -369,10 +370,6 @@ public class BookingCompletionService {
         BookingStatus oldStatus = booking.getStatus();
         if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
             BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, nowUtc);
-            if (booking.getCompletedAtUtc() == null && booking.getCompletedAt() == null) {
-                booking.setCompletedAtUtc(nowUtc);
-                booking.setCompletedAt(BookingTime.fromInstant(nowUtc));
-            }
             booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
             sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
             if (settlementService != null) {

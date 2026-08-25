@@ -137,6 +137,22 @@ class BookingResponseMapperTest {
         assertEquals(BookingNextAction.NONE, response.nextAction());
     }
 
+    @Test
+    void paymentDeadline_usesUtcAtTheExactBoundaryEvenWhenLegacyFieldsDiffer() {
+        authenticate(menteeId, RoleCode.MENTEE);
+        LocalDateTime now = timeProvider.nowBusiness();
+        Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+                now.plusDays(1), now.plusDays(1).plusHours(1));
+        booking.setAcceptedAt(now);
+        booking.setAcceptedAtUtc(FIXED_NOW.minusSeconds(60 * 60));
+        booking.setSelectedStartTimeUtc(FIXED_NOW.plusSeconds(6 * 60 * 60));
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertFalse(response.canPay());
+        assertEquals(BookingNextAction.NONE, response.nextAction());
+    }
+
     private Booking booking(BookingStatus status, LocalDateTime start, LocalDateTime end) {
         User mentee = User.builder().id(menteeId).email("mentee@test.com").fullName("Mentee").build();
         User mentor = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor").build();

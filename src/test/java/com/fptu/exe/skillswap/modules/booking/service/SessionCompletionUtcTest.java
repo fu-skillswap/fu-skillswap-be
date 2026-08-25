@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEvent;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
@@ -282,7 +283,7 @@ class SessionCompletionUtcTest {
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
         maintenanceService.setMentorViolationService(mentorViolationService);
 
-        booking.setStatus(BookingStatus.AWAITING_MENTOR_COMPLETION);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.AWAITING_MENTOR_COMPLETION);
         when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(eq(BookingStatus.PAID), any()))
                 .thenReturn(List.of());
         when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(eq(BookingStatus.AWAITING_MENTOR_COMPLETION), any()))
@@ -322,7 +323,7 @@ class SessionCompletionUtcTest {
         maintenanceService.setMentorViolationService(mentorViolationService);
         maintenanceService.setSessionAttendanceRepository(sessionAttendanceRepository);
 
-        booking.setStatus(BookingStatus.UNDER_REVIEW);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.UNDER_REVIEW);
         booking.setIssueType(BookingIssueType.MENTOR_NO_SHOW);
         booking.setIssueSubmittedAtUtc(submitTime);
         booking.setIssueSubmittedAt(BookingTime.fromInstant(submitTime));
@@ -366,7 +367,7 @@ class SessionCompletionUtcTest {
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
         maintenanceService.setSessionAttendanceRepository(sessionAttendanceRepository);
 
-        booking.setStatus(BookingStatus.UNDER_REVIEW);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.UNDER_REVIEW);
         booking.setIssueType(BookingIssueType.MENTOR_NO_SHOW);
         booking.setIssueSubmittedAtUtc(submitTime);
         booking.setIssueSubmittedAt(BookingTime.fromInstant(submitTime));

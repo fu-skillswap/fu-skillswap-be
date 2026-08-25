@@ -27,9 +27,9 @@ public record MentorServiceManagementResponse(
         boolean isFree,
         @Schema(description = "Base service price set by mentor in SCoin. 0 means the service is free.", nullable = true, example = "100")
         Integer basePriceScoin,
-        @Schema(description = "The 110% final service price to be paid by Mentee", nullable = true, example = "110")
+        @Schema(description = "Final service price paid by mentee after the configured surcharge", nullable = true, example = "110")
         Integer publicPriceScoin,
-        @Schema(description = "The estimated 95% payout for the mentor after platform commission", nullable = true, example = "95")
+        @Schema(description = "Estimated mentor payout after the configured mentor commission", nullable = true, example = "95")
         Integer estimatedMentorPayoutScoin,
         @Schema(description = "Whether the service is currently active for future use", example = "true")
         boolean isActive,

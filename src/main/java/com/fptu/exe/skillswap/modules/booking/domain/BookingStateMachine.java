@@ -45,6 +45,16 @@ public final class BookingStateMachine {
         return target;
     }
 
+    /** Returns whether a command is legal without mutating the booking. */
+    public static boolean canTransition(BookingStatus current, BookingTransitionCommand command) {
+        try {
+            target(current, command);
+            return true;
+        } catch (BaseException ignored) {
+            return false;
+        }
+    }
+
     public static boolean isTerminal(BookingStatus status) {
         return status == BookingStatus.REJECTED
                 || status == BookingStatus.EXPIRED

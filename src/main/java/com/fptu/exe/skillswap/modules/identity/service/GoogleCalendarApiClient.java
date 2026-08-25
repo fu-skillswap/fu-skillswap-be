@@ -67,6 +67,7 @@ public class GoogleCalendarApiClient {
     public GoogleUserInfoResponse fetchUserInfo(String accessToken) {
         Map<String, Object> payload = sendJson(
                 HttpRequest.newBuilder(URI.create(googleApiProperties.getUserinfoEndpoint()))
+                        .timeout(Duration.ofSeconds(5))
                         .header("Authorization", "Bearer " + accessToken)
                         .GET()
                         .build(),

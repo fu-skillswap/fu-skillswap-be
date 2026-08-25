@@ -9,11 +9,13 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.course.service.CourseEnrollmentService;
 import com.fptu.exe.skillswap.modules.course.service.CourseSettlementService;
 import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -48,6 +50,9 @@ class CourseEnrollmentServiceTest {
     @Mock
     private ConversationService conversationService;
 
+    @Spy
+    private PaymentProperties paymentProperties = new PaymentProperties();
+
     @InjectMocks
     private CourseEnrollmentService enrollmentService;
 
@@ -80,5 +85,22 @@ class CourseEnrollmentServiceTest {
         assertEquals(EnrollmentStatus.ACTIVE, result.getStatus());
         verify(conversationService).addCourseStudentParticipant(eq(courseId), eq(studentUserId));
         verify(settlementService).generateSettlements(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollStudentUsesConfiguredCourseFeePolicy() {
+        course.setPriceScoin(100_000);
+        paymentProperties.setCourseBuyerFeeBps(1_000);
+        paymentProperties.setCourseMentorCommissionBps(500);
+        when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
+        when(enrollmentRepository.existsByCourseIdAndStudentUserId(courseId, studentUserId)).thenReturn(false);
+        when(enrollmentRepository.save(any(CourseEnrollment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CourseEnrollment result = enrollmentService.enrollStudent(studentUserId, courseId);
+
+        assertEquals(10_000, result.getBuyerFeeScoin());
+        assertEquals(110_000, result.getPaidAmountScoin());
+        assertEquals(5_000, result.getMentorCommissionScoin());
+        assertEquals(95_000, result.getMentorPayoutScoin());
     }
 }

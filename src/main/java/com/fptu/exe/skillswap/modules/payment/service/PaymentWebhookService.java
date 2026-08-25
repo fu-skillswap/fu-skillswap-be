@@ -3,10 +3,11 @@ package com.fptu.exe.skillswap.modules.payment.service;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTransitionExecutor;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
@@ -43,6 +44,7 @@ import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -184,20 +186,36 @@ public class PaymentWebhookService {
     }
 
     public void reconcileStaleProviderPayments() {
+        long startedAtNanos = System.nanoTime();
+        long deadlineNanos = startedAtNanos + Duration.ofSeconds(paymentProperties.getReconciliationMaxDurationSeconds()).toNanos();
         Instant thresholdUtc = timeProvider.instant().minus(java.time.Duration.ofMinutes(15));
         LocalDateTime thresholdLegacy = timeProvider.nowBusiness().minusMinutes(15);
         List<PaymentOrder> staleOrders = paymentOrderRepository.findTop50ByStatusInAndUpdatedAtUtcBeforeOrderByUpdatedAtUtcAsc(
                 List.of(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, PaymentOrderStatus.PARTIALLY_COVERED_BY_CREDIT),
                 thresholdUtc,
                 thresholdLegacy,
-                PageRequest.of(0, 50)
+                PageRequest.of(0, paymentProperties.getReconciliationMaxOrdersPerRun())
         );
+        int processed = 0;
         for (PaymentOrder order : staleOrders) {
+            // This does not interrupt an in-flight provider call. It prevents one slow batch
+            // from consuming the scheduler for an unbounded number of sequential calls.
+            if (System.nanoTime() >= deadlineNanos) {
+                log.warn("metric_name=payment_reconciliation_time_budget_reached_total processed={} candidates={} budget_seconds={}",
+                        processed, staleOrders.size(), paymentProperties.getReconciliationMaxDurationSeconds());
+                break;
+            }
             try {
                 synchronizeProviderStatusForBooking(order.getTargetId());
             } catch (RuntimeException ex) {
                 log.warn("Failed to reconcile payment order {} for booking {}: {}", order.getId(), order.getTargetId(), ex.getMessage());
             }
+            processed++;
+        }
+        if (processed > 0) {
+            long elapsedMillis = Duration.ofNanos(System.nanoTime() - startedAtNanos).toMillis();
+            log.info("Payment reconciliation batch completed: processed={}, candidates={}, elapsed_ms={}",
+                    processed, staleOrders.size(), elapsedMillis);
         }
     }
 
@@ -249,8 +267,11 @@ public class PaymentWebhookService {
             }
             case "CANCELLED" -> {
                 order.setStatus(PaymentOrderStatus.CANCELLED);
-                order.setCancelledAtUtc(paymentLink.cancelledAtUtc() != null ? paymentLink.cancelledAtUtc() : timeProvider.instant());
-                order.setCancelledAt(paymentLink.cancelledAt() != null ? paymentLink.cancelledAt() : timeProvider.nowBusiness());
+                Instant cancelledAtUtc = paymentLink.cancelledAtUtc() != null
+                        ? paymentLink.cancelledAtUtc()
+                        : timeProvider.instant();
+                order.setCancelledAtUtc(cancelledAtUtc);
+                order.setCancelledAt(BookingTime.fromInstant(cancelledAtUtc));
                 paymentLifecycleService.rollbackReservedCredit(order);
                 if (couponService != null) {
                     couponService.voidRedemption(order.getId());
@@ -291,7 +312,10 @@ public class PaymentWebhookService {
                                         String providerEventId,
                                         String providerStatus,
                                         Booking lockedBooking) {
-        if (order.getCreditFinalizedAt() == null) {
+        // UTC is the authoritative value. Check both columns while the legacy
+        // business-zone shadow column still exists so a partially migrated row
+        // can never consume the same reserved credit twice.
+        if (order.getCreditFinalizedAtUtc() == null && order.getCreditFinalizedAt() == null) {
             if (order.getRemainingPayableScoin() != null && order.getRemainingPayableScoin() > 0) {
                 creditLedgerService.issueCredit(
                         order.getPayerUserId(),
@@ -335,7 +359,7 @@ public class PaymentWebhookService {
         finalizePaidBooking(order, lockedBooking);
     }
 
-    private void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
+    void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
         if (lockedBooking == null) {
             throw new IllegalArgumentException(
                     "Booking phải được khóa trước PaymentOrder và PaymentAttempt khi hoàn tất thanh toán");
@@ -355,6 +379,16 @@ public class PaymentWebhookService {
             log.warn("finalizePaidBooking: booking {} ở trạng thái {} không thể chuyển sang PAID. " +
                             "Payment order vẫn được ghi nhận PAID và hệ thống đã chạy bù trừ nội bộ nếu cần.",
                     booking.getId(), booking.getStatus());
+            return;
+        }
+        Instant paidAtUtc = order.getPaidAtUtc() != null ? order.getPaidAtUtc() : timeProvider.instant();
+        if (BookingDeadlinePolicy.isPaymentDeadlineReachedUtc(booking, paidAtUtc)) {
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PAYMENT, paidAtUtc);
+            booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
+            bookingQueryPort.save(booking);
+            compensateCapturedPaymentForTerminalBooking(booking, order);
+            log.warn("finalizePaidBooking: payment order {} was paid after booking {} payment deadline; refunding capture",
+                    order.getId(), booking.getId());
             return;
         }
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.PAYMENT_CONFIRMED, timeProvider.instant());
@@ -511,10 +545,10 @@ public class PaymentWebhookService {
         };
     }
 
-    private void applyTerminalWebhook(PaymentOrder order,
-                                      PaymentAttempt attempt,
-                                      PaymentGatewayProvider.VerifiedWebhook verified,
-                                      String providerEventId) {
+    void applyTerminalWebhook(PaymentOrder order,
+                              PaymentAttempt attempt,
+                              PaymentGatewayProvider.VerifiedWebhook verified,
+                              String providerEventId) {
         String status = verified.providerStatus().trim().toUpperCase(Locale.ROOT);
         order.setProviderOrderCode(verified.providerOrderCode());
         order.setProviderPaymentLinkId(verified.providerPaymentLinkId());
@@ -528,22 +562,26 @@ public class PaymentWebhookService {
         if (couponService != null) {
             couponService.voidRedemption(order.getId());
         }
+        Instant receivedAtUtc = timeProvider.instant();
         switch (status) {
             case "CANCELLED" -> {
                 order.setStatus(PaymentOrderStatus.CANCELLED);
-                order.setCancelledAt(timeProvider.nowBusiness());
+                order.setCancelledAtUtc(receivedAtUtc);
+                order.setCancelledAt(BookingTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.CANCELLED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link bị hủy");
             }
             case "EXPIRED" -> {
                 order.setStatus(PaymentOrderStatus.EXPIRED);
-                order.setFailedAt(timeProvider.nowBusiness());
+                order.setFailedAtUtc(receivedAtUtc);
+                order.setFailedAt(BookingTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.EXPIRED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link đã hết hạn");
             }
             case "FAILED" -> {
                 order.setStatus(PaymentOrderStatus.FAILED);
-                order.setFailedAt(timeProvider.nowBusiness());
+                order.setFailedAtUtc(receivedAtUtc);
+                order.setFailedAt(BookingTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.FAILED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link thất bại");
             }

@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -142,6 +143,8 @@ class BookingCompletionServiceTest {
 
         service.completeBookingByMentor(mentorId, bookingId, new CompleteBookingRequest("Đã hoàn tất"));
 
+        assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, booking.getStatus());
+        assertNull(booking.getCompletedAt());
         verify(sessionFinalizationService).recordMentorReportedCompletion(
                 org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
     }

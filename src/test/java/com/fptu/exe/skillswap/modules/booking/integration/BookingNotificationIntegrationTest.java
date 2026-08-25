@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
@@ -348,7 +349,7 @@ class BookingNotificationIntegrationTest {
         paymentOrderService.checkout(mentee1.getId(), new PaymentCheckoutRequest(b1.bookingId(), null));
         
         var bookingEntity = bookingRepository.findById(b1.bookingId()).orElseThrow();
-        bookingEntity.setStatus(BookingStatus.PAID);
+        BookingStateTestSupport.setStatus(bookingEntity, BookingStatus.PAID);
         bookingRepository.saveAndFlush(bookingEntity);
 
         commitTransaction();

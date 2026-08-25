@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
@@ -333,7 +334,7 @@ public class BookingLifecycleMaintenanceService {
             }
             return false;
         }
-        if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION && (booking.getCompletedAtUtc() != null || booking.getCompletedAt() != null)) {
+        if (oldStatus == BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
             if (endUtc == null) return false;
             if (!nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)))) {
                 BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, nowUtc);

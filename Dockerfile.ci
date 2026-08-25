@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1
+
+# Fast runtime image packaging for CI/CD — consumes pre-built and verified JAR artifact
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+RUN addgroup -S skillswap && adduser -S -G skillswap skillswap
+
+COPY target/*.jar app.jar
+RUN chown skillswap:skillswap /app/app.jar
+
+USER skillswap
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-XX:+UseG1GC", "-Xms256m", "-Xmx512m", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

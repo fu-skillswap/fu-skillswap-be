@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceReposi
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -142,5 +144,28 @@ class SessionAttendanceServiceTest {
         assertEquals(booking, result);
         verify(attendanceRepository, never()).save(any(SessionAttendance.class));
         verify(sessionRepository, never()).save(any(Session.class));
+    }
+
+    @Test
+    void checkInOutsideTheSessionWindow_doesNotCreateEvidenceOrStartTheSession() {
+        service.setTimeProvider(TimeProvider.fixed(START.minusMillis(1), ZoneOffset.UTC));
+        when(attendanceRepository.findBySessionIdAndParticipantRole(session.getId(), SessionParticipantRole.MENTEE))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BaseException.class, () -> service.checkIn(menteeId, bookingId));
+
+        assertEquals(SessionStatus.SCHEDULED, session.getStatus());
+        verify(attendanceRepository, never()).save(any(SessionAttendance.class));
+        verify(sessionRepository, never()).save(any(Session.class));
+    }
+
+    @Test
+    void nonParticipantCannotReadOrWriteAttendanceForTheBooking() {
+        UUID outsiderId = UUID.randomUUID();
+
+        assertThrows(BaseException.class, () -> service.checkIn(outsiderId, bookingId));
+
+        verify(sessionRepository, never()).findBySourceTypeAndSourceIdForUpdate(any(), any());
+        verify(attendanceRepository, never()).save(any(SessionAttendance.class));
     }
 }

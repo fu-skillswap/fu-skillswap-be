@@ -2,8 +2,10 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMachine;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 
-import java.time.LocalDateTime;
+import java.time.Duration;
+import java.time.Instant;
 
 /**
  * Single source of truth for role-based booking commands exposed to clients.
@@ -33,46 +35,44 @@ public final class BookingActionPolicy {
     }
 
     public static boolean canCancelByMentee(BookingStatus status, boolean beforeSession) {
-        return beforeSession && (status == BookingStatus.PENDING
-                || status == BookingStatus.ACCEPTED_AWAITING_PAYMENT
-                || isScheduled(status));
+        return beforeSession && BookingStateMachine.canTransition(status, BookingTransitionCommand.CANCEL_BY_MENTEE);
     }
 
     public static boolean canCancelByMentor(BookingStatus status, boolean beforeSession) {
-        return beforeSession && (status == BookingStatus.ACCEPTED_AWAITING_PAYMENT || isScheduled(status));
+        return beforeSession && BookingStateMachine.canTransition(status, BookingTransitionCommand.CANCEL_BY_MENTOR);
     }
 
     public static boolean canAcceptOrReject(BookingStatus status, boolean beforePendingDeadline) {
-        return status == BookingStatus.PENDING && beforePendingDeadline;
+        return beforePendingDeadline && BookingStateMachine.canTransition(status, BookingTransitionCommand.REJECT);
     }
 
     public static boolean canPay(BookingStatus status, boolean beforePaymentDeadline) {
-        return status == BookingStatus.ACCEPTED_AWAITING_PAYMENT && beforePaymentDeadline;
+        return beforePaymentDeadline && BookingStateMachine.canTransition(status, BookingTransitionCommand.PAYMENT_CONFIRMED);
     }
 
-    public static boolean canMentorComplete(BookingStatus status, LocalDateTime now, LocalDateTime endTime) {
+    public static boolean canMentorComplete(BookingStatus status, Instant nowUtc, Instant endUtc) {
         return (status == BookingStatus.PAID || status == BookingStatus.AWAITING_MENTOR_COMPLETION)
-                && endTime != null && !now.isBefore(endTime);
+                && endUtc != null && nowUtc != null && !nowUtc.isBefore(endUtc);
     }
 
-    public static boolean canMenteeConfirm(BookingStatus status, LocalDateTime now, LocalDateTime endTime) {
-        return isOpenPostSessionStatus(status) && isInsideReviewWindow(now, endTime);
+    public static boolean canMenteeConfirm(BookingStatus status, Instant nowUtc, Instant endUtc) {
+        return isOpenPostSessionStatus(status) && isInsideReviewWindow(nowUtc, endUtc);
     }
 
-    public static boolean canReportIssue(BookingStatus status, LocalDateTime now, LocalDateTime endTime) {
-        return isOpenPostSessionStatus(status) && isInsideReviewWindow(now, endTime);
+    public static boolean canReportIssue(BookingStatus status, Instant nowUtc, Instant endUtc) {
+        return isOpenPostSessionStatus(status) && isInsideReviewWindow(nowUtc, endUtc);
     }
 
     public static boolean canJoin(BookingStatus status,
-                                  LocalDateTime now,
-                                  LocalDateTime startTime,
-                                  LocalDateTime endTime,
+                                  Instant nowUtc,
+                                  Instant startUtc,
+                                  Instant endUtc,
                                   boolean hasMeetingAccess) {
-        if (!isScheduled(status) || !hasMeetingAccess || startTime == null || endTime == null) {
+        if (!isScheduled(status) || !hasMeetingAccess || nowUtc == null || startUtc == null || endUtc == null) {
             return false;
         }
-        return !now.isBefore(startTime.minusMinutes(JOIN_EARLY_MINUTES))
-                && now.isBefore(endTime.plusMinutes(JOIN_GRACE_MINUTES));
+        return !nowUtc.isBefore(startUtc.minus(Duration.ofMinutes(JOIN_EARLY_MINUTES)))
+                && nowUtc.isBefore(endUtc.plus(Duration.ofMinutes(JOIN_GRACE_MINUTES)));
     }
 
     private static boolean isOpenPostSessionStatus(BookingStatus status) {
@@ -83,9 +83,9 @@ public final class BookingActionPolicy {
                 || status == BookingStatus.AWAITING_MENTEE_CONFIRMATION;
     }
 
-    private static boolean isInsideReviewWindow(LocalDateTime now, LocalDateTime endTime) {
-        return endTime != null
-                && !now.isBefore(endTime)
-                && now.isBefore(endTime.plusHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS));
+    private static boolean isInsideReviewWindow(Instant nowUtc, Instant endUtc) {
+        return nowUtc != null && endUtc != null
+                && !nowUtc.isBefore(endUtc)
+                && nowUtc.isBefore(endUtc.plus(Duration.ofHours(PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS)));
     }
 }

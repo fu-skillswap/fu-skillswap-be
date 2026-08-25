@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.course.domain.Course;
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
 import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
@@ -8,6 +9,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,11 +27,8 @@ public class CourseEnrollmentService {
     private final CourseEnrollmentRepository enrollmentRepository;
     private final CreditLedgerService creditLedgerService;
     private final CourseSettlementService settlementService;
+    private final PaymentProperties paymentProperties;
     private final org.springframework.beans.factory.ObjectProvider<com.fptu.exe.skillswap.modules.chat.service.ConversationService> conversationServiceProvider;
-
-    // Hardcoded commission policy for now (Buyer 10%, Mentor 5% platform fee)
-    private static final double BUYER_FEE_RATE = 0.10;
-    private static final double MENTOR_FEE_RATE = 0.05;
 
     @Transactional
     public CourseEnrollment enrollStudent(UUID studentUserId, UUID courseId) {
@@ -45,10 +44,12 @@ public class CourseEnrollmentService {
 
         // Snapshot pricing
         int basePrice = course.getPriceScoin();
-        int buyerFee = (int) Math.round(basePrice * BUYER_FEE_RATE);
+        int buyerFee = PricingPolicy.bpsAmount(basePrice, paymentProperties.getCourseBuyerFeeBps());
         int totalPaid = basePrice + buyerFee;
-        
-        int platformRevenueFromMentor = (int) Math.round(basePrice * MENTOR_FEE_RATE);
+
+        int platformRevenueFromMentor = PricingPolicy.bpsAmount(
+                basePrice,
+                paymentProperties.getCourseMentorCommissionBps());
         int mentorPayout = basePrice - platformRevenueFromMentor;
 
         UUID enrollmentId = UuidUtil.generateUuidV7();

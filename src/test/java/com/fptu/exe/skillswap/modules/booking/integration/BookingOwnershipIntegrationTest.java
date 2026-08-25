@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
@@ -210,7 +211,7 @@ class BookingOwnershipIntegrationTest {
         paymentOrderService.checkout(menteeUser.getId(), new PaymentCheckoutRequest(booking.bookingId(), null));
 
         var bookingEntity = bookingRepository.findById(booking.bookingId()).orElseThrow();
-        bookingEntity.setStatus(BookingStatus.PAID);
+        BookingStateTestSupport.setStatus(bookingEntity, BookingStatus.PAID);
         bookingRepository.saveAndFlush(bookingEntity);
         conversationService.createDirectForAcceptedBooking(bookingEntity);
 

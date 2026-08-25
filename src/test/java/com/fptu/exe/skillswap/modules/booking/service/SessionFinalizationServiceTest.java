@@ -72,7 +72,8 @@ class SessionFinalizationServiceTest {
 
         assertEquals(SessionStatus.COMPLETED, session.getStatus());
         assertNull(session.getActualStartTime());
-        assertNull(session.getActualEndTime());
+        assertEquals(booking.getSelectedEndTime(), session.getActualEndTime());
+        assertEquals(booking.getSelectedEndTime(), booking.getActualEndTime());
         assertEquals(now, booking.getFinalizedAt());
         assertEquals(now, booking.getCompletedAt());
         assertEquals(5, mentor.getTotalSessions());
@@ -96,18 +97,46 @@ class SessionFinalizationServiceTest {
     }
 
     @Test
-    void recordMentorReportedCompletion_shouldNotFinalizeBookingOrIncreaseCounters() {
+    void recordMentorReportedCompletion_shouldNotFinalizeSessionOrIncreaseCounters() {
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
         when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
 
         service.recordMentorReportedCompletion(booking, now);
 
-        assertEquals(SessionStatus.COMPLETED, session.getStatus());
+        assertEquals(SessionStatus.SCHEDULED, session.getStatus());
+        assertNull(booking.getCompletedAt());
         assertNull(booking.getFinalizedAt());
         assertEquals(4, mentor.getTotalSessions());
         assertEquals(3, mentor.getTotalCompletedSessions());
         assertEquals(now, mentor.getLastActiveAt());
+    }
+
+    @Test
+    void finalizeDeliveredSession_doesNotInventAnEndBeforeTheScheduledSessionEnds() {
+        session.setScheduledEndTime(now.plusMinutes(15));
+        when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
+                .thenReturn(Optional.of(session));
+        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+
+        service.finalizeDeliveredSession(booking, now);
+
+        assertEquals(SessionStatus.COMPLETED, session.getStatus());
+        assertNull(session.getActualEndTime());
+        assertNull(booking.getActualEndTime());
+    }
+
+    @Test
+    void finalizeDeliveredSession_mirrorsAttendanceStartToTheLegacyBookingRecord() {
+        session.setActualStartTime(booking.getSelectedStartTime().plusMinutes(2));
+        when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
+                .thenReturn(Optional.of(session));
+        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+
+        service.finalizeDeliveredSession(booking, now);
+
+        assertEquals(session.getActualStartTime(), booking.getActualStartTime());
+        assertEquals(booking.getSelectedEndTime(), booking.getActualEndTime());
     }
 
     @Test

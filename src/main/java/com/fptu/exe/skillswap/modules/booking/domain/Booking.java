@@ -61,8 +61,18 @@ public class Booking {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
+    @Setter(AccessLevel.NONE)
     @Builder.Default
     private BookingStatus status = BookingStatus.PENDING;
+
+    /**
+     * Persisted lifecycle status is deliberately writable only inside the booking domain.
+     * Application services must use {@link BookingTransitionExecutor} so every transition is
+     * validated by {@link BookingStateMachine} and receives its owned timestamps.
+     */
+    void setStatus(BookingStatus status) {
+        this.status = status;
+    }
 
     @Column(name = "learning_goal_title", nullable = false, length = 200)
     private String learningGoalTitle;

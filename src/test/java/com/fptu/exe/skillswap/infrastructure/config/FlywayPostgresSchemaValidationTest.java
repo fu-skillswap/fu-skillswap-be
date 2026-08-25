@@ -28,10 +28,10 @@ class FlywayPostgresSchemaValidationTest extends AbstractPostgreSQLIntegrationTe
     /** Keep this on the concrete test: the schema gate must never fall back to H2. */
     @DynamicPropertySource
     static void forcePostgresDataSource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
+        registry.add("spring.datasource.url", AbstractPostgreSQLIntegrationTest::getPostgresJdbcUrl);
+        registry.add("spring.datasource.username", AbstractPostgreSQLIntegrationTest::getPostgresUsername);
+        registry.add("spring.datasource.password", AbstractPostgreSQLIntegrationTest::getPostgresPassword);
+        registry.add("spring.datasource.driver-class-name", AbstractPostgreSQLIntegrationTest::getPostgresDriverClassName);
     }
 
     @Test
@@ -41,7 +41,7 @@ class FlywayPostgresSchemaValidationTest extends AbstractPostgreSQLIntegrationTe
             org.junit.jupiter.api.Assertions.assertEquals(
                     "PostgreSQL",
                     connection.getMetaData().getDatabaseProductName(),
-                    "Schema validation must run against the Testcontainers PostgreSQL database");
+                    "Schema validation must run against a PostgreSQL database");
         }
     }
 }

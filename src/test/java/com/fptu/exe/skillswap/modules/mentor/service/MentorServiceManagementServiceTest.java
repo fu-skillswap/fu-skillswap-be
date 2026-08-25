@@ -11,12 +11,14 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequ
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -26,6 +28,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -50,6 +53,9 @@ class MentorServiceManagementServiceTest {
 
     @Mock
     private GoogleCalendarConnectionPort googleCalendarConnectionPort;
+
+    @Spy
+    private PaymentProperties paymentProperties = new PaymentProperties();
 
     @InjectMocks
     private MentorServiceManagementService mentorServiceManagementService;
@@ -154,7 +160,7 @@ class MentorServiceManagementServiceTest {
                 () -> mentorServiceManagementService.createService(mentorUserId, request)
         );
 
-        assertEquals("Thời lượng dịch vụ chỉ được chọn 30, 60, 90 hoặc 120 phút", exception.getMessage());
+        assertTrue(exception.getMessage().startsWith("Thời lượng dịch vụ không thuộc cấu hình cho phép:"));
         verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
     }
 

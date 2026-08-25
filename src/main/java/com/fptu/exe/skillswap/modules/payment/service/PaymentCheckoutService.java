@@ -337,7 +337,7 @@ public class PaymentCheckoutService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ mentoring đang có thời lượng không hợp lệ");
         }
         int normalizedPrice = Math.max(0, basePriceScoin);
-        PricingPolicy.validatePaidServicePrice(normalizedPrice, durationMinutes);
+        PricingPolicy.validatePaidServicePrice(normalizedPrice, durationMinutes, paymentProperties);
         return normalizedPrice;
     }
 
@@ -364,8 +364,7 @@ public class PaymentCheckoutService {
         int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
         int mentorCommissionBps = paymentProperties.getMentorCommissionBps();
 
-        int mentorCommissionScoin = originalPriceScoin == 0 ? 0 : (originalPriceScoin * mentorCommissionBps) / 10_000;
-        int mentorNetScoin = Math.max(0, originalPriceScoin - mentorCommissionScoin);
+        int mentorNetScoin = PricingPolicy.mentorNetScoin(originalPriceScoin, paymentProperties);
 
         draftOrder.setGrossScoin(menteePayablePrice);
         draftOrder.setCommissionRateBps(menteeSurchargeBps + mentorCommissionBps);
@@ -425,9 +424,7 @@ public class PaymentCheckoutService {
     private PaymentGatewayProvider.CreatePaymentLinkCommand buildCreatePaymentLinkCommand(Booking booking,
                                                                                 PaymentOrder order,
                                                                                 long providerOrderCode) {
-        long expiredAtEpoch = timeProvider.instant()
-                .plus(Duration.ofMinutes(paymentProperties.getPaymentLinkExpiryMinutes()))
-                .getEpochSecond();
+        long expiredAtEpoch = resolveProviderLinkExpiryUtc(booking).getEpochSecond();
         return new PaymentGatewayProvider.CreatePaymentLinkCommand(
                 providerOrderCode,
                 PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties),
@@ -471,9 +468,26 @@ public class PaymentCheckoutService {
 
     private boolean isExpired(PaymentOrder order) {
         if (order.getExpiresAtUtc() != null) {
-            return order.getExpiresAtUtc().isBefore(timeProvider.instant());
+            return !order.getExpiresAtUtc().isAfter(timeProvider.instant());
         }
-        return order.getExpiresAt() != null && order.getExpiresAt().isBefore(timeProvider.nowBusiness());
+        return order.getExpiresAt() != null && !order.getExpiresAt().isAfter(timeProvider.nowBusiness());
+    }
+
+    /**
+     * The gateway link must never outlive the booking's server-enforced payment window.
+     * This protects the short-window case where a session is close to starting.
+     */
+    Instant resolveProviderLinkExpiryUtc(Booking booking) {
+        Instant nowUtc = timeProvider.instant();
+        Instant configuredLinkExpiryUtc = nowUtc.plus(Duration.ofMinutes(paymentProperties.getPaymentLinkExpiryMinutes()));
+        Instant bookingDeadlineUtc = paymentDeadlineUtc(booking);
+        Instant effectiveExpiryUtc = bookingDeadlineUtc != null && bookingDeadlineUtc.isBefore(configuredLinkExpiryUtc)
+                ? bookingDeadlineUtc
+                : configuredLinkExpiryUtc;
+        if (!effectiveExpiryUtc.isAfter(nowUtc)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã quá hạn thanh toán");
+        }
+        return effectiveExpiryUtc;
     }
 
     private long parseProviderOrderCode(String providerOrderCode) {

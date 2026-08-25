@@ -62,7 +62,13 @@ public class SchedulingConfig implements SchedulingConfigurer {
 
     @Bean(name = "emailTaskExecutor")
     public TaskExecutor emailTaskExecutor(TaskDecorator mdcTaskDecorator) {
-        return buildExecutor("email-", 2, 5, 500, new ThreadPoolExecutor.CallerRunsPolicy(), mdcTaskDecorator);
+        // Email intent is already durable in email_outbox before this executor is used.
+        // Never let an SMTP outage make booking/payment request threads send email themselves.
+        return buildExecutor("email-", 2, 5, 500, (task, executor) ->
+                log.warn("metric_name=email_executor_rejections_total queue_size={} active_threads={} pool_size={}; "
+                                + "email remains PENDING for the durable retry scheduler",
+                        executor.getQueue().size(), executor.getActiveCount(), executor.getPoolSize()),
+                mdcTaskDecorator);
     }
 
     @Bean(name = "forumTaskExecutor")

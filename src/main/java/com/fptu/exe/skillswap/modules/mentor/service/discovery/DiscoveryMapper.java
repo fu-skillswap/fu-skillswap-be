@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -120,7 +121,8 @@ public class DiscoveryMapper {
                 .expectedOutcome(mentorService.getExpectedOutcome())
                 .durationMinutes(mentorService.getDurationMinutes())
                 .isFree(mentorService.isFree())
-                .priceScoin(mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0 : defaultInteger(mentorService.getPriceScoin()) + (defaultInteger(mentorService.getPriceScoin()) * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
+                .priceScoin(mentorService.isFree() || defaultInteger(mentorService.getPriceScoin()) == 0 ? 0
+                        : PricingPolicy.menteePayableScoin(defaultInteger(mentorService.getPriceScoin()), paymentProperties))
                 .isActive(mentorService.isActive())
                 .maintainPostSessionChat(mentorService.isMaintainPostSessionChat())
                 .deliveryMode(mentorService.getDeliveryMode())

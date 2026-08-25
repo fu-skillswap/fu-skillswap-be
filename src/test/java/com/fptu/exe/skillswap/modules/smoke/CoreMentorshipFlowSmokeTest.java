@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
@@ -384,7 +385,7 @@ class CoreMentorshipFlowSmokeTest {
         slot = slotRepository.saveAndFlush(slot);
         
         var booking = bookingRepository.findById(bk.bookingId()).orElseThrow();
-        booking.setStatus(BookingStatus.PAID);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.PAID);
         booking.setSelectedStartTime(pastStart);
         booking.setSelectedStartTimeUtc(BookingTime.toInstant(pastStart));
         booking.setSelectedEndTime(pastEnd);

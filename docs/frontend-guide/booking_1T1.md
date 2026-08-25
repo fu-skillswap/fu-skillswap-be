@@ -69,6 +69,8 @@ Mentee chọn mentor, dịch vụ (Service) và khung giờ chính xác (Exact C
 - Check-in là xác nhận có mặt được ghi thời gian bởi server, là evidence hỗ trợ khi có no-show; nó **không** tự hoàn tiền, release tiền hoặc kết luận buổi học đã diễn ra.
 - Nếu timeout, retry bằng cùng `Idempotency-Key`. Nếu nhận `409`, tải lại booking detail vì có thể đã hết cửa sổ check-in hoặc session đã đóng.
 
+Khi mentor bấm **Complete Session**, đó mới là khai báo của mentor và booking sẽ chờ mentee xác nhận/báo sự cố; chưa được coi là buổi học hoàn tất. Chỉ khi mentee xác nhận, hệ thống auto-close đúng hạn, hoặc admin quyết định buổi học đã diễn ra thì `completedAt` và session mới được chốt. `actualStartTime` chỉ có khi cả hai đã check-in; hiện chưa có checkout nên `actualEndTime` chỉ dùng giờ kết thúc theo lịch khi buổi học được chốt sau giờ đó, không dùng thời điểm người dùng bấm nút.
+
 ---
 
 ### 2.2 Bảng Trạng thái Hiển thị (State & Action Mapping)
@@ -161,6 +163,9 @@ interface BookingQuoteResponse {
 > [!NOTE]
 > Hiển thị `pricing.estimatedPayableScoin` và `disclaimer` chính xác như backend trả về. Frontend **không tự tính phụ phí, chiết khấu chiến dịch hay chính sách hoàn tiền**.
 > `paymentWindowMinutes` hiện là **60 phút**. Deadline thật vẫn phải lấy từ `actionDeadlineAt` của booking sau khi mentor accept vì có thể ngắn hơn nếu sát giờ học.
+
+> [!IMPORTANT]
+> Link PayOS không thể có hạn dài hơn `actionDeadlineAt`. Khi deadline đã đến, FE ẩn nút thanh toán và tải lại booking; không cố mở lại link cũ. Nếu cổng thanh toán xác nhận giao dịch sau deadline, backend không xác nhận lịch và xử lý hoàn tiền theo policy.
 
 ---
 

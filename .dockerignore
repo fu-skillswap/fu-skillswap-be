@@ -2,7 +2,8 @@
 .github
 .idea
 .vscode
-target
+target/*
+!target/*.jar
 uploads
 logs
 .env

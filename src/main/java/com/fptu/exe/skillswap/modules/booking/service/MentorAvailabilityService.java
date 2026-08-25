@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
@@ -39,6 +40,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesR
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
@@ -715,7 +717,8 @@ public class MentorAvailabilityService {
                 .title(service.getTitle())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
-                .priceScoin(service.isFree() || service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0 : service.getPriceScoin() + (service.getPriceScoin() * (paymentProperties == null ? 1000 : paymentProperties.getMenteeSurchargeBps())) / 10_000)
+                .priceScoin(service.isFree() || service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0
+                        : PricingPolicy.menteePayableScoin(service.getPriceScoin(), paymentProperties))
                 .build();
     }
 

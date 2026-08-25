@@ -14,9 +14,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.Clock;
 
 /**
  * Keeps the delivery record ({@link Session}) and mentor completion counters aligned with a
@@ -39,11 +39,16 @@ public class SessionFinalizationService {
         }
     }
 
-    /** Records the mentor's declaration without finalizing the booking or incrementing counters. */
+    /**
+     * Records the mentor's declaration without finalizing delivery.
+     *
+     * <p>The session must remain SCHEDULED or IN_PROGRESS until mentee confirmation,
+     * auto-close, or an admin decision establishes the final outcome. A mentor's declaration
+     * alone cannot become evidence that the session was delivered.</p>
+     */
     @Transactional
     public void recordMentorReportedCompletion(Booking booking, Instant reportedAtUtc) {
-        Session session = findOrCreateForUpdate(booking);
-        markCompleted(session, booking);
+        findOrCreateForUpdate(booking);
         touchMentorActivity(booking, reportedAtUtc);
     }
 
@@ -58,12 +63,12 @@ public class SessionFinalizationService {
      */
     @Transactional
     public void finalizeDeliveredSession(Booking booking, Instant finalizedAtUtc) {
-        if (booking == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không hợp lệ");
+        if (booking == null || finalizedAtUtc == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Booking và thời điểm hoàn tất là bắt buộc");
         }
 
         Session session = findOrCreateForUpdate(booking);
-        markCompleted(session, booking);
+        completeDeliveredSession(session, booking, finalizedAtUtc);
 
         // finalizedAt is the durable idempotency boundary for mentor counters. A repeated API
         // request or scheduler run may repair the Session but must never increment again.
@@ -117,13 +122,56 @@ public class SessionFinalizationService {
                 });
     }
 
-    private void markCompleted(Session session, Booking booking) {
+    private void completeDeliveredSession(Session session, Booking booking, Instant finalizedAtUtc) {
         if (session.getStatus() == SessionStatus.CANCELLED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Session đã bị hủy nên không thể xác nhận hoàn tất");
         }
         session.setStatus(SessionStatus.COMPLETED);
+        setConfirmedEndTimeWhenMissing(session, booking, finalizedAtUtc);
+        mirrorActualTimesToLegacyBooking(booking, session);
         sessionRepository.save(session);
+    }
+
+    /**
+     * There is no checkout signal yet. When delivery has been confirmed after the scheduled end,
+     * the scheduled end is the only defensible fallback for the end time. We never use the later
+     * confirm/auto-close timestamp, and never overwrite a future explicit checkout implementation.
+     */
+    private void setConfirmedEndTimeWhenMissing(Session session, Booking booking, Instant finalizedAtUtc) {
+        if (session.getActualEndTimeUtc() != null || session.getActualEndTime() != null) {
+            return;
+        }
+        Instant scheduledEndUtc = session.getScheduledEndTimeUtc() != null
+                ? session.getScheduledEndTimeUtc()
+                : BookingTime.toInstant(session.getScheduledEndTime());
+        if (scheduledEndUtc == null) {
+            scheduledEndUtc = BookingTime.resolveSelectedEndUtc(booking);
+        }
+        if (scheduledEndUtc == null || scheduledEndUtc.isAfter(finalizedAtUtc)) {
+            return;
+        }
+        session.setActualEndTimeUtc(scheduledEndUtc);
+        session.setActualEndTime(BookingTime.fromInstant(scheduledEndUtc));
+    }
+
+    private void mirrorActualTimesToLegacyBooking(Booking booking, Session session) {
+        if (booking.getActualStartTime() == null) {
+            Instant actualStartUtc = session.getActualStartTimeUtc() != null
+                    ? session.getActualStartTimeUtc()
+                    : BookingTime.toInstant(session.getActualStartTime());
+            if (actualStartUtc != null) {
+                booking.setActualStartTime(BookingTime.fromInstant(actualStartUtc));
+            }
+        }
+        if (booking.getActualEndTime() == null) {
+            Instant actualEndUtc = session.getActualEndTimeUtc() != null
+                    ? session.getActualEndTimeUtc()
+                    : BookingTime.toInstant(session.getActualEndTime());
+            if (actualEndUtc != null) {
+                booking.setActualEndTime(BookingTime.fromInstant(actualEndUtc));
+            }
+        }
     }
 
     private void incrementMentorCompletionCounters(Booking booking, Instant finalizedAtUtc) {

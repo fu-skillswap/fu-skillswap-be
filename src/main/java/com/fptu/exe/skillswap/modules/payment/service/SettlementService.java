@@ -40,11 +40,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class SettlementService {
 
-    private static final int COMMISSION_BPS_DEFAULT = 1000;
     private static final UUID PLATFORM_OWNER_ID = new UUID(0L, 1L);
-    private static final int LATE_MENTEE_CANCEL_REFUND_BPS = 5000;
-    private static final int LATE_MENTEE_CANCEL_MENTOR_BPS = 3500;
-    private static final int LATE_MENTEE_CANCEL_PLATFORM_BPS = 1500;
 
     private final SettlementAccountRepository settlementAccountRepository;
     private final SettlementEntryRepository settlementEntryRepository;
@@ -116,10 +112,10 @@ public class SettlementService {
 
         int grossScoin = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
         int commissionBps = paymentOrder.getCommissionRateBps() == null || paymentOrder.getCommissionRateBps() <= 0
-                ? (paymentProperties == null ? COMMISSION_BPS_DEFAULT : paymentProperties.getPlatformCommissionBps())
+                ? paymentProperties.getPlatformCommissionBps()
                 : paymentOrder.getCommissionRateBps();
         int commissionScoin = Math.max(0, paymentOrder.getCommissionScoin() == null
-                ? (grossScoin * commissionBps) / 10_000
+                ? PricingPolicy.bpsAmount(grossScoin, commissionBps)
                 : paymentOrder.getCommissionScoin());
         int releasableScoin = Math.max(0, paymentOrder.getMentorNetScoin() == null
                 ? grossScoin - commissionScoin
@@ -302,8 +298,11 @@ public class SettlementService {
             return;
         }
 
-        int refundShare = (grossScoin * LATE_MENTEE_CANCEL_REFUND_BPS) / 10_000;
-        int mentorShare = (grossScoin * LATE_MENTEE_CANCEL_MENTOR_BPS) / 10_000;
+        int lateRefundBps = paymentProperties.getLateMenteeCancellationRefundBps();
+        int lateMentorBps = paymentProperties.getLateMenteeCancellationMentorBps();
+        int latePlatformBps = paymentProperties.getLateMenteeCancellationPlatformBps();
+        int refundShare = PricingPolicy.bpsAmount(grossScoin, lateRefundBps);
+        int mentorShare = PricingPolicy.bpsAmount(grossScoin, lateMentorBps);
         // Platform absorbs the integer rounding remainder so the allocation always equals grossScoin.
         int platformShare = Math.max(0, grossScoin - refundShare - mentorShare);
 
@@ -314,7 +313,7 @@ public class SettlementService {
                     LedgerSourceType.BOOKING,
                     booking.getId(),
                     refundShare,
-                    "50% refund for late mentee cancellation of booking " + booking.getId()
+                    "Refund for late mentee cancellation of booking " + booking.getId()
             );
         }
 
@@ -331,7 +330,7 @@ public class SettlementService {
                     .amountScoin(mentorShare)
                     .balanceEffectScoin(mentorShare)
                     .grossScoin(grossScoin)
-                    .commissionRateBps(LATE_MENTEE_CANCEL_PLATFORM_BPS)
+                    .commissionRateBps(latePlatformBps)
                     .commissionScoin(platformShare)
                     .mentorNetScoin(mentorShare)
                     .memo("Late mentee cancellation compensation for booking " + booking.getId())
@@ -348,7 +347,7 @@ public class SettlementService {
                     .amountScoin(platformShare)
                     .balanceEffectScoin(platformShare)
                     .grossScoin(grossScoin)
-                    .commissionRateBps(LATE_MENTEE_CANCEL_PLATFORM_BPS)
+                    .commissionRateBps(latePlatformBps)
                     .commissionScoin(platformShare)
                     .mentorNetScoin(mentorShare)
                     .memo("Platform commission from late mentee cancellation of booking " + booking.getId())

@@ -38,6 +38,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -174,7 +175,6 @@ class BookingLifecycleMaintenanceServiceTest {
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
                 .selectedStartTime(now.minusHours(25))
                 .selectedEndTime(now.minusHours(23).minusMinutes(10))
-                .completedAt(now.minusHours(5).minusMinutes(10))
                 .autoCloseWarningSentAt(null)
                 .build();
 
@@ -187,6 +187,7 @@ class BookingLifecycleMaintenanceServiceTest {
 
         assertEquals(1, changed);
         assertNotNull(booking.getAutoCloseWarningSentAt());
+        assertNull(booking.getCompletedAt());
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, booking.getStatus());
         verify(settlementService, never()).releaseForBooking(any());
     }
@@ -202,7 +203,6 @@ class BookingLifecycleMaintenanceServiceTest {
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
                 .selectedStartTime(now.minusHours(26))
                 .selectedEndTime(now.minusHours(24).minusMinutes(5))
-                .completedAt(now.minusHours(6).minusMinutes(5))
                 .autoCloseWarningSentAt(now.minusHours(1))
                 .build();
 

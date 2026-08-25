@@ -1,9 +1,5 @@
-package com.fptu.exe.skillswap.modules.booking.service;
+package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMachine;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -12,7 +8,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
-/** Applies the single state-machine decision and status-owned timestamps. */
+/**
+ * The only writer for {@link BookingStatus} in production code.
+ *
+ * <p>It applies the state-machine decision and records timestamps owned by that transition.
+ * Outcome, issue and settlement details remain the responsibility of their bounded workflow.</p>
+ */
 public final class BookingTransitionExecutor {
 
     private static final ZoneId BUSINESS_ZONE = TimeProvider.BUSINESS_ZONE;
@@ -40,10 +41,6 @@ public final class BookingTransitionExecutor {
                 booking.setCancelledAtUtc(atUtc);
                 booking.setCancelledAt(atBusiness);
             }
-            case MENTOR_COMPLETED -> {
-                booking.setCompletedAtUtc(atUtc);
-                booking.setCompletedAt(atBusiness);
-            }
             case AUTO_CLOSE -> {
                 booking.setAutoClosedAtUtc(atUtc);
                 booking.setAutoClosedAt(atBusiness);
@@ -60,11 +57,12 @@ public final class BookingTransitionExecutor {
         return target;
     }
 
+    /** Temporary compatibility bridge during the UTC dual-write rollout. */
+    @Deprecated
     public static BookingStatus apply(Booking booking, BookingTransitionCommand command, LocalDateTime at) {
         if (booking == null || at == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking và thời điểm chuyển trạng thái là bắt buộc");
         }
-        Instant atUtc = at.atZone(BUSINESS_ZONE).toInstant();
-        return apply(booking, command, atUtc);
+        return apply(booking, command, at.atZone(BUSINESS_ZONE).toInstant());
     }
 }

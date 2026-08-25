@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,8 +25,8 @@ public record CreateMentorServiceRequest(
         @Schema(description = "Dịch vụ miễn phí hay có phí", example = "false", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotNull Boolean isFree,
 
-        @Schema(description = "Giá dịch vụ theo SCoin (Nếu isFree=true thì giá phải bằng 0; nếu có phí thì tối thiểu = durationMinutes * 500)", example = "30000", requiredMode = Schema.RequiredMode.REQUIRED)
-        @NotNull @Min(0) @Max(45_000_000) Integer priceScoin,
+        @Schema(description = "Giá dịch vụ theo SCoin. Nếu miễn phí, giá phải bằng 0; giới hạn giá thực tế lấy từ cấu hình dịch vụ.", example = "30000", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull @Min(0) Integer priceScoin,
 
         @Schema(description = "Duy trì kênh chat hỗ trợ sau buổi mentoring", example = "true")
         Boolean maintainPostSessionChat,

@@ -4,11 +4,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -73,9 +73,9 @@ public class MentorServiceManagementService {
     @Transactional(readOnly = true)
     public MentorServiceConstraintsResponse getServiceConstraints() {
         return new MentorServiceConstraintsResponse(
-                PricingPolicy.ALLOWED_DURATIONS,
-                PricingPolicy.MIN_PRICE_SCOIN_PER_MINUTE,
-                PricingPolicy.MAX_PRICE_SCOIN_PER_MINUTE
+                PricingPolicy.allowedServiceDurations(paymentProperties),
+                paymentProperties.getMinPriceScoinPerMinute(),
+                paymentProperties.getMaxPriceScoinPerMinute()
         );
     }
 
@@ -235,8 +235,10 @@ public class MentorServiceManagementService {
     }
 
     private Integer validateDuration(Integer durationMinutes) {
-        if (durationMinutes == null || !PricingPolicy.ALLOWED_DURATIONS.contains(durationMinutes)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ chỉ được chọn 30, 60, 90 hoặc 120 phút");
+        if (!PricingPolicy.isAllowedServiceDuration(durationMinutes, paymentProperties)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST,
+                    "Thời lượng dịch vụ không thuộc cấu hình cho phép: "
+                            + PricingPolicy.allowedServiceDurations(paymentProperties));
         }
         return durationMinutes;
     }
@@ -249,16 +251,16 @@ public class MentorServiceManagementService {
             return 0;
         }
 
-        PricingPolicy.validatePaidServicePrice(priceScoin, durationMinutes);
+        PricingPolicy.validatePaidServicePrice(priceScoin, durationMinutes, paymentProperties);
         return priceScoin;
     }
 
     private int minimumPriceForDuration(Integer durationMinutes) {
-        return PricingPolicy.minimumPriceForDuration(durationMinutes);
+        return PricingPolicy.minimumPriceForDuration(durationMinutes, paymentProperties);
     }
 
     private int maximumPriceForDuration(Integer durationMinutes) {
-        return PricingPolicy.maximumPriceForDuration(durationMinutes);
+        return PricingPolicy.maximumPriceForDuration(durationMinutes, paymentProperties);
     }
 
     private String cleanRequired(String value, String label) {

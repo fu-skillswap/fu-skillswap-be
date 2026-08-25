@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.feedback;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.domain.SessionFeedback;
 import com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest;
@@ -82,7 +83,7 @@ class SessionFeedbackServiceTest {
 
         booking = new Booking();
         booking.setId(UUID.randomUUID());
-        booking.setStatus(BookingStatus.COMPLETED);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.COMPLETED);
         booking.setMentee(mentee);
         booking.setMentorProfile(mentorProfile);
     }
@@ -98,7 +99,7 @@ class SessionFeedbackServiceTest {
 
     @Test
     void submitFeedback_bookingNotCompleted_shouldThrowConflict() {
-        booking.setStatus(BookingStatus.PAID);
+        BookingStateTestSupport.setStatus(booking, BookingStatus.PAID);
         when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
 
         BaseException exception = assertThrows(BaseException.class, () ->

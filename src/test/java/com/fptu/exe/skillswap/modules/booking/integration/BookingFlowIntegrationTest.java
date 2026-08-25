@@ -285,7 +285,9 @@ class BookingFlowIntegrationTest {
                 mentorId, booking.bookingId(), new CompleteBookingRequest("Good session, code works")
         );
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, mentorCompleted.status());
-        assertEquals(SessionStatus.COMPLETED, mentorCompleted.actualSessionStatus());
+        assertEquals(SessionStatus.SCHEDULED, mentorCompleted.actualSessionStatus(),
+                "Mentor chỉ khai báo hoàn tất; session chỉ hoàn tất sau khi có kết quả cuối");
+        assertNull(mentorCompleted.completedAt());
 
         BookingResponse completed = bookingService.completeBooking(
                 menteeId, booking.bookingId(), new CompleteBookingRequest("Confirmed")
@@ -296,7 +298,7 @@ class BookingFlowIntegrationTest {
     }
 
     @Test
-    void checkIn_persistsAttendanceAndStartsSessionWithoutChangingBookingSettlement() {
+    void checkIn_persistsEvidenceForBothParticipantsAndStartsSessionWithoutChangingBookingSettlement() {
         Instant nowUtc = Instant.now();
         var booking = bookingRepository.saveAndFlush(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                 .mentee(menteeUser)
@@ -328,6 +330,15 @@ class BookingFlowIntegrationTest {
         assertEquals(1, sessionAttendanceRepository.findBySessionId(session.getId()).size());
         assertEquals(SessionAttendanceSummary.MENTEE_ONLY, response.attendance().summary());
         assertNull(response.actualStartTime());
+
+        BookingResponse mentorResponse = bookingService.checkIn(mentorUser.getId(), booking.getId());
+
+        Session storedSession = sessionRepository.findById(session.getId()).orElseThrow();
+        assertEquals(SessionStatus.IN_PROGRESS, storedSession.getStatus());
+        assertEquals(2, sessionAttendanceRepository.findBySessionId(session.getId()).size());
+        assertEquals(SessionAttendanceSummary.BOTH, mentorResponse.attendance().summary());
+        assertNotNull(storedSession.getActualStartTimeUtc());
+        assertNotNull(mentorResponse.actualStartTime());
     }
 
     private void completeAcademicProfile(UUID userId, String studentCode) {

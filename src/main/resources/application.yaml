@@ -36,6 +36,10 @@ spring:
     properties:
       mail.smtp.auth: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:true}
       mail.smtp.starttls.enable: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:true}
+      # Bound SMTP network calls so a provider outage cannot hold email workers forever.
+      mail.smtp.connectiontimeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_CONNECTIONTIMEOUT:5000}
+      mail.smtp.timeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_TIMEOUT:10000}
+      mail.smtp.writetimeout: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_WRITETIMEOUT:10000}
 
   servlet:
     multipart:
@@ -261,8 +265,11 @@ application:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
     mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
     scoin-to-vnd-rate: ${PAYMENT_SCOIN_TO_VND_RATE:1}
-    mentor-commission-bps: ${PAYMENT_MENTOR_COMMISSION_BPS:1000}
+    mentor-commission-bps: ${PAYMENT_MENTOR_COMMISSION_BPS:500}
     payment-link-expiry-minutes: ${PAYMENT_LINK_EXPIRY_MINUTES:30}
+    # A scheduler guardrail, not a payment expiry policy. Keep provider recovery bounded on one VPS.
+    reconciliation-max-orders-per-run: ${PAYMENT_RECONCILIATION_MAX_ORDERS_PER_RUN:50}
+    reconciliation-max-duration-seconds: ${PAYMENT_RECONCILIATION_MAX_DURATION_SECONDS:45}
     payos:
       client-id: ${PAYOS_CLIENT_ID:}
       api-key: ${PAYOS_API_KEY:}
