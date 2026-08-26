@@ -42,7 +42,7 @@ API `GET /api/mentors` là **công khai (Public)**. Có thể đính kèm Bearer
 
 | Tham số | Kiểu dữ liệu | Mặc định | Ghi chú |
 |---|---|---|---|
-| `page` | number | `0` | Trang bắt đầu từ `0` |
+| `page` | number | `0` | Trang bắt đầu từ `0` (Backend giới hạn deep pagination tối đa 20 trang đầu: `0` đến `19`) |
 | `size` | number | `12` | Kích thước trang (Backend giới hạn từ `1` đến `30`) |
 | `keyword` | string | - | Tìm kiếm theo họ tên, headline, bio, môn học, dự án và thành tích |
 | `campusId` | UUID | - | Lọc theo cơ sở đào tạo (FPTU Campus) |

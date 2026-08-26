@@ -98,9 +98,9 @@ public class DiscoveryCandidateProvider {
     public int recallWindowSize(int requestedPage, int requestedSize, boolean relevanceSort, int defaultRecallWindowSize) {
         int minimumWindow = Math.max(defaultRecallWindowSize, (requestedPage + 1) * requestedSize);
         if (!relevanceSort) {
-            return minimumWindow;
+            return Math.min(minimumWindow, 600);
         }
-        return Math.max(minimumWindow, (requestedPage + 1) * requestedSize * 5);
+        return Math.min(Math.max(minimumWindow, (requestedPage + 1) * requestedSize * 5), 600);
     }
 
     private CandidateWindow findCandidatesByFts(
