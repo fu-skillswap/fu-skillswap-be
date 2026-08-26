@@ -217,7 +217,8 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             readyLatch.countDown();
             assertTrue(startLatch.await(5, TimeUnit.SECONDS));
             try {
-                bookingService.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("Confirmed"));
+                bookingService.acceptBooking(mentorId, bookingId,
+                        new AcceptBookingRequest("Confirmed", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
                 return true;
             } catch (Exception exception) {
                 return false;
