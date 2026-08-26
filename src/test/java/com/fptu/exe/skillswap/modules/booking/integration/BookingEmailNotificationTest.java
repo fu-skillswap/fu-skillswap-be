@@ -190,7 +190,7 @@ class BookingEmailNotificationTest {
                 eq(menteeUser.getEmail()),
                 eq("[SkillSwap] Mentor đã chấp nhận lịch của bạn"),
                 contains("'Segoe UI', Arial, Helvetica, sans-serif"),
-                contains("Hoàn tất thanh toán trong vòng 60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu"),
+                contains("Hoàn tất thanh toán trong vòng 240 phút hoặc ít nhất 2 giờ trước giờ bắt đầu"),
                 eq("BOOKING_ACCEPTED_EMAIL")
         );
     }

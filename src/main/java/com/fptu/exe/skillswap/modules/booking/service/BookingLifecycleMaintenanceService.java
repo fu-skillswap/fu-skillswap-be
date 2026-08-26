@@ -44,8 +44,6 @@ import java.util.UUID;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class BookingLifecycleMaintenanceService {
 
-    private static final long PAYMENT_WINDOW_MINUTES = BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES;
-    private static final String PAYMENT_DEADLINE_TEXT = "60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.PAID
@@ -210,7 +208,7 @@ public class BookingLifecycleMaintenanceService {
     @Transactional
     public int expireAwaitingPaymentBookings() {
         Instant nowUtc = timeProvider.instant();
-        Instant acceptedCutoff = nowUtc.minus(Duration.ofMinutes(PAYMENT_WINDOW_MINUTES));
+        Instant acceptedCutoff = nowUtc.minus(Duration.ofMinutes(BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES));
         Instant startCutoff = nowUtc.plus(Duration.ofMinutes(BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES));
         List<UUID> candidateIds = bookingRepository.findAwaitingPaymentExpiryCandidatesUtc(
                 BookingStatus.ACCEPTED_AWAITING_PAYMENT, acceptedCutoff, startCutoff)
@@ -226,7 +224,7 @@ public class BookingLifecycleMaintenanceService {
             booking.setRejectedAtUtc(nowUtc);
             booking.setRejectedAt(BookingTime.fromInstant(nowUtc));
             booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn do mentee chưa hoàn tất thanh toán trong vòng "
-                    + PAYMENT_DEADLINE_TEXT + ".");
+                    + BookingDeadlinePolicy.paymentDeadlineText() + ".");
             Instant slotStartUtc = booking.getSlot() != null ? (booking.getSlot().getStartTimeUtc() != null ? booking.getSlot().getStartTimeUtc() : BookingTime.toInstant(booking.getSlot().getStartTime())) : null;
             if (slotStartUtc != null && nowUtc.isBefore(slotStartUtc)) {
                 refreshSlotBookedFlag(booking.getSlot());
@@ -243,7 +241,7 @@ public class BookingLifecycleMaintenanceService {
                     booking.getMentee().getId(), NotificationType.BOOKING_PAYMENT_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn thanh toán",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng "
-                            + PAYMENT_DEADLINE_TEXT + ".",
+                            + BookingDeadlinePolicy.paymentDeadlineText() + ".",
                     "BOOKING", booking.getId()));
             eventPublisher.publishEvent(new NotificationEvent(
                     booking.getMentorProfile().getUserId(), NotificationType.BOOKING_PAYMENT_EXPIRED,

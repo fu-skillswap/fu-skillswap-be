@@ -1,10 +1,14 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -136,6 +140,52 @@ class BookingCompletionServiceTest {
 
         assertEquals(BookingStatus.UNDER_REVIEW, response.status());
         assertEquals(BookingIssueType.TECHNICAL_PROBLEM, response.issueType());
+        assertEquals(FIXED_NOW.plusSeconds(24 * 60 * 60), response.issueResponseDeadlineAt().toInstant());
+        assertEquals(BookingDisputeSlaStatus.WAITING_COUNTERPARTY, response.disputeSlaStatus());
+        assertNull(response.issueAdminEscalatedAt());
+    }
+
+    @Test
+    void respondToIssue_shouldReturnAdminSlaMetadataImmediately() {
+        Booking booking = eligibleBooking();
+        Instant submittedUtc = FIXED_NOW.minusSeconds(60 * 60);
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, submittedUtc);
+        booking.setIssueSubmittedAtUtc(submittedUtc);
+        booking.setIssueSubmittedAt(LocalDateTime.ofInstant(submittedUtc, APP_ZONE));
+        booking.setIssueSubmittedByUserId(menteeId);
+        booking.setIssueType(BookingIssueType.TECHNICAL_PROBLEM);
+        stubSave(booking);
+
+        var response = service.respondToBookingIssue(
+                mentorId,
+                bookingId,
+                new RespondBookingIssueRequest("Đã vào phòng họp nhưng mất kết nối", List.of())
+        );
+
+        assertEquals(FIXED_NOW, response.issueAdminEscalatedAt().toInstant());
+        assertEquals(FIXED_NOW.plusSeconds(48 * 60 * 60), response.issueAdminResolutionDeadlineAt().toInstant());
+        assertEquals(BookingDisputeSlaStatus.WAITING_ADMIN, response.disputeSlaStatus());
+        assertNull(response.issueAdminSlaOverdueAt());
+    }
+
+    @Test
+    void respondToIssue_atResponseDeadline_shouldReject() {
+        Booking booking = eligibleBooking();
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ISSUE_REPORTED, FIXED_NOW);
+        booking.setIssueSubmittedAtUtc(FIXED_NOW.minusSeconds(24 * 60 * 60));
+        booking.setIssueSubmittedAt(LocalDateTime.ofInstant(FIXED_NOW.minusSeconds(24 * 60 * 60), APP_ZONE));
+        booking.setIssueSubmittedByUserId(menteeId);
+        booking.setIssueType(BookingIssueType.TECHNICAL_PROBLEM);
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.respondToBookingIssue(
+                mentorId,
+                bookingId,
+                new RespondBookingIssueRequest("Phản hồi quá hạn", List.of())
+        ));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        verify(bookingRepository, never()).save(any());
     }
 
     @Test

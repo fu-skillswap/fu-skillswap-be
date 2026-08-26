@@ -43,9 +43,6 @@ import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapp
 @RequiredArgsConstructor
 public class BookingCancellationService {
 
-    private static final long MENTEE_FREE_CANCEL_DEADLINE_MINUTES = 4 * 60;
-    private static final long MENTOR_SAFE_CANCEL_DEADLINE_MINUTES = 6 * 60;
-
     private static final List<BookingStatus> SLOT_LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT,
             BookingStatus.PAID
@@ -120,7 +117,7 @@ public class BookingCancellationService {
         mentorProfileRepository.save(lockedMentorProfile);
 
         Booking savedBooking = bookingRepository.save(booking);
-        if (mentorViolationService != null && minutesUntilStart < MENTOR_SAFE_CANCEL_DEADLINE_MINUTES) {
+        if (mentorViolationService != null && BookingDeadlinePolicy.isLateCancellation(minutesUntilStart)) {
             mentorViolationService.record(mentorUserId, savedBooking.getId(), MentorViolationType.LATE_CANCELLATION,
                     "Mentor hủy booking khi còn " + minutesUntilStart + " phút trước giờ bắt đầu.");
         }
@@ -196,8 +193,10 @@ public class BookingCancellationService {
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);
 
-        boolean lateCancellation = currentStatus == BookingStatus.PAID
-                && minutesUntilStart < MENTEE_FREE_CANCEL_DEADLINE_MINUTES;
+        // Classification is based on the time boundary, not the current payment
+        // state. PaymentLifecycleService will apply the split only when money was
+        // actually captured; this also keeps a concurrent late payment correct.
+        boolean lateCancellation = BookingDeadlinePolicy.isLateCancellation(minutesUntilStart);
 
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTEE, nowUtc);
         booking.setCancelReason(requiredCancelReason(request));

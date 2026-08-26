@@ -162,7 +162,7 @@ interface BookingQuoteResponse {
 
 > [!NOTE]
 > Hiển thị `pricing.estimatedPayableScoin` và `disclaimer` chính xác như backend trả về. Frontend **không tự tính phụ phí, chiết khấu chiến dịch hay chính sách hoàn tiền**.
-> `paymentWindowMinutes` hiện là **60 phút**. Deadline thật vẫn phải lấy từ `actionDeadlineAt` của booking sau khi mentor accept vì có thể ngắn hơn nếu sát giờ học.
+> `paymentWindowMinutes` hiện là **240 phút**. Booking phải được thanh toán trước giờ học ít nhất **120 phút**; deadline thật vẫn phải lấy từ `actionDeadlineAt` của booking sau khi mentor accept vì có thể ngắn hơn nếu sát giờ học.
 
 > [!IMPORTANT]
 > Link PayOS không thể có hạn dài hơn `actionDeadlineAt`. Khi deadline đã đến, FE ẩn nút thanh toán và tải lại booking; không cố mở lại link cũ. Nếu cổng thanh toán xác nhận giao dịch sau deadline, backend không xác nhận lịch và xử lý hoàn tiền theo policy.
@@ -530,12 +530,13 @@ Các `NotificationResponse.type` mới: `BOOKING_ISSUE_REPORTED`, `BOOKING_ISSUE
 > Deadline xác nhận hoặc báo vấn đề luôn là `selectedEndTime + 24 giờ`, không tính từ lúc mentor bấm complete. Nếu cả hai bên không thao tác, backend tự đóng booking và release tiền bình thường; mentor bị ghi nhận `COMPLETION_OVERDUE`.
 
 Chính sách hủy booking đã thanh toán: hủy trước giờ học ít nhất 4 giờ được hoàn 100%; hủy trong vòng dưới 4 giờ chia `50% mentee / 35% mentor / 15% nền tảng`; từ đúng giờ bắt đầu không được hủy và trường hợp vắng mặt phải đi qua no-show flow.
+Ngưỡng áp dụng giống nhau cho hai phía: mentor hoặc mentee hủy từ đúng 4 giờ trở lên là hủy sớm; dưới 4 giờ là hủy muộn. Mentor hủy muộn bị ghi nhận vi phạm; việc chia tiền chỉ áp dụng cho booking đã thanh toán.
 
 ---
 
 ## 7. Tích Hợp Thanh Toán, Chat & Lịch (Integrations)
 
-- **Thanh toán**: Khi `canPay === true` (thường đi cùng `nextAction === "PAY_NOW"`), chuyển hướng người dùng sang luồng thanh toán trong [payment.md](payment.md). Mentee có tối đa 60 phút từ lúc mentor accept, nhưng FE luôn đếm ngược theo `actionDeadlineAt`. Sau khi PayOS chuyển hướng về, dùng API trạng thái/sync có chủ đích rồi tải lại booking; API GET danh sách booking không tự gọi PayOS.
+- **Thanh toán**: Khi `canPay === true` (thường đi cùng `nextAction === "PAY_NOW"`), chuyển hướng người dùng sang luồng thanh toán trong [payment.md](payment.md). Mentee có tối đa 240 phút từ lúc mentor accept và phải hoàn tất trước giờ học 120 phút, nhưng FE luôn đếm ngược theo `actionDeadlineAt`. Sau khi PayOS chuyển hướng về, dùng API trạng thái/sync có chủ đích rồi tải lại booking; API GET danh sách booking không tự gọi PayOS.
 - **Phòng Chat**: Trường `conversationId` có thể mang giá trị `null` khi booking chưa được xác nhận (`CONFIRMED`). Frontend **không tự ý tạo conversation**; chỉ mở khung chat khi backend đã trả về ID hợp lệ theo [realtime-chat-notification.md](realtime-chat-notification.md).
 - **Tham gia buổi học**: Chỉ bật CTA khi `canJoin === true`; cửa sổ mặc định là từ 15 phút trước giờ bắt đầu đến 15 phút sau giờ kết thúc. Online mở `meetingLink`; offline hiển thị `location`.
 - **Link Họp**: `meetingLink` có thể `null` lúc mới tạo. Frontend không tự tạo Google Meet link ở client. Nếu mentor đã liên kết Google Calendar, backend sẽ tự động đồng bộ và cập nhật link kèm mã trạng thái `calendarSyncStatus`. Lịch trong SkillSwap luôn là nguồn sự thật: lỗi hoặc trùng lịch Google không thể làm accept thất bại, hủy booking hay đổi payment. Khi sync lỗi, booking và thanh toán vẫn hợp lệ; hiển thị CTA cho mentor nhập link/địa điểm thủ công. Backend nhắc mentor trước 2 giờ và cả hai bên trước 30 phút nếu vẫn chưa có thông tin tham gia hợp lệ.

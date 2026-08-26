@@ -103,7 +103,7 @@ class PaymentWebhookServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
-                .acceptedAtUtc(deadline.minus(Duration.ofMinutes(60)))
+                .acceptedAtUtc(deadline.minus(Duration.ofMinutes(240)))
                 .selectedStartTimeUtc(deadline.plus(Duration.ofHours(2)))
                 .build();
         PaymentOrder order = PaymentOrder.builder()

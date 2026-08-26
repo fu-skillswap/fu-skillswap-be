@@ -247,10 +247,9 @@ public class BookingIssueEvidenceService {
         Instant resolvedUtc = booking.getIssueResolvedAtUtc() != null ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt());
         Instant escalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
         Instant overdueUtc = booking.getAdminSlaOverdueAtUtc();
-        BookingDisputeSlaStatus slaStatus = resolvedUtc != null ? BookingDisputeSlaStatus.RESOLVED
-                : overdueUtc != null ? BookingDisputeSlaStatus.ADMIN_SLA_OVERDUE
-                : escalatedUtc != null ? BookingDisputeSlaStatus.WAITING_ADMIN
-                : BookingDisputeSlaStatus.WAITING_COUNTERPARTY;
+        BookingDisputeSlaStatus slaStatus = BookingDeadlinePolicy.resolveDisputeSlaStatus(
+                submittedUtc, escalatedUtc, overdueUtc, resolvedUtc
+        );
         return new BookingIssueDetailResponse(booking.getId(), booking.getStatus(), booking.getIssueType(), booking.getIssueDescription(),
                 BookingTime.toOffsetDateTime(submittedUtc),
                 BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc)),
@@ -290,7 +289,7 @@ public class BookingIssueEvidenceService {
         }
         Instant submittedAt = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
         if (!actorUserId.equals(booking.getIssueSubmittedByUserId()) && booking.getIssueRespondedAtUtc() == null && booking.getIssueRespondedAt() == null
-                && submittedAt != null && now.isBefore(submittedAt.plus(Duration.ofHours(24)))) return;
+                && submittedAt != null && now.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedAt))) return;
         throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không còn quyền gửi thêm minh chứng cho dispute này");
     }
 

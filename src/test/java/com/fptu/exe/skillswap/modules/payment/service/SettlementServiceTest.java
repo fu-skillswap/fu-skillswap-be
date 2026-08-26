@@ -144,7 +144,7 @@ class SettlementServiceTest {
     }
 
     @Test
-    void handlePaidBookingCancelledByMentee_withinSixHours_shouldSplitFiftyThirtyFiveFifteen() {
+    void handlePaidBookingCancelledByMentee_withinFourHours_shouldSplitFiftyThirtyFiveFifteen() {
         UUID platformOwnerId = new UUID(0L, 1L);
         when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
                 .thenReturn(true);

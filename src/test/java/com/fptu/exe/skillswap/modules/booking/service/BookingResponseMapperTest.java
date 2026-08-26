@@ -97,7 +97,7 @@ class BookingResponseMapperTest {
     }
 
     @Test
-    void acceptedPaidRequest_menteeGetsPaymentCapabilityAndOneHourDeadline() {
+    void acceptedPaidRequest_menteeGetsPaymentCapabilityAndFourHourDeadline() {
         authenticate(menteeId, RoleCode.MENTEE);
         LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT, now.plusDays(1), now.plusDays(1).plusHours(1));
@@ -107,7 +107,7 @@ class BookingResponseMapperTest {
 
         assertTrue(response.canPay());
         assertEquals(BookingNextAction.PAY_NOW, response.nextAction());
-        assertEquals(BookingTime.toOffsetDateTime(now.plusMinutes(60)), response.actionDeadlineAt());
+        assertEquals(BookingTime.toOffsetDateTime(now.plusMinutes(240)), response.actionDeadlineAt());
     }
 
     @Test
@@ -130,7 +130,7 @@ class BookingResponseMapperTest {
         LocalDateTime now = timeProvider.nowBusiness();
         Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                 now.plusDays(1), now.plusDays(1).plusHours(1));
-        booking.setAcceptedAt(now.minusMinutes(61));
+        booking.setAcceptedAt(now.minusMinutes(241));
 
         BookingResponse response = mapper.toBookingResponse(booking);
 
@@ -145,7 +145,7 @@ class BookingResponseMapperTest {
         Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT,
                 now.plusDays(1), now.plusDays(1).plusHours(1));
         booking.setAcceptedAt(now);
-        booking.setAcceptedAtUtc(FIXED_NOW.minusSeconds(60 * 60));
+        booking.setAcceptedAtUtc(FIXED_NOW.minusSeconds(240 * 60));
         booking.setSelectedStartTimeUtc(FIXED_NOW.plusSeconds(6 * 60 * 60));
 
         BookingResponse response = mapper.toBookingResponse(booking);

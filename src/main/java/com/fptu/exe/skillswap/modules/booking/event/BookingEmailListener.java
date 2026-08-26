@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +21,7 @@ public class BookingEmailListener {
 
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
-    private static final String PAYMENT_DEADLINE_TEXT = "trong vòng 60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    private static final String PAYMENT_DEADLINE_TEXT = "trong vòng " + BookingDeadlinePolicy.paymentDeadlineText();
 
     private final EmailDispatchService emailDispatchService;
 

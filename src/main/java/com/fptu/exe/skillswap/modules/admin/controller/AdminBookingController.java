@@ -69,7 +69,7 @@ public class AdminBookingController {
 
     @Operation(
             summary = "Resolve booking issue",
-            description = "Admin đóng một booking đang UNDER_REVIEW sau khi xử lý dispute/manual support. Action chỉ finalize lại booking, không đổi service hay payment gốc."
+            description = "Admin đóng một booking đang UNDER_REVIEW sau khi xử lý dispute/manual support. Action chốt outcome session và settlement hiện có của booking; không sửa service hoặc payment order gốc."
     )
     @PostMapping("/{bookingId}/resolve-issue")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent

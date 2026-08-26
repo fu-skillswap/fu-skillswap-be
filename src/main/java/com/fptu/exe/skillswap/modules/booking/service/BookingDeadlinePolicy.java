@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -11,9 +12,12 @@ public final class BookingDeadlinePolicy {
 
     public static final long PENDING_RESPONSE_WINDOW_HOURS = 12;
     public static final long PENDING_RESPONSE_PREPARATION_HOURS = 3;
-    /** Async mentor approval still gives the mentee time to react without holding a scarce slot for hours. */
-    public static final long PAYMENT_WINDOW_MINUTES = 60;
-    public static final long PAYMENT_PREPARATION_MINUTES = 60;
+    /** Mentee has up to four hours after mentor acceptance to complete payment. */
+    public static final long PAYMENT_WINDOW_MINUTES = 240;
+    /** Payment must also be completed at least two hours before the session starts. */
+    public static final long PAYMENT_PREPARATION_MINUTES = 120;
+    /** Both parties get the same early-cancellation boundary: four hours before start. */
+    public static final long CANCELLATION_EARLY_WINDOW_MINUTES = 240;
     /** Dispute SLA is measured from the server timestamp at issue submission/escalation. */
     public static final long ISSUE_RESPONSE_WINDOW_HOURS = 24;
     public static final long ISSUE_RESPONSE_REMINDER_HOURS = 12;
@@ -23,6 +27,15 @@ public final class BookingDeadlinePolicy {
     public static final long ADMIN_DISPUTE_FINAL_ACTION_GRACE_HOURS = 24;
 
     private BookingDeadlinePolicy() {
+    }
+
+    public static String paymentDeadlineText() {
+        return PAYMENT_WINDOW_MINUTES + " phút hoặc ít nhất "
+                + (PAYMENT_PREPARATION_MINUTES / 60) + " giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
+    }
+
+    public static boolean isLateCancellation(long minutesUntilStart) {
+        return minutesUntilStart > 0 && minutesUntilStart < CANCELLATION_EARLY_WINDOW_MINUTES;
     }
 
     public static Instant resolvePendingExpiry(Instant createdAtUtc, Instant selectedStartAtUtc) {
@@ -122,5 +135,26 @@ public final class BookingDeadlinePolicy {
         long hoursUntilFinalAction = (long) ADMIN_DISPUTE_OVERDUE_REMINDER_INTERVAL_HOURS
                 * Math.max(0, MAX_ADMIN_DISPUTE_OVERDUE_REMINDERS - 1) + ADMIN_DISPUTE_FINAL_ACTION_GRACE_HOURS;
         return adminSlaOverdueUtc.plus(Duration.ofHours(hoursUntilFinalAction));
+    }
+
+    /** Resolves the user-facing dispute SLA phase from the persisted timestamps. */
+    public static BookingDisputeSlaStatus resolveDisputeSlaStatus(
+            Instant issueSubmittedUtc,
+            Instant adminEscalatedUtc,
+            Instant adminSlaOverdueUtc,
+            Instant issueResolvedUtc
+    ) {
+        if (issueSubmittedUtc == null) {
+            return null;
+        }
+        if (issueResolvedUtc != null) {
+            return BookingDisputeSlaStatus.RESOLVED;
+        }
+        if (adminSlaOverdueUtc != null) {
+            return BookingDisputeSlaStatus.ADMIN_SLA_OVERDUE;
+        }
+        return adminEscalatedUtc == null
+                ? BookingDisputeSlaStatus.WAITING_COUNTERPARTY
+                : BookingDisputeSlaStatus.WAITING_ADMIN;
     }
 }

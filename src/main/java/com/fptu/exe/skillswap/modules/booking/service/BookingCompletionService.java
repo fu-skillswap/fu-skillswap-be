@@ -267,12 +267,7 @@ public class BookingCompletionService {
                 throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Nội dung retry không khớp với issue đã gửi");
             }
             requireEvidenceService().assertReporterReplayMatches(booking, currentUserId, request.evidenceIds());
-            return BookingIssueResponse.builder()
-                    .bookingId(booking.getId()).status(booking.getStatus())
-                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
-                    .issueType(booking.getIssueType())
-                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : (booking.getIssueRespondedAt() != null ? BookingTime.toInstant(booking.getIssueRespondedAt()) : null)))
-                    .build();
+            return toIssueResponse(booking);
         }
 
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
@@ -310,13 +305,7 @@ public class BookingCompletionService {
                 "Buổi học đã được báo cáo vấn đề và đang được xem xét.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
-        return BookingIssueResponse.builder()
-                .bookingId(savedBooking.getId())
-                .status(savedBooking.getStatus())
-                .issueSubmittedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueSubmittedAtUtc() != null ? savedBooking.getIssueSubmittedAtUtc() : BookingTime.toInstant(savedBooking.getIssueSubmittedAt())))
-                .issueType(savedBooking.getIssueType())
-                .issueRespondedAt(BookingTime.toOffsetDateTime(savedBooking.getIssueRespondedAtUtc() != null ? savedBooking.getIssueRespondedAtUtc() : (savedBooking.getIssueRespondedAt() != null ? BookingTime.toInstant(savedBooking.getIssueRespondedAt()) : null)))
-                .build();
+        return toIssueResponse(savedBooking);
     }
 
     @Transactional
@@ -334,11 +323,7 @@ public class BookingCompletionService {
         }
         if (currentUserId.equals(booking.getIssueRespondedByUserId()) && (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null)) {
             requireEvidenceService().assertResponderReplayMatches(booking, currentUserId, request.evidenceIds());
-            return BookingIssueResponse.builder().bookingId(booking.getId()).status(booking.getStatus())
-                    .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())))
-                    .issueType(booking.getIssueType())
-                    .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt())))
-                    .build();
+            return toIssueResponse(booking);
         }
         if (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Issue này đã có phản hồi từ counterparty");
@@ -348,7 +333,7 @@ public class BookingCompletionService {
         }
         Instant nowUtc = timeProvider.instant();
         Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
-        if (nowUtc.isAfter(submittedUtc.plus(Duration.ofHours(24)))) {
+        if (!nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Đã quá thời hạn phản hồi issue");
         }
         booking.setIssueRespondedAtUtc(nowUtc);
@@ -367,11 +352,7 @@ public class BookingCompletionService {
         if (bookingDisputeNotificationService != null) {
             bookingDisputeNotificationService.notifyIssueResponded(saved, currentUserId);
         }
-        return BookingIssueResponse.builder().bookingId(saved.getId()).status(saved.getStatus())
-                .issueSubmittedAt(BookingTime.toOffsetDateTime(saved.getIssueSubmittedAtUtc() != null ? saved.getIssueSubmittedAtUtc() : BookingTime.toInstant(saved.getIssueSubmittedAt())))
-                .issueType(saved.getIssueType())
-                .issueRespondedAt(BookingTime.toOffsetDateTime(saved.getIssueRespondedAtUtc() != null ? saved.getIssueRespondedAtUtc() : BookingTime.toInstant(saved.getIssueRespondedAt())))
-                .build();
+        return toIssueResponse(saved);
     }
 
     @Transactional
@@ -437,6 +418,32 @@ public class BookingCompletionService {
         if (mentorViolationService == null || booking == null || booking.getMentorProfile() == null) return;
         mentorViolationService.record(booking.getMentorProfile().getUserId(), booking.getId(),
                 MentorViolationType.MENTOR_NO_SHOW, "Admin xác nhận mentor không có mặt trong buổi học.");
+    }
+
+    private BookingIssueResponse toIssueResponse(Booking booking) {
+        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null
+                ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        Instant respondedUtc = booking.getIssueRespondedAtUtc() != null
+                ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt());
+        Instant escalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
+        Instant overdueUtc = booking.getAdminSlaOverdueAtUtc();
+        Instant resolvedUtc = booking.getIssueResolvedAtUtc() != null
+                ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt());
+
+        return BookingIssueResponse.builder()
+                .bookingId(booking.getId())
+                .status(booking.getStatus())
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(submittedUtc))
+                .issueType(booking.getIssueType())
+                .issueRespondedAt(BookingTime.toOffsetDateTime(respondedUtc))
+                .issueResponseDeadlineAt(BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc)))
+                .issueAdminEscalatedAt(BookingTime.toOffsetDateTime(escalatedUtc))
+                .issueAdminResolutionDeadlineAt(BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(escalatedUtc)))
+                .issueAdminSlaOverdueAt(BookingTime.toOffsetDateTime(overdueUtc))
+                .issueAdminSlaReminderCount(booking.getAdminSlaReminderCount())
+                .issueAutoReleaseAt(BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(overdueUtc)))
+                .disputeSlaStatus(BookingDeadlinePolicy.resolveDisputeSlaStatus(submittedUtc, escalatedUtc, overdueUtc, resolvedUtc))
+                .build();
     }
 
     private BookingIssueEvidenceService requireEvidenceService() {

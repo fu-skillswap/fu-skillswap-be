@@ -29,7 +29,7 @@ class PaymentCheckoutTimePolicyTest {
         PaymentCheckoutService service = serviceWithFixedTime();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(50)))
+                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(230)))
                 .selectedStartTimeUtc(NOW.plus(Duration.ofHours(3)))
                 .build();
 
@@ -41,7 +41,7 @@ class PaymentCheckoutTimePolicyTest {
         PaymentCheckoutService service = serviceWithFixedTime();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(60)))
+                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(240)))
                 .selectedStartTimeUtc(NOW.plus(Duration.ofHours(3)))
                 .build();
 

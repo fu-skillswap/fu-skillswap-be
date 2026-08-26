@@ -24,14 +24,14 @@ class BookingDeadlinePolicyTest {
     }
 
     @Test
-    void paymentDeadlineUsesTheEarlierOneHourWindowOrPreparationBuffer_LocalDateTime() {
+    void paymentDeadlineUsesTheEarlierFourHourWindowOrTwoHourPreparationBuffer_LocalDateTime() {
         LocalDateTime acceptedAt = LocalDateTime.of(2026, 8, 1, 8, 0);
 
         assertEquals(
-                LocalDateTime.of(2026, 8, 1, 9, 0),
+                LocalDateTime.of(2026, 8, 1, 12, 0),
                 BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAt, LocalDateTime.of(2026, 8, 2, 8, 0)));
         assertEquals(
-                LocalDateTime.of(2026, 8, 1, 8, 30),
+                LocalDateTime.of(2026, 8, 1, 7, 30),
                 BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAt, LocalDateTime.of(2026, 8, 1, 9, 30)));
     }
 
@@ -55,20 +55,20 @@ class BookingDeadlinePolicyTest {
     }
 
     @Test
-    void paymentDeadlineUsesTheEarlierOneHourWindowOrPreparationBuffer_Instant() {
+    void paymentDeadlineUsesTheEarlierFourHourWindowOrTwoHourPreparationBuffer_Instant() {
         Instant acceptedAtUtc = Instant.parse("2026-08-01T01:00:00Z"); // 08:00 HCM
 
-        // 1. Far future session: 60m payment window applies (01:00 + 60m = 02:00 UTC = 09:00 HCM)
+        // 1. Far future session: 240m payment window applies (01:00 + 240m = 05:00 UTC)
         Instant sessionFarStartUtc = Instant.parse("2026-08-02T01:00:00Z");
         assertEquals(
-                Instant.parse("2026-08-01T02:00:00Z"),
+                Instant.parse("2026-08-01T05:00:00Z"),
                 BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAtUtc, sessionFarStartUtc)
         );
 
-        // 2. Near session (+90m from accept): preparation buffer (60m before session) applies
+        // 2. Near session (+90m from accept): preparation buffer (120m before session) applies
         Instant sessionNearStartUtc = Instant.parse("2026-08-01T02:30:00Z"); // 09:30 HCM
         assertEquals(
-                Instant.parse("2026-08-01T01:30:00Z"), // 02:30 - 60m = 01:30 UTC = 08:30 HCM
+                Instant.parse("2026-08-01T00:30:00Z"), // 02:30 - 120m = 00:30 UTC
                 BookingDeadlinePolicy.resolvePaymentDeadline(acceptedAtUtc, sessionNearStartUtc)
         );
     }
@@ -97,5 +97,12 @@ class BookingDeadlinePolicyTest {
         } finally {
             TimeZone.setDefault(originalTz);
         }
+    }
+
+    @Test
+    void cancellationIsEarlyAtExactlyFourHoursAndLateBelowFourHours() {
+        assertEquals(240, BookingDeadlinePolicy.CANCELLATION_EARLY_WINDOW_MINUTES);
+        org.junit.jupiter.api.Assertions.assertFalse(BookingDeadlinePolicy.isLateCancellation(240));
+        org.junit.jupiter.api.Assertions.assertTrue(BookingDeadlinePolicy.isLateCancellation(239));
     }
 }

@@ -692,7 +692,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentor_withinSixHours_shouldCancelBooking() {
+    void cancelBookingByMentor_atFourHours_shouldCancelBooking() {
         Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(4));
         booking.setSelectedEndTime(testNow().plusHours(5));
@@ -714,7 +714,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void cancelBookingByMentor_underThreeHours_shouldCancelBooking() {
+    void cancelBookingByMentor_underFourHours_shouldCancelBooking() {
         Booking booking = bookingForDecision(BookingStatus.PAID);
         booking.setSelectedStartTime(testNow().plusHours(2));
         booking.setSelectedEndTime(testNow().plusHours(3));
@@ -1154,7 +1154,7 @@ class BookingServiceTest {
     }
 
     @Test
-    void expireAwaitingPaymentBookings_afterOneHour_shouldExpireBookingAndPaymentOrder() {
+    void expireAwaitingPaymentBookings_afterFourHours_shouldExpireBookingAndPaymentOrder() {
         Booking staleBooking = bookingForDecision(BookingStatus.ACCEPTED_AWAITING_PAYMENT);
         staleBooking.setAcceptedAt(DateTimeUtil.now().minusHours(7));
         staleBooking.setSelectedStartTime(DateTimeUtil.now().plusHours(2));
@@ -1173,7 +1173,7 @@ class BookingServiceTest {
 
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
-        assertTrue(staleBooking.getRejectReason().contains("60 phút hoặc ít nhất 1 giờ trước giờ bắt đầu"));
+        assertTrue(staleBooking.getRejectReason().contains("240 phút hoặc ít nhất 2 giờ trước giờ bắt đầu"));
         verify(paymentOrderService).expireAwaitingPayment(staleBooking);
         verify(eventPublisher, org.mockito.Mockito.times(2))
                 .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));

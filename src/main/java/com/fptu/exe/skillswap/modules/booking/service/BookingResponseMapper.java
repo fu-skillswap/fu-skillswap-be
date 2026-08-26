@@ -258,7 +258,7 @@ public class BookingResponseMapper {
         Instant issueAdminResolutionDeadlineUtc = BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(issueAdminEscalatedUtc);
         Instant issueAdminSlaOverdueUtc = booking.getAdminSlaOverdueAtUtc();
         Instant issueAutoReleaseUtc = BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(issueAdminSlaOverdueUtc);
-        BookingDisputeSlaStatus disputeSlaStatus = deriveDisputeSlaStatus(
+        BookingDisputeSlaStatus disputeSlaStatus = BookingDeadlinePolicy.resolveDisputeSlaStatus(
                 issueSubmittedUtc, issueAdminEscalatedUtc, issueAdminSlaOverdueUtc, issueResolvedUtc
         );
 
@@ -358,16 +358,6 @@ public class BookingResponseMapper {
                 .nextAction(displayGuidance.action())
                 .actionDeadlineAt(BookingTime.toOffsetDateTime(displayGuidance.deadlineAt()))
                 .build();
-    }
-
-    private BookingDisputeSlaStatus deriveDisputeSlaStatus(Instant issueSubmittedUtc, Instant issueAdminEscalatedUtc,
-                                                            Instant issueAdminSlaOverdueUtc, Instant issueResolvedUtc) {
-        if (issueSubmittedUtc == null) return null;
-        if (issueResolvedUtc != null) return BookingDisputeSlaStatus.RESOLVED;
-        if (issueAdminSlaOverdueUtc != null) return BookingDisputeSlaStatus.ADMIN_SLA_OVERDUE;
-        return issueAdminEscalatedUtc == null
-                ? BookingDisputeSlaStatus.WAITING_COUNTERPARTY
-                : BookingDisputeSlaStatus.WAITING_ADMIN;
     }
 
     public BookingDisplayGuidance deriveDisplayGuidance(
