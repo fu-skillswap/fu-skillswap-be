@@ -62,6 +62,7 @@ public class BookingLifecycleMaintenanceService {
     private MentorViolationService mentorViolationService;
     private SessionFinalizationService sessionFinalizationService;
     private SessionAttendanceRepository sessionAttendanceRepository;
+    private BookingDisputeNotificationService bookingDisputeNotificationService;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -114,6 +115,11 @@ public class BookingLifecycleMaintenanceService {
     @Autowired(required = false)
     void setSessionAttendanceRepository(SessionAttendanceRepository sessionAttendanceRepository) {
         this.sessionAttendanceRepository = sessionAttendanceRepository;
+    }
+
+    @Autowired
+    void setBookingDisputeNotificationService(BookingDisputeNotificationService bookingDisputeNotificationService) {
+        this.bookingDisputeNotificationService = bookingDisputeNotificationService;
     }
 
     @Transactional
@@ -267,12 +273,8 @@ public class BookingLifecycleMaintenanceService {
             changed += processPostSessionCandidate(candidate.getId(), nowUtc) ? 1 : 0;
         }
         for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(
-                BookingStatus.UNDER_REVIEW, nowUtc.minus(Duration.ofHours(12)))) {
+                BookingStatus.UNDER_REVIEW, nowUtc.minus(Duration.ofHours(BookingDeadlinePolicy.ISSUE_RESPONSE_REMINDER_HOURS)))) {
             changed += processIssueDeadline(candidate.getId(), nowUtc) ? 1 : 0;
-        }
-        for (Booking candidate : bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
-                BookingStatus.UNDER_REVIEW, nowUtc.minus(Duration.ofHours(48)))) {
-            changed += processAdminDisputeSlaWarning(candidate.getId(), nowUtc) ? 1 : 0;
         }
         return changed;
     }
@@ -358,19 +360,22 @@ public class BookingLifecycleMaintenanceService {
     private boolean processIssueDeadline(UUID bookingId, Instant nowUtc) {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
         if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW
-                || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)
-                || (booking.getIssueType() != BookingIssueType.MENTOR_NO_SHOW && booking.getIssueType() != BookingIssueType.MENTEE_NO_SHOW)
-                || booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null) return false;
+                || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)) return false;
 
         Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        boolean counterpartyResponded = booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null;
 
-        if (!nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(24)))) {
-            if (!hasOneSidedAttendanceSupportingIssue(booking)) {
-                if (!"SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW".equals(booking.getIssueResolutionNote())) {
-                    booking.setIssueResolutionNote("SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW");
-                    return true;
-                }
-                return false;
+        if (booking.getIssueHumanReviewEscalatedAtUtc() == null) {
+            // A response makes the evidence packet complete: move it to admin immediately,
+            // rather than leaving either participant to wait for the original 24-hour window.
+            if (counterpartyResponded) {
+                return escalateIssueToHumanReview(booking, nowUtc);
+            }
+            if (!nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc))) {
+            boolean noShow = booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW
+                    || booking.getIssueType() == BookingIssueType.MENTEE_NO_SHOW;
+            if (!noShow || !hasOneSidedAttendanceSupportingIssue(booking)) {
+                return escalateIssueToHumanReview(booking, nowUtc);
             }
             BookingStatus old = booking.getStatus();
             if (booking.getIssueResolvedAtUtc() == null && booking.getIssueResolvedAt() == null) {
@@ -392,16 +397,99 @@ public class BookingLifecycleMaintenanceService {
                 settlementService.releaseForBooking(booking);
             }
             recordEvent(booking, BookingEventType.ISSUE_RESOLVED, old, BookingEventActorType.SYSTEM);
+            if (bookingDisputeNotificationService != null) {
+                bookingDisputeNotificationService.notifyIssueResolved(booking, true);
+            }
             return true;
-        }
-        if (booking.getIssueEscalationSentAtUtc() == null && booking.getIssueEscalationSentAt() == null && !nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(12)))) {
+            }
+            if (booking.getIssueEscalationSentAtUtc() == null && booking.getIssueEscalationSentAt() == null
+                    && !nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueEscalationDeadlineUtc(submittedUtc))) {
             booking.setIssueEscalationSentAtUtc(nowUtc);
             booking.setIssueEscalationSentAt(BookingTime.fromInstant(nowUtc));
-            if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) notifyMentor(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
-            else notifyMentee(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            if (bookingDisputeNotificationService != null) {
+                bookingDisputeNotificationService.notifyResponseReminder(booking);
+            } else if (booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW) {
+                notifyMentor(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            } else {
+                notifyMentee(booking, "Cần phản hồi issue booking", "Bạn có 12 giờ còn lại để phản hồi báo cáo no-show.");
+            }
+            return true;
+            }
+            return false;
+        }
+        return processEscalatedAdminSla(booking, nowUtc);
+    }
+
+    private boolean escalateIssueToHumanReview(Booking booking, Instant nowUtc) {
+        if (booking.getIssueHumanReviewEscalatedAtUtc() != null) return false;
+        booking.setIssueHumanReviewEscalatedAtUtc(nowUtc);
+        recordEvent(booking, BookingEventType.ISSUE_ESCALATED_TO_ADMIN, booking.getStatus(), BookingEventActorType.SYSTEM);
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyHumanReviewRequired(booking);
+        }
+        return true;
+    }
+
+    /**
+     * The dispute remains UNDER_REVIEW while humans decide it. Only after the published
+     * 48-hour admin target, three 24-hour reminders, and one final 24-hour grace period
+     * can the deterministic mentor-release fallback run.
+     */
+    private boolean processEscalatedAdminSla(Booking booking, Instant nowUtc) {
+        Instant escalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
+        Instant resolutionDeadlineUtc = BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(escalatedUtc);
+        if (resolutionDeadlineUtc == null || nowUtc.isBefore(resolutionDeadlineUtc)) return false;
+
+        if (booking.getAdminSlaOverdueAtUtc() == null) {
+            booking.setAdminSlaOverdueAtUtc(nowUtc);
+            booking.setAdminSlaReminderCount(1);
+            booking.setAdminSlaLastReminderAtUtc(nowUtc);
+            // Retain the legacy marker for existing reporting until its contract can be retired.
+            booking.setAdminSlaWarningSentAtUtc(nowUtc);
+            booking.setAdminSlaWarningSentAt(BookingTime.fromInstant(nowUtc));
+            recordEvent(booking, BookingEventType.ADMIN_SLA_OVERDUE, booking.getStatus(), BookingEventActorType.SYSTEM);
+            notifyAdminsAboutDisputeSla(booking);
             return true;
         }
-        return false;
+
+        if (booking.getAdminSlaReminderCount() < BookingDeadlinePolicy.MAX_ADMIN_DISPUTE_OVERDUE_REMINDERS) {
+            Instant lastReminderUtc = booking.getAdminSlaLastReminderAtUtc() == null
+                    ? booking.getAdminSlaOverdueAtUtc() : booking.getAdminSlaLastReminderAtUtc();
+            if (!nowUtc.isBefore(lastReminderUtc.plus(Duration.ofHours(BookingDeadlinePolicy.ADMIN_DISPUTE_OVERDUE_REMINDER_INTERVAL_HOURS)))) {
+                booking.setAdminSlaReminderCount(booking.getAdminSlaReminderCount() + 1);
+                booking.setAdminSlaLastReminderAtUtc(nowUtc);
+                recordEvent(booking, BookingEventType.ADMIN_SLA_REMINDER_SENT, booking.getStatus(), BookingEventActorType.SYSTEM);
+                notifyAdminsAboutDisputeSla(booking);
+                return true;
+            }
+            return false;
+        }
+
+        Instant autoReleaseDeadlineUtc = BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(booking.getAdminSlaOverdueAtUtc());
+        if (autoReleaseDeadlineUtc == null || nowUtc.isBefore(autoReleaseDeadlineUtc)) return false;
+
+        BookingStatus oldStatus = booking.getStatus();
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RELEASE_AFTER_ADMIN_SLA, nowUtc);
+        booking.setCompletionOutcome(BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED);
+        booking.setIssueResolvedAtUtc(nowUtc);
+        booking.setIssueResolvedAt(BookingTime.fromInstant(nowUtc));
+        booking.setIssueResolutionNote("SYSTEM_AUTO_RELEASE_AFTER_ADMIN_SLA_OVERDUE");
+        booking.setAdminSlaAutoReleasedAtUtc(nowUtc);
+        sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
+        settlementService.releaseForBooking(booking);
+        recordEvent(booking, BookingEventType.ADMIN_SLA_AUTO_RELEASED, oldStatus, BookingEventActorType.SYSTEM);
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyIssueResolved(booking, true);
+        }
+        return true;
+    }
+
+    private void notifyAdminsAboutDisputeSla(Booking booking) {
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyAdminSlaBreach(booking);
+        } else {
+            notifyAdminsDisputeSlaBreach(booking);
+        }
     }
 
     /**
@@ -421,26 +509,6 @@ public class BookingLifecycleMaintenanceService {
         return booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW
                 ? menteeCheckedIn && !mentorCheckedIn
                 : mentorCheckedIn && !menteeCheckedIn;
-    }
-
-    private boolean processAdminDisputeSlaWarning(UUID bookingId, Instant nowUtc) {
-        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId).orElse(null);
-        if (booking == null || booking.getStatus() != BookingStatus.UNDER_REVIEW
-                || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)
-                || (booking.getAdminSlaWarningSentAtUtc() != null || booking.getAdminSlaWarningSentAt() != null)
-                || (booking.getIssueResolvedAtUtc() != null || booking.getIssueResolvedAt() != null)) {
-            return false;
-        }
-        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
-        if (nowUtc.isBefore(submittedUtc.plus(Duration.ofHours(48)))) {
-            return false;
-        }
-        booking.setAdminSlaWarningSentAtUtc(nowUtc);
-        booking.setAdminSlaWarningSentAt(BookingTime.fromInstant(nowUtc));
-        bookingRepository.save(booking);
-        recordEvent(booking, BookingEventType.ADMIN_SLA_WARNING_SENT, booking.getStatus(), BookingEventActorType.SYSTEM);
-        notifyAdminsDisputeSlaBreach(booking);
-        return true;
     }
 
     private void notifyAdminsDisputeSlaBreach(Booking booking) {

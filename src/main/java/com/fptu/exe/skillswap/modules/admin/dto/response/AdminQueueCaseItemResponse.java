@@ -37,6 +37,26 @@ public record AdminQueueCaseItemResponse(
         @Schema(description = "API detail path mà FE có thể điều hướng sang", example = "/api/admin/bookings/019f1258-bdb6-7312-ac67-b289909329d1")
         String detailPath,
         @Schema(description = "Danh sách action khả dụng tại queue level", example = "[\"VIEW_DETAIL\",\"ASSIGN_TO_ME\"]")
-        List<String> availableActions
+        List<String> availableActions,
+        @Schema(description = "Loại dispute; chỉ có với queue booking_under_review", nullable = true, example = "QUALITY_ISSUE")
+        String issueType,
+        @Schema(description = "Thời điểm dispute được tạo", nullable = true)
+        LocalDateTime issueSubmittedAt,
+        @Schema(description = "Hạn counterparty phản hồi", nullable = true)
+        LocalDateTime counterpartyResponseDeadlineAt,
+        @Schema(description = "Thời điểm case vào hàng đợi admin", nullable = true)
+        LocalDateTime adminEscalatedAt,
+        @Schema(description = "Mục tiêu admin resolve", nullable = true)
+        LocalDateTime adminResolutionDeadlineAt,
+        @Schema(description = "Mốc case quá SLA admin", nullable = true)
+        LocalDateTime adminSlaOverdueAt,
+        @Schema(description = "Số lần reminder admin đã gửi", nullable = true)
+        Integer adminSlaReminderCount,
+        @Schema(description = "Mốc tự giải ngân mentor nếu admin không có quyết định", nullable = true)
+        LocalDateTime autoReleaseAt,
+        @Schema(description = "Tiến trình SLA dispute", nullable = true, example = "WAITING_ADMIN")
+        String disputeSlaStatus,
+        @Schema(description = "Số phút còn lại tới deadline hành động kế tiếp; âm nghĩa là quá hạn", nullable = true, example = "120")
+        Long slaMinutesRemaining
 ) {
 }

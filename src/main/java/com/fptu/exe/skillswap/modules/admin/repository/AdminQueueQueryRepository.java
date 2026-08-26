@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.admin.domain.AdminQueueKey;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -12,11 +13,16 @@ import org.springframework.stereotype.Repository;
 import java.sql.Timestamp;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
 
 @Repository
 public class AdminQueueQueryRepository {
+
+    private static final ZoneId DISPLAY_ZONE = ZoneId.of(DateTimeUtil.ZONE_HCM);
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -30,7 +36,7 @@ public class AdminQueueQueryRepository {
     ) {
         String baseSql = buildBaseSql(queueKey);
         String assignmentPredicate = buildAssignmentPredicate(assignedToMe, unassignedOnly);
-        String orderByClause = buildOrderByClause(pageable.getSort());
+        String orderByClause = buildOrderByClause(queueKey, pageable.getSort());
 
         Query countQuery = entityManager.createNativeQuery("""
                 select count(*)
@@ -61,7 +67,7 @@ public class AdminQueueQueryRepository {
         List<Object[]> rows = dataQuery.getResultList();
 
         List<QueueCaseRow> content = rows.stream()
-                .map(this::mapRow)
+                .map(row -> mapRow(row, queueKey))
                 .toList();
         return new PageImpl<>(content, pageable, total);
     }
@@ -83,8 +89,11 @@ public class AdminQueueQueryRepository {
         return predicate.toString();
     }
 
-    private String buildOrderByClause(Sort sort) {
+    private String buildOrderByClause(AdminQueueKey queueKey, Sort sort) {
         Sort.Order order = sort.stream().findFirst().orElse(Sort.Order.asc("createdAt"));
+        if (queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW && "createdAt".equals(order.getProperty())) {
+            return "order by priority_rank asc, created_at asc, case_id asc";
+        }
         String column = switch (order.getProperty()) {
             case "updatedAt" -> "updated_at";
             case "status" -> "status";
@@ -123,12 +132,24 @@ public class AdminQueueQueryRepository {
                         coalesce(booking.learning_goal_title, concat('Booking ', cast(booking.id as varchar))) as title,
                         concat(coalesce(mentee.full_name, mentee.email), ' -> ', coalesce(mentor.full_name, mentor.email)) as subtitle,
                         booking.status as status,
-                        booking.created_at as created_at,
+                        booking.issue_submitted_at_utc as created_at,
                         booking.updated_at as updated_at,
                         assignment.assigned_admin_user_id as assigned_admin_user_id,
                         assigned_admin.full_name as assigned_admin_display_name,
                         assignment.assigned_at as assigned_at,
-                        booking.id as detail_ref_id
+                        booking.id as detail_ref_id,
+                        booking.issue_type as issue_type,
+                        booking.issue_submitted_at_utc as issue_submitted_at,
+                        booking.issue_human_review_escalated_at_utc as admin_escalated_at,
+                        booking.admin_sla_overdue_at_utc as admin_sla_overdue_at,
+                        booking.admin_sla_reminder_count as admin_sla_reminder_count,
+                        case
+                            when booking.admin_sla_overdue_at_utc is not null then 1
+                            when booking.issue_human_review_escalated_at_utc is not null
+                                 and booking.issue_human_review_escalated_at_utc <= current_timestamp - interval '36 hours' then 2
+                            when booking.issue_responded_at_utc is not null then 3
+                            else 4
+                        end as priority_rank
                     from bookings booking
                     join users mentee on mentee.id = booking.mentee_user_id
                     join users mentor on mentor.id = booking.mentor_user_id
@@ -241,7 +262,7 @@ public class AdminQueueQueryRepository {
         };
     }
 
-    private QueueCaseRow mapRow(Object[] row) {
+    private QueueCaseRow mapRow(Object[] row, AdminQueueKey queueKey) {
         return new QueueCaseRow(
                 toUuid(row[0]),
                 toStringValue(row[1]),
@@ -252,7 +273,12 @@ public class AdminQueueQueryRepository {
                 toUuid(row[6]),
                 toStringValue(row[7]),
                 toLocalDateTime(row[8]),
-                toUuid(row[9])
+                toUuid(row[9]),
+                queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW ? toStringValue(row[10]) : null,
+                queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW ? toLocalDateTime(row[11]) : null,
+                queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW ? toLocalDateTime(row[12]) : null,
+                queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW ? toLocalDateTime(row[13]) : null,
+                queueKey == AdminQueueKey.BOOKING_UNDER_REVIEW && row[14] != null ? ((Number) row[14]).intValue() : null
         );
     }
 
@@ -284,6 +310,12 @@ public class AdminQueueQueryRepository {
         if (value instanceof Timestamp timestamp) {
             return timestamp.toLocalDateTime();
         }
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return LocalDateTime.ofInstant(offsetDateTime.toInstant(), DISPLAY_ZONE);
+        }
+        if (value instanceof Instant instant) {
+            return LocalDateTime.ofInstant(instant, DISPLAY_ZONE);
+        }
         return LocalDateTime.parse(String.valueOf(value).replace(' ', 'T'));
     }
 
@@ -297,7 +329,12 @@ public class AdminQueueQueryRepository {
             UUID assignedAdminUserId,
             String assignedAdminDisplayName,
             LocalDateTime assignedAt,
-            UUID detailRefId
+            UUID detailRefId,
+            String issueType,
+            LocalDateTime issueSubmittedAt,
+            LocalDateTime adminEscalatedAt,
+            LocalDateTime adminSlaOverdueAt,
+            Integer adminSlaReminderCount
     ) {
     }
 }

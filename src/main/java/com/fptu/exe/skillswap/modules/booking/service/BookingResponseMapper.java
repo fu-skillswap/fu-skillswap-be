@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.service.BookingCancellationRefundPolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
@@ -246,6 +247,20 @@ public class BookingResponseMapper {
                 booking, isMenteeUser, isMentorUser, nowUtc, startUtc, endUtc,
                 completionOutcome, canSubmitFeedback, canJoin
         );
+        Instant issueSubmittedUtc = booking.getIssueSubmittedAtUtc() != null
+                ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        Instant issueRespondedUtc = booking.getIssueRespondedAtUtc() != null
+                ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt());
+        Instant issueResolvedUtc = booking.getIssueResolvedAtUtc() != null
+                ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt());
+        Instant issueAdminEscalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
+        Instant issueResponseDeadlineUtc = BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(issueSubmittedUtc);
+        Instant issueAdminResolutionDeadlineUtc = BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(issueAdminEscalatedUtc);
+        Instant issueAdminSlaOverdueUtc = booking.getAdminSlaOverdueAtUtc();
+        Instant issueAutoReleaseUtc = BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(issueAdminSlaOverdueUtc);
+        BookingDisputeSlaStatus disputeSlaStatus = deriveDisputeSlaStatus(
+                issueSubmittedUtc, issueAdminEscalatedUtc, issueAdminSlaOverdueUtc, issueResolvedUtc
+        );
 
         return BookingResponse.builder()
                 .bookingId(booking.getId())
@@ -304,13 +319,20 @@ public class BookingResponseMapper {
                 .finalizedAt(BookingTime.toOffsetDateTime(booking.getFinalizedAt()))
                 .autoClosedAt(BookingTime.toOffsetDateTime(booking.getAutoClosedAt()))
                 .completionOutcome(completionOutcome)
-                .issueSubmittedAt(BookingTime.toOffsetDateTime(booking.getIssueSubmittedAt()))
+                .issueSubmittedAt(BookingTime.toOffsetDateTime(issueSubmittedUtc))
+                .issueResponseDeadlineAt(BookingTime.toOffsetDateTime(issueResponseDeadlineUtc))
                 .issueType(booking.getIssueType())
                 .issueDescription(booking.getIssueDescription())
-                .issueRespondedAt(BookingTime.toOffsetDateTime(booking.getIssueRespondedAt()))
+                .issueRespondedAt(BookingTime.toOffsetDateTime(issueRespondedUtc))
                 .issueRespondedByUserId(booking.getIssueRespondedByUserId())
                 .issueResponseNote(booking.getIssueResponseNote())
-                .issueResolvedAt(BookingTime.toOffsetDateTime(booking.getIssueResolvedAt()))
+                .issueResolvedAt(BookingTime.toOffsetDateTime(issueResolvedUtc))
+                .issueAdminEscalatedAt(BookingTime.toOffsetDateTime(issueAdminEscalatedUtc))
+                .issueAdminResolutionDeadlineAt(BookingTime.toOffsetDateTime(issueAdminResolutionDeadlineUtc))
+                .issueAdminSlaOverdueAt(BookingTime.toOffsetDateTime(issueAdminSlaOverdueUtc))
+                .issueAdminSlaReminderCount(issueSubmittedUtc == null ? null : booking.getAdminSlaReminderCount())
+                .issueAutoReleaseAt(BookingTime.toOffsetDateTime(issueAutoReleaseUtc))
+                .disputeSlaStatus(disputeSlaStatus)
                 .issueResolvedByUserId(booking.getIssueResolvedByUserId())
                 .issueResolutionNote(booking.getIssueResolutionNote())
                 .mentorNote(booking.getMentorNote())
@@ -336,6 +358,16 @@ public class BookingResponseMapper {
                 .nextAction(displayGuidance.action())
                 .actionDeadlineAt(BookingTime.toOffsetDateTime(displayGuidance.deadlineAt()))
                 .build();
+    }
+
+    private BookingDisputeSlaStatus deriveDisputeSlaStatus(Instant issueSubmittedUtc, Instant issueAdminEscalatedUtc,
+                                                            Instant issueAdminSlaOverdueUtc, Instant issueResolvedUtc) {
+        if (issueSubmittedUtc == null) return null;
+        if (issueResolvedUtc != null) return BookingDisputeSlaStatus.RESOLVED;
+        if (issueAdminSlaOverdueUtc != null) return BookingDisputeSlaStatus.ADMIN_SLA_OVERDUE;
+        return issueAdminEscalatedUtc == null
+                ? BookingDisputeSlaStatus.WAITING_COUNTERPARTY
+                : BookingDisputeSlaStatus.WAITING_ADMIN;
     }
 
     public BookingDisplayGuidance deriveDisplayGuidance(

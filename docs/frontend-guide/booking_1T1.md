@@ -483,7 +483,23 @@ interface SubmitFeedbackRequest {
 ```
 
 > [!NOTE]
-> Sự cố khiếu nại không tự động được đóng sau khi bên còn lại phản hồi. Nếu `bookingStatus === "UNDER_REVIEW"` hoặc `nextAction === "VIEW_ISSUE"`, hãy hiển thị chi tiết khiếu nại để người dùng theo dõi; **không tự đưa ra kết luận hoàn tiền trước khi có quyết định chính thức**.
+> Sự cố khiếu nại không tự động được đóng sau khi bên còn lại phản hồi. Nếu `bookingStatus === "UNDER_REVIEW"` hoặc `nextAction === "VIEW_ISSUE"`, hãy hiển thị chi tiết khiếu nại để người dùng theo dõi; **không tự đưa ra kết luận hoàn tiền trước khi có quyết định chính thức**. Ngoại lệ duy nhất là fallback đã công bố khi admin không xử lý hết toàn bộ SLA; backend sẽ trả kết quả cuối cùng, FE không tự tính tiền.
+
+### SLA dispute hiển thị cho mentor và mentee
+
+Khi có dispute, API booking và `GET .../issue/detail` trả cùng các mốc ISO-8601 có offset:
+
+| Field | Ý nghĩa FE cần hiển thị |
+|---|---|
+| `issueResponseDeadlineAt` | Hạn counterparty phản hồi, luôn bằng lúc tạo dispute + 24 giờ. |
+| `issueAdminEscalatedAt` | Case đã vào hàng đợi admin. Điều này xảy ra ngay khi counterparty phản hồi, hoặc khi hết 24 giờ không phản hồi. |
+| `issueAdminResolutionDeadlineAt` | Mục tiêu admin ra quyết định, bằng `issueAdminEscalatedAt + 48 giờ`. |
+| `issueAdminSlaOverdueAt` | Mốc case đã quá SLA admin. |
+| `issueAdminSlaReminderCount` | Số reminder admin đã nhận, từ 1 đến 3. |
+| `issueAutoReleaseAt` | Mốc fallback cuối cùng. Nếu admin vẫn không thao tác, backend giải ngân cho mentor theo policy và gửi kết quả cho cả hai bên. |
+| `disputeSlaStatus` | `WAITING_COUNTERPARTY`, `WAITING_ADMIN`, `ADMIN_SLA_OVERDUE`, hoặc `RESOLVED`. |
+
+FE luôn đếm ngược theo timestamp backend trả về. Khi `ADMIN_SLA_OVERDUE`, hiển thị rõ case đang được ưu tiên xử lý và mốc `issueAutoReleaseAt`; không tự đổi trạng thái hay gọi settlement.
 
 ### Upload minh chứng dispute: luồng bắt buộc
 
@@ -495,6 +511,20 @@ Chỉ nhận JPG/JPEG, PNG và PDF, tối đa 10 MB/file. Mentor, mentee và adm
 
 > [!IMPORTANT]
 > Ngay khi dispute được tạo, bên còn lại nhận đồng thời notification trong app và email. FE nên mở lại dispute detail từ notification, không gửi lại issue khi refresh.
+
+### Notification trong vòng đời dispute
+
+| Sự kiện | Người nhận | Kênh | FE cần làm |
+|---|---|---|---|
+| Dispute được tạo | Bên còn lại | In-app và email | Mở booking, hiển thị CTA `VIEW_ISSUE`. |
+| Có phản hồi dispute | Người đã tạo dispute | In-app và email | Tải lại dispute detail để hiển thị phản hồi và evidence mới. |
+| Chưa phản hồi sau 12 giờ | Bên còn lại | In-app và email | Hiển thị deadline; không tự kết luận kết quả. |
+| Counterparty phản hồi hoặc không phản hồi sau 24 giờ với case không thể tự xử lý | Admin queue | Queue vận hành | Case vào queue; user vẫn thấy `UNDER_REVIEW`; tiền tiếp tục được giữ. |
+| Case quá mục tiêu admin xử lý 48 giờ | Admin và system admin | In-app + email, sau đó mỗi 24 giờ, tối đa 3 lần | FE user hiển thị `ADMIN_SLA_OVERDUE` và mốc fallback; không tự tính tiền. |
+| Hết ba reminder và thêm 24 giờ vẫn không có quyết định admin | Mentor và mentee | In-app và email | Backend tự kết thúc dispute, giải ngân mentor theo policy; FE tải lại booking để hiển thị kết quả. |
+| Dispute được admin hoặc hệ thống xử lý | Mentor và mentee | In-app và email | Tải lại booking; hiển thị kết quả backend trả về, không tự tính tiền. |
+
+Các `NotificationResponse.type` mới: `BOOKING_ISSUE_REPORTED`, `BOOKING_ISSUE_RESPONSE_RECEIVED`, `BOOKING_ISSUE_RESPONSE_REMINDER`, `BOOKING_ISSUE_RESOLVED`, `BOOKING_ISSUE_ADMIN_REVIEW_REQUIRED`, `ADMIN_DISPUTE_SLA_BREACH`.
 
 > [!IMPORTANT]
 > Deadline xác nhận hoặc báo vấn đề luôn là `selectedEndTime + 24 giờ`, không tính từ lúc mentor bấm complete. Nếu cả hai bên không thao tác, backend tự đóng booking và release tiền bình thường; mentor bị ghi nhận `COMPLETION_OVERDUE`.

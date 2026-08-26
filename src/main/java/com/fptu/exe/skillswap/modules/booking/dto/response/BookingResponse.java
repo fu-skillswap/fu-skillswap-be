@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
@@ -152,6 +153,8 @@ public record BookingResponse(
         BookingCompletionOutcome completionOutcome,
         @Schema(description = "Thời điểm participant gửi issue", nullable = true)
         OffsetDateTime issueSubmittedAt,
+        @Schema(description = "Hạn counterparty phản hồi dispute; bằng issueSubmittedAt + 24 giờ", nullable = true)
+        OffsetDateTime issueResponseDeadlineAt,
         @Schema(description = "Loại issue participant đã gửi", nullable = true)
         BookingIssueType issueType,
         @Schema(description = "Mô tả issue participant đã gửi", nullable = true)
@@ -164,6 +167,18 @@ public record BookingResponse(
         String issueResponseNote,
         @Schema(description = "Thời điểm admin resolve issue", nullable = true)
         OffsetDateTime issueResolvedAt,
+        @Schema(description = "Thời điểm case được đưa vào hàng đợi admin; có ngay khi counterparty phản hồi hoặc hết hạn phản hồi", nullable = true)
+        OffsetDateTime issueAdminEscalatedAt,
+        @Schema(description = "Mục tiêu admin ra quyết định; bằng issueAdminEscalatedAt + 48 giờ", nullable = true)
+        OffsetDateTime issueAdminResolutionDeadlineAt,
+        @Schema(description = "Mốc dispute chính thức quá SLA admin", nullable = true)
+        OffsetDateTime issueAdminSlaOverdueAt,
+        @Schema(description = "Số lần đã nhắc admin sau khi case quá SLA", nullable = true, example = "2")
+        Integer issueAdminSlaReminderCount,
+        @Schema(description = "Mốc hệ thống tự giải ngân mentor nếu hết SLA admin và toàn bộ reminder vẫn không có quyết định", nullable = true)
+        OffsetDateTime issueAutoReleaseAt,
+        @Schema(description = "Tiến trình SLA dispute; dùng để hiển thị thông điệp cho user, không thay thế bookingStatus", nullable = true)
+        BookingDisputeSlaStatus disputeSlaStatus,
         @Schema(description = "admin userId đã resolve issue", nullable = true)
         UUID issueResolvedByUserId,
         @Schema(description = "Ghi chú xử lý issue của admin", nullable = true)

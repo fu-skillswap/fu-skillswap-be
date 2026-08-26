@@ -31,26 +31,21 @@ public class BookingEmailListener {
         log.info("Processing email event: {} for booking: {}", event.getEventType(), event.getBookingId());
 
         EmailContent content = buildContent(event);
-        try {
-            java.util.UUID outboxId = emailDispatchService.queueHtmlOnce(
-                    dedupeKey(event),
-                    event.getRecipientEmail(),
-                    content.subject(),
-                    renderHtml(event, content),
-                    renderPlainText(event, content),
-                    event.getEventType().name()
-            );
-            if (outboxId != null && TransactionSynchronizationManager.isSynchronizationActive()) {
-                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        emailDispatchService.dispatchEmailAsync(outboxId);
-                    }
-                });
-            }
-        } catch (Exception ex) {
-            log.error("Booking email event failed but transaction remains committed. eventType={}, bookingId={}, recipient={}",
-                    event.getEventType(), event.getBookingId(), event.getRecipientEmail(), ex);
+        java.util.UUID outboxId = emailDispatchService.queueHtmlOnce(
+                dedupeKey(event),
+                event.getRecipientEmail(),
+                content.subject(),
+                renderHtml(event, content),
+                renderPlainText(event, content),
+                event.getEventType().name()
+        );
+        if (outboxId != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    emailDispatchService.dispatchEmailAsync(outboxId);
+                }
+            });
         }
     }
 
@@ -123,6 +118,46 @@ public class BookingEmailListener {
                     "Đang xem xét",
                     "Mở SkillSwap để xem minh chứng và phản hồi trong vòng 24 giờ.",
                     "Xem tranh chấp"
+            );
+            case BOOKING_ISSUE_RESPONSE_RECEIVED_EMAIL -> new EmailContent(
+                    "[SkillSwap] Tranh chấp booking đã có phản hồi",
+                    "Đối tác đã phản hồi tranh chấp booking",
+                    "Phản hồi và minh chứng bổ sung đã được ghi nhận. Vụ việc vẫn được giữ để xử lý công bằng.",
+                    "Đang xem xét",
+                    "Mở SkillSwap để xem phản hồi và theo dõi kết quả xử lý.",
+                    "Xem tranh chấp"
+            );
+            case BOOKING_ISSUE_RESPONSE_REMINDER_EMAIL -> new EmailContent(
+                    "[SkillSwap] Nhắc phản hồi tranh chấp booking",
+                    "Bạn còn 12 giờ để phản hồi tranh chấp",
+                    "Đối tác đang chờ phản hồi của bạn. Nếu không phản hồi đúng hạn, hệ thống có thể xử lý theo bằng chứng hiện có.",
+                    "Cần phản hồi",
+                    "Mở SkillSwap để xem minh chứng và gửi phản hồi trước hạn.",
+                    "Phản hồi tranh chấp"
+            );
+            case BOOKING_ISSUE_RESOLVED_EMAIL -> new EmailContent(
+                    "[SkillSwap] Tranh chấp booking đã được xử lý",
+                    "Kết quả tranh chấp booking đã sẵn sàng",
+                    "SkillSwap đã hoàn tất xử lý vụ việc. Vui lòng xem kết quả và thông tin thanh toán trong booking.",
+                    "Đã xử lý",
+                    "Mở SkillSwap để xem kết quả cuối cùng của tranh chấp.",
+                    "Xem kết quả"
+            );
+            case BOOKING_ISSUE_ADMIN_REVIEW_REQUIRED_EMAIL -> new EmailContent(
+                    "[SkillSwap] Cần xử lý tranh chấp booking",
+                    "Một tranh chấp booking cần admin xem xét",
+                    "Vụ việc chưa thể tự xử lý do thiếu phản hồi hoặc cần đánh giá thêm bằng chứng.",
+                    "Cần xử lý",
+                    "Mở khu vực quản trị để xem chi tiết và đưa ra quyết định.",
+                    "Mở quản trị"
+            );
+            case BOOKING_ISSUE_ADMIN_SLA_BREACH_EMAIL -> new EmailContent(
+                    "[SkillSwap] Cảnh báo SLA tranh chấp booking",
+                    "Tranh chấp booking đã vượt SLA xử lý",
+                    "Vụ việc chưa có kết quả sau 48 giờ và cần được ưu tiên xử lý.",
+                    "Vượt SLA",
+                    "Mở khu vực quản trị để xử lý tranh chấp ngay.",
+                    "Mở quản trị"
             );
         };
     }
@@ -256,7 +291,15 @@ public class BookingEmailListener {
     }
 
     private String dedupeKey(BookingEmailNotificationEvent event) {
-        return "BOOKING_EMAIL:" + event.getEventType().name() + ":" + event.getBookingId() + ":" + event.getRecipientEmail();
+        String base = "BOOKING_EMAIL:" + event.getEventType().name() + ":" + event.getBookingId() + ":" + event.getRecipientEmail();
+        // SLA reminders are intentionally repeated every 24 hours. Scope their durable
+        // dedupe key to the calendar day so a scheduler retry cannot duplicate one reminder,
+        // while the next scheduled reminder is still deliverable.
+        if (event.getEventType() == BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_ADMIN_SLA_BREACH_EMAIL
+                && event.getCreatedAt() != null) {
+            return base + ":" + event.getCreatedAt().toLocalDate();
+        }
+        return base;
     }
 
     private record EmailContent(

@@ -42,6 +42,7 @@ class BookingStateMachineTest {
         assertEquals(BookingStatus.COMPLETED, target(BookingStatus.AWAITING_MENTEE_CONFIRMATION, BookingTransitionCommand.MENTEE_CONFIRMED));
         assertEquals(BookingStatus.UNDER_REVIEW, target(BookingStatus.AWAITING_MENTOR_COMPLETION, BookingTransitionCommand.ISSUE_REPORTED));
         assertEquals(BookingStatus.COMPLETED, target(BookingStatus.UNDER_REVIEW, BookingTransitionCommand.ADMIN_CONFIRM_SESSION));
+        assertEquals(BookingStatus.COMPLETED, target(BookingStatus.UNDER_REVIEW, BookingTransitionCommand.AUTO_RELEASE_AFTER_ADMIN_SLA));
     }
 
     @Test
@@ -114,6 +115,7 @@ class BookingStateMachineTest {
         for (BookingTransitionCommand command : EnumSet.of(
                 BookingTransitionCommand.AUTO_RESOLVE_MENTOR_NO_SHOW,
                 BookingTransitionCommand.AUTO_RESOLVE_MENTEE_NO_SHOW,
+                BookingTransitionCommand.AUTO_RELEASE_AFTER_ADMIN_SLA,
                 BookingTransitionCommand.ADMIN_CONFIRM_SESSION,
                 BookingTransitionCommand.ADMIN_CONFIRM_MENTOR_NO_SHOW,
                 BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW)) {

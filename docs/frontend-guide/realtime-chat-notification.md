@@ -224,7 +224,7 @@ export const realtimeService = new RealtimeService();
 ```typescript
 export interface NotificationResponse {
   notificationId: string;
-  type: string; // e.g. "BOOKING_ACCEPTED", "MENTOR_VERIFICATION_APPROVED", "ADMIN_DISPUTE_SLA_BREACH"
+  type: string; // e.g. "BOOKING_ACCEPTED", "BOOKING_ISSUE_RESOLVED", "MENTOR_VERIFICATION_APPROVED"
   title: string;
   message: string;
   relatedEntityType: "BOOKING" | "CONVERSATION" | "FORUM_POST" | "BLOG_POST" | "MENTOR_VERIFICATION";

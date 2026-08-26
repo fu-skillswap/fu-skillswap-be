@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -151,6 +152,23 @@ class BookingResponseMapperTest {
 
         assertFalse(response.canPay());
         assertEquals(BookingNextAction.NONE, response.nextAction());
+    }
+
+    @Test
+    void underReviewBooking_exposesCounterpartyAndAdminSlaDeadlines() {
+        authenticate(menteeId, RoleCode.MENTEE);
+        Booking booking = booking(BookingStatus.UNDER_REVIEW, timeProvider.nowBusiness().minusHours(4), timeProvider.nowBusiness().minusHours(3));
+        Instant submittedUtc = FIXED_NOW.minusSeconds(2 * 60 * 60);
+        Instant escalatedUtc = FIXED_NOW.minusSeconds(30 * 60);
+        booking.setIssueSubmittedAtUtc(submittedUtc);
+        booking.setIssueHumanReviewEscalatedAtUtc(escalatedUtc);
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertEquals(BookingTime.toOffsetDateTime(submittedUtc.plusSeconds(24 * 60 * 60)), response.issueResponseDeadlineAt());
+        assertEquals(BookingTime.toOffsetDateTime(escalatedUtc.plusSeconds(48 * 60 * 60)), response.issueAdminResolutionDeadlineAt());
+        assertEquals(BookingDisputeSlaStatus.WAITING_ADMIN, response.disputeSlaStatus());
+        assertEquals(BookingNextAction.VIEW_ISSUE, response.nextAction());
     }
 
     private Booking booking(BookingStatus status, LocalDateTime start, LocalDateTime end) {

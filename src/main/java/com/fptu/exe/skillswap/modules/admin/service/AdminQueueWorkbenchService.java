@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListReques
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminQueueQueryRepository;
 import com.fptu.exe.skillswap.modules.admin.strategy.AdminQueueDescriptorRegistry;
+import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -65,7 +66,23 @@ public class AdminQueueWorkbenchService {
 
     private AdminQueueCaseItemResponse toResponse(AdminQueueKey queueKey, AdminQueueQueryRepository.QueueCaseRow row) {
         LocalDateTime createdAt = row.createdAt();
-        long ageMinutes = createdAt == null ? 0L : Math.max(0L, Duration.between(createdAt, DateTimeUtil.now()).toMinutes());
+        LocalDateTime now = DateTimeUtil.now();
+        long ageMinutes = createdAt == null ? 0L : Math.max(0L, Duration.between(createdAt, now).toMinutes());
+        LocalDateTime responseDeadline = row.issueSubmittedAt() == null ? null
+                : row.issueSubmittedAt().plusHours(BookingDeadlinePolicy.ISSUE_RESPONSE_WINDOW_HOURS);
+        LocalDateTime adminDeadline = row.adminEscalatedAt() == null ? null
+                : row.adminEscalatedAt().plusHours(BookingDeadlinePolicy.ADMIN_DISPUTE_RESOLUTION_WINDOW_HOURS);
+        long autoReleaseHours = (long) BookingDeadlinePolicy.ADMIN_DISPUTE_OVERDUE_REMINDER_INTERVAL_HOURS
+                * Math.max(0, BookingDeadlinePolicy.MAX_ADMIN_DISPUTE_OVERDUE_REMINDERS - 1)
+                + BookingDeadlinePolicy.ADMIN_DISPUTE_FINAL_ACTION_GRACE_HOURS;
+        LocalDateTime autoReleaseAt = row.adminSlaOverdueAt() == null ? null : row.adminSlaOverdueAt().plusHours(autoReleaseHours);
+        String disputeSlaStatus = row.issueSubmittedAt() == null ? null
+                : row.adminSlaOverdueAt() != null ? "ADMIN_SLA_OVERDUE"
+                : row.adminEscalatedAt() != null ? "WAITING_ADMIN"
+                : "WAITING_COUNTERPARTY";
+        LocalDateTime activeDeadline = row.adminSlaOverdueAt() != null ? autoReleaseAt
+                : row.adminEscalatedAt() != null ? adminDeadline : responseDeadline;
+        Long slaMinutesRemaining = activeDeadline == null ? null : Duration.between(now, activeDeadline).toMinutes();
         return new AdminQueueCaseItemResponse(
                 queueKey.getKey(),
                 resolveCaseType(queueKey).name(),
@@ -81,7 +98,17 @@ public class AdminQueueWorkbenchService {
                 row.assignedAdminDisplayName(),
                 row.assignedAt(),
                 buildDetailPath(queueKey, row),
-                availableActions(queueKey)
+                availableActions(queueKey),
+                row.issueType(),
+                row.issueSubmittedAt(),
+                responseDeadline,
+                row.adminEscalatedAt(),
+                adminDeadline,
+                row.adminSlaOverdueAt(),
+                row.adminSlaReminderCount(),
+                autoReleaseAt,
+                disputeSlaStatus,
+                slaMinutesRemaining
         );
     }
 

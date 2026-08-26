@@ -5,5 +5,7 @@ public enum BookingCompletionOutcome {
     AUTO_CLOSED,
     UNDER_REVIEW,
     NO_SHOW_MENTEE,
-    NO_SHOW_MENTOR
+    NO_SHOW_MENTOR,
+    /** Fallback only after an escalated dispute exceeded the published admin SLA. */
+    ADMIN_SLA_AUTO_RELEASED
 }

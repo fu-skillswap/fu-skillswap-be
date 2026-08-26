@@ -275,6 +275,22 @@ public class Booking {
     @Column(name = "issue_escalation_sent_at")
     private LocalDateTime issueEscalationSentAt;
 
+    @Column(name = "issue_human_review_escalated_at_utc")
+    private Instant issueHumanReviewEscalatedAtUtc;
+
+    @Column(name = "admin_sla_overdue_at_utc")
+    private Instant adminSlaOverdueAtUtc;
+
+    @Column(name = "admin_sla_reminder_count", nullable = false)
+    @Builder.Default
+    private int adminSlaReminderCount = 0;
+
+    @Column(name = "admin_sla_last_reminder_at_utc")
+    private Instant adminSlaLastReminderAtUtc;
+
+    @Column(name = "admin_sla_auto_released_at_utc")
+    private Instant adminSlaAutoReleasedAtUtc;
+
     @Column(name = "admin_sla_warning_sent_at_utc")
     private Instant adminSlaWarningSentAtUtc;
 

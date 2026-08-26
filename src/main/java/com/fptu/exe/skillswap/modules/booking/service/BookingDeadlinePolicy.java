@@ -14,6 +14,13 @@ public final class BookingDeadlinePolicy {
     /** Async mentor approval still gives the mentee time to react without holding a scarce slot for hours. */
     public static final long PAYMENT_WINDOW_MINUTES = 60;
     public static final long PAYMENT_PREPARATION_MINUTES = 60;
+    /** Dispute SLA is measured from the server timestamp at issue submission/escalation. */
+    public static final long ISSUE_RESPONSE_WINDOW_HOURS = 24;
+    public static final long ISSUE_RESPONSE_REMINDER_HOURS = 12;
+    public static final long ADMIN_DISPUTE_RESOLUTION_WINDOW_HOURS = 48;
+    public static final long ADMIN_DISPUTE_OVERDUE_REMINDER_INTERVAL_HOURS = 24;
+    public static final int MAX_ADMIN_DISPUTE_OVERDUE_REMINDERS = 3;
+    public static final long ADMIN_DISPUTE_FINAL_ACTION_GRACE_HOURS = 24;
 
     private BookingDeadlinePolicy() {
     }
@@ -96,14 +103,24 @@ public final class BookingDeadlinePolicy {
     }
 
     public static Instant resolveIssueResponseDeadlineUtc(Instant issueSubmittedUtc) {
-        return issueSubmittedUtc != null ? issueSubmittedUtc.plus(Duration.ofHours(24)) : null;
+        return issueSubmittedUtc != null ? issueSubmittedUtc.plus(Duration.ofHours(ISSUE_RESPONSE_WINDOW_HOURS)) : null;
     }
 
     public static Instant resolveIssueEscalationDeadlineUtc(Instant issueSubmittedUtc) {
-        return issueSubmittedUtc != null ? issueSubmittedUtc.plus(Duration.ofHours(12)) : null;
+        return issueSubmittedUtc != null ? issueSubmittedUtc.plus(Duration.ofHours(ISSUE_RESPONSE_REMINDER_HOURS)) : null;
     }
 
-    public static Instant resolveAdminDisputeSlaDeadlineUtc(Instant issueSubmittedUtc) {
-        return issueSubmittedUtc != null ? issueSubmittedUtc.plus(Duration.ofHours(48)) : null;
+    /** The admin SLA starts only after the case has actually entered the admin queue. */
+    public static Instant resolveAdminDisputeSlaDeadlineUtc(Instant adminEscalatedUtc) {
+        return adminEscalatedUtc != null ? adminEscalatedUtc.plus(Duration.ofHours(ADMIN_DISPUTE_RESOLUTION_WINDOW_HOURS)) : null;
+    }
+
+    public static Instant resolveAdminDisputeAutoReleaseDeadlineUtc(Instant adminSlaOverdueUtc) {
+        if (adminSlaOverdueUtc == null) return null;
+        // Reminder #1 is emitted at the overdue moment itself; only the remaining
+        // reminders consume another full interval before the final grace period.
+        long hoursUntilFinalAction = (long) ADMIN_DISPUTE_OVERDUE_REMINDER_INTERVAL_HOURS
+                * Math.max(0, MAX_ADMIN_DISPUTE_OVERDUE_REMINDERS - 1) + ADMIN_DISPUTE_FINAL_ACTION_GRACE_HOURS;
+        return adminSlaOverdueUtc.plus(Duration.ofHours(hoursUntilFinalAction));
     }
 }

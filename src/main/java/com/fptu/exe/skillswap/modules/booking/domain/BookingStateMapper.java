@@ -87,6 +87,7 @@ public final class BookingStateMapper {
             case UNDER_REVIEW -> BookingCompletionOutcome.UNDER_REVIEW;
             case NO_SHOW_MENTEE -> BookingCompletionOutcome.NO_SHOW_MENTEE;
             case NO_SHOW_MENTOR -> BookingCompletionOutcome.NO_SHOW_MENTOR;
+            case ADMIN_SLA_AUTO_RELEASED -> BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED;
         };
     }
 

@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueEvidence;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueEvidenceState;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueEvidenceSubmissionSide;
@@ -241,11 +242,25 @@ public class BookingIssueEvidenceService {
 
     private BookingIssueDetailResponse detail(Booking booking, List<BookingIssueEvidence> evidences, boolean admin) {
         if (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null) throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking chưa có dispute");
+        Instant submittedUtc = booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
+        Instant respondedUtc = booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt());
+        Instant resolvedUtc = booking.getIssueResolvedAtUtc() != null ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt());
+        Instant escalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
+        Instant overdueUtc = booking.getAdminSlaOverdueAtUtc();
+        BookingDisputeSlaStatus slaStatus = resolvedUtc != null ? BookingDisputeSlaStatus.RESOLVED
+                : overdueUtc != null ? BookingDisputeSlaStatus.ADMIN_SLA_OVERDUE
+                : escalatedUtc != null ? BookingDisputeSlaStatus.WAITING_ADMIN
+                : BookingDisputeSlaStatus.WAITING_COUNTERPARTY;
         return new BookingIssueDetailResponse(booking.getId(), booking.getStatus(), booking.getIssueType(), booking.getIssueDescription(),
-                BookingTime.toOffsetDateTime(booking.getIssueSubmittedAtUtc() != null ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt())),
-                BookingTime.toOffsetDateTime(booking.getIssueRespondedAtUtc() != null ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt())),
-                booking.getIssueResponseNote(), BookingTime.toOffsetDateTime(booking.getIssueResolvedAtUtc() != null ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt())),
-                booking.getIssueResolutionNote(), evidences.stream().map(item -> toResponse(item, admin || item.getState() == BookingIssueEvidenceState.ACTIVE)).toList());
+                BookingTime.toOffsetDateTime(submittedUtc),
+                BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc)),
+                BookingTime.toOffsetDateTime(respondedUtc), booking.getIssueResponseNote(), BookingTime.toOffsetDateTime(resolvedUtc),
+                BookingTime.toOffsetDateTime(escalatedUtc),
+                BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(escalatedUtc)),
+                BookingTime.toOffsetDateTime(overdueUtc), booking.getAdminSlaReminderCount(),
+                BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(overdueUtc)),
+                slaStatus, booking.getIssueResolutionNote(),
+                evidences.stream().map(item -> toResponse(item, admin || item.getState() == BookingIssueEvidenceState.ACTIVE)).toList());
     }
 
     private BookingIssueEvidenceResponse toResponse(BookingIssueEvidence evidence, boolean canDownload) {

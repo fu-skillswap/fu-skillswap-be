@@ -28,6 +28,11 @@ public class BookingNotificationTitleResolver implements NotificationTitleResolv
             NotificationType.MEETING_LINK_UPDATED,
             NotificationType.GOOGLE_CALENDAR_SYNC_NOTICE,
             NotificationType.SESSION_COMPLETED,
+            NotificationType.BOOKING_ISSUE_REPORTED,
+            NotificationType.BOOKING_ISSUE_RESPONSE_RECEIVED,
+            NotificationType.BOOKING_ISSUE_RESPONSE_REMINDER,
+            NotificationType.BOOKING_ISSUE_RESOLVED,
+            NotificationType.BOOKING_ISSUE_ADMIN_REVIEW_REQUIRED,
             NotificationType.BOOKING_REMINDER,
             NotificationType.FEEDBACK_PROMPT,
             NotificationType.FEEDBACK_RECEIVED
@@ -60,6 +65,11 @@ public class BookingNotificationTitleResolver implements NotificationTitleResolv
             case MEETING_LINK_UPDATED -> "Link buổi học đã cập nhật";
             case GOOGLE_CALENDAR_SYNC_NOTICE -> "Google Calendar cần chú ý";
             case SESSION_COMPLETED -> "Phiên mentoring đã hoàn thành";
+            case BOOKING_ISSUE_REPORTED -> "Có tranh chấp booking cần phản hồi";
+            case BOOKING_ISSUE_RESPONSE_RECEIVED -> "Tranh chấp booking đã có phản hồi";
+            case BOOKING_ISSUE_RESPONSE_REMINDER -> "Nhắc phản hồi tranh chấp booking";
+            case BOOKING_ISSUE_RESOLVED -> "Tranh chấp booking đã được xử lý";
+            case BOOKING_ISSUE_ADMIN_REVIEW_REQUIRED -> "Cần xử lý tranh chấp booking";
             case BOOKING_REMINDER -> "Nhắc lịch mentoring";
             case FEEDBACK_PROMPT -> "Đánh giá buổi mentoring";
             case FEEDBACK_RECEIVED -> "Bạn vừa nhận đánh giá mới";

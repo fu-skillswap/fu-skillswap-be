@@ -18,7 +18,6 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequ
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
-import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
@@ -55,6 +54,7 @@ public class BookingCompletionService {
     private final TimeProvider timeProvider;
     private MentorViolationService mentorViolationService;
     private BookingIssueEvidenceService bookingIssueEvidenceService;
+    private BookingDisputeNotificationService bookingDisputeNotificationService;
 
     @Autowired
     public BookingCompletionService(
@@ -98,6 +98,11 @@ public class BookingCompletionService {
     @Autowired
     void setBookingIssueEvidenceService(BookingIssueEvidenceService bookingIssueEvidenceService) {
         this.bookingIssueEvidenceService = bookingIssueEvidenceService;
+    }
+
+    @Autowired
+    void setBookingDisputeNotificationService(BookingDisputeNotificationService bookingDisputeNotificationService) {
+        this.bookingDisputeNotificationService = bookingDisputeNotificationService;
     }
 
     @Transactional
@@ -294,7 +299,9 @@ public class BookingCompletionService {
         Booking savedBooking = bookingRepository.save(booking);
         recordBookingEvent(savedBooking, BookingEventType.ISSUE_CREATED,
                 oldStatus, BookingEventActorType.USER, currentUserId, null);
-        publishIssueReportedNotifications(savedBooking, currentUserId);
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyIssueReported(savedBooking, currentUserId);
+        }
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
@@ -349,9 +356,17 @@ public class BookingCompletionService {
         booking.setIssueRespondedByUserId(currentUserId);
         booking.setIssueResponseNote(trimToNull(request.responseNote()));
         requireEvidenceService().attachResponderEvidence(booking, currentUserId, request.evidenceIds(), nowUtc);
+        // Both sides have now submitted their one allowed statement/evidence packet.
+        // Move to the admin queue in this same transaction so the 48-hour SLA begins now.
+        booking.setIssueHumanReviewEscalatedAtUtc(nowUtc);
         Booking saved = bookingRepository.save(booking);
         recordBookingEvent(saved, BookingEventType.ISSUE_RESPONDED,
                 BookingStatus.UNDER_REVIEW, BookingEventActorType.USER, currentUserId, null);
+        recordBookingEvent(saved, BookingEventType.ISSUE_ESCALATED_TO_ADMIN,
+                BookingStatus.UNDER_REVIEW, BookingEventActorType.SYSTEM, null, null);
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyIssueResponded(saved, currentUserId);
+        }
         return BookingIssueResponse.builder().bookingId(saved.getId()).status(saved.getStatus())
                 .issueSubmittedAt(BookingTime.toOffsetDateTime(saved.getIssueSubmittedAtUtc() != null ? saved.getIssueSubmittedAtUtc() : BookingTime.toInstant(saved.getIssueSubmittedAt())))
                 .issueType(saved.getIssueType())
@@ -412,6 +427,9 @@ public class BookingCompletionService {
 
         recordBookingEvent(savedBooking, BookingEventType.ISSUE_RESOLVED,
                 oldStatus, BookingEventActorType.ADMIN, adminUserId, null);
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyIssueResolved(savedBooking, false);
+        }
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
 
@@ -426,30 +444,6 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Dịch vụ minh chứng dispute chưa sẵn sàng");
         }
         return bookingIssueEvidenceService;
-    }
-
-    private void publishIssueReportedNotifications(Booking booking, UUID reporterUserId) {
-        UUID mentorUserId = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUserId();
-        UUID menteeUserId = booking.getMentee() == null ? null : booking.getMentee().getId();
-        UUID recipientUserId = reporterUserId != null && reporterUserId.equals(mentorUserId) ? menteeUserId : mentorUserId;
-        if (recipientUserId == null) return;
-        eventPublisher.publishEvent(new NotificationEvent(recipientUserId, NotificationType.BOOKING_ISSUE_REPORTED,
-                "Có tranh chấp booking cần phản hồi", "Đối tác đã báo vấn đề. Hãy xem minh chứng và phản hồi trong 24 giờ.", "BOOKING", booking.getId()));
-        String recipientEmail = reporterUserId != null && reporterUserId.equals(mentorUserId)
-                ? booking.getMentee().getEmail() : booking.getMentorProfile().getUser().getEmail();
-        String recipientName = reporterUserId != null && reporterUserId.equals(mentorUserId)
-                ? booking.getMentee().getFullName() : booking.getMentorProfile().getUser().getFullName();
-        String actorName = reporterUserId != null && reporterUserId.equals(mentorUserId)
-                ? booking.getMentorProfile().getUser().getFullName() : booking.getMentee().getFullName();
-        eventPublisher.publishEvent(BookingEmailNotificationEvent.builder().bookingId(booking.getId())
-                .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_REPORTED_EMAIL)
-                .recipientEmail(recipientEmail).recipientName(recipientName).actorName(actorName)
-                .bookingStartTime(booking.getSelectedStartTime()).bookingEndTime(booking.getSelectedEndTime())
-                .serviceTitle(booking.getServiceTitleSnapshot()).serviceDurationMinutes(booking.getServiceDurationSnapshot())
-                .serviceFree(booking.getServiceIsFreeSnapshot()).servicePriceScoin(booking.getServicePriceScoinSnapshot())
-                .learningGoalTitle(booking.getLearningGoalTitle()).learningGoalDescription(booking.getLearningGoalDescription())
-                .serviceExpectedOutcome(booking.getServiceExpectedOutcomeSnapshot())
-                .reason("Loại vấn đề: " + booking.getIssueType()).createdAt(timeProvider.nowBusiness()).build());
     }
 
     private Booking getBookingForSessionAction(UUID currentUserId, UUID bookingId) {

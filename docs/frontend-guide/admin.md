@@ -159,6 +159,9 @@ Hệ thống cung cấp cơ chế **Nhận quyền xử lý (Case Ownership)** n
 ### 5.1 Danh Sách & Chi Tiết Booking Hệ Thống
 - **Danh sách toàn hệ thống**: `GET /api/admin/bookings?status=...&mentorUserId=...&menteeUserId=...&page=0&size=20`
 - **Chi tiết booking**: `GET /api/admin/bookings/{bookingId}` (Trả về đầy đủ trạng thái thanh toán, participant, meeting link và lịch sử sự cố).
+- **Queue ưu tiên dispute**: `GET /api/admin/dashboard/queue-items?queueKey=booking_under_review`. Queue ưu tiên case quá SLA, case sắp đến SLA, case đã đủ phản hồi hai phía, rồi mới tới case mới tạo. Với booking dispute, response trả `issueType`, các deadline, số reminder và mốc fallback để admin quyết định đúng thời hạn.
+
+> Admin có 48 giờ từ khi case vào queue để resolve. Nếu quá hạn, hệ thống nhắc mỗi 24 giờ tối đa ba lần. Sau reminder thứ ba thêm 24 giờ mà không có quyết định, hệ thống tự release tiền cho mentor theo policy đã công bố và lưu audit event.
 
 ---
 

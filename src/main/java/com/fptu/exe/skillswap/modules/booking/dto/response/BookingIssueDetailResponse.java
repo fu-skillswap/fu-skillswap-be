@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -15,9 +16,16 @@ public record BookingIssueDetailResponse(
         BookingIssueType issueType,
         String issueDescription,
         OffsetDateTime issueSubmittedAt,
+        OffsetDateTime issueResponseDeadlineAt,
         OffsetDateTime issueRespondedAt,
         String issueResponseNote,
         OffsetDateTime issueResolvedAt,
+        OffsetDateTime issueAdminEscalatedAt,
+        OffsetDateTime issueAdminResolutionDeadlineAt,
+        OffsetDateTime issueAdminSlaOverdueAt,
+        Integer issueAdminSlaReminderCount,
+        OffsetDateTime issueAutoReleaseAt,
+        BookingDisputeSlaStatus disputeSlaStatus,
         String issueResolutionNote,
         List<BookingIssueEvidenceResponse> evidences
 ) {

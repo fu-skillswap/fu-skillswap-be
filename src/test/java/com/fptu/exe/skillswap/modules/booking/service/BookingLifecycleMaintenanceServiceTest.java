@@ -17,6 +17,7 @@ import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,8 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -224,7 +227,8 @@ class BookingLifecycleMaintenanceServiceTest {
 
     @Test
     void processPostSessionLifecycle_underReview_overdueFortyEightHours_shouldAlertAdmins() {
-        LocalDateTime now = LocalDateTime.now();
+        Instant nowUtc = Instant.parse("2026-09-10T10:00:00Z");
+        maintenanceService.setTimeProvider(TimeProvider.from(Clock.fixed(nowUtc, ZoneOffset.UTC)));
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
@@ -233,7 +237,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 .status(BookingStatus.UNDER_REVIEW)
                 .issueType(BookingIssueType.QUALITY_ISSUE)
                 .issueDescription("Mentor quality was low")
-                .issueSubmittedAt(now.minusHours(49)) // submitted 49h ago
+                .issueSubmittedAtUtc(nowUtc.minusSeconds(72 * 60 * 60))
+                .issueHumanReviewEscalatedAtUtc(nowUtc.minusSeconds(49 * 60 * 60))
                 .adminSlaWarningSentAt(null)
                 .build();
 
@@ -245,7 +250,7 @@ class BookingLifecycleMaintenanceServiceTest {
                 .roles(Set.of(RoleCode.ADMIN))
                 .build();
 
-        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
+        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(
                 eq(BookingStatus.UNDER_REVIEW), any(Instant.class)))
                 .thenReturn(List.of(booking));
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
@@ -258,11 +263,45 @@ class BookingLifecycleMaintenanceServiceTest {
 
         assertEquals(1, changed);
         assertNotNull(booking.getAdminSlaWarningSentAt());
+        assertNotNull(booking.getAdminSlaOverdueAtUtc());
+        assertEquals(1, booking.getAdminSlaReminderCount());
 
         ArgumentCaptor<NotificationEvent> eventCaptor = ArgumentCaptor.forClass(NotificationEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         NotificationEvent capturedEvent = eventCaptor.getValue();
         assertEquals(adminUser.getId(), capturedEvent.recipientUserId());
         assertEquals(NotificationType.ADMIN_DISPUTE_SLA_BREACH, capturedEvent.type());
+    }
+
+    @Test
+    void processPostSessionLifecycle_adminStillIdleAfterFinalGrace_shouldReleaseMentorOnce() {
+        Instant nowUtc = Instant.parse("2026-09-10T10:00:00Z");
+        maintenanceService.setTimeProvider(TimeProvider.from(Clock.fixed(nowUtc, ZoneOffset.UTC)));
+        Booking booking = Booking.builder()
+                .id(UUID.randomUUID())
+                .mentee(mentee)
+                .mentorProfile(mentorProfile)
+                .slot(slot)
+                .status(BookingStatus.UNDER_REVIEW)
+                .issueType(BookingIssueType.QUALITY_ISSUE)
+                .issueSubmittedAtUtc(nowUtc.minusSeconds(10 * 24 * 60 * 60))
+                .issueHumanReviewEscalatedAtUtc(nowUtc.minusSeconds(8 * 24 * 60 * 60))
+                .adminSlaOverdueAtUtc(nowUtc.minusSeconds(73 * 60 * 60))
+                .adminSlaLastReminderAtUtc(nowUtc.minusSeconds(25 * 60 * 60))
+                .adminSlaReminderCount(3)
+                .build();
+
+        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(
+                eq(BookingStatus.UNDER_REVIEW), any(Instant.class))).thenReturn(List.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+
+        int changed = maintenanceService.processPostSessionLifecycle();
+
+        assertEquals(1, changed);
+        assertEquals(BookingStatus.COMPLETED, booking.getStatus());
+        assertEquals(BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED, booking.getCompletionOutcome());
+        assertNotNull(booking.getAdminSlaAutoReleasedAtUtc());
+        verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), eq(nowUtc));
+        verify(settlementService).releaseForBooking(eq(booking));
     }
 }

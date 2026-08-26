@@ -87,7 +87,8 @@ public class SettlementService {
         }
         if (booking.getCompletionOutcome() != BookingCompletionOutcome.USER_CONFIRMED
                 && booking.getCompletionOutcome() != BookingCompletionOutcome.AUTO_CLOSED
-                && booking.getCompletionOutcome() != BookingCompletionOutcome.NO_SHOW_MENTEE) {
+                && booking.getCompletionOutcome() != BookingCompletionOutcome.NO_SHOW_MENTEE
+                && booking.getCompletionOutcome() != BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED) {
             return;
         }
         PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);

@@ -11,6 +11,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.UUID;
 
 import static org.mockito.Mockito.verify;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationEventListenerTest {
@@ -39,5 +41,16 @@ class NotificationEventListenerTest {
         verify(notificationService).createNotification(
                 recipientId, type, title, message, entityType, entityId
         );
+    }
+
+    @Test
+    void handleNotificationEvent_shouldPropagateFailureSoBookingTransactionRollsBack() {
+        NotificationEvent event = new NotificationEvent(UUID.randomUUID(), NotificationType.BOOKING_ISSUE_REPORTED,
+                "Dispute", "message", "BOOKING", UUID.randomUUID());
+        doThrow(new IllegalStateException("outbox unavailable"))
+                .when(notificationService).createNotification(event.recipientUserId(), event.type(), event.title(),
+                        event.message(), event.relatedEntityType(), event.relatedEntityId());
+
+        assertThrows(IllegalStateException.class, () -> listener.handleNotificationEvent(event));
     }
 }
