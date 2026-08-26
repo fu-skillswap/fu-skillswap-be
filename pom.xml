@@ -24,7 +24,10 @@
         <skipUnitTests>false</skipUnitTests>
         <!-- Override from CI/local CLI when necessary, without editing plugin configuration. -->
         <test.jvm.heap.max>2048m</test.jvm.heap.max>
-        <test.spring.context.cache.max-size>16</test.spring.context.cache.max-size>
+        <!-- Keep all H2-backed Spring test contexts alive in one Surefire fork. Evicting
+             a context runs Hibernate create-drop and can remove the shared test schema
+             while another context still uses it. -->
+        <test.spring.context.cache.max-size>128</test.spring.context.cache.max-size>
     </properties>
 
     <dependencyManagement>

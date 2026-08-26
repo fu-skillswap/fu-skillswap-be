@@ -292,8 +292,6 @@ class SessionCompletionUtcTest {
                 .thenReturn(List.of());
         when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(eq(BookingStatus.UNDER_REVIEW), any()))
                 .thenReturn(List.of());
-        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(eq(BookingStatus.UNDER_REVIEW), any()))
-                .thenReturn(List.of());
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId)).thenReturn(Optional.of(session));
         when(mentorProfileRepository.findByIdForUpdate(mentorUserId)).thenReturn(Optional.of(mentorProfile));
@@ -332,8 +330,6 @@ class SessionCompletionUtcTest {
         when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(any(), any())).thenReturn(List.of());
         when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(eq(BookingStatus.UNDER_REVIEW), any()))
                 .thenReturn(List.of(booking));
-        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(any(), any()))
-                .thenReturn(List.of());
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId)).thenReturn(Optional.of(session));
         when(sessionAttendanceRepository.findByBookingId(bookingId)).thenReturn(List.of(SessionAttendance.builder()
@@ -376,8 +372,6 @@ class SessionCompletionUtcTest {
         when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(any(), any())).thenReturn(List.of());
         when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeOrderByIssueSubmittedAtUtcAsc(eq(BookingStatus.UNDER_REVIEW), any()))
                 .thenReturn(List.of(booking));
-        when(bookingRepository.findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(any(), any()))
-                .thenReturn(List.of());
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(sessionAttendanceRepository.findByBookingId(bookingId)).thenReturn(List.of());
 

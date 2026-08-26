@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -37,6 +38,7 @@ public class AdminQueueQueryRepository {
         String baseSql = buildBaseSql(queueKey);
         String assignmentPredicate = buildAssignmentPredicate(assignedToMe, unassignedOnly);
         String orderByClause = buildOrderByClause(queueKey, pageable.getSort());
+        Timestamp adminPriorityCutoff = Timestamp.from(Instant.now().minus(Duration.ofHours(36)));
 
         Query countQuery = entityManager.createNativeQuery("""
                 select count(*)
@@ -46,7 +48,7 @@ public class AdminQueueQueryRepository {
                 where 1 = 1
                 %s
                 """.formatted(baseSql, assignmentPredicate));
-        bindCommonParameters(countQuery, currentAdminUserId);
+        bindCommonParameters(countQuery, currentAdminUserId, adminPriorityCutoff);
         long total = ((Number) countQuery.getSingleResult()).longValue();
 
         Query dataQuery = entityManager.createNativeQuery("""
@@ -59,7 +61,7 @@ public class AdminQueueQueryRepository {
                 %s
                 limit :limit offset :offset
                 """.formatted(baseSql, assignmentPredicate, orderByClause));
-        bindCommonParameters(dataQuery, currentAdminUserId);
+        bindCommonParameters(dataQuery, currentAdminUserId, adminPriorityCutoff);
         dataQuery.setParameter("limit", pageable.getPageSize());
         dataQuery.setParameter("offset", pageable.getOffset());
 
@@ -72,9 +74,12 @@ public class AdminQueueQueryRepository {
         return new PageImpl<>(content, pageable, total);
     }
 
-    private void bindCommonParameters(Query query, UUID currentAdminUserId) {
+    private void bindCommonParameters(Query query, UUID currentAdminUserId, Timestamp adminPriorityCutoff) {
         if (query.getParameters().stream().anyMatch(parameter -> "currentAdminUserId".equals(parameter.getName()))) {
             query.setParameter("currentAdminUserId", currentAdminUserId);
+        }
+        if (query.getParameters().stream().anyMatch(parameter -> "adminPriorityCutoff".equals(parameter.getName()))) {
+            query.setParameter("adminPriorityCutoff", adminPriorityCutoff);
         }
     }
 
@@ -146,7 +151,7 @@ public class AdminQueueQueryRepository {
                         case
                             when booking.admin_sla_overdue_at_utc is not null then 1
                             when booking.issue_human_review_escalated_at_utc is not null
-                                 and booking.issue_human_review_escalated_at_utc <= current_timestamp - interval '36 hours' then 2
+                                 and booking.issue_human_review_escalated_at_utc <= :adminPriorityCutoff then 2
                             when booking.issue_responded_at_utc is not null then 3
                             else 4
                         end as priority_rank

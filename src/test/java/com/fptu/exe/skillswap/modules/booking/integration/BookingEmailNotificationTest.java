@@ -254,18 +254,16 @@ class BookingEmailNotificationTest {
     }
 
     @Test
-    void emailSendFailure_shouldNotRollbackBooking() {
+    void emailOutboxFailure_shouldRollbackBookingTransaction() {
         doThrow(new RuntimeException("Queue Error")).when(emailDispatchService)
                 .queueHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
 
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
-        
-        BookingResponse accepted = bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
+
+        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
 
         TestTransaction.flagForCommit();
-        TestTransaction.end();
-
-        org.junit.jupiter.api.Assertions.assertEquals("ACCEPTED_AWAITING_PAYMENT", accepted.status().name());
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, TestTransaction::end);
     }
 
     private CreateBookingRequest bookingRequest(String title, String description) {

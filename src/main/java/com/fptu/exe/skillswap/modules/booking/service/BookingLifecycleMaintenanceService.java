@@ -374,7 +374,14 @@ public class BookingLifecycleMaintenanceService {
             if (!nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc))) {
             boolean noShow = booking.getIssueType() == BookingIssueType.MENTOR_NO_SHOW
                     || booking.getIssueType() == BookingIssueType.MENTEE_NO_SHOW;
-            if (!noShow || !hasOneSidedAttendanceSupportingIssue(booking)) {
+            boolean attendanceSupportsIssue = hasOneSidedAttendanceSupportingIssue(booking);
+            if (!noShow || !attendanceSupportsIssue) {
+                if (noShow && sessionAttendanceRepository != null) {
+                    // An unanswered no-show claim without one-sided attendance evidence is
+                    // not safe to settle automatically. Keep the case in the admin queue and
+                    // leave a durable reason for the participant/admin detail view.
+                    booking.setIssueResolutionNote("SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW");
+                }
                 return escalateIssueToHumanReview(booking, nowUtc);
             }
             BookingStatus old = booking.getStatus();
