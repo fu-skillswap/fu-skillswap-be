@@ -242,7 +242,6 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             Pageable pageable
     );
 
-    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select booking
             from Booking booking

@@ -230,7 +230,8 @@ class BookingFlowIntegrationTest {
 
         // 4. Mentor accepts booking
         BookingResponse accepted = bookingService.acceptBooking(
-                mentorId, booking.bookingId(), new AcceptBookingRequest("Happy to help!")
+                mentorId, booking.bookingId(),
+                new AcceptBookingRequest("Happy to help!", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null)
         );
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, accepted.status());
         assertEquals(accepted.bookingId(), accepted.sessionId());
@@ -358,4 +359,3 @@ class BookingFlowIntegrationTest {
                 .build());
     }
 }
-

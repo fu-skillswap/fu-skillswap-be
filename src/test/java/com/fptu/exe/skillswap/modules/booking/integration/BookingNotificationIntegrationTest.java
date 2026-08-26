@@ -250,7 +250,8 @@ class BookingNotificationIntegrationTest {
         BookingResponse b3 = bookingService.createBooking(mentee3.getId(), bookingRequest("T3", "D3"));
 
         // Mentor accepts b1
-        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         commitTransaction();
         awaitNotificationCount(mentee1.getId(), 1);
         awaitNotificationCount(mentee2.getId(), 1);
@@ -323,7 +324,8 @@ class BookingNotificationIntegrationTest {
     @Test
     void mentorCancelBooking_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
-        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         commitTransaction();
         awaitAsyncNotifications();
 
@@ -345,13 +347,13 @@ class BookingNotificationIntegrationTest {
     @Test
     void updateMeetingLink_shouldNotifyMentee() {
         BookingResponse b1 = bookingService.createBooking(mentee1.getId(), bookingRequest("T1", "D1"));
-        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), b1.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         paymentOrderService.checkout(mentee1.getId(), new PaymentCheckoutRequest(b1.bookingId(), null));
         
         var bookingEntity = bookingRepository.findById(b1.bookingId()).orElseThrow();
         BookingStateTestSupport.setStatus(bookingEntity, BookingStatus.PAID);
         bookingRepository.saveAndFlush(bookingEntity);
-
         commitTransaction();
         awaitAsyncNotifications();
 
@@ -424,4 +426,3 @@ class BookingNotificationIntegrationTest {
         }
     }
 }
-

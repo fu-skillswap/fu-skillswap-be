@@ -480,7 +480,8 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
 
-        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
+        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(),
+                new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
         assertEquals("Accepted", booking.getMentorResponseNote());
@@ -496,7 +497,8 @@ class BookingServiceTest {
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
 
         BaseException exception = assertThrows(BaseException.class,
-                () -> bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted")));
+                () -> bookingService.acceptBooking(mentorId, booking.getId(),
+                        new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null)));
 
         assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
         assertEquals(BookingStatus.PENDING, booking.getStatus());
@@ -521,7 +523,8 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(selectedBooking)).thenReturn(selectedBooking);
 
-        BookingResponse response = bookingService.acceptBooking(mentorId, selectedBooking.getId(), new AcceptBookingRequest("Accepted"));
+        BookingResponse response = bookingService.acceptBooking(mentorId, selectedBooking.getId(),
+                new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
         assertTrue(slot.isBooked());
@@ -987,7 +990,8 @@ class BookingServiceTest {
         )) {
             Booking mentorDecisionBooking = bookingForDecision(status);
             when(bookingRepository.findByIdForMentorDecision(mentorDecisionBooking.getId())).thenReturn(Optional.of(mentorDecisionBooking));
-            assertThrows(BaseException.class, () -> bookingService.acceptBooking(mentorId, mentorDecisionBooking.getId(), new AcceptBookingRequest("Nope")));
+            assertThrows(BaseException.class, () -> bookingService.acceptBooking(mentorId, mentorDecisionBooking.getId(),
+                    new AcceptBookingRequest("Nope", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null)));
             assertThrows(BaseException.class, () -> bookingService.rejectBooking(mentorId, mentorDecisionBooking.getId(), new RejectBookingRequest("Nope", null)));
 
             Booking cancellationBooking = bookingForDecision(status);
@@ -1059,7 +1063,8 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(acceptedBooking)).thenReturn(acceptedBooking);
 
-        bookingService.acceptBooking(mentorId, acceptedBooking.getId(), new AcceptBookingRequest("Accepted note"));
+        bookingService.acceptBooking(mentorId, acceptedBooking.getId(),
+                new AcceptBookingRequest("Accepted note", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         assertEquals("Accepted note", acceptedBooking.getMentorResponseNote());
         assertNull(acceptedBooking.getRejectReason());
         assertNull(acceptedBooking.getCancelReason());
@@ -1314,7 +1319,8 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
 
-        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
+        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(),
+                new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         assertEquals(BookingStatus.PAID, response.status());
         assertEquals("Accepted", booking.getMentorResponseNote());
@@ -1343,7 +1349,8 @@ class BookingServiceTest {
         org.mockito.Mockito.lenient().when(bookingRepository.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
         org.mockito.Mockito.lenient().when(bookingRepository.save(booking)).thenReturn(booking);
 
-        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(), new AcceptBookingRequest("Accepted"));
+        BookingResponse response = bookingService.acceptBooking(mentorId, booking.getId(),
+                new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, response.status());
         assertEquals("Accepted", booking.getMentorResponseNote());

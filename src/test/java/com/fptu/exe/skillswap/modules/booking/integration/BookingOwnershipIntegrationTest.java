@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
@@ -207,7 +208,8 @@ class BookingOwnershipIntegrationTest {
                 "Please help with access control"
         ));
 
-        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("Accepted"));
+        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(),
+                new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         paymentOrderService.checkout(menteeUser.getId(), new PaymentCheckoutRequest(booking.bookingId(), null));
 
         var bookingEntity = bookingRepository.findById(booking.bookingId()).orElseThrow();

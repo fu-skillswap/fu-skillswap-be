@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
@@ -88,7 +89,8 @@ class BookingCommandLockOrderTest {
                 bookingRepository, slotRepository, userLockPort, mentorProfileRepository,
                 entityManager, sessionService, conversationService, eventPublisher, responseMapper,
                 googleCalendarConnectionPort, meetingProviderFactory);
-        service.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("retry"));
+        service.acceptBooking(mentorId, bookingId,
+                new AcceptBookingRequest("retry", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         InOrder order = inOrder(bookingRepository, userLockPort, mentorProfileRepository, slotRepository);
         order.verify(bookingRepository).findByIdForMentorDecision(bookingId);
