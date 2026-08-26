@@ -99,7 +99,6 @@ public class MentorServiceManagementService {
         MentorServiceDeliveryMode deliveryMode = request.deliveryMode() == null
                 ? MentorServiceDeliveryMode.ONE_TO_ONE
                 : request.deliveryMode();
-        googleCalendarConnectionPort.requireActiveConnectionForServiceCreation(mentorUserId);
 
         MentorService service = MentorService.builder()
                 .mentorProfile(mentorProfile)
@@ -156,7 +155,7 @@ public class MentorServiceManagementService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "rejectPendingBookings chỉ hợp lệ khi deactivate service");
         }
         if (Boolean.TRUE.equals(request.isActive()) && !service.isActive()) {
-            googleCalendarConnectionPort.requireActiveConnectionForServiceCreation(mentorUserId);
+            // Activating service does not require mandatory Google Calendar connection
         }
         if (!Boolean.TRUE.equals(request.isActive())) {
             LocalDateTime now = DateTimeUtil.now();

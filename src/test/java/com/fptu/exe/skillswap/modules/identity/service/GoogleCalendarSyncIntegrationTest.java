@@ -24,6 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -127,7 +128,8 @@ class GoogleCalendarSyncIntegrationTest {
                 .status(GoogleCalendarSyncJobStatus.PENDING)
                 .idempotencyKey("TEST_SYNC_1_" + UUID.randomUUID())
                 .attemptCount(0)
-                .runAfter(DateTimeUtil.now())
+                .runAfterUtc(Instant.now().minusSeconds(10))
+                .runAfter(DateTimeUtil.now().minusMinutes(1))
                 .build());
 
         when(apiClient.createBookingEvent(any(), any(), any(), any(), any()))
@@ -149,6 +151,8 @@ class GoogleCalendarSyncIntegrationTest {
                 .jobType(GoogleCalendarSyncJobType.CREATE_BOOKING_EVENT)
                 .status(GoogleCalendarSyncJobStatus.PENDING)
                 .idempotencyKey("TEST_SYNC_2_" + UUID.randomUUID())
+                .runAfterUtc(Instant.now().minusSeconds(10))
+                .runAfter(DateTimeUtil.now().minusMinutes(1))
                 .build());
 
         when(apiClient.createBookingEvent(any(), any(), any(), any(), any()))

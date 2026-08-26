@@ -234,7 +234,6 @@ class MentorServiceManagementServiceTest {
 
         assertEquals(120, response.durationMinutes());
         assertEquals(150_000, response.basePriceScoin());
-        verify(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
         verify(mentorServiceRepository).save(org.mockito.ArgumentMatchers.any(MentorService.class));
     }
 
@@ -262,11 +261,17 @@ class MentorServiceManagementServiceTest {
 
         assertEquals(true, response.free());
         assertEquals(0, response.basePriceScoin());
-        verify(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
     }
 
     @Test
-    void createService_withoutActiveCalendar_shouldNotPersistService() {
+    void createService_withoutActiveCalendar_shouldSucceed() {
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> {
+                    MentorService service = inv.getArgument(0);
+                    service.setId(UUID.randomUUID());
+                    return service;
+                });
+
         CreateMentorServiceRequest request = new CreateMentorServiceRequest(
                 "Review project",
                 "Mo ta",
@@ -277,20 +282,11 @@ class MentorServiceManagementServiceTest {
                 false,
                 MentorServiceDeliveryMode.ONE_TO_ONE
         );
-        doThrow(new BaseException(
-                com.fptu.exe.skillswap.shared.exception.ErrorCode.GOOGLE_CALENDAR_CONNECTION_REQUIRED,
-                "Cần kết nối Google Calendar"
-        )).when(googleCalendarConnectionPort).requireActiveConnectionForServiceCreation(mentorUserId);
 
-        BaseException exception = assertThrows(
-                BaseException.class,
-                () -> mentorServiceManagementService.createService(mentorUserId, request)
-        );
+        var response = mentorServiceManagementService.createService(mentorUserId, request);
 
-        assertEquals(
-                com.fptu.exe.skillswap.shared.exception.ErrorCode.GOOGLE_CALENDAR_CONNECTION_REQUIRED,
-                exception.getErrorCode()
-        );
-        verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
+        assertEquals("Review project", response.title());
+        assertEquals(72_000, response.basePriceScoin());
+        verify(mentorServiceRepository).save(org.mockito.ArgumentMatchers.any(MentorService.class));
     }
 }

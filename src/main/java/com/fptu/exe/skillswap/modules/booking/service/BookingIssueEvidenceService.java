@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueEvidence;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueEvidenceState;
@@ -15,6 +17,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceR
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceUploadIntentResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceUploadIntentRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -47,6 +50,12 @@ public class BookingIssueEvidenceService {
     private final StorageGateway storageGateway;
     private final BookingIssueEvidenceProperties properties;
     private final TimeProvider timeProvider;
+    private BookingIssueResolutionRepository bookingIssueResolutionRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setBookingIssueResolutionRepository(BookingIssueResolutionRepository bookingIssueResolutionRepository) {
+        this.bookingIssueResolutionRepository = bookingIssueResolutionRepository;
+    }
 
     @Transactional
     public BookingIssueEvidenceUploadIntentResponse createUploadIntent(UUID actorUserId, UUID bookingId,
@@ -250,6 +259,10 @@ public class BookingIssueEvidenceService {
         BookingDisputeSlaStatus slaStatus = BookingDeadlinePolicy.resolveDisputeSlaStatus(
                 submittedUtc, escalatedUtc, overdueUtc, resolvedUtc
         );
+        BookingIssueResolution resolution = resolvedUtc == null || bookingIssueResolutionRepository == null
+                ? null
+                : bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindOrderByCreatedAtUtcDesc(
+                        booking.getId(), BookingIssueResolutionKind.RESOLUTION).orElse(null);
         return new BookingIssueDetailResponse(booking.getId(), booking.getStatus(), booking.getIssueType(), booking.getIssueDescription(),
                 BookingTime.toOffsetDateTime(submittedUtc),
                 BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(submittedUtc)),
@@ -259,6 +272,11 @@ public class BookingIssueEvidenceService {
                 BookingTime.toOffsetDateTime(overdueUtc), booking.getAdminSlaReminderCount(),
                 BookingTime.toOffsetDateTime(BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(overdueUtc)),
                 slaStatus, booking.getIssueResolutionNote(),
+                resolution == null ? null : resolution.getAction(),
+                resolution == null ? null : resolution.getReasonCode(),
+                resolution == null ? null : resolution.getMenteeRefundScoin(),
+                resolution == null ? null : resolution.getMentorSettlementScoin(),
+                resolution == null ? null : resolution.getPlatformSettlementScoin(),
                 evidences.stream().map(item -> toResponse(item, admin || item.getState() == BookingIssueEvidenceState.ACTIVE)).toList());
     }
 

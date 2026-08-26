@@ -166,7 +166,7 @@ Hệ thống cung cấp cơ chế **Nhận quyền xử lý (Case Ownership)** n
 ---
 
 ### 5.2 Phán Quyết & Xử Lý Khiếu Nại Buổi Học (`POST /api/admin/bookings/{bookingId}/resolve-issue`)
-Khi booking rơi vào trạng thái có sự cố (`UNDER_REVIEW`), Admin tiến hành điều tra và đưa ra quyết định xử lý:
+Khi booking rơi vào trạng thái có sự cố (`UNDER_REVIEW`), Admin tiến hành điều tra và đưa ra quyết định xử lý theo Ma Trận Phán Quyết (Dispute Settlement Matrix):
 
 - **Endpoint**: `POST /api/admin/bookings/{bookingId}/resolve-issue`
 - **Request Body (`AdminResolveBookingIssueRequest`)**:
@@ -174,16 +174,54 @@ Khi booking rơi vào trạng thái có sự cố (`UNDER_REVIEW`), Admin tiến
 ```typescript
 interface AdminResolveBookingIssueRequest {
   action: 
-    | "FORCE_COMPLETE"        // Xác nhận buổi học đã diễn ra thành công (giải ngân cho mentor)
-    | "FORCE_CANCEL_REFUND"    // Hủy buổi học và hoàn 100% tiền lại cho mentee (do mentor vắng mặt/lỗi)
-    | "DISMISS_ISSUE";         // Bác bỏ khiếu nại không hợp lệ
-  resolutionNote: string;      // Biên bản giải quyết của Admin (Bắt buộc, 1 - 2000 ký tự)
+    | "CONFIRM_SESSION"                 // Xác nhận buổi học đã diễn ra hợp lệ (giải ngân cho mentor)
+    | "RELEASE_AS_IS"                   // Bác bỏ khiếu nại không hợp lệ, giữ nguyên tỷ lệ phân bổ tiêu chuẩn
+    | "PARTIAL_SETTLEMENT"              // Phân chia tỷ lệ tùy chỉnh (Custom Split) giữa mentee, mentor và sàn
+    | "CONFIRM_MENTOR_NO_SHOW_REFUND"   // Xác nhận Mentor vắng mặt (Hoàn 100% cho mentee, phạt mentor)
+    | "CONFIRM_MENTEE_NO_SHOW_RELEASE"; // Xác nhận Mentee vắng mặt (Trả tiền cho mentor theo quy định)
+  reasonCode:
+    | "SESSION_CONFIRMED"               // Buổi học đã hoàn thành thực tế
+    | "NO_SHOW_CONFIRMED"               // Xác nhận vắng mặt một phía
+    | "EVIDENCE_INSUFFICIENT"           // Bằng chứng khiếu nại không đủ hoặc không hợp lệ
+    | "QUALITY_PARTIAL_COMPENSATION"    // Bồi thường một phần do chất lượng không trọn vẹn
+    | "TECHNICAL_PARTIAL_COMPENSATION"  // Bồi thường do sự cố kỹ thuật
+    | "OTHER";                          // Lý do khác (Bắt buộc nhập adminNote)
+  adminNote?: string;                   // Biên bản xử lý. Bắt buộc khi PARTIAL_SETTLEMENT hoặc reasonCode OTHER (1 - 2000 ký tự)
+  menteeBps?: number;                   // Tỷ lệ hoàn Mentee theo basis points (0 - 10000). Ví dụ: 5000 = 50%
+  mentorBps?: number;                   // Tỷ lệ trả Mentor theo basis points (0 - 10000). Ví dụ: 3500 = 35%
+  platformBps?: number;                 // Tỷ lệ sàn giữ theo basis points (0 - 10000). Tổng 3 tỷ lệ phải = 10000
 }
 ```
 
 ---
 
-### 5.3 Đổi lịch
+### 5.3 Đảo Ngược Quyết Định Dispute (Dispute Reversal / Bút Toán Bù Trừ)
+
+Trong trường hợp phát hiện sai sót hoặc có bằng chứng mới, Admin có thể thực hiện đảo ngược quyết định dispute đã đóng trước đó. Hệ thống sẽ thực hiện bút toán bù trừ (Compensating Ledger) an toàn và đưa booking về lại trạng thái `UNDER_REVIEW`:
+
+- **Endpoint**: `POST /api/admin/bookings/{bookingId}/reverse-resolution`
+- **Request Body (`AdminReverseResolutionRequest`)**:
+
+```typescript
+interface AdminReverseResolutionRequest {
+  reasonCode:
+    | "SESSION_CONFIRMED"
+    | "NO_SHOW_CONFIRMED"
+    | "EVIDENCE_INSUFFICIENT"
+    | "QUALITY_PARTIAL_COMPENSATION"
+    | "TECHNICAL_PARTIAL_COMPENSATION"
+    | "OTHER";
+  adminNote: string; // Bắt buộc giải thích lý do đảo ngược quyết định (1 - 2000 ký tự)
+}
+```
+
+> [!IMPORTANT]
+> - Sau khi đảo ngược, booking quay về `UNDER_REVIEW` để Admin có thể xem xét và đưa ra quyết định mới.
+> - Bút toán bù trừ đảm bảo nguyên tắc an toàn số dư ví (Zero-Negative-Balance Guarantee).
+
+---
+
+### 5.4 Đổi Lịch (Reschedule)
 
 Tính năng đổi lịch chưa phát hành. Không có API đổi lịch cho mentee, mentor hoặc admin.
 

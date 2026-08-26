@@ -7,52 +7,57 @@ import com.fptu.exe.skillswap.modules.identity.repository.SpecializationReposito
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
-import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
-import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
-import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminUserModerationService;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
+import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -75,14 +80,14 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private MentorAvailabilityRuleRepository ruleRepository;
     @Autowired private MentorAvailabilitySlotRepository slotRepository;
     @Autowired private MentorProfileRepository mentorProfileRepository;
-    @Autowired private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
-    @Autowired private com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
-    @Autowired private com.fptu.exe.skillswap.modules.booking.repository.BookingRepository bookingRepository;
-    @Autowired private jakarta.persistence.EntityManager entityManager;
-    @Autowired private com.fptu.exe.skillswap.modules.catalog.repository.TagRepository tagRepository;
-    @Autowired private com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService mentorProfileService;
+    @Autowired private MentorServiceRepository mentorServiceRepository;
+    @Autowired private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
+    @Autowired private BookingRepository bookingRepository;
+    @Autowired private EntityManager entityManager;
+    @Autowired private MentorProfileService mentorProfileService;
     @Autowired private PaymentOrderService paymentOrderService;
-    @Autowired private com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService creditLedgerService;
+    @Autowired private CreditLedgerService creditLedgerService;
+    @Autowired private SessionFeedbackService feedbackService;
     
     @Autowired private CampusRepository campusRepository;
     @Autowired private AcademicProgramRepository programRepository;
@@ -168,7 +173,7 @@ class CoreMentorshipFlowSmokeTest {
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
+                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
                 3,
                 3,
                 2,
@@ -179,7 +184,7 @@ class CoreMentorshipFlowSmokeTest {
         mentorProfileService.upsertProfile(mentorApplicant.getId(), upsertReq);
 
         MentorProfile mp = mentorProfileRepository.findById(mentorApplicant.getId()).orElseThrow();
-        mp.setStatus(com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT);
+        mp.setStatus(MentorStatus.DRAFT);
         mp.setVerifiedAt(null);
         mentorProfileRepository.saveAndFlush(mp);
         entityManager.clear();
@@ -209,8 +214,6 @@ class CoreMentorshipFlowSmokeTest {
 
         // Assert discovery
         var discoveryPage = mentorDiscoveryService.searchMentors(mentorApplicant.getId(), new MentorDiscoverySearchRequest());
-        // It might not have "Spring" if we didn't add service, but the user should be technically discoverable if they add services.
-        // Wait, discovery needs MentorService. Let's not strict check the exact discovery output if they have no service.
     }
 
     @Test
@@ -225,7 +228,7 @@ class CoreMentorshipFlowSmokeTest {
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
+                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
                 3,
                 3,
                 2,
@@ -287,7 +290,7 @@ class CoreMentorshipFlowSmokeTest {
         assertEquals(BookingStatus.PENDING, bk3.status());
 
         // Mentor accepts one
-        AcceptBookingRequest aReq = new AcceptBookingRequest("Yes!");
+        AcceptBookingRequest aReq = new AcceptBookingRequest("Yes!", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null);
         bookingService.acceptBooking(mentor.getId(), bk1.bookingId(), aReq);
 
         var accepted = bookingService.getBookingDetail(m1.getId(), bk1.bookingId());
@@ -304,8 +307,6 @@ class CoreMentorshipFlowSmokeTest {
         assertThrows(BaseException.class, () -> bookingService.createBooking(m4.getId(), bReq));
     }
 
-    @Autowired private com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService feedbackService;
-
     @Test
     void test4_completeAndFeedbackDoesNotBreakRating() {
         User mentor = createUser("fb-mentor@test.com", "FB Mentor", new HashSet<>(Set.of(RoleCode.MENTEE, RoleCode.MENTOR)));
@@ -318,7 +319,7 @@ class CoreMentorshipFlowSmokeTest {
                 "Senior Java Developer",
                 "5 years of Spring Boot experience",
                 false,
-                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", java.math.BigDecimal.valueOf(8.5))),
+                List.of(new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest("PRJ301", "Java Web", BigDecimal.valueOf(8.5))),
                 3,
                 3,
                 2,
@@ -371,7 +372,7 @@ class CoreMentorshipFlowSmokeTest {
         );
         var bk = bookingService.createBooking(mentee.getId(), bReq);
 
-        AcceptBookingRequest aReq = new AcceptBookingRequest("Sure");
+        AcceptBookingRequest aReq = new AcceptBookingRequest("Sure", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null);
         bookingService.acceptBooking(mentor.getId(), bk.bookingId(), aReq);
         paymentOrderService.checkout(mentee.getId(), new PaymentCheckoutRequest(bk.bookingId(), null));
 
@@ -412,7 +413,7 @@ class CoreMentorshipFlowSmokeTest {
         // Check rating update
         var updatedProfile = mentorProfileRepository.findById(mentor.getId()).orElseThrow();
         assertEquals(1, updatedProfile.getTotalReviews());
-        assertEquals(new java.math.BigDecimal("5.00"), updatedProfile.getAverageRating());
+        assertEquals(new BigDecimal("5.00"), updatedProfile.getAverageRating());
         assertEquals(1, updatedProfile.getTotalCompletedSessions());
     }
 
@@ -440,4 +441,3 @@ class CoreMentorshipFlowSmokeTest {
                 .build());
     }
 }
-

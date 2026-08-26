@@ -264,6 +264,49 @@ public class CreditLedgerService {
         }
     }
 
+    @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
+    @Transactional
+    public boolean debitCredit(UUID userId,
+                               CreditOriginType originType,
+                               LedgerSourceType sourceType,
+                               UUID sourceId,
+                               int amountScoin,
+                               String memo,
+                               String operationKey) {
+        if (amountScoin <= 0) {
+            return true;
+        }
+        if (operationKey != null && entryRepository.findByOperationKey(operationKey).isPresent()) {
+            return true;
+        }
+        CreditLedgerAccount account = getUserAccountForUpdate(userId);
+        if (operationKey != null && entryRepository.findByOperationKey(operationKey).isPresent()) {
+            return true;
+        }
+        int rows = accountRepository.deductBalanceSafely(account.getId(), amountScoin);
+        if (rows == 0) {
+            return false;
+        }
+        try {
+            entryRepository.save(CreditLedgerEntry.builder()
+                    .accountId(account.getId())
+                    .entryType(LedgerEntryType.ADJUSTMENT)
+                    .originType(originType)
+                    .sourceType(sourceType)
+                    .sourceId(sourceId)
+                    .amountScoin(amountScoin)
+                    .balanceEffectScoin(-amountScoin)
+                    .memo(memo)
+                    .operationKey(operationKey)
+                    .build());
+        } catch (DataIntegrityViolationException duplicate) {
+            if (operationKey == null || entryRepository.findByOperationKey(operationKey).isEmpty()) {
+                throw duplicate;
+            }
+        }
+        return true;
+    }
+
     private CreditLedgerAccount ensureAccount(LedgerAccountType ownerType, UUID ownerId, String accountCode) {
         return accountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                 .orElseGet(() -> createAccount(ownerType, ownerId, accountCode));

@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -79,7 +80,11 @@ public class BookingDisputeNotificationService {
     }
 
     public void notifyIssueResolved(Booking booking, boolean autoResolved) {
-        String result = resolveMessage(booking, autoResolved);
+        notifyIssueResolved(booking, autoResolved, null);
+    }
+
+    public void notifyIssueResolved(Booking booking, boolean autoResolved, BookingIssueResolution resolution) {
+        String result = resolveMessage(booking, autoResolved, resolution);
         String reason = trimToMax(booking.getIssueResolutionNote(), 500);
         User mentee = mentee(booking);
         User mentor = mentor(booking);
@@ -90,6 +95,23 @@ public class BookingDisputeNotificationService {
             emit(booking, mentor, null, NotificationType.BOOKING_ISSUE_RESOLVED,
                     "Tranh chấp booking đã được xử lý", result,
                     BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLVED_EMAIL, reason);
+        }
+    }
+
+    public void notifyIssueResolutionReversed(Booking booking, BookingIssueResolution reversalRecord) {
+        String result = "Quyết định xử lý khiếu nại trước đó đã được quản trị viên đảo ngược và đang được xem xét lại.";
+        String reason = reversalRecord != null && reversalRecord.getAdminNote() != null
+                ? trimToMax(reversalRecord.getAdminNote(), 500)
+                : trimToMax(booking.getIssueResolutionNote(), 500);
+        User mentee = mentee(booking);
+        User mentor = mentor(booking);
+        emit(booking, mentee, null, NotificationType.BOOKING_ISSUE_RESOLUTION_REVERSED,
+                "Quyết định khiếu nại booking được xem xét lại", result,
+                BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLUTION_REVERSED_EMAIL, reason);
+        if (mentor != null && (mentee == null || !mentor.getId().equals(mentee.getId()))) {
+            emit(booking, mentor, null, NotificationType.BOOKING_ISSUE_RESOLUTION_REVERSED,
+                    "Quyết định khiếu nại booking được xem xét lại", result,
+                    BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLUTION_REVERSED_EMAIL, reason);
         }
     }
 
@@ -145,8 +167,14 @@ public class BookingDisputeNotificationService {
         return booking == null || booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
     }
 
-    private String resolveMessage(Booking booking, boolean autoResolved) {
+    private String resolveMessage(Booking booking, boolean autoResolved, BookingIssueResolution resolution) {
         String prefix = autoResolved ? "Hệ thống đã tự động xử lý tranh chấp. " : "Admin đã xử lý tranh chấp. ";
+        if (resolution != null) {
+            return prefix + "Kết quả: hoàn " + safeAmount(resolution.getMenteeRefundScoin())
+                    + " SCoin cho mentee, thanh toán " + safeAmount(resolution.getMentorSettlementScoin())
+                    + " SCoin cho mentor và nền tảng giữ " + safeAmount(resolution.getPlatformSettlementScoin())
+                    + " SCoin.";
+        }
         BookingCompletionOutcome outcome = booking.getCompletionOutcome();
         if (outcome == BookingCompletionOutcome.NO_SHOW_MENTOR) {
             return prefix + "Mentor được xác nhận không có mặt; booking được hoàn tiền theo chính sách nếu có thanh toán.";
@@ -158,6 +186,10 @@ public class BookingDisputeNotificationService {
             return "Tranh chấp vượt thời hạn xử lý của admin. Theo chính sách công bố, khoản thanh toán được giải ngân cho mentor.";
         }
         return prefix + "Buổi mentoring được xác nhận; thanh toán được xử lý theo chính sách nếu có.";
+    }
+
+    private int safeAmount(Integer amount) {
+        return amount == null ? 0 : Math.max(0, amount);
     }
 
     private String trimToMax(String value, int maxLength) {

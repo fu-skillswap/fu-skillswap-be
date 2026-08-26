@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
 import com.fptu.exe.skillswap.modules.booking.service.BookingCancellationRefundPolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
@@ -21,6 +23,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.SessionAttendanceResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
@@ -59,6 +62,7 @@ public class BookingResponseMapper {
     private final PaymentProperties paymentProperties;
     private final TimeProvider timeProvider;
     private final SessionAttendanceRepository sessionAttendanceRepository;
+    private BookingIssueResolutionRepository bookingIssueResolutionRepository;
 
     @Autowired
     public BookingResponseMapper(SessionService sessionService,
@@ -73,6 +77,11 @@ public class BookingResponseMapper {
         this.paymentProperties = paymentProperties;
         this.timeProvider = timeProvider != null ? timeProvider : TimeProvider.from(Clock.systemUTC());
         this.sessionAttendanceRepository = sessionAttendanceRepository;
+    }
+
+    @Autowired
+    void setBookingIssueResolutionRepository(BookingIssueResolutionRepository bookingIssueResolutionRepository) {
+        this.bookingIssueResolutionRepository = bookingIssueResolutionRepository;
     }
 
     public BookingResponseMapper(SessionService sessionService,
@@ -261,6 +270,10 @@ public class BookingResponseMapper {
         BookingDisputeSlaStatus disputeSlaStatus = BookingDeadlinePolicy.resolveDisputeSlaStatus(
                 issueSubmittedUtc, issueAdminEscalatedUtc, issueAdminSlaOverdueUtc, issueResolvedUtc
         );
+        BookingIssueResolution issueResolution = issueResolvedUtc == null || bookingIssueResolutionRepository == null
+                ? null
+                : bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindOrderByCreatedAtUtcDesc(
+                        booking.getId(), BookingIssueResolutionKind.RESOLUTION).orElse(null);
 
         return BookingResponse.builder()
                 .bookingId(booking.getId())
@@ -335,6 +348,11 @@ public class BookingResponseMapper {
                 .disputeSlaStatus(disputeSlaStatus)
                 .issueResolvedByUserId(booking.getIssueResolvedByUserId())
                 .issueResolutionNote(booking.getIssueResolutionNote())
+                .issueResolutionAction(issueResolution == null ? null : issueResolution.getAction())
+                .issueResolutionReasonCode(issueResolution == null ? null : issueResolution.getReasonCode())
+                .issueResolutionMenteeRefundScoin(issueResolution == null ? null : issueResolution.getMenteeRefundScoin())
+                .issueResolutionMentorSettlementScoin(issueResolution == null ? null : issueResolution.getMentorSettlementScoin())
+                .issueResolutionPlatformSettlementScoin(issueResolution == null ? null : issueResolution.getPlatformSettlementScoin())
                 .mentorNote(booking.getMentorNote())
                 .menteeNote(booking.getMenteeNote())
                 .createdAt(BookingTime.toOffsetDateTime(booking.getCreatedAt()))

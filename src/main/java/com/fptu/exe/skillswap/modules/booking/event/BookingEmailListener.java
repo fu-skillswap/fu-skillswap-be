@@ -160,6 +160,14 @@ public class BookingEmailListener {
                     "Mở khu vực quản trị để xử lý tranh chấp ngay.",
                     "Mở quản trị"
             );
+            case BOOKING_ISSUE_RESOLUTION_REVERSED_EMAIL -> new EmailContent(
+                    "[SkillSwap] Quyết định xử lý khiếu nại booking đang được xem xét lại",
+                    "Quyết định khiếu nại trước đó đã được đảo ngược",
+                    "Quản trị viên đã đảo ngược quyết định trước đó để đối soát lại dữ liệu. Trạng thái tranh chấp đã được mở lại để xem xét.",
+                    "Đang xem xét lại",
+                    "Mở SkillSwap để theo dõi tiến trình xử lý khiếu nại.",
+                    "Xem khiếu nại"
+            );
         };
     }
 

@@ -41,6 +41,8 @@ public final class BookingStateMachine {
             case AUTO_RESOLVE_MENTOR_NO_SHOW, AUTO_RESOLVE_MENTEE_NO_SHOW, AUTO_RELEASE_AFTER_ADMIN_SLA,
                     ADMIN_CONFIRM_SESSION, ADMIN_CONFIRM_MENTOR_NO_SHOW, ADMIN_CONFIRM_MENTEE_NO_SHOW ->
                     require(current, BookingStatus.UNDER_REVIEW, BookingStatus.COMPLETED, command);
+            case ADMIN_REVERSE_RESOLUTION ->
+                    require(current, BookingStatus.COMPLETED, BookingStatus.UNDER_REVIEW, command);
         };
         return target;
     }

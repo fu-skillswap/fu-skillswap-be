@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionReasonCode;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
@@ -10,7 +12,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
@@ -54,6 +58,7 @@ class BookingCompletionServiceTest {
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private BookingResponseMapper bookingResponseMapper;
     @Mock private BookingIssueEvidenceService bookingIssueEvidenceService;
+    @Mock private BookingIssueResolutionRepository bookingIssueResolutionRepository;
 
     private TimeProvider timeProvider;
     private BookingCompletionService service;
@@ -75,6 +80,7 @@ class BookingCompletionServiceTest {
                 timeProvider
         );
         service.setBookingIssueEvidenceService(bookingIssueEvidenceService);
+        service.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
         bookingId = UUID.randomUUID();
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
@@ -215,12 +221,127 @@ class BookingCompletionServiceTest {
         verify(settlementService).releaseForBooking(booking);
     }
 
+    @Test
+    void resolvePartialSettlement_shouldFinalizeSessionWithoutFullCompletionCounterAndDelegateOneSettlement() {
+        Booking booking = eligibleBooking(BookingStatus.UNDER_REVIEW);
+        booking.setIssueType(BookingIssueType.QUALITY_ISSUE);
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+        when(bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(bookingIssueResolutionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var resolution = invocation.getArgument(0, com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class);
+            resolution.setId(UUID.randomUUID());
+            return resolution;
+        });
+
+        service.resolveBookingIssue(mentorId, bookingId, new AdminResolveBookingIssueRequest(
+                AdminBookingIssueResolutionAction.PARTIAL_SETTLEMENT,
+                AdminBookingIssueResolutionReasonCode.QUALITY_PARTIAL_COMPENSATION,
+                "Nội dung chỉ đáp ứng một phần mục tiêu đã đặt ra.",
+                5000, 3500, 1500
+        ));
+
+        assertEquals(BookingStatus.COMPLETED, booking.getStatus());
+        assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.PARTIALLY_SETTLED,
+                booking.getCompletionOutcome());
+        verify(sessionFinalizationService).finalizeDisputedSessionWithoutCompletionCounter(
+                org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
+        verify(settlementService).applyAdminIssueResolution(
+                org.mockito.ArgumentMatchers.eq(booking), any(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class));
+    }
+
+    @Test
+    void reverseBookingIssueResolution_whenCompletedWithAppliedResolution_shouldReopenDispute() {
+        Booking booking = eligibleBooking(BookingStatus.COMPLETED);
+        booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.PARTIALLY_SETTLED);
+
+        var originalResolution = com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.builder()
+                .id(UUID.randomUUID())
+                .bookingId(bookingId)
+                .resolutionKind(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind.RESOLUTION)
+                .status(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.APPLIED)
+                .action(AdminBookingIssueResolutionAction.PARTIAL_SETTLEMENT)
+                .reasonCode(AdminBookingIssueResolutionReasonCode.QUALITY_PARTIAL_COMPENSATION)
+                .menteeBps(5000)
+                .mentorBps(3500)
+                .platformBps(1500)
+                .menteeRefundScoin(50)
+                .mentorSettlementScoin(35)
+                .platformSettlementScoin(15)
+                .escrowScoin(100)
+                .build();
+
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(booking)).thenReturn(booking);
+        when(bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
+                any(), any(), any())).thenReturn(Optional.of(originalResolution));
+        when(bookingIssueResolutionRepository.existsByReversalOfResolutionIdAndResolutionKind(any(), any()))
+                .thenReturn(false);
+        when(bookingIssueResolutionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var resolution = invocation.getArgument(0, com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class);
+            resolution.setId(UUID.randomUUID());
+            return resolution;
+        });
+
+        var response = service.reverseBookingIssueResolution(
+                UUID.randomUUID(),
+                bookingId,
+                new com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest(
+                        AdminBookingIssueResolutionReasonCode.OTHER,
+                        "Phát hiện sai sót trong biên bản đối soát, cần xem xét lại"
+                )
+        );
+
+        assertEquals(BookingStatus.UNDER_REVIEW, booking.getStatus());
+        assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.UNDER_REVIEW, booking.getCompletionOutcome());
+        assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.REVERSED, originalResolution.getStatus());
+        verify(settlementService).applyReversal(
+                org.mockito.ArgumentMatchers.eq(booking),
+                org.mockito.ArgumentMatchers.eq(originalResolution),
+                any(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class)
+        );
+    }
+
+    @Test
+    void reverseBookingIssueResolution_whenAlreadyReversed_shouldRejectDuplicate() {
+        Booking booking = eligibleBooking(BookingStatus.COMPLETED);
+
+        var originalResolution = com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.builder()
+                .id(UUID.randomUUID())
+                .bookingId(bookingId)
+                .resolutionKind(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind.RESOLUTION)
+                .status(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.APPLIED)
+                .build();
+
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
+                any(), any(), any())).thenReturn(Optional.of(originalResolution));
+        when(bookingIssueResolutionRepository.existsByReversalOfResolutionIdAndResolutionKind(any(), any()))
+                .thenReturn(true);
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.reverseBookingIssueResolution(
+                UUID.randomUUID(),
+                bookingId,
+                new com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest(
+                        AdminBookingIssueResolutionReasonCode.OTHER,
+                        "Duplicate reversal attempt"
+                )
+        ));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+    }
+
     private void stubSave(Booking booking) {
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(bookingRepository.save(booking)).thenReturn(booking);
     }
 
     private Booking eligibleBooking() {
+        return eligibleBooking(BookingStatus.AWAITING_MENTOR_COMPLETION);
+    }
+
+    private Booking eligibleBooking(BookingStatus status) {
         User mentee = new User();
         mentee.setId(menteeId);
         User mentorUser = new User();
@@ -234,7 +355,7 @@ class BookingCompletionServiceTest {
                 .id(bookingId)
                 .mentee(mentee)
                 .mentorProfile(mentor)
-                .status(BookingStatus.AWAITING_MENTOR_COMPLETION)
+                .status(status)
                 .selectedStartTime(now.minusHours(2))
                 .selectedEndTime(now.minusHours(1))
                 .build();

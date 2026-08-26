@@ -5,6 +5,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionReasonCode;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
@@ -183,6 +185,16 @@ public record BookingResponse(
         UUID issueResolvedByUserId,
         @Schema(description = "Ghi chú xử lý issue của admin", nullable = true)
         String issueResolutionNote,
+        @Schema(description = "Quyết định settlement của admin, nếu dispute đã được resolve", nullable = true)
+        AdminBookingIssueResolutionAction issueResolutionAction,
+        @Schema(description = "Mã lý do chuẩn của quyết định admin", nullable = true)
+        AdminBookingIssueResolutionReasonCode issueResolutionReasonCode,
+        @Schema(description = "Số SCoin hoàn cho mentee theo quyết định dispute", nullable = true)
+        Integer issueResolutionMenteeRefundScoin,
+        @Schema(description = "Số SCoin thanh toán cho mentor theo quyết định dispute", nullable = true)
+        Integer issueResolutionMentorSettlementScoin,
+        @Schema(description = "Số SCoin nền tảng giữ theo quyết định dispute", nullable = true)
+        Integer issueResolutionPlatformSettlementScoin,
         @Schema(description = "Ghi chú của mentor sau buổi học", nullable = true)
         String mentorNote,
         @Schema(description = "Ghi chú của mentee sau buổi học", nullable = true)

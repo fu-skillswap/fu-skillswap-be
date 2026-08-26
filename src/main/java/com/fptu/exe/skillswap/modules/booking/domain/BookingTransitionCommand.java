@@ -21,5 +21,7 @@ public enum BookingTransitionCommand {
     AUTO_RELEASE_AFTER_ADMIN_SLA,
     ADMIN_CONFIRM_SESSION,
     ADMIN_CONFIRM_MENTOR_NO_SHOW,
-    ADMIN_CONFIRM_MENTEE_NO_SHOW
+    ADMIN_CONFIRM_MENTEE_NO_SHOW,
+    /** Reverses a prior dispute decision and returns the booking to UNDER_REVIEW. */
+    ADMIN_REVERSE_RESOLUTION
 }

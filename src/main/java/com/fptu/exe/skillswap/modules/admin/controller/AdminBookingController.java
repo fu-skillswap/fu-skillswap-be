@@ -1,11 +1,14 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.admin.service.AdminBookingModerationService;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
+import com.fptu.exe.skillswap.shared.idempotency.Idempotent;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,7 +27,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
-import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 
 @RestController
 @RequestMapping("/api/admin/bookings")
@@ -72,13 +74,27 @@ public class AdminBookingController {
             description = "Admin đóng một booking đang UNDER_REVIEW sau khi xử lý dispute/manual support. Action chốt outcome session và settlement hiện có của booking; không sửa service hoặc payment order gốc."
     )
     @PostMapping("/{bookingId}/resolve-issue")
-    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
+    @Idempotent
     public ApiResponse<BookingResponse> resolveIssue(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
             @Valid @RequestBody AdminResolveBookingIssueRequest request
     ) {
         return ApiResponse.success(adminBookingModerationService.resolveBookingIssue(principal.getPublicId(), bookingId, request));
+    }
+
+    @Operation(
+            summary = "Reverse booking issue resolution",
+            description = "Admin đảo ngược một quyết định dispute đã đóng trước đó theo bút toán bù trừ (reversal audit log). Booking quay về UNDER_REVIEW để admin có thể xem xét và ra quyết định mới."
+    )
+    @PostMapping("/{bookingId}/reverse-resolution")
+    @Idempotent
+    public ApiResponse<BookingResponse> reverseResolution(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId,
+            @Valid @RequestBody AdminReverseResolutionRequest request
+    ) {
+        return ApiResponse.success(adminBookingModerationService.reverseBookingIssueResolution(principal.getPublicId(), bookingId, request));
     }
 
 }

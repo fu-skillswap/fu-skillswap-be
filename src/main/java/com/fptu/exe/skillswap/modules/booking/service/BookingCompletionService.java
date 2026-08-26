@@ -1,7 +1,11 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType;
@@ -19,6 +23,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
@@ -55,6 +60,7 @@ public class BookingCompletionService {
     private MentorViolationService mentorViolationService;
     private BookingIssueEvidenceService bookingIssueEvidenceService;
     private BookingDisputeNotificationService bookingDisputeNotificationService;
+    private BookingIssueResolutionRepository bookingIssueResolutionRepository;
 
     @Autowired
     public BookingCompletionService(
@@ -103,6 +109,11 @@ public class BookingCompletionService {
     @Autowired
     void setBookingDisputeNotificationService(BookingDisputeNotificationService bookingDisputeNotificationService) {
         this.bookingDisputeNotificationService = bookingDisputeNotificationService;
+    }
+
+    @Autowired
+    void setBookingIssueResolutionRepository(BookingIssueResolutionRepository bookingIssueResolutionRepository) {
+        this.bookingIssueResolutionRepository = bookingIssueResolutionRepository;
     }
 
     @Transactional
@@ -372,45 +383,146 @@ public class BookingCompletionService {
         if (booking.getStatus() != BookingStatus.UNDER_REVIEW) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể resolve booking đang UNDER_REVIEW");
         }
+        AdminBookingIssueResolutionPolicy.validate(request, booking.getIssueType());
+        if (requireIssueResolutionRepository().findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
+                bookingId, BookingIssueResolutionKind.RESOLUTION, BookingIssueResolutionStatus.APPLIED).isPresent()) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Dispute này đã có quyết định settlement đang hiệu lực");
+        }
 
         Instant nowUtc = timeProvider.instant();
+        BookingIssueResolution resolution = requireIssueResolutionRepository().saveAndFlush(BookingIssueResolution.builder()
+                .bookingId(bookingId)
+                .resolvedByUserId(adminUserId)
+                .resolutionKind(BookingIssueResolutionKind.RESOLUTION)
+                .status(BookingIssueResolutionStatus.APPLIED)
+                .action(request.action())
+                .reasonCode(request.reasonCode())
+                .adminNote(trimToNull(request.adminNote()))
+                .menteeBps(request.menteeBps())
+                .mentorBps(request.mentorBps())
+                .platformBps(request.platformBps())
+                .createdAtUtc(nowUtc)
+                .build());
         booking.setIssueResolvedAtUtc(nowUtc);
         booking.setIssueResolvedAt(BookingTime.fromInstant(nowUtc));
         booking.setIssueResolvedByUserId(adminUserId);
         booking.setIssueResolutionNote(trimToNull(request.adminNote()));
 
         BookingStatus oldStatus = booking.getStatus();
-        if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION) {
+        if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_SESSION
+                || request.action() == AdminBookingIssueResolutionAction.RELEASE_AS_IS) {
             BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, nowUtc);
             booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
             sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
-            if (settlementService != null) {
-                settlementService.releaseForBooking(booking);
-            }
+        } else if (request.action() == AdminBookingIssueResolutionAction.PARTIAL_SETTLEMENT) {
+            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_SESSION, nowUtc);
+            booking.setCompletionOutcome(BookingCompletionOutcome.PARTIALLY_SETTLED);
+            sessionFinalizationService.finalizeDisputedSessionWithoutCompletionCounter(booking, nowUtc);
         } else if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
             BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTOR_NO_SHOW, nowUtc);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
             sessionFinalizationService.markSessionNotDelivered(booking);
-            if (settlementService != null) {
-                settlementService.refundForMentorNoShow(booking);
-            }
             recordMentorNoShowViolation(booking);
-        } else {
+        } else if (request.action() == AdminBookingIssueResolutionAction.CONFIRM_MENTEE_NO_SHOW_RELEASE) {
             BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW, nowUtc);
             booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
             sessionFinalizationService.markSessionNotDelivered(booking);
-            if (settlementService != null) {
-                settlementService.releaseForBooking(booking);
-            }
+        } else {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Action resolve dispute không hợp lệ");
+        }
+        if (settlementService != null) {
+            settlementService.applyAdminIssueResolution(booking, resolution);
         }
 
         Booking savedBooking = bookingRepository.save(booking);
+        requireIssueResolutionRepository().save(resolution);
 
         recordBookingEvent(savedBooking, BookingEventType.ISSUE_RESOLVED,
                 oldStatus, BookingEventActorType.ADMIN, adminUserId, null);
         if (bookingDisputeNotificationService != null) {
-            bookingDisputeNotificationService.notifyIssueResolved(savedBooking, false);
+            bookingDisputeNotificationService.notifyIssueResolved(savedBooking, false, resolution);
         }
+        return bookingResponseMapper.toBookingResponse(savedBooking);
+    }
+
+    @Transactional
+    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
+        if (adminUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực admin");
+        }
+        if (bookingId == null || request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu thông tin reversal bắt buộc");
+        }
+        if (request.reasonCode() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "reasonCode là bắt buộc cho reversal");
+        }
+        if (request.adminNote() == null || request.adminNote().isBlank()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "adminNote là bắt buộc cho reversal");
+        }
+
+        Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
+
+        if (booking.getStatus() != BookingStatus.COMPLETED) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể đảo ngược quyết định của booking đã COMPLETED");
+        }
+
+        BookingIssueResolution originalResolution = requireIssueResolutionRepository()
+                .findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
+                        bookingId, BookingIssueResolutionKind.RESOLUTION, BookingIssueResolutionStatus.APPLIED)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy quyết định dispute đang hiệu lực để đảo ngược"));
+
+        if (requireIssueResolutionRepository().existsByReversalOfResolutionIdAndResolutionKind(
+                originalResolution.getId(), BookingIssueResolutionKind.REVERSAL)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Quyết định dispute này đã được đảo ngược trước đó");
+        }
+
+        Instant nowUtc = timeProvider.instant();
+
+        // Mark original resolution as REVERSED
+        originalResolution.setStatus(BookingIssueResolutionStatus.REVERSED);
+        requireIssueResolutionRepository().save(originalResolution);
+
+        // Create new immutable REVERSAL record referencing original
+        BookingIssueResolution reversalRecord = requireIssueResolutionRepository().saveAndFlush(BookingIssueResolution.builder()
+                .bookingId(bookingId)
+                .resolvedByUserId(adminUserId)
+                .resolutionKind(BookingIssueResolutionKind.REVERSAL)
+                .status(BookingIssueResolutionStatus.APPLIED)
+                .action(originalResolution.getAction())
+                .reasonCode(request.reasonCode())
+                .adminNote(trimToNull(request.adminNote()))
+                .menteeBps(originalResolution.getMenteeBps())
+                .mentorBps(originalResolution.getMentorBps())
+                .platformBps(originalResolution.getPlatformBps())
+                .reversalOfResolutionId(originalResolution.getId())
+                .createdAtUtc(nowUtc)
+                .build());
+
+        // Apply financial reversal
+        if (settlementService != null) {
+            settlementService.applyReversal(booking, originalResolution, reversalRecord);
+        }
+        requireIssueResolutionRepository().save(reversalRecord);
+
+        // Return booking state to UNDER_REVIEW
+        BookingStatus oldStatus = booking.getStatus();
+        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_REVERSE_RESOLUTION, nowUtc);
+        booking.setIssueResolvedAtUtc(null);
+        booking.setIssueResolvedAt(null);
+        booking.setIssueResolvedByUserId(null);
+        booking.setIssueResolutionNote(null);
+        booking.setCompletionOutcome(BookingCompletionOutcome.UNDER_REVIEW);
+
+        Booking savedBooking = bookingRepository.save(booking);
+
+        recordBookingEvent(savedBooking, BookingEventType.ISSUE_RESOLUTION_REVERSED,
+                oldStatus, BookingEventActorType.ADMIN, adminUserId, trimToNull(request.adminNote()));
+
+        if (bookingDisputeNotificationService != null) {
+            bookingDisputeNotificationService.notifyIssueResolutionReversed(savedBooking, reversalRecord);
+        }
+
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
 
@@ -451,6 +563,13 @@ public class BookingCompletionService {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Dịch vụ minh chứng dispute chưa sẵn sàng");
         }
         return bookingIssueEvidenceService;
+    }
+
+    private BookingIssueResolutionRepository requireIssueResolutionRepository() {
+        if (bookingIssueResolutionRepository == null) {
+            throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Dịch vụ audit settlement dispute chưa sẵn sàng");
+        }
+        return bookingIssueResolutionRepository;
     }
 
     private Booking getBookingForSessionAction(UUID currentUserId, UUID bookingId) {

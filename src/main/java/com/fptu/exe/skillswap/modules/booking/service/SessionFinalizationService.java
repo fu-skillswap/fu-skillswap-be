@@ -88,6 +88,24 @@ public class SessionFinalizationService {
         finalizeDeliveredSession(booking, finalizedAt != null ? BookingTime.toInstant(finalizedAt) : timeProvider.instant());
     }
 
+    /**
+     * A partial quality/technical settlement acknowledges the session record but must not inflate
+     * the mentor's full-delivery counters. The financial outcome is intentionally handled by the
+     * caller's settlement service.
+     */
+    @Transactional
+    public void finalizeDisputedSessionWithoutCompletionCounter(Booking booking, Instant finalizedAtUtc) {
+        if (booking == null || finalizedAtUtc == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Booking và thời điểm hoàn tất là bắt buộc");
+        }
+        Session session = findOrCreateForUpdate(booking);
+        completeDeliveredSession(session, booking, finalizedAtUtc);
+        if (booking.getCompletedAtUtc() == null && booking.getCompletedAt() == null) {
+            booking.setCompletedAtUtc(finalizedAtUtc);
+            booking.setCompletedAt(BookingTime.fromInstant(finalizedAtUtc));
+        }
+    }
+
     /** A confirmed no-show means the session did not take place and must not count for the mentor. */
     @Transactional
     public void markSessionNotDelivered(Booking booking) {

@@ -8,13 +8,13 @@ import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
@@ -180,7 +180,8 @@ class BookingEmailNotificationTest {
     void acceptBooking_shouldPublishEmailEventAfterCommit() {
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
         
-        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         TestTransaction.flagForCommit();
         TestTransaction.end();
@@ -236,7 +237,8 @@ class BookingEmailNotificationTest {
     @Test
     void mentorCancelBooking_shouldPublishCancelledEmailToMentee() {
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
-        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
         
         bookingService.cancelBookingByMentor(mentorUser.getId(), booking.bookingId(), new CancelBookingRequest("Emergency"));
 
@@ -260,7 +262,8 @@ class BookingEmailNotificationTest {
 
         BookingResponse booking = bookingService.createBooking(menteeUser.getId(), bookingRequest("T1", "D1"));
 
-        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(), new AcceptBookingRequest("OK"));
+        bookingService.acceptBooking(mentorUser.getId(), booking.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
         TestTransaction.flagForCommit();
         org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, TestTransaction::end);
@@ -277,4 +280,3 @@ class BookingEmailNotificationTest {
         );
     }
 }
-

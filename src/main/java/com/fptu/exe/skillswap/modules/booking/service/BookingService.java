@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
@@ -91,6 +92,16 @@ public class BookingService {
         PaymentOrderRepository paymentOrderRepo = null;
         BookingResponseMapper mapper = new BookingResponseMapper(sessionService, conversationService, paymentOrderRepo, paymentProperties);
         BookingEventService bookingEventService = null;
+        com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort calendarPort = new com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort() {
+            @Override
+            public boolean hasActiveConnection(UUID mentorUserId) {
+                return true;
+            }
+
+            @Override
+            public void requireActiveConnectionForServiceCreation(UUID mentorUserId) {
+            }
+        };
         MeetingProviderFactory meetingFactory = new MeetingProviderFactory(Collections.emptyList());
 
         this.bookingResponseMapper = mapper;
@@ -116,7 +127,9 @@ public class BookingService {
                 sessionService,
                 conversationService,
                 eventPublisher,
-                mapper
+                mapper,
+                calendarPort,
+                meetingFactory
         );
         this.bookingCancellationService = new BookingCancellationService(
                 bookingRepository,
@@ -231,6 +244,11 @@ public class BookingService {
     @Transactional
     public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, AdminResolveBookingIssueRequest request) {
         return bookingCompletionService.resolveBookingIssue(adminUserId, bookingId, request);
+    }
+
+    @Transactional
+    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
+        return bookingCompletionService.reverseBookingIssueResolution(adminUserId, bookingId, request);
     }
 
     @Transactional

@@ -46,6 +46,8 @@ class BookingCommandLockOrderTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock BookingResponseMapper responseMapper;
     @Mock PaymentOrderService paymentOrderService;
+    @Mock com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort googleCalendarConnectionPort;
+    @Mock com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory meetingProviderFactory;
 
     private UUID mentorId;
     private UUID menteeId;
@@ -84,7 +86,8 @@ class BookingCommandLockOrderTest {
 
         BookingDecisionService service = new BookingDecisionService(
                 bookingRepository, slotRepository, userLockPort, mentorProfileRepository,
-                entityManager, sessionService, conversationService, eventPublisher, responseMapper);
+                entityManager, sessionService, conversationService, eventPublisher, responseMapper,
+                googleCalendarConnectionPort, meetingProviderFactory);
         service.acceptBooking(mentorId, bookingId, new AcceptBookingRequest("retry"));
 
         InOrder order = inOrder(bookingRepository, userLockPort, mentorProfileRepository, slotRepository);

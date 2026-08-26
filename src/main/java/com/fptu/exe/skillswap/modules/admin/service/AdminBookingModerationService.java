@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingRescheduleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequestResponse;
@@ -51,6 +52,26 @@ public class AdminBookingModerationService {
                 "RESOLVE_BOOKING_ISSUE",
                 Map.of("status", oldStatus),
                 Map.of("status", response.status().name(), "reason", request.adminNote() == null ? "" : request.adminNote(), "action", request.action().name())
+        );
+
+        return response;
+    }
+
+    @Transactional
+    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
+        BookingResponse booking = bookingService.getAdminBookingDetail(bookingId);
+        String oldStatus = booking.status().name();
+
+        BookingResponse response = bookingService.reverseBookingIssueResolution(adminUserId, bookingId, request);
+
+        // Save Audit Log
+        adminAuditWriterService.writeOperatorEvent(
+                adminUserId,
+                "BOOKING",
+                bookingId,
+                "REVERSE_BOOKING_ISSUE_RESOLUTION",
+                Map.of("status", oldStatus),
+                Map.of("status", response.status().name(), "reason", request.adminNote() == null ? "" : request.adminNote(), "reasonCode", request.reasonCode().name())
         );
 
         return response;

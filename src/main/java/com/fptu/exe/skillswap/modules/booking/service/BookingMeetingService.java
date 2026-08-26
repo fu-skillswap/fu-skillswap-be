@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
@@ -8,19 +9,23 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
+import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
-import java.time.Clock;
 
 import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isScheduledBookingStatus;
 
@@ -35,7 +40,7 @@ public class BookingMeetingService {
     private final BookingResponseMapper bookingResponseMapper;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Autowired(required = false)
     public void setTimeProvider(TimeProvider timeProvider) {
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
@@ -48,30 +53,49 @@ public class BookingMeetingService {
         if (request == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu meeting link");
         }
-        if (!isScheduledBookingStatus(booking.getStatus())) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận thanh toán");
+        if (!isScheduledBookingStatus(booking.getStatus()) && booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận hoặc chờ thanh toán");
+        }
+
+        Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
+        if (startUtc != null && !startUtc.isAfter(timeProvider.instant())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể cập nhật thông tin phòng học sau khi buổi học đã bắt đầu");
         }
 
         Session session = sessionService.findByBookingId(bookingId);
-        if (session == null) {
-            session = sessionService.createForAcceptedBooking(booking);
-        }
-        MeetingPlatform previousPlatform = session.getMeetingPlatform();
-        String previousMeetingLink = trimToNull(session.getMeetingLink());
+        MeetingPlatform previousPlatform = session != null ? session.getMeetingPlatform() : booking.getMeetingPlatform();
+        String previousMeetingLink = trimToNull(session != null ? session.getMeetingLink() : booking.getMeetingLink());
         String previousLocation = trimToNull(booking.getLocation());
         MeetingPlatform nextPlatform = request.meetingPlatform();
         String nextMeetingLink = cleanMeetingLink(nextPlatform, request.meetingLink());
         String nextLocation = trimToNull(request.location());
+
+        if (nextPlatform == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Vui lòng chọn nền tảng phòng học");
+        }
+        if (nextPlatform == MeetingPlatform.OFFLINE && !StringUtils.hasText(nextLocation) && !StringUtils.hasText(nextMeetingLink)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Địa điểm hoặc thông tin gặp mặt là bắt buộc đối với hình thức Offline");
+        }
+        if (nextPlatform != MeetingPlatform.OFFLINE && !StringUtils.hasText(nextMeetingLink)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Link phòng học là bắt buộc");
+        }
+
         boolean meetingChanged = !Objects.equals(previousPlatform, nextPlatform)
                 || !Objects.equals(previousMeetingLink, nextMeetingLink)
                 || !Objects.equals(previousLocation, nextLocation);
-        if (session.isGoogleCalendarManaged() && meetingChanged) {
+        if (session != null && session.isGoogleCalendarManaged() && meetingChanged) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Thông tin cuộc họp đang được Google Calendar quản lý, không thể sửa thủ công");
         }
 
-        session.setMeetingPlatform(nextPlatform);
-        session.setMeetingLink(nextMeetingLink);
+        if (session != null) {
+            session.setMeetingPlatform(nextPlatform);
+            session.setMeetingLink(nextMeetingLink);
+            session.setGoogleCalendarManaged(false);
+            sessionService.save(session);
+        }
+        booking.setMeetingPlatform(nextPlatform);
+        booking.setMeetingLink(nextMeetingLink);
         booking.setLocation(nextLocation);
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -84,6 +108,10 @@ public class BookingMeetingService {
                     savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
                     "BOOKING",
                     savedBooking.getId()
+            ));
+            eventPublisher.publishEvent(new GoogleCalendarUpdateBookingRequestedEvent(
+                    savedBooking.getId(),
+                    savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
             ));
         }
 

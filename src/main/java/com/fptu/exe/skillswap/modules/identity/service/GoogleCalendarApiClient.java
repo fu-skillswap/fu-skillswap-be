@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -89,12 +90,16 @@ public class GoogleCalendarApiClient {
                                                           Booking booking,
                                                           Session session) {
         Map<String, Object> body = buildBaseEventBody(booking, session);
-        body.put("conferenceData", Map.of(
-                "createRequest", Map.of(
-                        "requestId", requestId,
-                        "conferenceSolutionKey", Map.of("type", "hangoutsMeet")
-                )
-        ));
+        boolean hasManualMeeting = (session != null && !session.isGoogleCalendarManaged() && StringUtils.hasText(session.getMeetingLink()))
+                || (session != null && session.getMeetingPlatform() != null && session.getMeetingPlatform() != MeetingPlatform.GOOGLE_MEET);
+        if (!hasManualMeeting) {
+            body.put("conferenceData", Map.of(
+                    "createRequest", Map.of(
+                            "requestId", requestId,
+                            "conferenceSolutionKey", Map.of("type", "hangoutsMeet")
+                    )
+            ));
+        }
         String url = googleApiProperties.getCalendarBaseUrl() + "/" + urlEncode(calendarId) + "/events?conferenceDataVersion=1&sendUpdates=all";
         return sendCalendarWrite(accessToken, url, "POST", body);
     }
@@ -139,7 +144,8 @@ public class GoogleCalendarApiClient {
         String serviceTitle = booking.getServiceTitleSnapshot() != null
                 ? booking.getServiceTitleSnapshot()
                 : booking.getLearningGoalTitle();
-        String description = """
+        StringBuilder descriptionBuilder = new StringBuilder();
+        descriptionBuilder.append("""
                 SkillSwap booking
 
                 Mentee: %s
@@ -153,7 +159,25 @@ public class GoogleCalendarApiClient {
                         : defaultText(booking.getMentorProfile().getUser().getFullName(), booking.getMentorProfile().getUser().getEmail()),
                 defaultText(booking.getLearningGoalTitle(), "Mentoring session"),
                 defaultText(booking.getLearningGoalDescription(), "Không có mô tả thêm")
-        );
+        ));
+
+        String manualLink = session != null && StringUtils.hasText(session.getMeetingLink())
+                ? session.getMeetingLink()
+                : (StringUtils.hasText(booking.getMeetingLink()) ? booking.getMeetingLink() : null);
+
+        MeetingPlatform platform = session != null && session.getMeetingPlatform() != null
+                ? session.getMeetingPlatform()
+                : booking.getMeetingPlatform();
+
+        if (manualLink != null) {
+            String platformName = platform != null ? platform.name() : "Online";
+            descriptionBuilder.append("\nNền tảng: ").append(platformName)
+                    .append("\nLink phòng học: ").append(manualLink).append("\n");
+        }
+        if (StringUtils.hasText(booking.getLocation())) {
+            descriptionBuilder.append("\nĐịa điểm: ").append(booking.getLocation()).append("\n");
+        }
+
         List<Map<String, String>> attendees = new ArrayList<>();
         if (booking.getMentee() != null && StringUtils.hasText(booking.getMentee().getEmail())) {
             attendees.add(Map.of("email", booking.getMentee().getEmail()));
@@ -169,13 +193,20 @@ public class GoogleCalendarApiClient {
                     ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledEndTime())
                     : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedEndUtc(booking));
 
-        return new LinkedHashMap<>(Map.of(
-                "summary", defaultText(serviceTitle, "SkillSwap Mentoring Session"),
-                "description", description,
-                "start", dateTimeMapper.toGoogleDateTime(startUtc),
-                "end", dateTimeMapper.toGoogleDateTime(endUtc),
-                "attendees", attendees
-        ));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("summary", defaultText(serviceTitle, "SkillSwap Mentoring Session"));
+        body.put("description", descriptionBuilder.toString());
+        body.put("start", dateTimeMapper.toGoogleDateTime(startUtc));
+        body.put("end", dateTimeMapper.toGoogleDateTime(endUtc));
+        body.put("attendees", attendees);
+
+        if (StringUtils.hasText(booking.getLocation())) {
+            body.put("location", booking.getLocation());
+        } else if (manualLink != null) {
+            body.put("location", manualLink);
+        }
+
+        return body;
     }
 
     private GoogleTokenResponse sendForm(String url, Map<String, String> formFields) {

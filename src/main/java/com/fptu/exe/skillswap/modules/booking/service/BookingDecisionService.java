@@ -5,7 +5,9 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
+import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
+import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -13,7 +15,9 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEven
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
@@ -29,6 +33,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 
@@ -42,8 +47,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy.resolvePaymentDeadline;
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedEndTime;
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedStartTime;
 
 @Service
 @RequiredArgsConstructor
@@ -63,6 +66,8 @@ public class BookingDecisionService {
     private final ConversationService conversationService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
+    private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
+    private final MeetingProviderFactory meetingProviderFactory;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -164,12 +169,41 @@ public class BookingDecisionService {
                 selectedEndAt
         );
 
+        boolean hasActiveCalendar = googleCalendarConnectionPort != null
+                && googleCalendarConnectionPort.hasActiveConnection(mentorUserId);
+
+        MeetingPlatform selectedPlatform = request == null ? null : request.meetingPlatform();
+        String selectedMeetingLink = trimToNull(request == null ? null : request.meetingLink());
+        String selectedLocation = trimToNull(request == null ? null : request.location());
+
+        if (!hasActiveCalendar) {
+            if (selectedPlatform == null) {
+                throw new BaseException(ErrorCode.BAD_REQUEST,
+                        "Vui lòng chọn nền tảng phòng học (Google Meet, Zoom, Discord, MS Teams, Offline, Khác)");
+            }
+            if (selectedPlatform != MeetingPlatform.OFFLINE && !StringUtils.hasText(selectedMeetingLink)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST,
+                        "Link phòng học là bắt buộc khi mentor chưa kết nối Google Calendar");
+            }
+            if (selectedPlatform == MeetingPlatform.OFFLINE && !StringUtils.hasText(selectedLocation) && !StringUtils.hasText(selectedMeetingLink)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST,
+                        "Địa điểm hoặc thông tin gặp mặt là bắt buộc đối với hình thức Offline");
+            }
+        }
+
+        if (selectedMeetingLink != null && selectedPlatform != null && meetingProviderFactory != null) {
+            meetingProviderFactory.getProvider(selectedPlatform).validateMeetingLink(selectedMeetingLink);
+        }
+
         boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
                 || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0);
 
         BookingTransitionExecutor.apply(booking,
                 isFree ? BookingTransitionCommand.ACCEPT_FREE : BookingTransitionCommand.ACCEPT_PAID, nowUtc);
         booking.setMentorResponseNote(trimToNull(request == null ? null : request.mentorResponseNote()));
+        booking.setLocation(selectedLocation);
+        booking.setMeetingPlatform(selectedPlatform);
+        booking.setMeetingLink(selectedMeetingLink);
         slot.setBooked(true);
 
         if (entityManager != null) {
@@ -233,6 +267,7 @@ public class BookingDecisionService {
                     .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
                     .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                     .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .meetingLink(selectedMeetingLink)
                     .createdAt(timeProvider.nowBusiness())
                     .build());
 
@@ -252,6 +287,7 @@ public class BookingDecisionService {
                     .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
                     .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                     .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .meetingLink(selectedMeetingLink)
                     .createdAt(timeProvider.nowBusiness())
                     .build());
         } else {
@@ -272,6 +308,7 @@ public class BookingDecisionService {
                     .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
                     .mentorResponseNote(savedBooking.getMentorResponseNote())
                     .paymentDeadline(resolvePaymentDeadline(savedBooking))
+                    .meetingLink(selectedMeetingLink)
                     .createdAt(timeProvider.nowBusiness())
                     .build());
 
@@ -294,7 +331,7 @@ public class BookingDecisionService {
                        : "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
-        if (isFree) {
+        if (isFree && hasActiveCalendar) {
             eventPublisher.publishEvent(new GoogleCalendarCreateBookingRequestedEvent(savedBooking.getId()));
         }
 

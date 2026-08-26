@@ -356,13 +356,42 @@ Tất cả endpoint trong phần này yêu cầu Role `MENTOR`. Backend sẽ t�
 
 | Thao tác | Endpoint | Request Body |
 |---|---|---|
-| Chấp nhận (Accept) | `POST /api/mentor/bookings/{bookingId}/accept` | `{ mentorResponseNote?: string }` (Tối đa 2000 ký tự) |
+| Chấp nhận (Accept) | `POST /api/mentor/bookings/{bookingId}/accept` | `AcceptBookingRequest` (Xem chi tiết bên dưới) |
 | Từ chối (Reject) | `POST /api/mentor/bookings/{bookingId}/reject` | `{ rejectReason: string, mentorResponseNote?: string }` (Mỗi trường tối đa 2000 ký tự) |
+
+#### Schema `AcceptBookingRequest`:
+
+```typescript
+interface AcceptBookingRequest {
+  mentorResponseNote?: string; // Tối đa 2000 ký tự (Tùy chọn)
+  meetingPlatform?:
+    | "GOOGLE_MEET"
+    | "ZOOM"
+    | "MICROSOFT_TEAMS"
+    | "DISCORD"
+    | "OFFLINE"
+    | "OTHER";
+  meetingLink?: string;        // Tối đa 1000 ký tự
+  location?: string;           // Tối đa 500 ký tự (Bắt buộc nếu OFFLINE)
+}
+```
+
+#### Quy tắc hiển thị Modal khi Mentor bấm Chấp nhận (Accept):
+
+1. **Trường hợp 1 — Mentor CHƯA kết nối Google Calendar**:
+   - Khi mentor bấm “Chấp nhận”, Frontend hiển thị Modal yêu cầu Mentor chọn `meetingPlatform`.
+   - Nếu chọn Online (`GOOGLE_MEET`, `ZOOM`, `MICROSOFT_TEAMS`, `DISCORD`, `OTHER`): **Bắt buộc nhập `meetingLink`**.
+   - Nếu chọn `OFFLINE`: **Bắt buộc nhập `location`** (hoặc `meetingLink`).
+   - Nếu không điền đủ, backend sẽ trả lỗi `400 Bad Request`.
+
+2. **Trường hợp 2 — Mentor ĐÃ kết nối Google Calendar**:
+   - Các trường `meetingPlatform`, `meetingLink`, `location` là **Tùy chọn (Optional)**.
+   - **Nếu để trống**: Hệ thống tự động tạo Google Calendar Event và sinh link **Google Meet** tự động.
+   - **Nếu mentor chủ động nhập Zoom/Discord/Offline**: Hệ thống sử dụng link này và đồng bộ vào phần Description/Location của Calendar Event thay vì ghi đè bằng Google Meet.
 
 > [!IMPORTANT]
 > - Chỉ hiển thị nút Accept/Reject theo `canAccept` và `canReject`; `nextAction === "ACCEPT_OR_REJECT"` dùng để chọn CTA nổi bật.
 > - Chấp nhận một booking sẽ tự động từ chối (Auto Reject) các yêu cầu pending khác bị trùng lịch.
-> - Lịch và khả năng accept chỉ dựa trên dữ liệu SkillSwap. Google Calendar không thể chặn accept hoặc làm booking thất bại. Khi đồng bộ Calendar lỗi, FE hiển thị `calendarSyncStatus` và hướng mentor kiểm tra lịch/link trong app.
 > - Đối với dịch vụ có phí: Sau khi Accept, booking sẽ chuyển sang `WAITING_PAYMENT`; **chưa mở chat/session cho đến khi mentee thanh toán thành công**.
 > - Đối với dịch vụ miễn phí: Booking được xác nhận (`CONFIRMED`) ngay lập tức.
 
@@ -387,7 +416,7 @@ interface CancelBookingRequest {
 | Thao tác | Endpoint | Request Body |
 |---|---|---|
 | Mentor hoàn thành (Complete) | `POST /api/mentor/bookings/{bookingId}/complete` | `{ completionNote?: string }` (Tối đa 2000 ký tự) |
-| Lưu link họp (Meeting Link) | `PATCH /api/mentor/bookings/{bookingId}/meeting-link` | Xem schema bên dưới |
+| Cập nhật link phòng học | `POST /api/mentor/bookings/{bookingId}/meeting-link` | `SaveMeetingLinkRequest` (Xem schema bên dưới) |
 
 ```typescript
 interface SaveMeetingLinkRequest {
@@ -398,13 +427,15 @@ interface SaveMeetingLinkRequest {
     | "DISCORD"
     | "OFFLINE"
     | "OTHER";
-  meetingLink: string; // Bắt buộc, tối đa 1000 ký tự
-  location?: string;   // Tùy chọn (địa điểm nếu offline), tối đa 500 ký tự
+  meetingLink?: string; // Bắt buộc đối với Online, tối đa 1000 ký tự
+  location?: string;   // Bắt buộc đối với OFFLINE nếu không có link, tối đa 500 ký tự
 }
 ```
 
 > [!NOTE]
-> Nếu `googleCalendarManaged === true`, không hiển thị form chỉnh sửa link họp thủ công vì link Google Meet được tạo và quản lý tự động. Việc đồng bộ Google Calendar diễn ra bất đồng bộ; `calendarSyncStatus` chỉ để biểu thị trạng thái kết nối, không phải là điều kiện chặn mentee tham gia buổi học.
+> - **Cập nhật link thủ công**: Mentor có thể dùng API `POST /api/mentor/bookings/{id}/meeting-link` để cập nhật lại thông tin phòng học **bất cứ lúc nào trước khi buổi học bắt đầu** (`now < selectedStartTime`) đối với các session không do Google Calendar quản lý (`!googleCalendarManaged`).
+> - Nếu session đang do Google Calendar quản lý (`googleCalendarManaged === true`), backend sẽ trả mã lỗi `409 Conflict` (vì Google Meet link được quản lý tự động từ Calendar).
+> - Sau khi cập nhật thành công, Mentee nhận thông báo `MEETING_LINK_UPDATED` và hệ thống tự động đồng bộ sang Google Calendar nếu mentor có kết nối Calendar.
 
 ### 5.4 Điểm vi phạm nội bộ của mentor
 

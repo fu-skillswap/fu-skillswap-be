@@ -6,6 +6,7 @@
 > - Tài liệu này dành cho giao diện quản trị của Mentor (đã có Role `MENTOR`): quản lý dịch vụ 1:1 (`ONE_TO_ONE`), chính sách đặt lịch (Booking Policy), lịch rảnh trực tiếp (Direct Slots) và mẫu lịch lặp tuần (Availability Templates).
 > - Xem [mentor-discovery.md](mentor-discovery.md) để biết cách hiển thị thẻ/profile công khai và cách Mentee chọn khung giờ.
 > - Xem [mentor-verification.md](mentor-verification.md) để nắm quy trình xét duyệt hồ sơ mentor.
+> - Xem [booking_1T1.md](booking_1T1.md) để biết cách xử lý accept booking kèm tùy chọn meeting link.
 
 ---
 
@@ -15,7 +16,7 @@ Tất cả các endpoint trong tài liệu này yêu cầu Bearer token với Ro
 
 ```text
 Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
- ➔ Kết nối Google Calendar bằng OAuth state + PKCE riêng
+ ➔ [Tùy chọn] Kết nối Google Calendar bằng OAuth PKCE
  ➔ Tạo Dịch vụ 1:1 đang hoạt động (Active ONE_TO_ONE Service)
  ➔ Tạo Lịch rảnh trực tiếp (Direct Slot) hoặc Mẫu lịch lặp tuần (Weekly Template)
  ➔ Mentor đủ điều kiện xuất hiện trên trang Tìm kiếm công khai (Discovery)
@@ -23,20 +24,23 @@ Hồ sơ Mentor đã được Admin phê duyệt (Role MENTOR)
 ```
 
 > [!NOTE]
-> Việc được duyệt hồ sơ xác thực (Verification) không tự động tạo sẵn dịch vụ hay lịch rảnh. Google Calendar không thuộc đơn verification, nhưng phải được kết nối trước khi mentor tạo hoặc bật lại service.
+> - Việc được duyệt hồ sơ xác thực (Verification) không tự động tạo sẵn dịch vụ hay lịch rảnh.
+> - **Google Calendar là Tùy chọn (Optional)**: Mentor có thể chọn kết nối Google Calendar hoặc không khi tạo và kích hoạt dịch vụ.
+> - **Nếu Mentor ĐÃ kết nối Google Calendar**: Hệ thống tự động đồng bộ lịch và sinh Google Meet link khi mentor chấp nhận booking.
+> - **Nếu Mentor CHƯA kết nối Google Calendar**: Mentor vẫn tạo/kích hoạt dịch vụ và mở slot bình thường. Khi chấp nhận booking, mentor sẽ chủ động nhập link phòng học (Google Meet, Zoom, Discord, MS Teams, Offline...).
 
 ---
 
-## 2. Kết Nối Google Calendar Trước Khi Tạo Service
+## 2. Kết Nối Google Calendar (Tùy Chọn)
 
 ### 2.1 Các endpoint FE cần dùng
 
 | Endpoint | Khi nào gọi |
 |---|---|
-| `GET /api/me/google-calendar/status` | Khi mở trang quản lý service để quyết định hiển thị CTA kết nối |
+| `GET /api/me/google-calendar/status` | Khi mở trang quản lý service / cài đặt để hiển thị trạng thái kết nối |
 | `GET /api/me/google-calendar/authorization-context?redirectUri=...&codeChallenge=...` | Sau khi mentor bấm “Kết nối Google Calendar” |
 | `POST /api/me/google-calendar/connect` | Tại trang callback sau khi Google trả `code` và `state` |
-| `POST /api/me/google-calendar/disconnect` | Khi mentor chủ động ngắt kết nối, không còn service active và không còn booking `PAID` trong tương lai |
+| `POST /api/me/google-calendar/disconnect` | Khi mentor chủ động ngắt kết nối Google Calendar |
 
 Tất cả endpoint trên yêu cầu Bearer token. Endpoint tạo context và connect chỉ chấp nhận mentor đã được Admin duyệt.
 
@@ -71,7 +75,7 @@ interface GoogleCalendarConnectRequest {
 }
 ```
 
-6. Khi connect thành công, xóa `codeVerifier` và state tạm, gọi lại `GET /status`, sau đó mới mở form tạo service.
+6. Khi connect thành công, xóa `codeVerifier` và state tạm, gọi lại `GET /api/me/google-calendar/status` để cập nhật UI.
 
 > [!WARNING]
 > State của đăng nhập và state của Calendar không dùng chung. Mỗi state chỉ dùng một lần, gắn với đúng mentor, callback và PKCE verifier. Nếu callback bị refresh sau khi đã connect, FE không tự retry code cũ mà bắt đầu flow kết nối mới.
@@ -80,12 +84,9 @@ interface GoogleCalendarConnectRequest {
 
 | HTTP / code | FE cần làm |
 |---|---|
-| `409 / CAL_4401` | Calendar chưa kết nối hoặc cần kết nối lại. Giữ dữ liệu form service ở state tạm và mở CTA kết nối Calendar. |
 | `409 / CAL_4402` | Hồ sơ mentor chưa được duyệt. Điều hướng về trang trạng thái verification. |
-| `409 / CAL_4403` | Không thể disconnect vì còn service active hoặc còn booking `PAID` trong tương lai. Giữ kết nối đến khi các lịch này kết thúc. |
+| `409 / CAL_4403` | Không thể disconnect vì còn booking `PAID` trong tương lai đang dùng Calendar. Giữ kết nối đến khi các lịch này kết thúc. |
 | `400 / AUTH_1006` | State, PKCE, callback hoặc authorization code không hợp lệ/hết hạn. Bắt đầu flow mới. |
-
-Không chỉ dựa vào trạng thái cũ trong `GET /api/auth/me`: backend luôn kiểm tra và khóa connection trong transaction khi tạo hoặc bật lại service để tránh race condition với disconnect.
 
 ---
 
@@ -146,7 +147,6 @@ interface MentorServiceManagementResponse {
 ```
 
 > [!IMPORTANT]
-> - `POST /api/me/mentor-services` và thao tác bật lại service sẽ trả `CAL_4401` nếu Calendar không còn `ACTIVE`.
 > - `durationMinutes` và `deliveryMode` không thể chỉnh sửa sau khi dịch vụ đã được tạo. Hãy hiển thị các trường này ở dạng chỉ đọc (Read-only) trong form cập nhật.
 > - Khi nhận mã lỗi `409 Conflict`, hãy tải lại dữ liệu dịch vụ mới nhất và yêu cầu mentor xác nhận lại thay đổi; **không tự ý gửi lại `expectedVersion` cũ**.
 > - Không tự tạo chuỗi `pendingRejectionToken`. Nếu backend yêu cầu xác nhận hủy các booking đang chờ duyệt (Pending), hãy hiển thị dialog xác nhận kèm thông tin conflict mà backend trả về và gửi kèm token đó trong lần gọi tiếp theo.
@@ -267,7 +267,7 @@ interface AvailabilityTemplateResponse {
 
 ---
 
-## 7. Tra Cứu Candidate Segments & Đồng Bộ Lịch Bận (Booking Candidates & Google Busy Overlay)
+## 7. Tra Cứu Candidate Segments & Lựa Chọn Khung Giờ
 
 Khi Mentee chọn một Slot rảnh và một Service cụ thể, Frontend gọi API:
 `GET /api/mentors/{mentorUserId}/availability-slots/{slotId}/services/{serviceId}/candidates`
@@ -290,9 +290,6 @@ interface ServiceSlotCandidateItemResponse {
 ```
 
 ### Các Mã `reasonIfBlocked` & Hướng Dẫn Hiển Thị UI:
-
-> [!NOTE]
-> Candidate chỉ được tính từ lịch, booking và quota trên SkillSwap. Google Calendar là tiện ích đồng bộ sau khi booking được xác nhận; không khóa segment và không quyết định mentor có thể accept hay không.
 
 | `reasonIfBlocked` | Ý nghĩa | Trạng thái hiển thị trên FE |
 |---|---|---|

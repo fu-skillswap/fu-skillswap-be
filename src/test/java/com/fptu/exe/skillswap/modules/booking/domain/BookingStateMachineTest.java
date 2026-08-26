@@ -62,12 +62,16 @@ class BookingStateMachineTest {
     void rejectsAllCommandsFromTerminalStatuses() {
         EnumSet<BookingStatus> terminalStatuses = EnumSet.of(
                 BookingStatus.REJECTED, BookingStatus.EXPIRED,
-                BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR,
-                BookingStatus.COMPLETED);
+                BookingStatus.CANCELLED_BY_MENTEE, BookingStatus.CANCELLED_BY_MENTOR);
         for (BookingStatus terminal : terminalStatuses) {
             assertTrue(BookingStateMachine.isTerminal(terminal));
             for (BookingTransitionCommand command : BookingTransitionCommand.values()) {
                 assertInvalid(terminal, command);
+            }
+        }
+        for (BookingTransitionCommand command : BookingTransitionCommand.values()) {
+            if (command != BookingTransitionCommand.ADMIN_REVERSE_RESOLUTION) {
+                assertInvalid(BookingStatus.COMPLETED, command);
             }
         }
     }
@@ -121,6 +125,7 @@ class BookingStateMachineTest {
                 BookingTransitionCommand.ADMIN_CONFIRM_MENTEE_NO_SHOW)) {
             put(table, command, BookingStatus.UNDER_REVIEW, BookingStatus.COMPLETED);
         }
+        put(table, BookingTransitionCommand.ADMIN_REVERSE_RESOLUTION, BookingStatus.COMPLETED, BookingStatus.UNDER_REVIEW);
         return table;
     }
 

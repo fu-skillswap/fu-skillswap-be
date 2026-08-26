@@ -197,6 +197,17 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveConnection(UUID mentorUserId) {
+        if (mentorUserId == null) {
+            return false;
+        }
+        return connectionRepository.findByUserId(mentorUserId)
+                .map(conn -> conn.getConnectionStatus() == GoogleCalendarConnectionStatus.ACTIVE)
+                .orElse(false);
+    }
+
+    @Override
     @Transactional
     public void requireActiveConnectionForServiceCreation(UUID mentorUserId) {
         GoogleCalendarConnection connection = connectionRepository.findByUserIdForUpdate(mentorUserId)

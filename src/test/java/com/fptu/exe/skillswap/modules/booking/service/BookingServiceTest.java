@@ -21,6 +21,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.booking.service.BookingSlotValidator;
@@ -125,6 +126,9 @@ class BookingServiceTest {
     @Mock
     private InternalTelemetryService internalTelemetryService;
 
+    @Mock
+    private BookingIssueResolutionRepository bookingIssueResolutionRepository;
+
     private BookingSlotValidator bookingSlotValidator;
 
     private BookingEligibilityPolicy bookingEligibilityPolicy;
@@ -162,6 +166,9 @@ class BookingServiceTest {
                 internalTelemetryService,
                 sessionRepository
         );
+        BookingCompletionService completionService = (BookingCompletionService) ReflectionTestUtils.getField(
+                bookingService, "bookingCompletionService");
+        completionService.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
 
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
@@ -1205,6 +1212,13 @@ class BookingServiceTest {
 
         when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindOrderByCreatedAtUtcDesc(any(), any()))
+                .thenReturn(Optional.empty());
+        when(bookingIssueResolutionRepository.saveAndFlush(any())).thenAnswer(invocation -> {
+            var resolution = invocation.getArgument(0, com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class);
+            resolution.setId(UUID.randomUUID());
+            return resolution;
+        });
         stubSessionFinalization(booking);
 
         BookingResponse response = bookingService.resolveBookingIssue(
