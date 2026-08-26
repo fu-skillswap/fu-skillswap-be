@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.feedback;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateTestSupport;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
@@ -29,7 +30,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -84,6 +87,7 @@ class SessionFeedbackServiceTest {
         booking = new Booking();
         booking.setId(UUID.randomUUID());
         BookingStateTestSupport.setStatus(booking, BookingStatus.COMPLETED);
+        booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMentee(mentee);
         booking.setMentorProfile(mentorProfile);
     }
@@ -160,9 +164,28 @@ class SessionFeedbackServiceTest {
                 eq(NotificationType.FEEDBACK_RECEIVED),
                 eq("Bạn vừa nhận được đánh giá mới"),
                 eq("Mentee đã gửi đánh giá sau buổi mentoring."),
-                eq("FEEDBACK"),
-                eq(response.getId())
+                eq("BOOKING"),
+                eq(booking.getId()),
+                eq("/bookings/" + booking.getId())
         );
+    }
+
+    @Test
+    void submitFeedback_autoClosedBooking_shouldSucceed() {
+        booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
+        when(bookingQueryPort.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+        when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(booking.getId(), menteeId)).thenReturn(false);
+        when(sessionFeedbackRepository.saveAndFlush(any(SessionFeedback.class))).thenAnswer(invocation -> {
+            SessionFeedback feedback = invocation.getArgument(0);
+            feedback.setId(UUID.randomUUID());
+            return feedback;
+        });
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
+
+        SessionFeedbackResponse response = sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request());
+
+        assertNotNull(response.getId());
+        assertEquals(menteeId, response.getReviewerUserId());
     }
 
     @Test
@@ -186,7 +209,80 @@ class SessionFeedbackServiceTest {
                 sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request())
         );
 
-        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
+        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void getBookingFeedback_byMentee_shouldReturnFeedback() {
+        when(bookingQueryPort.findById(booking.getId())).thenReturn(Optional.of(booking));
+        SessionFeedback feedback = SessionFeedback.builder()
+                .id(UUID.randomUUID())
+                .booking(booking)
+                .reviewer(booking.getMentee())
+                .reviewee(booking.getMentorProfile().getUser())
+                .rating(5)
+                .comment("Excellent mentor")
+                .isPublic(true)
+                .build();
+        when(sessionFeedbackRepository.findByBookingId(booking.getId())).thenReturn(Optional.of(feedback));
+
+        SessionFeedbackResponse response = sessionFeedbackService.getBookingFeedback(menteeId, booking.getId());
+
+        assertNotNull(response);
+        assertEquals(5, response.getRating());
+        assertEquals("Excellent mentor", response.getComment());
+    }
+
+    @Test
+    void getBookingFeedback_byMentor_shouldReturnFeedback() {
+        when(bookingQueryPort.findById(booking.getId())).thenReturn(Optional.of(booking));
+        SessionFeedback feedback = SessionFeedback.builder()
+                .id(UUID.randomUUID())
+                .booking(booking)
+                .reviewer(booking.getMentee())
+                .reviewee(booking.getMentorProfile().getUser())
+                .rating(4)
+                .comment("Good session")
+                .isPublic(true)
+                .build();
+        when(sessionFeedbackRepository.findByBookingId(booking.getId())).thenReturn(Optional.of(feedback));
+
+        SessionFeedbackResponse response = sessionFeedbackService.getBookingFeedback(mentorId, booking.getId());
+
+        assertNotNull(response);
+        assertEquals(4, response.getRating());
+        assertEquals("Good session", response.getComment());
+    }
+
+    @Test
+    void getBookingFeedback_whenNoneExists_shouldReturnNull() {
+        when(bookingQueryPort.findById(booking.getId())).thenReturn(Optional.of(booking));
+        when(sessionFeedbackRepository.findByBookingId(booking.getId())).thenReturn(Optional.empty());
+
+        SessionFeedbackResponse response = sessionFeedbackService.getBookingFeedback(menteeId, booking.getId());
+
+        assertNull(response);
+    }
+
+    @Test
+    void getBookingFeedback_unrelatedUser_shouldThrowAccessDenied() {
+        when(bookingQueryPort.findById(booking.getId())).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () ->
+                sessionFeedbackService.getBookingFeedback(UUID.randomUUID(), booking.getId())
+        );
+
+        assertEquals(ErrorCode.ACCESS_DENIED, exception.getErrorCode());
+    }
+
+    @Test
+    void hasSubmittedFeedback_shouldDelegateToRepository() {
+        UUID bookingId = UUID.randomUUID();
+        when(sessionFeedbackRepository.existsByBookingIdAndReviewerId(bookingId, menteeId)).thenReturn(true);
+
+        assertTrue(sessionFeedbackService.hasSubmittedFeedback(bookingId, menteeId));
+        assertFalse(sessionFeedbackService.hasSubmittedFeedback(null, menteeId));
+        assertFalse(sessionFeedbackService.hasSubmittedFeedback(bookingId, null));
     }
 
     private SubmitFeedbackRequest request() {

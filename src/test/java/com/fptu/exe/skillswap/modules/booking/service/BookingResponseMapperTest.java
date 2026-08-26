@@ -171,6 +171,47 @@ class BookingResponseMapperTest {
         assertEquals(BookingNextAction.VIEW_ISSUE, response.nextAction());
     }
 
+    @Test
+    void completedBooking_withoutFeedback_menteeGetsLeaveFeedbackCta() {
+        authenticate(menteeId, RoleCode.MENTEE);
+        Booking booking = booking(BookingStatus.COMPLETED, timeProvider.nowBusiness().minusHours(2), timeProvider.nowBusiness().minusHours(1));
+        booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED);
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertTrue(response.canSubmitFeedback());
+        assertEquals(BookingDisplayState.FEEDBACK_REQUIRED, response.displayState());
+        assertEquals(BookingNextAction.LEAVE_FEEDBACK, response.nextAction());
+    }
+
+    @Test
+    void completedBooking_withFeedback_menteeGetsCompletedStateAndNoFeedbackCta() {
+        authenticate(menteeId, RoleCode.MENTEE);
+        Booking booking = booking(BookingStatus.COMPLETED, timeProvider.nowBusiness().minusHours(2), timeProvider.nowBusiness().minusHours(1));
+        booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED);
+
+        mapper.setBookingFeedbackPort((bId, rId) -> bId.equals(booking.getId()) && rId.equals(menteeId));
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertFalse(response.canSubmitFeedback());
+        assertEquals(BookingDisplayState.COMPLETED, response.displayState());
+        assertEquals(BookingNextAction.NONE, response.nextAction());
+    }
+
+    @Test
+    void autoClosedBooking_withoutFeedback_menteeGetsLeaveFeedbackCta() {
+        authenticate(menteeId, RoleCode.MENTEE);
+        Booking booking = booking(BookingStatus.COMPLETED, timeProvider.nowBusiness().minusHours(2), timeProvider.nowBusiness().minusHours(1));
+        booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.AUTO_CLOSED);
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertTrue(response.canSubmitFeedback());
+        assertEquals(BookingDisplayState.FEEDBACK_REQUIRED, response.displayState());
+        assertEquals(BookingNextAction.LEAVE_FEEDBACK, response.nextAction());
+    }
+
     private Booking booking(BookingStatus status, LocalDateTime start, LocalDateTime end) {
         User mentee = User.builder().id(menteeId).email("mentee@test.com").fullName("Mentee").build();
         User mentor = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor").build();

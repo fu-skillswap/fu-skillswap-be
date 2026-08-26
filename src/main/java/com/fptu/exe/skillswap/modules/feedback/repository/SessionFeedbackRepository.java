@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -36,6 +37,8 @@ public interface SessionFeedbackRepository extends JpaRepository<SessionFeedback
               and sf.isPublic = true
             """)
     Page<MentorReviewQueryRow> findPublicMentorReviews(@Param("mentorUserId") UUID mentorUserId, Pageable pageable);
+
+    Optional<SessionFeedback> findByBookingId(UUID bookingId);
 
     boolean existsByBookingIdAndReviewerId(UUID bookingId, UUID reviewerId);
 

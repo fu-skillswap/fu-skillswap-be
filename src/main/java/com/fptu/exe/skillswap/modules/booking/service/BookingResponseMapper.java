@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendanceSummary;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.SessionAttendanceResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingFeedbackPort;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
@@ -63,6 +64,7 @@ public class BookingResponseMapper {
     private final TimeProvider timeProvider;
     private final SessionAttendanceRepository sessionAttendanceRepository;
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
+    private BookingFeedbackPort bookingFeedbackPort;
 
     @Autowired
     public BookingResponseMapper(SessionService sessionService,
@@ -77,6 +79,11 @@ public class BookingResponseMapper {
         this.paymentProperties = paymentProperties;
         this.timeProvider = timeProvider != null ? timeProvider : TimeProvider.from(Clock.systemUTC());
         this.sessionAttendanceRepository = sessionAttendanceRepository;
+    }
+
+    @Autowired(required = false)
+    void setBookingFeedbackPort(BookingFeedbackPort bookingFeedbackPort) {
+        this.bookingFeedbackPort = bookingFeedbackPort;
     }
 
     @Autowired
@@ -230,9 +237,17 @@ public class BookingResponseMapper {
                     && !currentUserId.equals(booking.getIssueSubmittedByUserId())
                     && nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(issueSubmittedUtc));
 
+            BookingCompletionOutcome canonicalOutcome = booking.getCompletionOutcome();
+            if (canonicalOutcome == null) {
+                canonicalOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
+            }
+            boolean hasFeedback = bookingFeedbackPort != null && isMenteeUser
+                    && bookingFeedbackPort.hasSubmittedFeedback(booking.getId(), currentUserId);
+
             canSubmitFeedback = isMenteeUser
                     && booking.getStatus() == BookingStatus.COMPLETED
-                    && BookingStateMapper.toCanonicalCompletionOutcome(booking) == BookingCompletionOutcome.USER_CONFIRMED;
+                    && (canonicalOutcome == BookingCompletionOutcome.USER_CONFIRMED || canonicalOutcome == BookingCompletionOutcome.AUTO_CLOSED)
+                    && !hasFeedback;
 
             SessionParticipantRole currentRole = isMentorUser ? SessionParticipantRole.MENTOR
                     : isMenteeUser ? SessionParticipantRole.MENTEE : null;

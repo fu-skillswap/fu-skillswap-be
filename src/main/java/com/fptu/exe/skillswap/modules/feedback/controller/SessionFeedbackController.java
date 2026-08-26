@@ -64,4 +64,32 @@ public class SessionFeedbackController {
         );
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
+
+    @Operation(
+            summary = "Lấy thông tin feedback của buổi mentoring",
+            description = """
+                    Mentee hoặc Mentor tham gia booking có thể xem feedback đã gửi cho buổi học này.
+                    Trả về data = null (200 OK) nếu buổi học chưa có feedback.
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy feedback thành công (hoặc null nếu chưa đánh giá)"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người gọi không tham gia booking này"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy booking")
+    })
+    @GetMapping("/{bookingId}/feedback")
+    public ResponseEntity<ApiResponse<SessionFeedbackResponse>> getBookingFeedback(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID bookingId
+    ) {
+        if (principal == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        SessionFeedbackResponse response = sessionFeedbackService.getBookingFeedback(
+                principal.getPublicId(),
+                bookingId
+        );
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

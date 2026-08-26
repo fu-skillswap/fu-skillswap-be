@@ -574,7 +574,65 @@ Ngưỡng áp dụng giống nhau cho hai phía: mentor hoặc mentee hủy từ
 
 ---
 
-## 8. Xử Lý Lỗi & Cơ Chế Thử Lại An Toàn (Error Handling & Safe Retries)
+## 8. Đánh Giá Buổi Học (Mentoring Feedback & Review Flow)
+
+Sau khi buổi học kết thúc ở trạng thái `COMPLETED` (bao gồm xác nhận trực tiếp `USER_CONFIRMED` hoặc tự động hoàn tất sau 24 giờ `AUTO_CLOSED`), Mentee có thể gửi đánh giá cho Mentor để đóng góp vào điểm uy tín công khai của Mentor.
+
+### 8.1 Trạng Thái Đánh Giá trên Booking Detail
+- **Khi Mentee CHƯA đánh giá**:
+  - `BookingResponse.canSubmitFeedback === true`
+  - `BookingResponse.displayState === "FEEDBACK_REQUIRED"`
+  - `BookingResponse.nextAction === "LEAVE_FEEDBACK"`
+  - FE hiển thị nút nổi bật: **"Đánh giá buổi học"** (mở Review Modal).
+- **Khi Mentee ĐÃ gửi đánh giá**:
+  - `BookingResponse.canSubmitFeedback === false`
+  - `BookingResponse.displayState === "COMPLETED"`
+  - `BookingResponse.nextAction === "NONE"`
+  - FE gọi `GET /api/bookings/{bookingId}/feedback` để hiển thị **Thẻ Đánh Giá (Feedback Card)** với số sao, bình luận và mức độ hài lòng.
+
+### 8.2 API Gửi Đánh Giá (`POST /api/bookings/{bookingId}/feedback`)
+- **Headers**: `Authorization: Bearer <mentee_access_token>`
+- **Payload**:
+```typescript
+interface SubmitFeedbackRequest {
+  rating: number;             // 1 đến 5 (bắt buộc)
+  satisfactionLevel: number;  // 1 đến 5 (bắt buộc)
+  comment: string;            // Nhận xét chi tiết (tối đa 1000 ký tự)
+  wouldRecommend: boolean;    // Có sẵn sàng giới thiệu mentor này không
+  isPublic?: boolean;         // true (công khai trên profile mentor, mặc định) hoặc false
+}
+```
+- **Response**: `201 Created` kèm `ApiResponse<SessionFeedbackResponse>`.
+
+### 8.3 API Lấy Đánh Giá của Buổi Học (`GET /api/bookings/{bookingId}/feedback`)
+- **Headers**: `Authorization: Bearer <access_token>` (Mentee hoặc Mentor của buổi học)
+- **Response**: `200 OK`
+  - Nếu đã có đánh giá: `data` chứa `SessionFeedbackResponse`
+  - Nếu chưa có đánh giá: `data: null` (FE không cần try-catch 404)
+```typescript
+interface SessionFeedbackResponse {
+  id: string;
+  sessionId: string;            // ID của booking
+  reviewerUserId: string;
+  reviewerDisplayName: string;
+  revieweeUserId: string;
+  revieweeDisplayName: string;
+  rating: number;
+  satisfactionLevel: number;
+  comment: string | null;
+  wouldRecommend: boolean;
+  isPublic: boolean;
+  createdAt: string;            // ISO-8601
+}
+```
+
+### 8.4 Điều Hướng Thông Báo Đánh Giá
+- Khi Mentee gửi đánh giá thành công, Mentor nhận được thông báo in-app `FEEDBACK_RECEIVED` với `relatedEntityType = "BOOKING"`, `relatedEntityId = bookingId`, và `targetUrl = "/bookings/" + bookingId`.
+- FE khi click vào thông báo chỉ cần điều hướng đến trang chi tiết `/bookings/[id]`, trang sẽ tự động gọi `GET /api/bookings/{id}/feedback` để hiển thị review cho Mentor.
+
+---
+
+## 9. Xử Lý Lỗi & Cơ Chế Thử Lại An Toàn (Error Handling & Safe Retries)
 
 | HTTP Status | Hướng xử lý cho Frontend |
 |---|---|

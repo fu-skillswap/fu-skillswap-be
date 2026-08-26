@@ -1,7 +1,10 @@
 package com.fptu.exe.skillswap.modules.feedback.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.port.BookingFeedbackPort;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.domain.SessionFeedback;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.SessionFeedbackResponse;
@@ -25,13 +28,22 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class SessionFeedbackService {
+public class SessionFeedbackService implements BookingFeedbackPort {
 
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final BookingQueryPort bookingQueryPort;
     private final MentorQueryPort mentorQueryPort;
     private final NotificationService notificationService;
     private final EntityManager entityManager;
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasSubmittedFeedback(UUID bookingId, UUID reviewerId) {
+        if (bookingId == null || reviewerId == null) {
+            return false;
+        }
+        return sessionFeedbackRepository.existsByBookingIdAndReviewerId(bookingId, reviewerId);
+    }
 
     @Transactional
     public SessionFeedbackResponse submitFeedback(UUID reviewerId, UUID bookingId, SubmitFeedbackRequest request) {
@@ -43,9 +55,9 @@ public class SessionFeedbackService {
         Booking booking = bookingQueryPort.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
+        BookingCompletionOutcome outcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
         if (booking.getStatus() != BookingStatus.COMPLETED
-                || com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper.toCanonicalCompletionOutcome(booking)
-                != com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED) {
+                || (outcome != BookingCompletionOutcome.USER_CONFIRMED && outcome != BookingCompletionOutcome.AUTO_CLOSED)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể gửi đánh giá cho buổi học đã hoàn thành");
         }
 
@@ -91,11 +103,37 @@ public class SessionFeedbackService {
                 NotificationType.FEEDBACK_RECEIVED,
                 "Bạn vừa nhận được đánh giá mới",
                 reviewer.getFullName() + " đã gửi đánh giá sau buổi mentoring.",
-                "FEEDBACK",
-                feedback.getId()
+                "BOOKING",
+                booking.getId(),
+                "/bookings/" + booking.getId()
         );
 
         return toResponse(feedback);
+    }
+
+    @Transactional(readOnly = true)
+    public SessionFeedbackResponse getBookingFeedback(UUID currentUserId, UUID bookingId) {
+        if (currentUserId == null) {
+            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
+        }
+        if (bookingId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
+        }
+
+        Booking booking = bookingQueryPort.findById(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
+
+        UUID menteeId = booking.getMentee() != null ? booking.getMentee().getId() : null;
+        UUID mentorId = (booking.getMentorProfile() != null && booking.getMentorProfile().getUser() != null)
+                ? booking.getMentorProfile().getUser().getId() : null;
+
+        if (!currentUserId.equals(menteeId) && !currentUserId.equals(mentorId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền xem đánh giá của buổi học này");
+        }
+
+        return sessionFeedbackRepository.findByBookingId(bookingId)
+                .map(this::toResponse)
+                .orElse(null);
     }
 
     private void updateMentorRatingStats(UUID mentorUserId, int newRating) {
