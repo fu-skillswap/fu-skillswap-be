@@ -1,0 +1,2 @@
+org.springframework.modulith.core.ApplicationModuleDetectionStrategy=\
+com.fptu.exe.skillswap.infrastructure.config.ExplicitApplicationModuleDetectionStrategy

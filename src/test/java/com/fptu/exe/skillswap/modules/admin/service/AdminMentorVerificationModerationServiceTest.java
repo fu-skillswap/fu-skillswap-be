@@ -30,6 +30,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -165,6 +166,7 @@ class AdminMentorVerificationModerationServiceTest {
     void approveVerification_shouldNotifyApplicant() {
         User admin = User.builder().id(UUID.randomUUID()).email("admin@test.com").fullName("Admin").build();
         User mentor = User.builder().id(UUID.randomUUID()).email("mentor@test.com").fullName("Mentor").build();
+        mentor.getRoles().add(RoleCode.MENTEE);
         MentorVerificationRequest request = pendingLockedRequest(admin, mentor);
         request.setSubmittedAt(DateTimeUtil.now().minusMinutes(1));
         request.setTermsAcceptedAt(DateTimeUtil.now().minusMinutes(1));
@@ -195,6 +197,8 @@ class AdminMentorVerificationModerationServiceTest {
         assertThat(requestCaptor.getValue().getStatus()).isEqualTo(VerificationStatus.APPROVED);
         assertThat(requestCaptor.getValue().getLockedBy()).isNull();
         assertThat(requestCaptor.getValue().getLockExpiresAt()).isNull();
+        assertThat(mentor.getRoles()).containsExactly(RoleCode.MENTOR);
+        verify(userRepository).save(mentor);
         
 
         

@@ -290,9 +290,11 @@ public class AdminMentorVerificationModerationService {
 
         updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE, reviewer);
 
-        // Grant MENTOR role to user (preserving MENTEE and avoiding duplicates)
-        if (!mentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)) {
-            mentor.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR);
+        // Mentor and mentee are mutually exclusive product roles. Approval promotes the account
+        // rather than adding a second role, while administrative roles remain untouched.
+        boolean roleChanged = mentor.getRoles().remove(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE);
+        roleChanged |= mentor.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR);
+        if (roleChanged) {
             userRepository.save(mentor);
         }
 
