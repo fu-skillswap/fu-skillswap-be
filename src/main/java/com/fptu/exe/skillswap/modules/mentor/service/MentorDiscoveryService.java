@@ -117,7 +117,7 @@ public class MentorDiscoveryService {
         String normalizedKeywordPattern = discoveryKeywordSupport.toLikePattern(normalizedKeyword);
 
         int requestedPage = Math.min(Math.max(safeRequest.getPage(), 0), 19);
-        int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), 30);
+        int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), MentorDiscoverySearchRequest.MAX_PAGE_SIZE);
         org.springframework.data.domain.Sort.Direction direction = safeRequest.getDirection() == org.springframework.data.domain.Sort.Direction.ASC ? org.springframework.data.domain.Sort.Direction.ASC : org.springframework.data.domain.Sort.Direction.DESC;
         String sortBy = safeRequest.getSortBy() == null ? "relevance" : safeRequest.getSortBy().trim();
 

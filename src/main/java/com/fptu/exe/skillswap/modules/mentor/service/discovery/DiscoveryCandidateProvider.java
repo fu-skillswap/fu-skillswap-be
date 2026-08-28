@@ -42,7 +42,10 @@ public class DiscoveryCandidateProvider {
             int defaultRecallWindowSize
     ) {
         int requestedPage = Math.max(request.getPage(), 0);
-        int requestedSize = Math.min(Math.max(request.getSize(), 1), 30);
+        int requestedSize = Math.min(
+                Math.max(request.getSize(), 1),
+                MentorDiscoverySearchRequest.MAX_PAGE_SIZE
+        );
         int recallWindowSize = recallWindowSize(requestedPage, requestedSize, relevanceSort, defaultRecallWindowSize);
         boolean hasKeyword = normalizedKeyword != null && !normalizedKeyword.isBlank();
 

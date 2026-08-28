@@ -226,6 +226,22 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
+    void searchMentors_shouldCapPageSizeAtFifty() {
+        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
+        request.setPage(0);
+        request.setSize(999);
+        when(discoveryKeywordSupport.normalizeSearchText(nullable(String.class))).thenReturn("");
+        when(discoveryKeywordSupport.toLikePattern(nullable(String.class))).thenReturn(null);
+        when(discoveryCandidateProvider.recallForSearch(eq(request), eq(""), isNull(), isNull(), eq(true), anyList(), any(), anyInt()))
+                .thenReturn(new CandidateWindow(List.of(), 100));
+
+        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(null, request);
+
+        assertEquals(50, response.getSize());
+        assertEquals(2, response.getTotalPages());
+    }
+
+    @Test
     void searchMentors_relevanceSort_shouldDelegateToCollaborators() {
         stubSearchContext();
 
