@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap;
 
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
@@ -11,7 +13,12 @@ class ModulithTest {
     void verifyModulith() {
         ApplicationModules modules = ApplicationModules.of(ProjectApplication.class);
 
-        assertThat(modules.getModuleByName("booking")).isPresent();
+        var booking = modules.getModuleByName("booking");
+        assertThat(booking).isPresent();
+        assertThat(booking.orElseThrow().getNamedInterfaces().stream()
+                .anyMatch(api -> api.contains(BookingResponse.class))).isTrue();
+        assertThat(booking.orElseThrow().getNamedInterfaces().stream()
+                .anyMatch(api -> api.contains(BookingIssueEvidencePort.class))).isTrue();
         assertThat(modules.getModuleByName("chat")).isPresent();
         assertThat(modules.getModuleByName("notification")).isPresent();
         assertThat(modules.getModuleByName("course")).isPresent();

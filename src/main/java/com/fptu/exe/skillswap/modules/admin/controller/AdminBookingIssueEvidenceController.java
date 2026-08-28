@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueDetailResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceDownloadResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
-import com.fptu.exe.skillswap.modules.booking.service.BookingIssueEvidenceService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,7 +33,7 @@ import java.util.UUID;
 @Tag(name = "Admin - Booking dispute evidence")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminBookingIssueEvidenceController {
-    private final BookingIssueEvidenceService evidenceService;
+    private final BookingIssueEvidencePort evidenceService;
     private final AdminAuditWriterService auditWriter;
 
     @GetMapping("/{bookingId}/issue/detail")

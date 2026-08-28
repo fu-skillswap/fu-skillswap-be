@@ -17,6 +17,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAdminPort;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
@@ -52,7 +53,7 @@ import java.util.UUID;
 @Slf4j
 @Service
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
-public class BookingService {
+public class BookingService implements BookingAdminPort {
 
     private final BookingCreationService bookingCreationService;
     private final BookingDecisionService bookingDecisionService;
@@ -242,11 +243,13 @@ public class BookingService {
     }
 
     @Transactional
+    @Override
     public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, AdminResolveBookingIssueRequest request) {
         return bookingCompletionService.resolveBookingIssue(adminUserId, bookingId, request);
     }
 
     @Transactional
+    @Override
     public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
         return bookingCompletionService.reverseBookingIssueResolution(adminUserId, bookingId, request);
     }
@@ -267,11 +270,13 @@ public class BookingService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public PageResponse<BookingResponse> getAdminBookings(AdminBookingListRequest request) {
         return bookingQueryService.getAdminBookings(request);
     }
 
     @Transactional(readOnly = true)
+    @Override
     public BookingResponse getAdminBookingDetail(UUID bookingId) {
         return bookingQueryService.getAdminBookingDetail(bookingId);
     }

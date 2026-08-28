@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueDetailRes
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceDownloadResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceUploadIntentResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
@@ -40,7 +41,7 @@ import java.util.UUID;
 /** Private, immutable evidence pipeline for a booking dispute. */
 @Service
 @RequiredArgsConstructor
-public class BookingIssueEvidenceService {
+public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "application/pdf");
 
@@ -154,6 +155,7 @@ public class BookingIssueEvidenceService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public BookingIssueDetailResponse getForAdmin(UUID bookingId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
@@ -162,6 +164,7 @@ public class BookingIssueEvidenceService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public BookingIssueEvidenceDownloadResponse downloadForAdmin(UUID bookingId, UUID evidenceId) {
         BookingIssueEvidence evidence = evidenceRepository.findWithBookingById(evidenceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy file minh chứng"));
@@ -170,6 +173,7 @@ public class BookingIssueEvidenceService {
     }
 
     @Transactional
+    @Override
     public BookingIssueEvidenceResponse setAdminVisibility(UUID bookingId, UUID evidenceId, UUID adminUserId,
                                                             boolean hidden, String reason) {
         BookingIssueEvidence evidence = evidenceRepository.findWithBookingById(evidenceId)
