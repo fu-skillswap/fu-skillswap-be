@@ -369,7 +369,7 @@ class MentorVerificationFlowIntegrationTest {
     }
 
     @Test
-    void approveVerification_shouldGrantMentorRoleAndKeepMenteeRole() {
+    void approveVerification_shouldPromoteMenteeToMentorRole() {
         UUID mentorId = mentorUser.getId();
         mentorUser.getRoles().add(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE);
         userRepository.save(mentorUser);
@@ -380,7 +380,7 @@ class MentorVerificationFlowIntegrationTest {
 
         User updatedMentor = userRepository.findById(mentorId).orElseThrow();
         assertTrue(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR));
-        assertTrue(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE));
+        assertFalse(updatedMentor.getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE));
     }
 
     @Test
