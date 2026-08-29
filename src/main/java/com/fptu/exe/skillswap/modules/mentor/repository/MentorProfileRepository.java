@@ -544,4 +544,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @EntityGraph(attributePaths = {"user"})
     @Query("select mp from MentorProfile mp where mp.userId = :userId")
     Optional<MentorProfile> findWithUserByUserIdForUpdate(@Param("userId") UUID userId);
+
+    long countByStatus(MentorStatus status);
 }
