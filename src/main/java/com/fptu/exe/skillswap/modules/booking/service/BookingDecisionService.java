@@ -23,8 +23,8 @@ import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import jakarta.persistence.EntityManager;
@@ -46,7 +46,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy.resolvePaymentDeadline;
+import static com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy.resolvePaymentDeadline;
 
 @Service
 @RequiredArgsConstructor

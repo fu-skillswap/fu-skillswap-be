@@ -27,6 +27,8 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, UU
 
     long countByMentorUserId(UUID mentorUserId);
 
+    long countByStatus(PayoutRequestStatus status);
+
     @Query(value = """
             select payoutRequest
             from PayoutRequest payoutRequest

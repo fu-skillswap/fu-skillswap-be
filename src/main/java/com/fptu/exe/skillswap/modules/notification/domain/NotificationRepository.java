@@ -12,15 +12,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
+
 public interface NotificationRepository extends JpaRepository<Notification, UUID>, NotificationRepositoryCustom {
 
-    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.type <> com.fptu.exe.skillswap.modules.notification.domain.NotificationType.CHAT_UNREAD")
+    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     Page<Notification> findByRecipientUserId(@Param("recipientUserId") UUID recipientUserId, Pageable pageable);
 
-    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.domain.NotificationType.CHAT_UNREAD")
+    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     Page<Notification> findByRecipientUserIdAndReadAtIsNull(@Param("recipientUserId") UUID recipientUserId, Pageable pageable);
 
-    @Query("SELECT COUNT(n) FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.domain.NotificationType.CHAT_UNREAD")
+    @Query("SELECT COUNT(n) FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     long countByRecipientUserIdAndReadAtIsNull(@Param("recipientUserId") UUID recipientUserId);
 
     Optional<Notification> findByIdAndRecipientUserId(UUID id, UUID recipientUserId);

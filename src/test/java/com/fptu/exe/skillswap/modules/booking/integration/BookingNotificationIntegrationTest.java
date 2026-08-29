@@ -34,7 +34,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;

@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

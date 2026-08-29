@@ -6,7 +6,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminEmailOutboxItemRes
 import com.fptu.exe.skillswap.modules.admin.domain.AdminCaseActivityEventType;
 import com.fptu.exe.skillswap.modules.notification.domain.EmailOutbox;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
-import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxPort;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -30,13 +30,13 @@ public class AdminEmailOutboxService {
     private static final int ERROR_PREVIEW_LIMIT = 160;
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "sentAt", "status", "retryCount", "toEmail", "templateCode");
 
-    private final EmailOutboxRepository emailOutboxRepository;
+    private final EmailOutboxPort emailOutboxPort;
     private final AdminCaseSupportService adminCaseSupportService;
     private final AdminAuditWriterService adminAuditWriterService;
 
     public PageResponse<AdminEmailOutboxItemResponse> getEmailOutbox(AdminEmailOutboxListRequest request) {
         AdminEmailOutboxListRequest safeRequest = request == null ? new AdminEmailOutboxListRequest() : request;
-        Page<EmailOutbox> page = emailOutboxRepository.searchForAdmin(
+        Page<EmailOutbox> page = emailOutboxPort.searchForAdmin(
                 parseStatus(safeRequest.getStatus()),
                 normalizeBlankToNull(safeRequest.getTemplateCode()),
                 normalizeLikePattern(safeRequest.getToEmail()),
@@ -56,7 +56,7 @@ public class AdminEmailOutboxService {
     }
 
     public AdminEmailOutboxDetailResponse getEmailOutboxDetail(UUID emailOutboxId) {
-        EmailOutbox emailOutbox = emailOutboxRepository.findById(emailOutboxId)
+        EmailOutbox emailOutbox = emailOutboxPort.findById(emailOutboxId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy email outbox"));
         return toDetailResponse(emailOutbox);
     }
@@ -64,7 +64,7 @@ public class AdminEmailOutboxService {
     @Transactional
     public AdminEmailOutboxDetailResponse retry(UUID emailOutboxId, UUID adminUserId) {
         adminCaseSupportService.requireAdminUser(adminUserId);
-        EmailOutbox emailOutbox = emailOutboxRepository.findByIdForUpdate(emailOutboxId)
+        EmailOutbox emailOutbox = emailOutboxPort.findByIdForUpdate(emailOutboxId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy email outbox"));
         if (emailOutbox.getStatus() != NotificationStatus.FAILED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể retry email đang FAILED");
@@ -77,7 +77,7 @@ public class AdminEmailOutboxService {
         emailOutbox.setRetryCount((emailOutbox.getRetryCount() == null ? 0 : emailOutbox.getRetryCount()) + 1);
         emailOutbox.setLastError(null);
         emailOutbox.setSentAt(null);
-        emailOutboxRepository.save(emailOutbox);
+        emailOutboxPort.save(emailOutbox);
 
         adminAuditWriterService.writeOperatorEvent(
                 adminUserId,

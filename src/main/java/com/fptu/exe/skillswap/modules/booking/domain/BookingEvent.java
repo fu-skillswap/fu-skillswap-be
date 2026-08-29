@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

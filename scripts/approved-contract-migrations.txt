@@ -7,3 +7,4 @@ V107__drop_legacy_mentor_penalty_counters.sql
 V110__normalize_booking_terminal_outcomes.sql
 V117__expand_notification_type_contract.sql
 V121__promote_dual_role_users_to_mentor.sql
+V122__drop_mentor_service_resource_tables.sql

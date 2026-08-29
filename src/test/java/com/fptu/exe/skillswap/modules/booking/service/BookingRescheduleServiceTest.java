@@ -181,7 +181,7 @@ class BookingRescheduleServiceTest {
         assertEquals(proposedSlot.getId(), booking.getSlot().getId());
         assertEquals(1, booking.getRescheduleCount());
         verify(bookingSlotValidator).validateServiceAttachedToSlot(eq(proposedSlot.getId()), eq(booking.getService().getId()));
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
@@ -222,7 +222,7 @@ class BookingRescheduleServiceTest {
         );
 
         assertEquals("ACCEPTED", response.status());
-        verify(eventPublisher, times(2)).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher, times(2)).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
     }
 
     @Test
@@ -253,7 +253,7 @@ class BookingRescheduleServiceTest {
         );
 
         assertEquals("REJECTED", response.status());
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 

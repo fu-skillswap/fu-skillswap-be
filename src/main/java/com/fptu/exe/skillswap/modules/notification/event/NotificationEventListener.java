@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.notification.event;
 
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

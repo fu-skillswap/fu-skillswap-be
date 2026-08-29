@@ -1,469 +1,176 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
-import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
-import com.fptu.exe.skillswap.modules.course.domain.Course;
-import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
-import com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent;
-import com.fptu.exe.skillswap.modules.course.domain.CourseLecture;
-import com.fptu.exe.skillswap.modules.course.domain.LectureResource;
-import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
-import com.fptu.exe.skillswap.modules.course.domain.MaterialType;
-import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
-import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
+import com.fptu.exe.skillswap.infrastructure.config.CourseMaterialProperties;
+import com.fptu.exe.skillswap.modules.course.domain.*;
 import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
-import com.fptu.exe.skillswap.modules.course.repository.BunnyWebhookEventRepository;
-import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
-import com.fptu.exe.skillswap.modules.course.repository.CourseLectureRepository;
-import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
-import com.fptu.exe.skillswap.modules.course.repository.LectureResourceRepository;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreatePdfMaterialUploadRequest;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
+import com.fptu.exe.skillswap.modules.course.dto.response.*;
 import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
+import com.fptu.exe.skillswap.modules.course.repository.*;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
+import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
+/** Media lifecycle for the Course -> Chapter -> Material curriculum. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CourseVaultServiceImpl implements CourseVaultService {
-
-    private static final int BUNNY_STATUS_PROCESSING = 2;
-    private static final int BUNNY_STATUS_FINISHED = 3;
-    private static final int BUNNY_STATUS_RESOLUTION_FINISHED = 4;
-    private static final int BUNNY_STATUS_FAILED = 5;
+    private static final int BUNNY_STATUS_PROCESSING = 2, BUNNY_STATUS_FINISHED = 3,
+            BUNNY_STATUS_RESOLUTION_FINISHED = 4, BUNNY_STATUS_FAILED = 5;
 
     private final CourseRepository courseRepository;
-    private final CourseLectureRepository lectureRepository;
+    private final CourseChapterRepository chapterRepository;
     private final CourseEnrollmentRepository enrollmentRepository;
-    private final LectureResourceRepository resourceRepository;
+    private final CourseMaterialRepository materialRepository;
     private final BunnyWebhookEventRepository webhookEventRepository;
+    private final CourseOutboxEventRepository outboxEventRepository;
     private final CourseVideoProvider courseVideoProvider;
-    private final com.fptu.exe.skillswap.modules.course.repository.CourseOutboxEventRepository outboxEventRepository;
-    private final org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+    private final StorageGateway storageGateway;
+    private final CourseMaterialProperties materialProperties;
+    private final TransactionTemplate transactionTemplate;
 
     @Override
-    public CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, CreateVideoMaterialRequest request) {
-        UUID resourceId = createVideoUploadIntent(mentorUserId, courseId, request);
-        return initializeVideoUpload(resourceId);
-    }
-
-    private UUID createVideoUploadIntent(UUID mentorUserId, UUID courseId, CreateVideoMaterialRequest request) {
-        return transactionTemplate.execute(status -> createVideoUploadIntentInTransaction(mentorUserId, courseId, request));
+    public CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request) {
+        UUID materialId = transactionTemplate.execute(s -> createVideoIntent(mentorUserId, courseId, chapterId, request));
+        return initializeVideoUpload(materialId);
     }
 
     @Transactional
-    protected UUID createVideoUploadIntentInTransaction(UUID mentorUserId, UUID courseId, CreateVideoMaterialRequest request) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
-
-        if (!course.getMentorProfile().getUserId().equals(mentorUserId)) {
-            throw new AccessDeniedException("Only course mentor can upload materials");
-        }
-
-        CourseLecture lecture = lectureRepository.findById(request.getLectureId())
-                .orElseThrow(() -> new BadRequestException(ErrorCode.BAD_REQUEST, "Lecture not found"));
-
-        if (!lecture.getChapter().getCourse().getId().equals(courseId)) {
-            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Lecture does not belong to specified course");
-        }
-
-        LectureResource resource = LectureResource.builder()
-                .lecture(lecture)
-                .title(request.getTitle())
-                .resourceType(MaterialType.VIDEO)
-                .storageProviderType(StorageProviderType.BUNNY_VIDEO)
-                .status(MaterialStatus.UPLOADING_INTENT)
-                .uploadedBy(mentorUserId)
-                .uploadedAt(Instant.now())
-                .build();
-
-        resourceRepository.save(resource);
-        outboxEventRepository.save(CourseOutboxEvent.builder()
-                .aggregateType("LectureResource")
-                .aggregateId(resource.getId())
-                .eventType(com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED)
-                .payloadJson("{}")
-                .build());
-        return resource.getId();
+    protected UUID createVideoIntent(UUID userId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request) {
+        CourseChapter chapter = ownedChapter(userId, courseId, chapterId);
+        assertUnusedOrder(chapterId, request.getSortOrder(), null);
+        CourseMaterial material = materialRepository.save(CourseMaterial.builder().chapter(chapter).title(request.getTitle())
+                .materialType(CourseMaterialType.VIDEO).sortOrder(request.getSortOrder())
+                .isPreviewable(Boolean.TRUE.equals(request.getPreviewable())).isPublished(!Boolean.FALSE.equals(request.getPublished()))
+                .storageProviderType(StorageProviderType.BUNNY_VIDEO).status(MaterialStatus.UPLOADING_INTENT)
+                .uploadedBy(userId).uploadedAt(Instant.now()).build());
+        outboxEventRepository.save(outbox(material.getId(), DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED));
+        return material.getId();
     }
 
-    private CourseVideoUploadInitResponse initializeVideoUpload(UUID resourceId) {
-        LectureResource resource = resourceRepository.findById(resourceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lecture resource not found"));
-        if (resource.getStatus() != MaterialStatus.UPLOADING_INTENT) {
-            return toUploadResponse(resource);
-        }
-        CourseVideoProvider.CreatedVideo bunnyResponse = courseVideoProvider.createVideo(resource.getTitle());
-        long expiresAt = Instant.now().plusSeconds(2 * 3600).getEpochSecond();
-        String uploadSignature = courseVideoProvider.generateDirectUploadSignature(bunnyResponse.videoId(), expiresAt);
+    private CourseVideoUploadInitResponse initializeVideoUpload(UUID materialId) {
+        CourseMaterial material = materialRepository.findById(materialId).orElseThrow(() -> new ResourceNotFoundException("Course material not found"));
+        if (material.getStatus() != MaterialStatus.UPLOADING_INTENT) return uploadResponse(material);
+        CourseVideoProvider.CreatedVideo created = courseVideoProvider.createVideo(material.getTitle());
+        long expiry = Instant.now().plus(Duration.ofHours(2)).getEpochSecond();
         try {
-            return completeVideoUploadInitialization(resourceId, bunnyResponse, expiresAt, uploadSignature);
-        } catch (RuntimeException completionFailure) {
-            try {
-                courseVideoProvider.deleteVideo(bunnyResponse.videoId());
-            } catch (RuntimeException cleanupFailure) {
-                log.error("Unable to compensate Bunny video {} after local initialization failure", bunnyResponse.videoId(), cleanupFailure);
-            }
-            throw completionFailure;
+            return transactionTemplate.execute(s -> {
+                CourseMaterial locked = materialRepository.findById(materialId).orElseThrow();
+                if (locked.getStatus() == MaterialStatus.UPLOADING_INTENT) {
+                    locked.setBunnyLibraryId(created.libraryId()); locked.setBunnyVideoId(created.videoId()); locked.setStatus(MaterialStatus.UPLOADING);
+                    outboxEventRepository.findActiveByAggregateIdAndEventType(materialId, DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED)
+                            .forEach(e -> { e.setStatus("PROCESSED"); e.setProcessingStartedAt(null); e.setNextRetryAt(null); });
+                }
+                return videoUploadResponse(locked, expiry, courseVideoProvider.generateDirectUploadSignature(created.videoId(), expiry));
+            });
+        } catch (RuntimeException error) {
+            try { courseVideoProvider.deleteVideo(created.videoId()); } catch (RuntimeException cleanup) { log.warn("Could not delete provisional Bunny video", cleanup); }
+            throw error;
         }
     }
 
-    private CourseVideoUploadInitResponse completeVideoUploadInitialization(UUID resourceId,
-                                                                              CourseVideoProvider.CreatedVideo bunnyResponse,
-                                                                              long expiresAt,
-                                                                              String uploadSignature) {
-        return transactionTemplate.execute(status -> {
-            LectureResource resource = resourceRepository.findById(resourceId).orElseThrow();
-            if (resource.getStatus() == MaterialStatus.UPLOADING_INTENT) {
-                resource.setBunnyLibraryId(bunnyResponse.libraryId());
-                resource.setBunnyVideoId(bunnyResponse.videoId());
-                resource.setStatus(MaterialStatus.UPLOADING);
-                resourceRepository.save(resource);
-                outboxEventRepository.findActiveByAggregateIdAndEventType(resourceId,
-                                com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED)
-                        .forEach(event -> {
-                            event.setStatus("PROCESSED");
-                            event.setLastError(null);
-                            event.setNextRetryAt(null);
-                            event.setProcessingStartedAt(null);
-                        });
-            }
-            return CourseVideoUploadInitResponse.builder()
-                    .materialId(resource.getId())
-                    .bunnyLibraryId(resource.getBunnyLibraryId())
-                    .bunnyVideoId(resource.getBunnyVideoId())
-                    .uploadUrl(String.format("https://video.bunnycdn.com/library/%s/videos/%s", resource.getBunnyLibraryId(), resource.getBunnyVideoId()))
-                    .authorizationSignature(uploadSignature)
-                    .expirationTimestamp(expiresAt)
-                    .build();
-        });
+    @Override
+    @Transactional
+    public CoursePdfUploadInitResponse createPdfUpload(UUID userId, UUID courseId, UUID chapterId, CreatePdfMaterialUploadRequest request) {
+        if (!request.filename().toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Only PDF files are supported");
+        CourseChapter chapter = ownedChapter(userId, courseId, chapterId);
+        assertUnusedOrder(chapterId, request.sortOrder(), null);
+        CourseMaterial material = materialRepository.save(CourseMaterial.builder().chapter(chapter).title(request.title()).materialType(CourseMaterialType.PDF)
+                .sortOrder(request.sortOrder()).isPreviewable(Boolean.TRUE.equals(request.previewable())).isPublished(!Boolean.FALSE.equals(request.published()))
+                .storageProviderType(StorageProviderType.OBJECT_STORAGE).status(MaterialStatus.UPLOADING).uploadedBy(userId).uploadedAt(Instant.now())
+                .uploadExpiresAt(Instant.now().plus(pdfUploadTtl())).build());
+        String key = "course-materials/" + userId + "/" + material.getId() + "/upload.pdf";
+        material.setDocumentObjectKey(key);
+        StorageGateway.PrivatePresignedUpload upload = storageGateway.generatePrivateUploadUrl(key, "application/pdf", pdfUploadTtl());
+        return new CoursePdfUploadInitResponse(material.getId(), upload.uploadUrl(), upload.expiresAt(), "application/pdf");
     }
 
-    private CourseVideoUploadInitResponse toUploadResponse(LectureResource resource) {
-        return CourseVideoUploadInitResponse.builder()
-                .materialId(resource.getId())
-                .bunnyLibraryId(resource.getBunnyLibraryId())
-                .bunnyVideoId(resource.getBunnyVideoId())
-                .uploadUrl(resource.getBunnyVideoId() == null ? null : String.format("https://video.bunnycdn.com/library/%s/videos/%s", resource.getBunnyLibraryId(), resource.getBunnyVideoId()))
-                .expirationTimestamp(0)
-                .build();
+    @Override
+    @Transactional
+    public void confirmPdfUpload(UUID userId, UUID courseId, UUID materialId, String objectKey) {
+        CourseMaterial material = ownedMaterial(userId, courseId, materialId);
+        if (material.getMaterialType() != CourseMaterialType.PDF || material.getStatus() != MaterialStatus.UPLOADING || !objectKey.equals(material.getDocumentObjectKey()))
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, "PDF upload cannot be confirmed");
+        StorageGateway.ObjectMetadata object = storageGateway.headObject(objectKey);
+        if (!"application/pdf".equalsIgnoreCase(object.contentType()) || object.sizeBytes() <= 0 || object.sizeBytes() > maxPdfBytes())
+            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Uploaded file must be a PDF within the configured size limit");
+        material.setFileSizeBytes(object.sizeBytes()); material.setStatus(MaterialStatus.READY); material.setUploadExpiresAt(null);
+        refreshCourseTotals(material.getChapter().getCourse());
     }
 
     @Override
     @Transactional(readOnly = true)
     public CourseVideoPlaybackResponse getPlaybackAuthorization(UUID userId, UUID courseId, UUID materialId, String clientIp) {
-        LectureResource resource = resourceRepository.findById(materialId)
-                .orElseThrow(() -> new IllegalArgumentException("Resource not found"));
-
-        Course course = resource.getLecture().getChapter().getCourse();
-        if (!course.getId().equals(courseId)) {
-            throw new IllegalArgumentException("Resource does not belong to specified course");
-        }
-
-        if (resource.getStatus() != MaterialStatus.READY) {
-            throw new IllegalStateException("Video is not ready for playback. Current status: " + resource.getStatus());
-        }
-
-        boolean isMentor = course.getMentorProfile().getUserId().equals(userId);
-        boolean isPreviewable = resource.getLecture().isPreviewable();
-
-        if (!isMentor && !isPreviewable) {
-            CourseEnrollment enrollment = enrollmentRepository.findByCourseIdAndStudentUserId(courseId, userId)
-                    .orElseThrow(() -> new AccessDeniedException("User is not enrolled in this course"));
-            validateEntitlementPolicy(enrollment);
-        }
-
-        long expiresAt = Instant.now().plusSeconds(60).getEpochSecond();
-        String signedPlaybackUrl = courseVideoProvider.generateSignedPlaybackUrl(resource.getBunnyVideoId(), 60, clientIp);
-
-        return CourseVideoPlaybackResponse.builder()
-                .materialId(resource.getId())
-                .title(resource.getTitle())
-                .playbackUrl(signedPlaybackUrl)
-                .thumbnailUrl(resource.getThumbnailUrl())
-                .durationSeconds(resource.getDurationSeconds())
-                .expiresAt(Instant.ofEpochSecond(expiresAt))
-                .build();
-    }
-
-    private void validateEntitlementPolicy(CourseEnrollment enrollment) {
-        switch (enrollment.getStatus()) {
-            case ACTIVE:
-            case COMPLETED:
-                return;
-            case REFUNDED:
-            case PARTIAL_REFUNDED:
-            case PENDING_PAYMENT:
-            case PAYMENT_EXPIRED:
-            case CANCELLED:
-            default:
-                throw new AccessDeniedException("No access entitlement for current enrollment status: " + enrollment.getStatus());
-        }
-    }
-
-    @Override
-    @Transactional
-    public BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, CourseVideoWebhook payload) {
-        return webhookEventRepository.findByExternalEventId(externalEventId)
-                .orElseGet(() -> {
-                    BunnyWebhookEvent event = BunnyWebhookEvent.builder()
-                            .externalEventId(externalEventId)
-                            .eventType(String.valueOf(payload.status()))
-                            .videoId(payload.videoId())
-                            .libraryId(payload.libraryId())
-                            .payloadJson(payload.toString())
-                            .receivedAt(Instant.now())
-                            .status("PENDING")
-                            .build();
-                    return webhookEventRepository.save(event);
-                });
-    }
-
-    @Override
-    @Transactional
-    public List<UUID> claimWebhookEvents(int limit) {
-        Instant now = Instant.now();
-        List<UUID> ids = webhookEventRepository.findClaimableIdsForUpdateSkipLocked(now, now.minus(5, ChronoUnit.MINUTES), limit);
-        for (UUID id : ids) {
-            BunnyWebhookEvent event = webhookEventRepository.findByIdForUpdate(id).orElseThrow();
-            event.setStatus("PROCESSING");
-            event.setProcessingStartedAt(now);
-            event.setLastError(null);
-        }
-        return ids;
-    }
-
-    @Override
-    @Transactional
-    public void processWebhookEventIdempotent(UUID eventId) {
-        BunnyWebhookEvent event = webhookEventRepository.findByIdForUpdate(eventId).orElseThrow();
-        if ("PROCESSED".equals(event.getStatus()) || "DEAD_LETTER".equals(event.getStatus())) {
-            return;
-        }
-        if (!"PROCESSING".equals(event.getStatus())) {
-            throw new IllegalStateException("Webhook event must be claimed before processing");
-        }
-
-        LectureResource resource = resourceRepository.findByBunnyVideoId(event.getVideoId()).orElse(null);
-        if (resource != null) {
-            applyWebhookStatus(resource, Integer.parseInt(event.getEventType()));
-            resourceRepository.save(resource);
-        }
-        event.setStatus("PROCESSED");
-        event.setProcessedAt(Instant.now());
-        event.setProcessingStartedAt(null);
-        event.setLastError(null);
-    }
-
-    private void applyWebhookStatus(LectureResource resource, int bunnyStatus) {
-        if (resource.getStatus() == MaterialStatus.READY || resource.getStatus() == MaterialStatus.DELETING
-                || resource.getStatus() == MaterialStatus.DELETED || resource.getStatus() == MaterialStatus.EXPIRED) {
-            return;
-        }
-        if (bunnyStatus == BUNNY_STATUS_FINISHED || bunnyStatus == BUNNY_STATUS_RESOLUTION_FINISHED) {
-            resource.setStatus(MaterialStatus.READY);
-        } else if (bunnyStatus == BUNNY_STATUS_FAILED) {
-            resource.setStatus(MaterialStatus.FAILED);
-        } else if (bunnyStatus == BUNNY_STATUS_PROCESSING && resource.getStatus() == MaterialStatus.UPLOADING) {
-            resource.setStatus(MaterialStatus.PROCESSING);
-        }
-    }
-
-    @Override
-    @Transactional
-    public void markWebhookEventFailed(UUID eventId, Throwable cause) {
-        BunnyWebhookEvent event = webhookEventRepository.findByIdForUpdate(eventId).orElseThrow();
-        if ("PROCESSED".equals(event.getStatus()) || "DEAD_LETTER".equals(event.getStatus())) {
-            return;
-        }
-        int retryCount = event.getRetryCount() + 1;
-        event.setRetryCount(retryCount);
-        event.setProcessingStartedAt(null);
-        event.setLastError(truncate(cause.getMessage()));
-        if (retryCount >= 5) {
-            event.setStatus("DEAD_LETTER");
-        } else {
-            event.setStatus("FAILED");
-            event.setNextRetryAt(nextRetryAt(retryCount));
-        }
-    }
-
-    @Override
-    @Transactional
-    public List<UUID> claimCourseOutboxEvents(int limit) {
-        Instant now = Instant.now();
-        List<UUID> ids = outboxEventRepository.findClaimableIdsForUpdateSkipLocked(now, now.minus(5, ChronoUnit.MINUTES), limit);
-        for (UUID id : ids) {
-            CourseOutboxEvent event = outboxEventRepository.findByIdForUpdate(id).orElseThrow();
-            event.setStatus("PROCESSING");
-            event.setProcessingStartedAt(now);
-            event.setLastError(null);
-        }
-        return ids;
-    }
-
-    @Override
-    public void processCourseOutboxEvent(UUID eventId) {
-        CourseOutboxEvent event = outboxEventRepository.findById(eventId).orElseThrow();
-        if (!"PROCESSING".equals(event.getStatus())) {
-            return;
-        }
-        if (com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED
-                .equals(event.getEventType())) {
-            initializeVideoUpload(event.getAggregateId());
-            return;
-        }
-        if (com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED
-                .equals(event.getEventType())) {
-            processMaterialDeletion(event.getAggregateId());
-            markOutboxProcessed(eventId);
-            return;
-        }
-        markOutboxProcessed(eventId);
-    }
-
-    private void processMaterialDeletion(UUID resourceId) {
-        LectureResource resource = resourceRepository.findById(resourceId).orElseThrow();
-        if (resource.getStatus() != MaterialStatus.DELETED && resource.getBunnyVideoId() != null && !resource.getBunnyVideoId().isBlank()) {
-            courseVideoProvider.deleteVideo(resource.getBunnyVideoId());
-        }
-        transactionTemplate.executeWithoutResult(status -> {
-            LectureResource locked = resourceRepository.findById(resourceId).orElseThrow();
-            if (locked.getStatus() != MaterialStatus.DELETED) {
-                locked.setStatus(MaterialStatus.DELETED);
-                locked.setDeletedAt(Instant.now());
-            }
-        });
-    }
-
-    private void markOutboxProcessed(UUID eventId) {
-        transactionTemplate.executeWithoutResult(status -> {
-            CourseOutboxEvent event = outboxEventRepository.findByIdForUpdate(eventId).orElseThrow();
-            event.setStatus("PROCESSED");
-            event.setProcessingStartedAt(null);
-            event.setNextRetryAt(null);
-            event.setLastError(null);
-        });
-    }
-
-    @Override
-    @Transactional
-    public void markCourseOutboxEventFailed(UUID eventId, Throwable cause) {
-        CourseOutboxEvent event = outboxEventRepository.findByIdForUpdate(eventId).orElseThrow();
-        if ("PROCESSED".equals(event.getStatus()) || "DEAD_LETTER".equals(event.getStatus())) {
-            return;
-        }
-        int retryCount = event.getRetryCount() + 1;
-        event.setRetryCount(retryCount);
-        event.setProcessingStartedAt(null);
-        event.setLastError(truncate(cause.getMessage()));
-        if (retryCount >= 5) {
-            event.setStatus("DEAD_LETTER");
-        } else {
-            event.setStatus("FAILED");
-            event.setNextRetryAt(nextRetryAt(retryCount));
-        }
-    }
-
-    private Instant nextRetryAt(int retryCount) {
-        long[] seconds = {10L, 30L, 60L, 300L};
-        return Instant.now().plus(seconds[Math.min(Math.max(retryCount - 1, 0), seconds.length - 1)], ChronoUnit.SECONDS);
-    }
-
-    private String truncate(String message) {
-        return message == null ? "Unknown failure" : message.substring(0, Math.min(message.length(), 500));
+        CourseMaterial material = materialForCourse(courseId, materialId);
+        if (material.getMaterialType() != CourseMaterialType.VIDEO) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Material is not a video");
+        assertAvailable(userId, material);
+        if (material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Video is not ready for playback");
+        long expires = Instant.now().plusSeconds(60).getEpochSecond();
+        return CourseVideoPlaybackResponse.builder().materialId(material.getId()).title(material.getTitle())
+                .playbackUrl(courseVideoProvider.generateSignedPlaybackUrl(material.getBunnyVideoId(), 60, clientIp))
+                .thumbnailUrl(material.getThumbnailUrl()).durationSeconds(material.getDurationSeconds()).expiresAt(Instant.ofEpochSecond(expires)).build();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId) {
-        Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
-
-        boolean isMentor = course.getMentorProfile().getUserId().equals(userId);
-        CourseEnrollment enrollment = isMentor ? null : enrollmentRepository.findByCourseIdAndStudentUserId(courseId, userId).orElse(null);
-        
-        List<LectureResource> resources = resourceRepository.findAll().stream()
-                .filter(r -> r.getLecture().getChapter().getCourse().getId().equals(courseId))
-                .filter(r -> r.getStatus() != MaterialStatus.DELETED && r.getDeletedAt() == null)
-                .toList();
-        
-        return resources.stream().map(resource -> {
-            boolean isAvailable = false;
-            String reason = null;
-            
-            if (isMentor || resource.getLecture().isPreviewable()) {
-                isAvailable = true;
-            } else if (enrollment == null) {
-                reason = "NOT_ENROLLED";
-            } else {
-                try {
-                    validateEntitlementPolicy(enrollment);
-                    isAvailable = true;
-                } catch (AccessDeniedException e) {
-                    reason = "ENTITLEMENT_RESTRICTION";
-                }
-            }
-            
-            return CourseMaterialSummaryResponse.builder()
-                    .resourceId(resource.getId())
-                    .lectureId(resource.getLecture().getId())
-                    .title(resource.getTitle())
-                    .materialType(resource.getResourceType())
-                    .storageProviderType(resource.getStorageProviderType())
-                    .status(resource.getStatus())
-                    .durationSeconds(resource.getDurationSeconds())
-                    .thumbnailUrl(resource.getThumbnailUrl())
-                    .uploadedAt(resource.getUploadedAt())
-                    .available(isAvailable)
-                    .lockedReason(reason)
-                    .build();
-        }).collect(java.util.stream.Collectors.toList());
+    public CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId) {
+        CourseMaterial material = materialForCourse(courseId, materialId);
+        if (material.getMaterialType() != CourseMaterialType.PDF || material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.BAD_REQUEST, "PDF is not ready");
+        assertAvailable(userId, material);
+        StorageGateway.PrivatePresignedDownload download = storageGateway.generatePrivateDownloadUrl(material.getDocumentObjectKey(), pdfDownloadTtl(),
+                "attachment; filename=\"" + material.getTitle().replace("\"", "") + ".pdf\"");
+        return new CourseMaterialDownloadResponse(download.downloadUrl(), download.expiresAt());
     }
 
-    @Override
-    @Transactional
-    public void deleteMaterial(UUID userId, UUID courseId, UUID materialId) {
-        LectureResource resource = resourceRepository.findById(materialId)
-                .orElseThrow(() -> new ResourceNotFoundException("Resource not found"));
-
-        if (!resource.getLecture().getChapter().getCourse().getId().equals(courseId)) {
-            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Resource does not belong to specified course");
-        }
-
-        if (!resource.getLecture().getChapter().getCourse().getMentorProfile().getUserId().equals(userId)) {
-            throw new AccessDeniedException("Only course mentor can delete materials");
-        }
-
-        if (resource.getStatus() == MaterialStatus.DELETED || resource.getStatus() == MaterialStatus.DELETING) {
-            return;
-        }
-
-        resource.setStatus(MaterialStatus.DELETING);
-        resourceRepository.save(resource);
-
-        outboxEventRepository.save(buildMaterialDeleteEvent(resource.getId()));
+    @Override @Transactional
+    public BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalId, CourseVideoWebhook payload) {
+        return webhookEventRepository.findByExternalEventId(externalId).orElseGet(() -> webhookEventRepository.save(BunnyWebhookEvent.builder()
+                .externalEventId(externalId).eventType(String.valueOf(payload.status())).videoId(payload.videoId()).libraryId(payload.libraryId())
+                .payloadJson(payload.toString()).receivedAt(Instant.now()).status("PENDING").build()));
     }
+    @Override @Transactional public List<UUID> claimWebhookEvents(int limit) { return claimWebhookEventsInternal(limit); }
+    private List<UUID> claimWebhookEventsInternal(int limit) { Instant now=Instant.now(); List<UUID> ids=webhookEventRepository.findClaimableIdsForUpdateSkipLocked(now,now.minus(5,ChronoUnit.MINUTES),limit); ids.forEach(id->{BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSING");e.setProcessingStartedAt(now);e.setLastError(null);});return ids; }
+    @Override @Transactional public void processWebhookEventIdempotent(UUID id) { BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow(); if (!"PROCESSING".equals(e.getStatus())) return; CourseMaterial m=materialRepository.findByBunnyVideoId(e.getVideoId()).orElse(null); if(m!=null){applyWebhookStatus(m,Integer.parseInt(e.getEventType()));refreshCourseTotals(m.getChapter().getCourse());} e.setStatus("PROCESSED");e.setProcessedAt(Instant.now());e.setProcessingStartedAt(null);e.setLastError(null); }
+    private void applyWebhookStatus(CourseMaterial m,int status) { if(m.getStatus()==MaterialStatus.READY||m.getStatus()==MaterialStatus.DELETING||m.getStatus()==MaterialStatus.DELETED||m.getStatus()==MaterialStatus.EXPIRED)return; if(status==BUNNY_STATUS_FINISHED||status==BUNNY_STATUS_RESOLUTION_FINISHED)m.setStatus(MaterialStatus.READY);else if(status==BUNNY_STATUS_FAILED)m.setStatus(MaterialStatus.FAILED);else if(status==BUNNY_STATUS_PROCESSING&&m.getStatus()==MaterialStatus.UPLOADING)m.setStatus(MaterialStatus.PROCESSING); }
+    @Override @Transactional public void markWebhookEventFailed(UUID id, Throwable cause) { BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow();fail(e, cause); }
+    @Override @Transactional public List<UUID> claimCourseOutboxEvents(int limit) { Instant now=Instant.now(); List<UUID> ids=outboxEventRepository.findClaimableIdsForUpdateSkipLocked(now,now.minus(5,ChronoUnit.MINUTES),limit);ids.forEach(id->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSING");e.setProcessingStartedAt(now);e.setLastError(null);});return ids; }
+    @Override public void processCourseOutboxEvent(UUID id) { CourseOutboxEvent e=outboxEventRepository.findById(id).orElseThrow();if(!"PROCESSING".equals(e.getStatus()))return;if(DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED.equals(e.getEventType())){initializeVideoUpload(e.getAggregateId());return;}if(DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED.equals(e.getEventType()))processMaterialDeletion(e.getAggregateId());markOutboxProcessed(id); }
+    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getStorageProviderType()==StorageProviderType.BUNNY_VIDEO&&m.getBunnyVideoId()!=null)courseVideoProvider.deleteVideo(m.getBunnyVideoId());if(m.getStorageProviderType()==StorageProviderType.OBJECT_STORAGE&&m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(Instant.now());refreshCourseTotals(locked.getChapter().getCourse());}); }
+    private void markOutboxProcessed(UUID id){transactionTemplate.executeWithoutResult(s->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSED");e.setProcessingStartedAt(null);e.setNextRetryAt(null);e.setLastError(null);});}
+    @Override @Transactional public void markCourseOutboxEventFailed(UUID id,Throwable cause){fail(outboxEventRepository.findByIdForUpdate(id).orElseThrow(),cause);}
+    private void fail(BunnyWebhookEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}
+    private void fail(CourseOutboxEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}
+    private Instant nextRetry(int n){long[] s={10,30,60,300};return Instant.now().plusSeconds(s[Math.min(n-1,s.length-1)]);} private String truncate(String s){return s==null?"Unknown failure":s.substring(0,Math.min(s.length(),500));}
 
-    private com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent buildMaterialDeleteEvent(UUID resourceId) {
-        return com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent.builder()
-                .aggregateType("LectureResource")
-                .aggregateId(resourceId)
-                .eventType(com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED)
-                .payloadJson("{}")
-                .status("PENDING")
-                .build();
-    }
+    @Override @Transactional(readOnly=true) public List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId) { return materialRepository.findActiveByCourseIdOrderByCurriculum(courseId).stream().map(m -> CourseMaterialSummaryResponse.builder().materialId(m.getId()).chapterId(m.getChapter().getId()).title(m.getTitle()).materialType(m.getMaterialType()).storageProviderType(m.getStorageProviderType()).status(m.getStatus()).durationSeconds(m.getDurationSeconds()).thumbnailUrl(m.getThumbnailUrl()).uploadedAt(m.getUploadedAt()).available(canAccess(userId,m)).lockedReason(canAccess(userId,m)?null:"NOT_ENROLLED").build()).toList(); }
+    @Override @Transactional public void deleteMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=ownedMaterial(userId,courseId,materialId);if(m.getStatus()==MaterialStatus.DELETED||m.getStatus()==MaterialStatus.DELETING)return;m.setStatus(MaterialStatus.DELETING);outboxEventRepository.save(outbox(m.getId(),DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED));}
+
+    private CourseChapter ownedChapter(UUID userId,UUID courseId,UUID chapterId){CourseChapter c=chapterRepository.findById(chapterId).orElseThrow(()->new ResourceNotFoundException("Chapter not found"));if(!c.getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Chapter does not belong to course");if(!c.getCourse().getMentorProfile().getUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return c;}
+    private CourseMaterial ownedMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=materialForCourse(courseId,materialId);if(!m.getChapter().getCourse().getMentorProfile().getUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return m;}
+    private CourseMaterial materialForCourse(UUID courseId,UUID materialId){CourseMaterial m=materialRepository.findActiveWithCurriculumById(materialId).orElseThrow(()->new ResourceNotFoundException("Course material not found"));if(!m.getChapter().getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Material does not belong to course");return m;}
+    private void assertUnusedOrder(UUID chapterId,int order,UUID self){materialRepository.findByChapterIdAndDeletedAtIsNullOrderBySortOrderAsc(chapterId).stream().filter(m->m.getSortOrder()==order&&!m.getId().equals(self)).findAny().ifPresent(m->{throw new BadRequestException(ErrorCode.RESOURCE_CONFLICT,"Material sort order already exists in this chapter");});}
+    private boolean canAccess(UUID user,CourseMaterial m){try{assertAvailable(user,m);return true;}catch(AccessDeniedException e){return false;}}
+    private void assertAvailable(UUID user,CourseMaterial m){Course c=m.getChapter().getCourse();if(c.getMentorProfile().getUserId().equals(user)||m.isPreviewable())return;CourseEnrollment e=enrollmentRepository.findByCourseIdAndStudentUserId(c.getId(),user).orElseThrow(()->new AccessDeniedException("User is not enrolled"));if(e.getStatus()!=EnrollmentStatus.ACTIVE&&e.getStatus()!=EnrollmentStatus.COMPLETED)throw new AccessDeniedException("No active course entitlement");}
+    private CourseOutboxEvent outbox(UUID id,String type){return CourseOutboxEvent.builder().aggregateType("CourseMaterial").aggregateId(id).eventType(type).payloadJson("{}").status("PENDING").build();}
+    private void refreshCourseTotals(Course c){c.setTotalMaterials(Math.toIntExact(materialRepository.countByChapterCourseIdAndDeletedAtIsNullAndIsPublishedTrue(c.getId())));}
+    private Duration pdfUploadTtl() { return Duration.ofMinutes(materialProperties.getPdfUploadTtlMinutes()); }
+    private Duration pdfDownloadTtl() { return Duration.ofMinutes(materialProperties.getPdfDownloadTtlMinutes()); }
+    private long maxPdfBytes() { return Math.multiplyExact((long) materialProperties.getMaxPdfSizeMb(), 1024L * 1024L); }
+    private CourseVideoUploadInitResponse uploadResponse(CourseMaterial m){return videoUploadResponse(m,0,null);} private CourseVideoUploadInitResponse videoUploadResponse(CourseMaterial m,long expiry,String signature){return CourseVideoUploadInitResponse.builder().materialId(m.getId()).bunnyLibraryId(m.getBunnyLibraryId()).bunnyVideoId(m.getBunnyVideoId()).uploadUrl(m.getBunnyVideoId()==null?null:String.format("https://video.bunnycdn.com/library/%s/videos/%s",m.getBunnyLibraryId(),m.getBunnyVideoId())).authorizationSignature(signature).expirationTimestamp(expiry).build();}
 }

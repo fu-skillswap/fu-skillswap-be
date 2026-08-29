@@ -27,4 +27,8 @@ public interface UserQueryPort {
     Optional<StudentProfile> findStudentProfileById(UUID userId);
 
     List<StudentProfile> findStudentProfilesByUserIdIn(List<UUID> userIds);
+
+    List<User> findUsersByIdIn(java.util.Collection<UUID> userIds);
+
+    Optional<User> findAdminVisibleUserById(UUID userId);
 }

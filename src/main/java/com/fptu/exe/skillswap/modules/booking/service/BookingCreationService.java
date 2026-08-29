@@ -2,7 +2,9 @@ package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -11,26 +13,24 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.fptu.exe.skillswap.shared.time.TimeProvider;
-import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -133,6 +133,11 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu không được để trống");
         }
         requestedStartAt = requestedStartAt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
+        Instant vnAsUtc = requestedStartAt.minus(Duration.ofHours(7));
+        if ((requestedStartAt.isBefore(slotStartUtc) || requestedStartAt.isAfter(slotEndUtc))
+                && !vnAsUtc.isBefore(slotStartUtc) && !vnAsUtc.isAfter(slotEndUtc)) {
+            requestedStartAt = vnAsUtc;
+        }
         Instant requestedEndAt = requestedStartAt.plus(Duration.ofMinutes(mentorService.getDurationMinutes()));
         LocalDateTime selectedStartTime = BookingTime.fromInstant(requestedStartAt);
         LocalDateTime selectedEndTime = BookingTime.fromInstant(requestedEndAt);

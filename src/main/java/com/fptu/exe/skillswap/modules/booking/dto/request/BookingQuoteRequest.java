@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.dto.request;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fptu.exe.skillswap.shared.time.FlexibleInstantDeserializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
@@ -10,6 +12,6 @@ import java.util.UUID;
 public record BookingQuoteRequest(
         @NotNull UUID slotId,
         @NotNull UUID serviceId,
-        @NotNull Instant startAt
+        @NotNull @JsonDeserialize(using = FlexibleInstantDeserializer.class) Instant startAt
 ) {
 }

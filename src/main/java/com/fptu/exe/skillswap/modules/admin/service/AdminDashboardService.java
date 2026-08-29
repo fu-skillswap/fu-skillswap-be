@@ -1,25 +1,27 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardFinancialOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardMentorVerificationOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardOverviewResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardFinancialOverviewResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardRetentionOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardQueueItemResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardQueuesResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardRetentionOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardTimeseriesPointResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardTimeseriesResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardUsersOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.FinancialPeriodMetricsResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminDashboardQueryRepository;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
-import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReportStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
+import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
+import com.fptu.exe.skillswap.modules.payment.port.CampaignAdminPort;
+import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,8 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.temporal.IsoFields;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -39,30 +41,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
-import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
-import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
-import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
-import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AdminDashboardService {
 
     private static final String TIMEZONE = DateTimeUtil.ZONE_HCM;
-    private static final List<PaymentOrderStatus> EXCLUDED_STATUSES =
-            List.of(PaymentOrderStatus.FAILED, PaymentOrderStatus.CANCELLED, PaymentOrderStatus.EXPIRED);
 
     private final AdminDashboardQueryRepository adminDashboardQueryRepository;
     private final AdminQueueWorkbenchService adminQueueWorkbenchService;
-    private final CampaignRepository campaignRepository;
-    private final CouponRepository couponRepository;
-    private final CouponRedemptionRepository couponRedemptionRepository;
-    private final PaymentOrderRepository paymentOrderRepository;
+    private final CampaignAdminPort campaignAdminPort;
 
     public AdminDashboardOverviewResponse getOverview() {
         LocalDateTime snapshotAt = DateTimeUtil.now();
@@ -95,43 +83,24 @@ public class AdminDashboardService {
         ZoneId zoneId = ZoneId.of(TIMEZONE);
         LocalDate today = snapshotAt.atZone(zoneId).toLocalDate();
         LocalDateTime thisMonthStart = YearMonth.from(today).atDay(1).atStartOfDay();
-        
+
         int quarter = today.get(IsoFields.QUARTER_OF_YEAR);
         int firstMonthOfQuarter = (quarter - 1) * 3 + 1;
         LocalDateTime thisQuarterStart = LocalDate.of(today.getYear(), firstMonthOfQuarter, 1).atStartOfDay();
-        
+
         LocalDateTime thisYearStart = LocalDate.of(today.getYear(), 1, 1).atStartOfDay();
 
         var mtdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisMonthStart);
         var qtdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisQuarterStart);
         var ytdStats = adminDashboardQueryRepository.fetchFinancialPeriodMetrics(thisYearStart);
-        
+
         var balances = adminDashboardQueryRepository.fetchTotalBalances();
-        
+
         LocalDateTime yesterday = snapshotAt.minusDays(1);
         LocalDateTime lastMonth = snapshotAt.minusDays(30);
         var retentionStats = adminDashboardQueryRepository.fetchRetentionOverview(yesterday, lastMonth);
 
-        long activeCampaigns = campaignRepository.countByStatus(CampaignStatus.ACTIVE);
-        long scheduledCampaigns = campaignRepository.countByStatus(CampaignStatus.SCHEDULED);
-        List<Campaign> activeCampaignList = campaignRepository.findByStatus(CampaignStatus.ACTIVE);
-        long totalBudgetScoin = activeCampaignList.stream().mapToLong(c -> c.getBudgetScoin() == null ? 0L : c.getBudgetScoin()).sum();
-        long totalBudgetUsedScoin = activeCampaignList.stream().mapToLong(c -> {
-            Integer used = paymentOrderRepository.sumCampaignCreditByCampaignIdAndStatusNotIn(c.getId(), EXCLUDED_STATUSES);
-            return used == null ? 0L : used.longValue();
-        }).sum();
-
-        long activeCoupons = couponRepository.countByStatus(CouponStatus.ACTIVE);
-        long totalRedemptions = couponRedemptionRepository.count();
-
-        AdminDashboardCampaignOverviewResponse campaignOverview = new AdminDashboardCampaignOverviewResponse(
-                activeCampaigns,
-                scheduledCampaigns,
-                totalBudgetScoin,
-                totalBudgetUsedScoin,
-                activeCoupons,
-                totalRedemptions
-        );
+        AdminDashboardCampaignOverviewResponse campaignOverview = campaignAdminPort.getDashboardCampaignOverview();
 
         return new AdminDashboardOverviewResponse(
                 snapshotAt,

@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.domain.*;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingEngagementDeliveryRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

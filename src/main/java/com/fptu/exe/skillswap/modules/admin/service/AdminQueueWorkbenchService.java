@@ -6,8 +6,8 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListReques
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminQueueQueryRepository;
 import com.fptu.exe.skillswap.modules.admin.strategy.AdminQueueDescriptorRegistry;
-import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -37,7 +37,8 @@ public class AdminQueueWorkbenchService {
 
     public PageResponse<AdminQueueCaseItemResponse> getQueueItems(UUID adminUserId, AdminQueueCaseListRequest request) {
         AdminQueueCaseListRequest safeRequest = request == null ? new AdminQueueCaseListRequest() : request;
-        if (Boolean.TRUE.equals(safeRequest.getAssignedToMe()) && Boolean.TRUE.equals(safeRequest.getUnassignedOnly())) {
+        if (Boolean.TRUE.equals(safeRequest.getAssignedToMe())
+                && Boolean.TRUE.equals(safeRequest.getUnassignedOnly())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "assignedToMe và unassignedOnly không thể cùng bật");
         }
 
@@ -48,8 +49,7 @@ public class AdminQueueWorkbenchService {
                 adminUserId,
                 safeRequest.getAssignedToMe(),
                 safeRequest.getUnassignedOnly(),
-                pageable
-        );
+                pageable);
 
         List<AdminQueueCaseItemResponse> content = page.getContent().stream()
                 .map(row -> toResponse(queueKey, row))
@@ -69,15 +69,17 @@ public class AdminQueueWorkbenchService {
         LocalDateTime createdAt = row.createdAt();
         LocalDateTime now = DateTimeUtil.now();
         long ageMinutes = createdAt == null ? 0L : Math.max(0L, Duration.between(createdAt, now).toMinutes());
-        LocalDateTime responseDeadline = toBusinessTime(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(BookingTime.toInstant(row.issueSubmittedAt())));
-        LocalDateTime adminDeadline = toBusinessTime(BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(BookingTime.toInstant(row.adminEscalatedAt())));
-        LocalDateTime autoReleaseAt = toBusinessTime(BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(BookingTime.toInstant(row.adminSlaOverdueAt())));
+        LocalDateTime responseDeadline = toBusinessTime(
+                BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(BookingTime.toInstant(row.issueSubmittedAt())));
+        LocalDateTime adminDeadline = toBusinessTime(
+                BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(BookingTime.toInstant(row.adminEscalatedAt())));
+        LocalDateTime autoReleaseAt = toBusinessTime(BookingDeadlinePolicy
+                .resolveAdminDisputeAutoReleaseDeadlineUtc(BookingTime.toInstant(row.adminSlaOverdueAt())));
         var disputeSlaStatusValue = BookingDeadlinePolicy.resolveDisputeSlaStatus(
                 BookingTime.toInstant(row.issueSubmittedAt()),
                 BookingTime.toInstant(row.adminEscalatedAt()),
                 BookingTime.toInstant(row.adminSlaOverdueAt()),
-                null
-        );
+                null);
         String disputeSlaStatus = disputeSlaStatusValue == null ? null : disputeSlaStatusValue.name();
         LocalDateTime activeDeadline = row.adminSlaOverdueAt() != null ? autoReleaseAt
                 : row.adminEscalatedAt() != null ? adminDeadline : responseDeadline;
@@ -107,8 +109,7 @@ public class AdminQueueWorkbenchService {
                 row.adminSlaReminderCount(),
                 autoReleaseAt,
                 disputeSlaStatus,
-                slaMinutesRemaining
-        );
+                slaMinutesRemaining);
     }
 
     private LocalDateTime toBusinessTime(java.time.Instant instant) {
@@ -157,7 +158,8 @@ public class AdminQueueWorkbenchService {
 
     private String buildDetailPath(AdminQueueKey queueKey, AdminQueueQueryRepository.QueueCaseRow row) {
         if (adminQueueDescriptorRegistry != null) {
-            return adminQueueDescriptorRegistry.buildDetailPath(queueKey, row != null && row.detailRefId() != null ? String.valueOf(row.detailRefId()) : "");
+            return adminQueueDescriptorRegistry.buildDetailPath(queueKey,
+                    row != null && row.detailRefId() != null ? String.valueOf(row.detailRefId()) : "");
         }
         return "";
     }

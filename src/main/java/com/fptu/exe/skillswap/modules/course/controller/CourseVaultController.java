@@ -1,72 +1,73 @@
 package com.fptu.exe.skillswap.modules.course.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
+import com.fptu.exe.skillswap.modules.course.dto.request.*;
+import com.fptu.exe.skillswap.modules.course.dto.response.*;
+import com.fptu.exe.skillswap.modules.course.service.CourseProgressService;
 import com.fptu.exe.skillswap.modules.course.service.CourseVaultService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Tag(name = "Course Vault", description = "Endpoints for managing course materials and videos")
+@Tag(name = "Course curriculum", description = "Course chapters and their video or PDF learning materials")
 public class CourseVaultController {
-
     private final CourseVaultService courseVaultService;
+    private final CourseProgressService courseProgressService;
 
-    @Operation(summary = "Initialize video upload for a course")
-    @PostMapping("/me/mentor/courses/{courseId}/materials/video/create-upload")
-    public ApiResponse<CourseVideoUploadInitResponse> createVideoUpload(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID courseId,
-            @Valid @RequestBody CreateVideoMaterialRequest request) {
-        
-        CourseVideoUploadInitResponse response = courseVaultService.createVideoUpload(principal.getId(), courseId, request);
-        return ApiResponse.success(response);
+    @Operation(summary = "Initialize video upload in a chapter")
+    @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/video/upload-intent")
+    public ApiResponse<CourseVideoUploadInitResponse> createVideoUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID chapterId, @Valid @RequestBody CreateVideoMaterialRequest request) {
+        return ApiResponse.success(courseVaultService.createVideoUpload(principal.getId(), courseId, chapterId, request));
     }
 
-    @Operation(summary = "Get materials for a course")
+    @Operation(summary = "Initialize PDF upload in a chapter")
+    @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/pdf/upload-intent")
+    public ApiResponse<CoursePdfUploadInitResponse> createPdfUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID chapterId, @Valid @RequestBody CreatePdfMaterialUploadRequest request) {
+        return ApiResponse.success(courseVaultService.createPdfUpload(principal.getId(), courseId, chapterId, request));
+    }
+
+    @Operation(summary = "Confirm PDF upload")
+    @PostMapping("/me/mentor/courses/{courseId}/materials/{materialId}/confirm-pdf-upload")
+    public ApiResponse<Void> confirmPdfUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, @Valid @RequestBody ConfirmCoursePdfUploadRequest request) {
+        courseVaultService.confirmPdfUpload(principal.getId(), courseId, materialId, request.objectKey());
+        return ApiResponse.success(null);
+    }
+
+    @Operation(summary = "List materials in course order")
     @GetMapping("/me/courses/{courseId}/materials")
-    public ApiResponse<List<CourseMaterialSummaryResponse>> getCourseMaterials(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID courseId) {
-            
-        List<CourseMaterialSummaryResponse> materials = courseVaultService.getCourseMaterials(principal.getId(), courseId);
-        return ApiResponse.success(materials);
+    public ApiResponse<List<CourseMaterialSummaryResponse>> getCourseMaterials(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId) {
+        return ApiResponse.success(courseVaultService.getCourseMaterials(principal.getId(), courseId));
     }
 
     @Operation(summary = "Get playback URL for a course video")
     @GetMapping("/me/courses/{courseId}/materials/{materialId}/playback")
-    public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(
-            @AuthenticationPrincipal UserPrincipal principal,
-            @PathVariable UUID courseId,
-            @PathVariable UUID materialId,
-            jakarta.servlet.http.HttpServletRequest request) {
-            
-        String clientIp = request.getHeader("X-Forwarded-For");
-        if (clientIp == null || clientIp.isEmpty() || "unknown".equalsIgnoreCase(clientIp)) {
-            clientIp = request.getRemoteAddr();
-        } else {
-            clientIp = clientIp.split(",")[0].trim();
-        }
-            
-        CourseVideoPlaybackResponse response = courseVaultService.getPlaybackAuthorization(principal.getId(), courseId, materialId, clientIp);
-        return ApiResponse.success(response);
+    public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        String clientIp = forwarded == null || forwarded.isBlank() || "unknown".equalsIgnoreCase(forwarded) ? request.getRemoteAddr() : forwarded.split(",")[0].trim();
+        return ApiResponse.success(courseVaultService.getPlaybackAuthorization(principal.getId(), courseId, materialId, clientIp));
+    }
+
+    @Operation(summary = "Get signed download URL for a course PDF")
+    @GetMapping("/me/courses/{courseId}/materials/{materialId}/download")
+    public ApiResponse<CourseMaterialDownloadResponse> getPdfDownload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId) {
+        return ApiResponse.success(courseVaultService.getPdfDownload(principal.getId(), courseId, materialId));
+    }
+
+    @Operation(summary = "Update video learning progress")
+    @PutMapping("/me/courses/{courseId}/materials/{materialId}/progress")
+    public ApiResponse<Void> updateProgress(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, @Valid @RequestBody UpdateCourseMaterialProgressRequest request) {
+        courseProgressService.updateMaterialProgress(principal.getId(), courseId, materialId, request.watchedSeconds());
+        return ApiResponse.success(null);
     }
 }

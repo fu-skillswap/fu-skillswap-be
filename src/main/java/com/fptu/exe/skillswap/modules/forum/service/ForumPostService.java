@@ -27,7 +27,7 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;

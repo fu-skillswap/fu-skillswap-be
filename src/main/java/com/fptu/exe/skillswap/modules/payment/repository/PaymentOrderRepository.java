@@ -46,6 +46,10 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrder, UUID
 
     long countByPayerUserId(UUID payerUserId);
 
+    long countByStatus(PaymentOrderStatus status);
+
+    long countByStatusAndCreatedAtBetween(PaymentOrderStatus status, LocalDateTime start, LocalDateTime end);
+
     @Query("""
             select coalesce(sum(po.campaignCreditScoin), 0)
             from PaymentOrder po

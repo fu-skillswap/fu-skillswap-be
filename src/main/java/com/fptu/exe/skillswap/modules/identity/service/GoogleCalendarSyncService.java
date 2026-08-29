@@ -5,7 +5,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.identity.domain.*;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;

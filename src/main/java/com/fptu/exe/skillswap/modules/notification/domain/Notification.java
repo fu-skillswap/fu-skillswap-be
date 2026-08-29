@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.notification.domain;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;

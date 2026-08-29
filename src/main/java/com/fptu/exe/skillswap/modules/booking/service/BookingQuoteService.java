@@ -80,6 +80,14 @@ public class BookingQuoteService {
         MentorService service = mentorQueryPort
                 .findActiveServiceByIdAndMentorUserId(request.serviceId(), mentor.getUserId())
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn khả dụng"));
+        Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
+        Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc() : BookingTime.toInstant(slot.getEndTime());
+        Instant vnAsUtc = normalizedStartAt.minus(Duration.ofHours(7));
+        if ((normalizedStartAt.isBefore(slotStartUtc) || normalizedStartAt.isAfter(slotEndUtc))
+                && !vnAsUtc.isBefore(slotStartUtc) && !vnAsUtc.isAfter(slotEndUtc)) {
+            normalizedStartAt = vnAsUtc;
+        }
+
         Instant normalizedEndAt = normalizedStartAt.plus(Duration.ofMinutes(service.getDurationMinutes()));
         LocalDateTime start = BookingTime.fromInstant(normalizedStartAt);
         LocalDateTime end = BookingTime.fromInstant(normalizedEndAt);

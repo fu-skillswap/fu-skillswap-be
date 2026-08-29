@@ -7,7 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingEngagementDelive
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import org.junit.jupiter.api.Test;
 

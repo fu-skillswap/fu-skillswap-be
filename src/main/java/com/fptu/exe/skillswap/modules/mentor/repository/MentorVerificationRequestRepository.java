@@ -24,6 +24,8 @@ public interface MentorVerificationRequestRepository extends JpaRepository<Mento
     @EntityGraph(attributePaths = {"mentor", "reviewedBy", "previousRequest"})
     Optional<MentorVerificationRequest> findById(UUID id);
 
+    long countByStatus(VerificationStatus status);
+
     @EntityGraph(attributePaths = {"mentor", "reviewedBy", "previousRequest"})
     Optional<MentorVerificationRequest> findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(
             UUID mentorUserId,

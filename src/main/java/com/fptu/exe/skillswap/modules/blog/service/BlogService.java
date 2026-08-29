@@ -282,7 +282,7 @@ public class BlogService {
     @Transactional(readOnly = true)
     public CursorPageResponse<BlogPostReaderCardResponse> premiumLibrary(UserPrincipal principal, UUID serviceId, Integer limit) {
         UUID userId = requireAuthenticated(principal);
-        if (serviceId == null || !bookingEligibilityPolicy.canAccessServiceResources(userId, serviceId)) {
+        if (serviceId == null || !bookingEligibilityPolicy.hasServiceContentEntitlement(userId, serviceId)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thư viện premium");
         }
         int resolvedLimit = resolveLimit(limit);
@@ -668,7 +668,7 @@ public class BlogService {
             return false;
         }
         return post.getEntitledServices().stream()
-                .anyMatch(service -> bookingEligibilityPolicy.canAccessServiceResources(principal.getPublicId(), service.getId()));
+                .anyMatch(service -> bookingEligibilityPolicy.hasServiceContentEntitlement(principal.getPublicId(), service.getId()));
     }
 
     private boolean isAuthorPubliclyReadable(BlogPost post) {

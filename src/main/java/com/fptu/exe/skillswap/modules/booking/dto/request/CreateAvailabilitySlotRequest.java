@@ -1,23 +1,27 @@
 package com.fptu.exe.skillswap.modules.booking.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fptu.exe.skillswap.shared.time.FlexibleInstantDeserializer;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import jakarta.validation.constraints.NotEmpty;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 @Schema(description = "Payload tạo slot rảnh trực tiếp cho mentor")
 public record CreateAvailabilitySlotRequest(
-        @Schema(description = "UTC whole-minute start của slot", example = "2026-06-29T01:00:00Z")
+        @Schema(description = "Thời gian bắt đầu (UTC Instant '2026-06-29T01:00:00Z' hoặc giờ VN '2026-06-29T08:00:00')", example = "2026-06-29T08:00:00")
         @NotNull(message = "startAt là bắt buộc")
+        @JsonDeserialize(using = FlexibleInstantDeserializer.class)
         Instant startAt,
 
-        @Schema(description = "UTC whole-minute end của slot", example = "2026-06-29T03:00:00Z")
+        @Schema(description = "Thời gian kết thúc (UTC Instant '2026-06-29T03:00:00Z' hoặc giờ VN '2026-06-29T10:00:00')", example = "2026-06-29T10:00:00")
         @NotNull(message = "endAt là bắt buộc")
+        @JsonDeserialize(using = FlexibleInstantDeserializer.class)
         Instant endAt,
 
         @Schema(description = "Ghi chú nội bộ cho slot rảnh này", example = "Rảnh buổi tối để tư vấn CV")
@@ -56,5 +60,4 @@ public record CreateAvailabilitySlotRequest(
     public java.time.LocalDateTime endTime() {
         return endAt == null ? null : java.time.LocalDateTime.ofInstant(endAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
     }
-
 }

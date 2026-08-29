@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.modules.course.service;
 import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
 import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreatePdfMaterialUploadRequest;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
 
@@ -10,7 +11,10 @@ import java.util.UUID;
 
 public interface CourseVaultService {
     
-    CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, CreateVideoMaterialRequest request);
+    CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request);
+    com.fptu.exe.skillswap.modules.course.dto.response.CoursePdfUploadInitResponse createPdfUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreatePdfMaterialUploadRequest request);
+    void confirmPdfUpload(UUID mentorUserId, UUID courseId, UUID materialId, String objectKey);
+    com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId);
     
     CourseVideoPlaybackResponse getPlaybackAuthorization(UUID userId, UUID courseId, UUID materialId, String clientIp);
     

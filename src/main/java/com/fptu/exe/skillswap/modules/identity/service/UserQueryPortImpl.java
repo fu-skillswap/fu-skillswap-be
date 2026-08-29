@@ -89,4 +89,23 @@ public class UserQueryPortImpl implements UserQueryPort, UserLockPort {
     public List<StudentProfile> findStudentProfilesByUserIdIn(List<UUID> userIds) {
         return (userIds == null || userIds.isEmpty() || studentProfileRepository == null) ? List.of() : studentProfileRepository.findByUserIdIn(userIds);
     }
+
+    @Override
+    public List<User> findUsersByIdIn(java.util.Collection<UUID> userIds) {
+        return (userIds == null || userIds.isEmpty() || userRepository == null) ? List.of() : userRepository.findAllById(userIds);
+    }
+
+    @Override
+    public Optional<User> findAdminVisibleUserById(UUID userId) {
+        if (userId == null || userRepository == null) {
+            return Optional.empty();
+        }
+        return userRepository.findAdminVisibleUserById(
+                userId,
+                com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE,
+                com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR,
+                com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN,
+                com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN
+        );
+    }
 }

@@ -6,8 +6,8 @@ import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevok
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;

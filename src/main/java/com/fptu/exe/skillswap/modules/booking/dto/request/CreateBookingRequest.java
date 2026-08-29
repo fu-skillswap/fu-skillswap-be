@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fptu.exe.skillswap.shared.time.FlexibleInstantDeserializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -19,8 +21,9 @@ public record CreateBookingRequest(
         @NotNull(message = "serviceId là bắt buộc")
         UUID serviceId,
 
-        @Schema(description = "UTC whole-minute candidate start lấy từ API candidates. Backend tự suy ra end time từ duration của service.", example = "2026-06-30T12:00:00Z")
+        @Schema(description = "Thời gian bắt đầu (chấp nhận cả ISO-8601 UTC '2026-08-30T11:16:00Z' hoặc giờ VN '2026-08-30T18:16:00')", example = "2026-08-30T18:16:00")
         @NotNull(message = "startAt là bắt buộc")
+        @JsonDeserialize(using = FlexibleInstantDeserializer.class)
         Instant startAt,
 
         @Schema(description = "Tiêu đề mục tiêu học tập ngắn gọn để mentor nhìn nhanh", example = "Review lộ trình học Spring Boot và chuẩn bị phỏng vấn intern")

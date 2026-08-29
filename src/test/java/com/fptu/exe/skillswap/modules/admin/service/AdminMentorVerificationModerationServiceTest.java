@@ -16,6 +16,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorVerificationQ
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+
 import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
@@ -23,8 +24,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;

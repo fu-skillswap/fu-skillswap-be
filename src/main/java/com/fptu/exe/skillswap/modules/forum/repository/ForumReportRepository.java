@@ -21,6 +21,8 @@ public interface ForumReportRepository extends JpaRepository<ForumReport, UUID> 
 
     boolean existsByReporterUserIdAndTargetTypeAndTargetId(UUID reporterUserId, ForumReportTargetType targetType, UUID targetId);
 
+    long countByStatus(ForumReportStatus status);
+
     @EntityGraph(attributePaths = {"reporterUser"})
     @Query("""
             select r

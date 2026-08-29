@@ -34,4 +34,14 @@ public class BookingQueryPortImpl implements BookingQueryPort {
     public boolean existsById(UUID bookingId) {
         return bookingRepository.existsById(bookingId);
     }
+
+    @Override
+    public long countByMenteeId(UUID menteeId) {
+        return menteeId == null ? 0L : bookingRepository.countByMenteeId(menteeId);
+    }
+
+    @Override
+    public long countByMentorProfileUserId(UUID mentorUserId) {
+        return mentorUserId == null ? 0L : bookingRepository.countByMentorProfileUserId(mentorUserId);
+    }
 }

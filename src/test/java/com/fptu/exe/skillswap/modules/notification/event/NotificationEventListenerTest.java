@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.notification.event;
 
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

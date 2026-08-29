@@ -14,4 +14,8 @@ public interface BookingQueryPort {
     Booking save(Booking booking);
 
     boolean existsById(UUID bookingId);
+
+    long countByMenteeId(UUID menteeId);
+
+    long countByMentorProfileUserId(UUID mentorUserId);
 }

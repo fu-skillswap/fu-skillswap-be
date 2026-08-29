@@ -194,13 +194,13 @@ public class FileStorageController {
     private void validateOwnedObjectKey(UserPrincipal principal, String objectKey) {
         String key = requireSafeObjectKey(objectKey);
         boolean verificationObject = principal != null && principal.getPublicId() != null && key.startsWith(verificationPrefix(principal) + "/");
-        boolean mentorResourceObject = principal != null && principal.getPublicId() != null
-                && key.startsWith("mentor-service-resources/" + principal.getPublicId() + "/");
         boolean blogPublicObject = principal != null && principal.getPublicId() != null
                 && key.startsWith("public-assets/blog/" + principal.getPublicId() + "/");
         boolean portfolioPublicObject = principal != null && principal.getPublicId() != null
                 && key.startsWith("public-assets/portfolio/" + principal.getPublicId() + "/");
-        if (!verificationObject && !mentorResourceObject && !blogPublicObject && !portfolioPublicObject) {
+        boolean courseMaterialObject = principal != null && principal.getPublicId() != null
+                && key.startsWith("course-materials/" + principal.getPublicId() + "/");
+        if (!verificationObject && !blogPublicObject && !portfolioPublicObject && !courseMaterialObject) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi upload của người dùng");
         }
     }

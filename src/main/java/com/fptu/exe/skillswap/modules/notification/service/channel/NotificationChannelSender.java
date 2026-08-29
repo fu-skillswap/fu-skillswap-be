@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.notification.service.channel;
 
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 
 import java.util.UUID;
 

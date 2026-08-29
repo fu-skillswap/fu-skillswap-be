@@ -7,8 +7,8 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEven
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.event.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;

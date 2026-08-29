@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.notification.service;
 
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.strategy.BookingNotificationTitleResolver;
 import com.fptu.exe.skillswap.modules.notification.strategy.ForumNotificationTitleResolver;
 import com.fptu.exe.skillswap.modules.notification.strategy.MentorNotificationTitleResolver;

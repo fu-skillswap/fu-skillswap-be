@@ -41,7 +41,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -600,6 +600,8 @@ public class MentorAvailabilityService {
             results.add(ServiceSlotCandidateItemResponse.builder()
                     .startTime(candidateStart)
                     .endTime(candidateEnd)
+                    .startAt(BookingTime.toInstant(candidateStart))
+                    .endAt(BookingTime.toInstant(candidateEnd))
                     .pendingCount(pendingCount)
                     .remainingPendingQuota(Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount))
                     .isSelectable(selectable)

@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import org.junit.jupiter.api.Test;

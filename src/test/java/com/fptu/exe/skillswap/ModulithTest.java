@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap;
 
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
@@ -20,7 +21,12 @@ class ModulithTest {
         assertThat(booking.orElseThrow().getNamedInterfaces().stream()
                 .anyMatch(api -> api.contains(BookingIssueEvidencePort.class))).isTrue();
         assertThat(modules.getModuleByName("chat")).isPresent();
-        assertThat(modules.getModuleByName("notification")).isPresent();
+
+        var notification = modules.getModuleByName("notification");
+        assertThat(notification).isPresent();
+        assertThat(notification.orElseThrow().getNamedInterfaces().stream()
+                .anyMatch(api -> api.contains(EmailOutboxPort.class))).isTrue();
+
         assertThat(modules.getModuleByName("course")).isPresent();
     }
 }

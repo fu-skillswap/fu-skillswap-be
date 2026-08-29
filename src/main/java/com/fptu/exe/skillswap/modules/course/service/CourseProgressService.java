@@ -1,104 +1,83 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
 import com.fptu.exe.skillswap.modules.course.domain.Course;
-import com.fptu.exe.skillswap.modules.course.domain.CourseLecture;
+import com.fptu.exe.skillswap.modules.course.domain.CourseMaterial;
+import com.fptu.exe.skillswap.modules.course.domain.CourseMaterialProgress;
 import com.fptu.exe.skillswap.modules.course.domain.CourseProgress;
-import com.fptu.exe.skillswap.modules.course.domain.LectureProgress;
-import com.fptu.exe.skillswap.modules.course.repository.CourseLectureRepository;
+import com.fptu.exe.skillswap.modules.course.repository.CourseMaterialProgressRepository;
+import com.fptu.exe.skillswap.modules.course.repository.CourseMaterialRepository;
+import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseProgressRepository;
-
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
-import com.fptu.exe.skillswap.modules.course.repository.LectureProgressRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
 
+/** Progress is tracked against a learning material, never an implementation-only lecture. */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class CourseProgressService {
-
-    private final LectureProgressRepository lectureProgressRepository;
+    private static final int COMPLETION_THRESHOLD_PERCENT = 90;
+    private final CourseMaterialProgressRepository materialProgressRepository;
     private final CourseProgressRepository courseProgressRepository;
-    private final CourseLectureRepository lectureRepository;
+    private final CourseMaterialRepository materialRepository;
+    private final CourseEnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
 
-    private static final int COMPLETION_THRESHOLD_PERCENT = 90;
-
-
-
     @Transactional
-    public LectureProgress updateLectureProgress(UUID studentUserId, UUID lectureId, int watchedSeconds) {
-        CourseLecture lecture = lectureRepository.findById(lectureId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Lecture not found"));
-
-        LectureProgress progress = lectureProgressRepository
-                .findByStudentUserIdAndLectureId(studentUserId, lectureId)
-                .orElseGet(() -> {
-                    LectureProgress p = LectureProgress.builder()
-                            .studentUserId(studentUserId)
-                            .lecture(lecture)
-                            .watchedSeconds(0)
-                            .completionPercentage(0)
-                            .isCompleted(false)
-                            .build();
-                    p.setCreatedAt(Instant.now());
-                    return p;
-                });
-
-        progress.setWatchedSeconds(watchedSeconds);
-        progress.setLastAccessedAt(Instant.now());
-
-        if (lecture.getDurationSeconds() > 0) {
-            int percentage = Math.min(100, (int) Math.round(((double) watchedSeconds / lecture.getDurationSeconds()) * 100));
-            progress.setCompletionPercentage(percentage);
-
-            if (percentage >= COMPLETION_THRESHOLD_PERCENT && !progress.isCompleted()) {
-                progress.setCompleted(true);
-                progress.setCompletedAt(Instant.now());
-            }
+    public CourseMaterialProgress updateMaterialProgress(UUID studentUserId, UUID courseId, UUID materialId, int watchedSeconds) {
+        CourseMaterial material = materialRepository.findActiveWithCurriculumById(materialId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Course material not found"));
+        if (!material.getChapter().getCourse().getId().equals(courseId)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Material does not belong to specified course");
         }
-
-        progress = lectureProgressRepository.save(progress);
-
-        // Update overall course progress
-        updateCourseProgress(studentUserId, lecture.getChapter().getCourse().getId(), lecture);
-
+        boolean isMentor = material.getChapter().getCourse().getMentorProfile().getUserId().equals(studentUserId);
+        if (!isMentor && enrollmentRepository.findByCourseIdAndStudentUserId(courseId, studentUserId)
+                .filter(enrollment -> enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.ACTIVE
+                        || enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.COMPLETED)
+                .isEmpty()) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "You do not have access to this course");
+        }
+        if (material.getDurationSeconds() == null || material.getDurationSeconds() <= 0) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Progress is available only after video duration is known");
+        }
+        CourseMaterialProgress progress = materialProgressRepository.findByStudentUserIdAndMaterialId(studentUserId, materialId)
+                .orElseGet(() -> CourseMaterialProgress.builder().studentUserId(studentUserId).material(material).build());
+        int safeWatchedSeconds = Math.max(0, watchedSeconds);
+        progress.setWatchedSeconds(safeWatchedSeconds);
+        progress.setLastAccessedAt(Instant.now());
+        int percentage = Math.min(100, (int) Math.round((double) safeWatchedSeconds * 100 / material.getDurationSeconds()));
+        progress.setCompletionPercentage(percentage);
+        if (percentage >= COMPLETION_THRESHOLD_PERCENT && !progress.isCompleted()) {
+            progress.setCompleted(true);
+            progress.setCompletedAt(Instant.now());
+        }
+        progress = materialProgressRepository.save(progress);
+        updateCourseProgress(studentUserId, courseId, material);
         return progress;
     }
 
     @Transactional
-    public CourseProgress updateCourseProgress(UUID studentUserId, UUID courseId, CourseLecture lastStudied) {
+    public CourseProgress updateCourseProgress(UUID studentUserId, UUID courseId, CourseMaterial lastStudied) {
         Course course = courseRepository.findById(courseId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Course not found"));
-
-        int totalLectures = lectureRepository.countByCourseId(courseId);
-        int completedCount = lectureProgressRepository.countByStudentUserIdAndLectureChapterCourseIdAndIsCompletedTrue(studentUserId, courseId);
-
-        CourseProgress courseProgress = courseProgressRepository
-                .findByStudentUserIdAndCourseId(studentUserId, courseId)
-                .orElseGet(() -> CourseProgress.builder()
-                        .studentUserId(studentUserId)
-                        .course(course)
-                        .build());
-
-        courseProgress.setTotalLectures(totalLectures);
-        courseProgress.setCompletedLectures(completedCount);
-        courseProgress.setLastStudiedLecture(lastStudied);
-
-        int overall = totalLectures > 0 ? (int) Math.round(((double) completedCount / totalLectures) * 100) : 0;
-        courseProgress.setOverallPercentage(overall);
-
-        if (overall >= 100 && courseProgress.getCompletedAt() == null) {
-            courseProgress.setCompletedAt(Instant.now());
+        int total = Math.toIntExact(materialRepository.countByChapterCourseIdAndDeletedAtIsNullAndIsPublishedTrue(courseId));
+        int completed = materialProgressRepository.countCompletedPublishedByStudentUserIdAndCourseId(studentUserId, courseId);
+        CourseProgress progress = courseProgressRepository.findByStudentUserIdAndCourseId(studentUserId, courseId)
+                .orElseGet(() -> CourseProgress.builder().studentUserId(studentUserId).course(course).build());
+        progress.setTotalMaterials(total);
+        progress.setCompletedMaterials(completed);
+        progress.setLastStudiedMaterial(lastStudied);
+        int overall = total == 0 ? 0 : (int) Math.round((double) completed * 100 / total);
+        progress.setOverallPercentage(overall);
+        if (overall == 100 && progress.getCompletedAt() == null) {
+            progress.setCompletedAt(Instant.now());
         }
-
-        return courseProgressRepository.save(courseProgress);
+        return courseProgressRepository.save(progress);
     }
 }

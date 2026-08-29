@@ -47,21 +47,21 @@ public class CourseProgress {
     @JoinColumn(name = "course_id", nullable = false, foreignKey = @ForeignKey(name = "fk_course_progress_course"))
     private Course course;
 
-    @Column(name = "completed_lectures", nullable = false)
-    @Builder.Default
-    private int completedLectures = 0;
-
-    @Column(name = "total_lectures", nullable = false)
-    @Builder.Default
-    private int totalLectures = 0;
-
     @Column(name = "overall_percentage", nullable = false)
     @Builder.Default
     private int overallPercentage = 0;
 
+    @Column(name = "completed_materials", nullable = false)
+    @Builder.Default
+    private int completedMaterials = 0;
+
+    @Column(name = "total_materials", nullable = false)
+    @Builder.Default
+    private int totalMaterials = 0;
+
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "last_studied_lecture_id", foreignKey = @ForeignKey(name = "fk_course_progress_last_lecture"))
-    private CourseLecture lastStudiedLecture;
+    @JoinColumn(name = "last_studied_material_id", foreignKey = @ForeignKey(name = "fk_course_progress_last_material"))
+    private CourseMaterial lastStudiedMaterial;
 
     @Column(name = "completed_at")
     private Instant completedAt;

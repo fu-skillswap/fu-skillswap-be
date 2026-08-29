@@ -6,13 +6,13 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminNoteCreateRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminNoteListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminNoteResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminNoteRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
-import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxPort;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -41,11 +41,11 @@ public class AdminNoteService {
     private final UserRepository userRepository;
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
-    private final BookingRepository bookingRepository;
+    private final BookingQueryPort bookingQueryPort;
     private final ForumReportRepository forumReportRepository;
     private final PayoutRequestRepository payoutRequestRepository;
     private final PaymentOrderRepository paymentOrderRepository;
-    private final EmailOutboxRepository emailOutboxRepository;
+    private final EmailOutboxPort emailOutboxPort;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminNoteResponse> getNotes(AdminNoteListRequest request) {
@@ -103,11 +103,11 @@ public class AdminNoteService {
             ).isPresent();
             case MENTOR -> mentorProfileRepository.existsById(targetId);
             case MENTOR_VERIFICATION_REQUEST -> mentorVerificationRequestRepository.existsById(targetId);
-            case BOOKING -> bookingRepository.existsById(targetId);
+            case BOOKING -> bookingQueryPort.existsById(targetId);
             case FORUM_REPORT -> forumReportRepository.existsById(targetId);
             case PAYOUT_REQUEST -> payoutRequestRepository.existsById(targetId);
             case PAYMENT_ORDER -> paymentOrderRepository.existsById(targetId);
-            case EMAIL_OUTBOX -> emailOutboxRepository.existsById(targetId);
+            case EMAIL_OUTBOX -> emailOutboxPort.existsById(targetId);
         };
 
         if (!exists) {

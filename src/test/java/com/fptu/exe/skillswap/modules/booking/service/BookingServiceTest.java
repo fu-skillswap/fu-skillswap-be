@@ -646,7 +646,7 @@ class BookingServiceTest {
         // attendance evidence. Actual session times are derived from participant check-ins.
         assertNull(booking.getActualStartTime());
         assertNull(booking.getActualEndTime());
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
@@ -967,7 +967,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.REJECTED, booking.getStatus());
         assertFalse(slot.isBooked());
         verify(bookingRepository).saveAll(any());
-        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
@@ -1161,7 +1161,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
         verify(bookingRepository).saveAll(any());
         verify(eventPublisher, org.mockito.Mockito.times(2))
-                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
 
@@ -1188,7 +1188,7 @@ class BookingServiceTest {
         assertTrue(staleBooking.getRejectReason().contains("240 phút hoặc ít nhất 2 giờ trước giờ bắt đầu"));
         verify(paymentOrderService).expireAwaitingPayment(staleBooking);
         verify(eventPublisher, org.mockito.Mockito.times(2))
-                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.event.NotificationEvent.class));
+                .publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
     }
 
     @Test

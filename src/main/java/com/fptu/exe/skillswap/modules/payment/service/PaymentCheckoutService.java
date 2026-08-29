@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;

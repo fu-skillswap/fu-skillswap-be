@@ -163,6 +163,10 @@ application:
       ttl: ${CACHE_FORUM_PROHIBITED_PHRASE_TTL:30m}
   upload:
     dir: ${APP_UPLOAD_DIR:${java.io.tmpdir}/skillswap-storage}
+  course-material:
+    pdf-upload-ttl-minutes: ${COURSE_PDF_UPLOAD_TTL_MINUTES:15}
+    pdf-download-ttl-minutes: ${COURSE_PDF_DOWNLOAD_TTL_MINUTES:10}
+    max-pdf-size-mb: ${COURSE_MAX_PDF_SIZE_MB:25}
   security:
     # Comma-separated Nginx/load-balancer CIDRs allowed to supply the original client address.
     # Leave empty for direct backend access; never trust forwarded headers from arbitrary peers.
@@ -261,7 +265,7 @@ application:
     submit-requirements:
       student-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_STUDENT_PROFILE_COMPLETED:true}
       mentor-profile-completed: ${MENTOR_VERIFICATION_REQUIRE_MENTOR_PROFILE_COMPLETED:true}
-payment:
+  payment:
     platform-commission-bps: ${PAYMENT_PLATFORM_COMMISSION_BPS:1000}
     mentee-surcharge-bps: ${PAYMENT_MENTEE_SURCHARGE_BPS:1000}
     scoin-to-vnd-rate: ${PAYMENT_SCOIN_TO_VND_RATE:1}

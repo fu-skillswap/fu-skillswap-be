@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import java.util.List;
 import java.util.UUID;
 

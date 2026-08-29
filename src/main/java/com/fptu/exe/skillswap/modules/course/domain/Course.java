@@ -58,9 +58,10 @@ public class Course {
     @Builder.Default
     private int totalChapters = 0;
 
-    @Column(name = "total_lectures", nullable = false)
+    /** Published curriculum items in the Course -> Chapter -> Material model. */
+    @Column(name = "total_materials", nullable = false)
     @Builder.Default
-    private int totalLectures = 0;
+    private int totalMaterials = 0;
 
     @Column(name = "total_duration_seconds", nullable = false)
     @Builder.Default

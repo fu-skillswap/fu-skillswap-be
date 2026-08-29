@@ -33,16 +33,16 @@ public class BookingEligibilityPolicy {
         this(academicService, null);
     }
 
-    /** Resource modules depend on this policy, never on raw booking-status values. */
-    public boolean canAccessServiceResources(java.util.UUID viewerId, java.util.UUID serviceId) {
+    /** Shared paid-service entitlement policy for premium content and notifications. */
+    public boolean hasServiceContentEntitlement(java.util.UUID viewerId, java.util.UUID serviceId) {
         if (viewerId == null || serviceId == null || bookingRepository == null) return false;
-        return bookingRepository.existsByMenteeIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceResourceAccessStatuses());
+        return bookingRepository.existsByMenteeIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceContentEntitlementStatuses());
     }
 
     /** Notification and content modules ask the policy for recipients rather than duplicating lifecycle status rules. */
-    public java.util.Set<java.util.UUID> findUsersWithServiceResourceAccess(java.util.Collection<java.util.UUID> serviceIds) {
+    public java.util.Set<java.util.UUID> findUsersWithServiceContentEntitlement(java.util.Collection<java.util.UUID> serviceIds) {
         if (serviceIds == null || serviceIds.isEmpty() || bookingRepository == null) return java.util.Set.of();
-        return new java.util.LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceResourceAccessStatuses()));
+        return new java.util.LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceContentEntitlementStatuses()));
     }
 
     public void validateBookerEligibility(User mentee) {
@@ -105,7 +105,7 @@ public class BookingEligibilityPolicy {
         return trimmed.isBlank() ? null : trimmed;
     }
 
-    private java.util.Set<BookingStatus> serviceResourceAccessStatuses() {
+    private java.util.Set<BookingStatus> serviceContentEntitlementStatuses() {
         return java.util.Set.of(BookingStatus.PAID,
                 BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION,
                 BookingStatus.COMPLETED);

@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +57,7 @@ public class BlogPostPublishedNotificationListener {
 
     private Set<UUID> followerIds(BlogPostPublishedEvent event) {
         if (event.visibility() == BlogVisibility.BOOKED_MEMBERS) {
-            return bookingEligibilityPolicy.findUsersWithServiceResourceAccess(event.entitledServiceIds());
+            return bookingEligibilityPolicy.findUsersWithServiceContentEntitlement(event.entitledServiceIds());
         }
         Set<UUID> recipientIds = new LinkedHashSet<>();
         if (event.categoryIds() != null && !event.categoryIds().isEmpty()) {

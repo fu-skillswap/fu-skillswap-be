@@ -16,7 +16,8 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleReques
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -474,7 +475,7 @@ public class BookingRescheduleService {
                 ? booking.getMentorProfile().getUserId()
                 : booking.getMentee().getId();
         if (request.getRequesterRole() == BookingRescheduleActorRole.ADMIN) {
-            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+            eventPublisher.publishEvent(new NotificationEvent(
                     booking.getMentee().getId(),
                     NotificationType.BOOKING_RESCHEDULE_REQUESTED,
                     "Admin đã tạo đề xuất dời lịch",
@@ -482,7 +483,7 @@ public class BookingRescheduleService {
                     "BOOKING",
                     booking.getId()
             ));
-            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+            eventPublisher.publishEvent(new NotificationEvent(
                     booking.getMentorProfile().getUserId(),
                     NotificationType.BOOKING_RESCHEDULE_REQUESTED,
                     "Admin đã tạo đề xuất dời lịch",
@@ -492,7 +493,7 @@ public class BookingRescheduleService {
             ));
             return;
         }
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
                 NotificationType.BOOKING_RESCHEDULE_REQUESTED,
                 "Có đề xuất dời lịch mới",
@@ -516,7 +517,7 @@ public class BookingRescheduleService {
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
                 ? booking.getMentee().getId()
                 : booking.getMentorProfile().getUserId();
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
                 NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
                 "Đề xuất dời lịch đã được chấp nhận",
@@ -549,7 +550,7 @@ public class BookingRescheduleService {
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
                 ? booking.getMentee().getId()
                 : booking.getMentorProfile().getUserId();
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
                 NotificationType.BOOKING_RESCHEDULE_REJECTED,
                 "Đề xuất dời lịch đã bị từ chối",
@@ -570,7 +571,7 @@ public class BookingRescheduleService {
 
     private void notifyExpire(BookingRescheduleRequest request) {
         Booking booking = request.getBooking();
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 booking.getMentee().getId(),
                 NotificationType.BOOKING_RESCHEDULE_EXPIRED,
                 "Đề xuất dời lịch đã hết hạn",
@@ -578,7 +579,7 @@ public class BookingRescheduleService {
                 "BOOKING",
                 booking.getId()
         ));
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 booking.getMentorProfile().getUserId(),
                 NotificationType.BOOKING_RESCHEDULE_EXPIRED,
                 "Đề xuất dời lịch đã hết hạn",
@@ -598,7 +599,7 @@ public class BookingRescheduleService {
     }
 
     private void notifyBothParticipants(Booking booking, NotificationType type, String title, String message) {
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 booking.getMentee().getId(),
                 type,
                 title,
@@ -606,7 +607,7 @@ public class BookingRescheduleService {
                 "BOOKING",
                 booking.getId()
         ));
-        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+        eventPublisher.publishEvent(new NotificationEvent(
                 booking.getMentorProfile().getUserId(),
                 type,
                 title,
@@ -618,7 +619,7 @@ public class BookingRescheduleService {
 
     private void notifyAutoRejectedPendingBookings(List<Booking> pendingBookings) {
         for (Booking pendingBooking : pendingBookings) {
-            eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.event.NotificationEvent(
+            eventPublisher.publishEvent(new NotificationEvent(
                     pendingBooking.getMentee().getId(),
                     NotificationType.BOOKING_AUTO_REJECTED,
                     "Yêu cầu đặt lịch không còn khả dụng",

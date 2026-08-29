@@ -25,7 +25,7 @@ public class NotificationRepositoryImpl implements NotificationRepositoryCustom 
                 select n
                 from Notification n
                 where n.recipientUser.id = :recipientUserId
-                  and n.type <> com.fptu.exe.skillswap.modules.notification.domain.NotificationType.CHAT_UNREAD
+                  and n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD
                 """);
         if (unreadOnly) {
             jpql.append(" and n.readAt is null");
