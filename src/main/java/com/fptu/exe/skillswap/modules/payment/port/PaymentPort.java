@@ -10,7 +10,8 @@ import java.util.UUID;
 
 public interface PaymentPort {
     void cancelUnpaidOrdersForBooking(UUID bookingId);
-    void settleBooking(UUID bookingId);
+    void releaseForBooking(UUID bookingId);
+    void refundForMentorNoShow(UUID bookingId);
     void releaseEscrowRefund(UUID bookingId, String reason);
     Optional<BookingPaymentSummaryDto> getPaymentSummaryForBooking(UUID bookingId);
     Map<UUID, BookingPaymentSummaryDto> getPaymentSummariesForBookings(Collection<UUID> bookingIds);

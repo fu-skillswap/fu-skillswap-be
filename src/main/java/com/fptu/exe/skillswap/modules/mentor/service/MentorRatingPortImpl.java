@@ -23,20 +23,20 @@ public class MentorRatingPortImpl implements MentorRatingPort {
         if (mentorUserId == null) {
             return;
         }
-        MentorProfile lockedProfile = mentorProfileRepository.findByUserIdForUpdate(mentorUserId).orElse(null);
+        MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId).orElse(null);
         if (lockedProfile == null) {
             return;
         }
-        int currentReviewCount = lockedProfile.getReviewCount() != null ? lockedProfile.getReviewCount() : 0;
-        BigDecimal currentAvg = lockedProfile.getRatingAverage() != null ? lockedProfile.getRatingAverage() : BigDecimal.ZERO;
+        int currentReviewCount = lockedProfile.getTotalReviews() != null ? lockedProfile.getTotalReviews() : 0;
+        BigDecimal currentAvg = lockedProfile.getAverageRating() != null ? lockedProfile.getAverageRating() : BigDecimal.ZERO;
 
         BigDecimal totalScore = currentAvg.multiply(BigDecimal.valueOf(currentReviewCount))
                 .add(BigDecimal.valueOf(newRating));
         int newReviewCount = currentReviewCount + 1;
         BigDecimal newAvg = totalScore.divide(BigDecimal.valueOf(newReviewCount), 2, RoundingMode.HALF_UP);
 
-        lockedProfile.setReviewCount(newReviewCount);
-        lockedProfile.setRatingAverage(newAvg);
+        lockedProfile.setTotalReviews(newReviewCount);
+        lockedProfile.setAverageRating(newAvg);
         mentorProfileRepository.save(lockedProfile);
     }
 }

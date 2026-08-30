@@ -35,4 +35,12 @@ public class CourseQueryPortImpl implements CourseQueryPort {
         }
         return courseRepository.existsById(courseId);
     }
+
+    @Override
+    public String findCourseTitle(UUID courseId) {
+        if (courseId == null) {
+            return null;
+        }
+        return courseRepository.findById(courseId).map(com.fptu.exe.skillswap.modules.course.domain.Course::getTitle).orElse(null);
+    }
 }

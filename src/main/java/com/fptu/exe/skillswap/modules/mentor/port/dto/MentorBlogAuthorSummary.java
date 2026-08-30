@@ -5,6 +5,8 @@ import java.util.UUID;
 
 public record MentorBlogAuthorSummary(
         UUID mentorUserId,
+        String fullName,
+        String avatarUrl,
         String headline,
         boolean verified,
         BigDecimal averageRating,

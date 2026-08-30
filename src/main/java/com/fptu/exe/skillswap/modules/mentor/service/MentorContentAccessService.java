@@ -41,6 +41,8 @@ public class MentorContentAccessService {
                         profile -> profile.getUserId(),
                         profile -> new MentorBlogAuthorSummary(
                                 profile.getUserId(),
+                                profile.getUser() != null ? profile.getUser().getFullName() : null,
+                                profile.getUser() != null ? profile.getUser().getAvatarUrl() : null,
                                 profile.getHeadline(),
                                 profile.getVerifiedAt() != null,
                                 profile.getAverageRating(),

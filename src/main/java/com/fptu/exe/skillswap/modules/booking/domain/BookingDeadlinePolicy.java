@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
+import com.fptu.exe.skillswap.shared.time.BookingTime;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;

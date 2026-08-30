@@ -284,9 +284,9 @@ public class NotificationService {
                 "NOTIFICATION",
                 notification.getId(),
                 DomainEventOutboxEventTypes.NOTIFICATION_CREATED,
-                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUser().getId(),
+                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUserId(),
                         notification.getType().name(), eventKind, unreadCount));
-        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUser().getId(), unreadCount,
+        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUserId(), unreadCount,
                 eventKind);
     }
 

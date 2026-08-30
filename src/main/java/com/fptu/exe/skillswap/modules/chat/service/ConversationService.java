@@ -171,4 +171,8 @@ public class ConversationService {
     public Map<UUID, UUID> findConversationIdsByBookingIds(List<UUID> bookingIds) {
         return chatService.findConversationIdsByBookingIds(bookingIds);
     }
+
+    public record ChatMessageCreatedPayload(UUID conversationId, UUID messageId, UUID senderId) {}
+    public record ChatConversationUpdatedPayload(UUID conversationId, UUID actorUserId) {}
+    public record ChatUnreadCountUpdatedPayload(UUID conversationId, UUID recipientUserId) {}
 }
