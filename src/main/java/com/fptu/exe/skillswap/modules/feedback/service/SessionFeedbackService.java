@@ -12,7 +12,8 @@ import com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.feedback.event.SessionFeedbackSubmittedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -32,9 +33,8 @@ public class SessionFeedbackService implements BookingFeedbackPort {
 
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final BookingQueryPort bookingQueryPort;
-    private final MentorQueryPort mentorQueryPort;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final NotificationService notificationService;
-    private final EntityManager entityManager;
 
     @Override
     @Transactional(readOnly = true)
@@ -94,8 +94,8 @@ public class SessionFeedbackService implements BookingFeedbackPort {
         feedback = sessionFeedbackRepository.saveAndFlush(feedback);
 
         // If the reviewee is a Mentor, recalculate and update their MentorProfile stats
-        if (reviewee.getId().equals(mentor.getId())) {
-            updateMentorRatingStats(mentorProfile.getUserId(), request.getRating());
+        if (applicationEventPublisher != null && reviewee.getId().equals(mentor.getId())) {
+            applicationEventPublisher.publishEvent(new SessionFeedbackSubmittedEvent(mentorProfile.getUserId(), request.getRating()));
         }
 
         notificationService.createNotification(
@@ -136,22 +136,6 @@ public class SessionFeedbackService implements BookingFeedbackPort {
                 .orElse(null);
     }
 
-    private void updateMentorRatingStats(UUID mentorUserId, int newRating) {
-        MentorProfile lockedProfile = mentorQueryPort.findMentorProfileByIdForUpdate(mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-        entityManager.refresh(lockedProfile);
-        
-        int currentCount = lockedProfile.getTotalReviews() == null ? 0 : lockedProfile.getTotalReviews();
-        BigDecimal currentAvg = lockedProfile.getAverageRating() == null ? BigDecimal.ZERO : lockedProfile.getAverageRating();
-        
-        // O(1) Incremental Update: NewAvg = ((OldAvg * OldCount) + NewRating) / (OldCount + 1)
-        BigDecimal newSum = currentAvg.multiply(BigDecimal.valueOf(currentCount)).add(BigDecimal.valueOf(newRating));
-        BigDecimal newAvg = newSum.divide(BigDecimal.valueOf(currentCount + 1), 2, RoundingMode.HALF_UP);
-        
-        lockedProfile.setTotalReviews(currentCount + 1);
-        lockedProfile.setAverageRating(newAvg);
-        mentorQueryPort.saveMentorProfile(lockedProfile);
-    }
 
     private SessionFeedbackResponse toResponse(SessionFeedback feedback) {
         return SessionFeedbackResponse.builder()

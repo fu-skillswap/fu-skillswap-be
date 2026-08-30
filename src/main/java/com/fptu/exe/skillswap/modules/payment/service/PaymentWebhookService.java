@@ -1,15 +1,15 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
+import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentPort;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.port.ChatPort;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
@@ -29,7 +29,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -39,7 +39,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BookingTime;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -65,13 +65,12 @@ public class PaymentWebhookService {
     private final CreditLedgerService creditLedgerService;
     private final CouponService couponService;
     private final SettlementService settlementService;
-    private final SessionService sessionService;
-    private final ConversationService conversationService;
+    private final ChatPort chatPort;
     private final PaymentGatewayProviderFactory paymentGatewayProviderFactory;
     private final PaymentLifecycleService paymentLifecycleService;
     private final PaymentResponseMapper paymentResponseMapper;
     private final ApplicationEventPublisher eventPublisher;
-    private final InternalTelemetryService internalTelemetryService;
+    private final TelemetryPort internalTelemetryService;
     private final TransactionTemplate transactionTemplate;
     private final PaymentProperties paymentProperties;
 
@@ -370,7 +369,11 @@ public class PaymentWebhookService {
                 sessionService.createForAcceptedBooking(booking);
             }
             if (conversationService != null) {
-                conversationService.createDirectForAcceptedBooking(booking);
+                UUID mentorUid = (booking.getMentorProfile() != null && booking.getMentorProfile().getUser() != null) ? booking.getMentorProfile().getUser().getId() : null;
+            UUID menteeUid = booking.getMentee() != null ? booking.getMentee().getId() : null;
+            if (chatPort != null && mentorUid != null && menteeUid != null) {
+                chatPort.createBookingConversation(booking.getId(), menteeUid, mentorUid);
+            }
             }
             return;
         }
@@ -411,7 +414,11 @@ public class PaymentWebhookService {
             sessionService.createForAcceptedBooking(booking);
         }
         if (conversationService != null) {
-            conversationService.createDirectForAcceptedBooking(booking);
+            UUID mentorUid = (booking.getMentorProfile() != null && booking.getMentorProfile().getUser() != null) ? booking.getMentorProfile().getUser().getId() : null;
+            UUID menteeUid = booking.getMentee() != null ? booking.getMentee().getId() : null;
+            if (chatPort != null && mentorUid != null && menteeUid != null) {
+                chatPort.createBookingConversation(booking.getId(), menteeUid, mentorUid);
+            }
         }
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(

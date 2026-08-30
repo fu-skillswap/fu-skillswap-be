@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.catalog.service;
 
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileOptionsResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSupportLevelOptionResponse;
+import com.fptu.exe.skillswap.modules.catalog.dto.response.MentorProfileOptionsResponse;
+import com.fptu.exe.skillswap.modules.catalog.dto.response.MentorSupportLevelOptionResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -40,5 +40,4 @@ public class CatalogService {
                 .directionSupportLevels(directionLevels)
                 .build();
     }
-
 }

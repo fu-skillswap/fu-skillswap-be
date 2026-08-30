@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminFilterQuery;
+import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminResolveIssueCommand;
+import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminReverseResolutionCommand;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
@@ -22,18 +22,14 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.port.ChatPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentPort;
+import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -64,127 +60,6 @@ public class BookingService implements BookingAdminPort {
     private final BookingQueryService bookingQueryService;
     private final BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
     private final BookingResponseMapper bookingResponseMapper;
-
-    /**
-     * Constructor tương thích ngược hỗ trợ Unit Tests và Spring DI truyền thống.
-     */
-    public BookingService(
-            BookingRepository bookingRepository,
-            MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository,
-            MentorServiceRepository mentorServiceRepository,
-            UserRepository userRepository,
-            NotificationService notificationService,
-            ApplicationEventPublisher eventPublisher,
-            MentorProfileRepository mentorProfileRepository,
-            EntityManager entityManager,
-            SessionService sessionService,
-            ConversationService conversationService,
-            SettlementService settlementService,
-            PaymentOrderService paymentOrderService,
-            BookingSlotValidator bookingSlotValidator,
-            BookingEligibilityPolicy bookingEligibilityPolicy,
-            PaymentProperties paymentProperties,
-            InternalTelemetryService internalTelemetryService,
-            SessionRepository sessionRepository
-    ) {
-        UserQueryPortImpl userPort = new UserQueryPortImpl(userRepository, entityManager);
-        com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort mentorPort =
-                new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, mentorServiceRepository);
-        PaymentOrderRepository paymentOrderRepo = null;
-        BookingResponseMapper mapper = new BookingResponseMapper(sessionService, conversationService, paymentOrderRepo, paymentProperties);
-        BookingEventService bookingEventService = null;
-        com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort calendarPort = new com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort() {
-            @Override
-            public boolean hasActiveConnection(UUID mentorUserId) {
-                return true;
-            }
-
-            @Override
-            public void requireActiveConnectionForServiceCreation(UUID mentorUserId) {
-            }
-        };
-        MeetingProviderFactory meetingFactory = new MeetingProviderFactory(Collections.emptyList());
-
-        this.bookingResponseMapper = mapper;
-        this.bookingCreationService = new BookingCreationService(
-                bookingRepository,
-                mentorAvailabilitySlotRepository,
-                userPort,
-                userPort,
-                mentorPort,
-                bookingSlotValidator,
-                bookingEligibilityPolicy,
-                eventPublisher,
-                internalTelemetryService,
-                mapper,
-                null
-        );
-        this.bookingDecisionService = new BookingDecisionService(
-                bookingRepository,
-                mentorAvailabilitySlotRepository,
-                userPort,
-                mentorProfileRepository,
-                entityManager,
-                sessionService,
-                conversationService,
-                eventPublisher,
-                mapper,
-                calendarPort,
-                meetingFactory
-        );
-        this.bookingCancellationService = new BookingCancellationService(
-                bookingRepository,
-                mentorAvailabilitySlotRepository,
-                mentorProfileRepository,
-                entityManager,
-                sessionService,
-                paymentOrderService,
-                eventPublisher,
-                mapper
-        );
-        SessionFinalizationService sessionFinalizationService = new SessionFinalizationService(
-                sessionRepository,
-                sessionService,
-                mentorProfileRepository
-        );
-        this.bookingCompletionService = new BookingCompletionService(
-                bookingRepository,
-                sessionFinalizationService,
-                settlementService,
-                bookingEventService,
-                eventPublisher,
-                internalTelemetryService,
-                mapper
-        );
-        this.bookingMeetingService = new BookingMeetingService(
-                bookingRepository,
-                sessionService,
-                eventPublisher,
-                meetingFactory,
-                mapper
-        );
-        this.sessionAttendanceService = new SessionAttendanceService(
-                bookingRepository,
-                sessionRepository,
-                null
-        );
-        this.bookingQueryService = new BookingQueryService(
-                bookingRepository,
-                sessionService,
-                null,
-                conversationService,
-                paymentOrderRepo,
-                mapper
-        );
-        this.bookingLifecycleMaintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository,
-                paymentOrderService,
-                settlementService,
-                eventPublisher,
-                bookingEventService
-        );
-        this.bookingLifecycleMaintenanceService.setSessionFinalizationService(sessionFinalizationService);
-    }
 
     @Transactional
     public BookingResponse createBooking(UUID menteeUserId, CreateBookingRequest request) {
@@ -244,13 +119,13 @@ public class BookingService implements BookingAdminPort {
 
     @Transactional
     @Override
-    public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, AdminResolveBookingIssueRequest request) {
+    public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, BookingAdminResolveIssueCommand request) {
         return bookingCompletionService.resolveBookingIssue(adminUserId, bookingId, request);
     }
 
     @Transactional
     @Override
-    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
+    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, BookingAdminReverseResolutionCommand request) {
         return bookingCompletionService.reverseBookingIssueResolution(adminUserId, bookingId, request);
     }
 
@@ -271,7 +146,7 @@ public class BookingService implements BookingAdminPort {
 
     @Transactional(readOnly = true)
     @Override
-    public PageResponse<BookingResponse> getAdminBookings(AdminBookingListRequest request) {
+    public PageResponse<BookingResponse> getAdminBookings(BookingAdminFilterQuery request) {
         return bookingQueryService.getAdminBookings(request);
     }
 

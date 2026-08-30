@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("mentor")
+@org.springframework.modulith.NamedInterface("port")
 package com.fptu.exe.skillswap.modules.mentor.port;

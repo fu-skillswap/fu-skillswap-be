@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("identity")
+@org.springframework.modulith.NamedInterface("port")
 package com.fptu.exe.skillswap.modules.identity.port;

@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface({"conversation", "chat"})
+@org.springframework.modulith.NamedInterface("event")
 package com.fptu.exe.skillswap.modules.chat.event;

@@ -1,15 +1,15 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignStatusRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignAnalyticsResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignBenefitResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignAnalyticsDto;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignBenefitCreateCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignBenefitDto;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignBenefitUpdateCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignCreateCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignDto;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignFilterQuery;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignStatusChangeCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCampaignUpdateCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminDashboardCampaignOverviewDto;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
@@ -57,16 +57,16 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCampaignResponse> list(AdminCampaignListRequest request) {
+    public PageResponse<AdminCampaignDto> list(AdminCampaignFilterQuery request) {
         Specification<Campaign> spec = buildSpecification(request);
         Pageable pageable = request.getPageable();
         Page<Campaign> page = campaignRepository.findAll(spec, pageable);
 
-        List<AdminCampaignResponse> content = page.getContent().stream()
+        List<AdminCampaignDto> content = page.getContent().stream()
                 .map(this::toResponse)
                 .toList();
 
-        return PageResponse.<AdminCampaignResponse>builder()
+        return PageResponse.<AdminCampaignDto>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -78,14 +78,14 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCampaignResponse getDetail(UUID campaignId) {
+    public AdminCampaignDto getDetail(UUID campaignId) {
         Campaign campaign = findCampaignOrThrow(campaignId);
         return toResponse(campaign);
     }
 
     @Override
     @Transactional
-    public AdminCampaignResponse create(UUID adminUserId, AdminCampaignCreateRequest request) {
+    public AdminCampaignDto create(UUID adminUserId, AdminCampaignCreateCommand request) {
         validateTimeWindow(request.startAt(), request.endAt());
 
         CampaignStatus initialStatus = CampaignStatus.DRAFT;
@@ -115,7 +115,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional
-    public AdminCampaignResponse update(UUID adminUserId, UUID campaignId, AdminCampaignUpdateRequest request) {
+    public AdminCampaignDto update(UUID adminUserId, UUID campaignId, AdminCampaignUpdateCommand request) {
         Campaign campaign = findCampaignOrThrow(campaignId);
 
         if (campaign.getStatus() == CampaignStatus.ACTIVE) {
@@ -161,7 +161,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional
-    public AdminCampaignResponse changeStatus(UUID adminUserId, UUID campaignId, AdminCampaignStatusRequest request) {
+    public AdminCampaignDto changeStatus(UUID adminUserId, UUID campaignId, AdminCampaignStatusChangeCommand request) {
         Campaign campaign = findCampaignOrThrow(campaignId);
         CampaignStatus targetStatus = request.status();
 
@@ -175,7 +175,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCampaignAnalyticsResponse getAnalytics(UUID campaignId) {
+    public AdminCampaignAnalyticsDto getAnalytics(UUID campaignId) {
         Campaign campaign = findCampaignOrThrow(campaignId);
         int budget = campaign.getBudgetScoin() == null ? 0 : campaign.getBudgetScoin();
         int budgetUsed = getUsedBudget(campaign.getId());
@@ -201,7 +201,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
             }
         }
 
-        return new AdminCampaignAnalyticsResponse(
+        return new AdminCampaignAnalyticsDto(
                 campaign.getId(),
                 campaign.getName(),
                 campaign.getStatus(),
@@ -222,16 +222,16 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminCampaignBenefitResponse> listBenefits(UUID campaignId) {
+    public List<AdminCampaignBenefitDto> listBenefits(UUID campaignId) {
         findCampaignOrThrow(campaignId);
         return campaignBenefitRepository.findByCampaignId(campaignId).stream()
-                .map(this::toBenefitResponse)
+                .map(this::toBenefitDto)
                 .toList();
     }
 
     @Override
     @Transactional
-    public AdminCampaignBenefitResponse createBenefit(UUID adminUserId, UUID campaignId, AdminCampaignBenefitCreateRequest request) {
+    public AdminCampaignBenefitDto createBenefit(UUID adminUserId, UUID campaignId, AdminCampaignBenefitCreateCommand request) {
         Campaign campaign = findCampaignOrThrow(campaignId);
 
         CampaignBenefit benefit = CampaignBenefit.builder()
@@ -250,12 +250,12 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         CampaignBenefit saved = campaignBenefitRepository.save(benefit);
         log.info("Admin {} created benefit {} for campaign {}", adminUserId, saved.getId(), campaignId);
-        return toBenefitResponse(saved);
+        return toBenefitDto(saved);
     }
 
     @Override
     @Transactional
-    public AdminCampaignBenefitResponse updateBenefit(UUID adminUserId, UUID campaignId, UUID benefitId, AdminCampaignBenefitUpdateRequest request) {
+    public AdminCampaignBenefitDto updateBenefit(UUID adminUserId, UUID campaignId, UUID benefitId, AdminCampaignBenefitUpdateCommand request) {
         findCampaignOrThrow(campaignId);
         CampaignBenefit benefit = campaignBenefitRepository.findById(benefitId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy benefit"));
@@ -277,7 +277,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         CampaignBenefit saved = campaignBenefitRepository.save(benefit);
         log.info("Admin {} updated benefit {} for campaign {}", adminUserId, saved.getId(), campaignId);
-        return toBenefitResponse(saved);
+        return toBenefitDto(saved);
     }
 
     @Override
@@ -297,7 +297,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminDashboardCampaignOverviewResponse getDashboardCampaignOverview() {
+    public AdminDashboardCampaignOverviewDto getDashboardCampaignOverview() {
         long activeCampaigns = campaignRepository.countByStatus(CampaignStatus.ACTIVE);
         long scheduledCampaigns = campaignRepository.countByStatus(CampaignStatus.SCHEDULED);
         List<Campaign> activeCampaignList = campaignRepository.findByStatus(CampaignStatus.ACTIVE);
@@ -310,7 +310,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         long activeCoupons = couponRepository.countByStatus(CouponStatus.ACTIVE);
         long totalRedemptions = couponRedemptionRepository.count();
 
-        return new AdminDashboardCampaignOverviewResponse(
+        return new AdminDashboardCampaignOverviewDto(
                 activeCampaigns,
                 scheduledCampaigns,
                 totalBudgetScoin,
@@ -356,14 +356,14 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         }
     }
 
-    private AdminCampaignResponse toResponse(Campaign c) {
+    private AdminCampaignDto toResponse(Campaign c) {
         int budget = c.getBudgetScoin() == null ? 0 : c.getBudgetScoin();
         int used = getUsedBudget(c.getId());
         int remaining = Math.max(0, budget - used);
         long benefitCount = campaignBenefitRepository.countByCampaignId(c.getId());
         long totalBookings = paymentOrderRepository.countByCampaignIdAndStatusNotIn(c.getId(), EXCLUDED_STATUSES);
 
-        return new AdminCampaignResponse(
+        return new AdminCampaignDto(
                 c.getId(),
                 c.getName(),
                 c.getDescription(),
@@ -385,8 +385,8 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         );
     }
 
-    private AdminCampaignBenefitResponse toBenefitResponse(CampaignBenefit b) {
-        return new AdminCampaignBenefitResponse(
+    private AdminCampaignBenefitDto toBenefitDto(CampaignBenefit b) {
+        return new AdminCampaignBenefitDto(
                 b.getId(),
                 b.getCampaign().getId(),
                 b.getBenefitType(),
@@ -404,7 +404,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         );
     }
 
-    private Specification<Campaign> buildSpecification(AdminCampaignListRequest request) {
+    private Specification<Campaign> buildSpecification(AdminCampaignFilterQuery request) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 

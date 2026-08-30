@@ -2,11 +2,17 @@ package com.fptu.exe.skillswap.modules.mentor.port;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorBlogAuthorSummary;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
+
 public interface MentorQueryPort {
+    MentorDiscoveryDetailResponse getMentorDetail(UUID mentorId);
 
     Optional<MentorProfile> findMentorProfileById(UUID mentorId);
 
@@ -23,4 +29,10 @@ public interface MentorQueryPort {
     Optional<MentorProfile> findMentorProfileByIdForUpdate(UUID mentorUserId);
 
     MentorProfile saveMentorProfile(MentorProfile profile);
+
+    Map<UUID, MentorBlogAuthorSummary> getBlogAuthorSummaries(Collection<UUID> userIds);
+
+    boolean hasCompletedMentorProfile(UUID userId);
+
+    String getLatestVerificationStatus(UUID userId);
 }

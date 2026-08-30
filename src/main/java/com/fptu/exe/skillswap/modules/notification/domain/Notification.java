@@ -1,10 +1,8 @@
 package com.fptu.exe.skillswap.modules.notification.domain;
 
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -27,9 +25,8 @@ public class Notification {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "recipient_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_notifications_recipient"))
-    private User recipientUser;
+    @Column(name = "recipient_user_id", nullable = false)
+    private UUID recipientUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 100)
@@ -63,7 +60,3 @@ public class Notification {
         }
     }
 }
-
-
-
-

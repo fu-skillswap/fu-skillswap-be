@@ -1,8 +1,9 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
+import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
@@ -17,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BookingTime;
 import java.time.Instant;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -43,7 +44,6 @@ public class BookingPricingPreviewService {
     private final CouponService couponService;
     private final CreditLedgerService creditLedgerService;
     private final PaymentProperties paymentProperties;
-    private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -151,7 +151,8 @@ public class BookingPricingPreviewService {
     private void validateDiscoverable(MentorService service) {
         MentorProfile mentor = service.getMentorProfile();
         if (!service.isActive() || mentor == null || mentor.getUser() == null
-                || !bookingEligibilityPolicy.isDiscoverableMentorForBooking(mentor)) {
+                || mentor.getStatus() != com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE
+                || mentor.getVerifiedAt() == null || !mentor.isAvailable()) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring khả dụng");
         }
     }

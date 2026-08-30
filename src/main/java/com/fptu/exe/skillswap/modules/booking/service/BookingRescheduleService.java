@@ -15,7 +15,6 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleRequestRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -49,7 +48,7 @@ public class BookingRescheduleService {
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final BookingSlotValidator bookingSlotValidator;
     private final NotificationService notificationService;
-    private final UserRepository userRepository;
+    
     private final SessionService sessionService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 

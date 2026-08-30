@@ -15,7 +15,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
-import com.fptu.exe.skillswap.modules.payment.service.BookingPricingPreviewService;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -43,7 +43,7 @@ public class BookingQuoteService {
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final BookingSlotValidator bookingSlotValidator;
     private final MentorBookingPolicyService mentorBookingPolicyService;
-    private final BookingPricingPreviewService pricingPreviewService;
+    private final PaymentPort paymentPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 

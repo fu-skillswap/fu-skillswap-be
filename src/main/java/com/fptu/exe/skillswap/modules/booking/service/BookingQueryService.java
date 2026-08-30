@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminFilterQuery;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.chat.port.ChatPort;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -71,7 +71,7 @@ public class BookingQueryService {
     private final BookingRepository bookingRepository;
     private final SessionService sessionService;
     private final SessionAttendanceRepository sessionAttendanceRepository;
-    private final ConversationService conversationService;
+    private final ChatPort chatPort;
     private final PaymentOrderRepository paymentOrderRepository;
     private final BookingResponseMapper bookingResponseMapper;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
@@ -165,7 +165,6 @@ public class BookingQueryService {
         if (bookingId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
-
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
@@ -173,8 +172,8 @@ public class BookingQueryService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<BookingResponse> getAdminBookings(AdminBookingListRequest request) {
-        AdminBookingListRequest safeRequest = request == null ? new AdminBookingListRequest() : request;
+    public PageResponse<BookingResponse> getAdminBookings(BookingAdminFilterQuery request) {
+        BookingAdminFilterQuery safeRequest = request == null ? new BookingAdminFilterQuery() : request;
         Page<Booking> page = bookingRepository.searchForAdmin(
                 safeRequest.getStatus(),
                 safeRequest.getMentorUserId(),
@@ -250,7 +249,7 @@ public class BookingQueryService {
         return PageRequest.of(page, size, Sort.by(direction, sortBy));
     }
 
-    private Pageable adminBookingPageable(AdminBookingListRequest request) {
+    private Pageable adminBookingPageable(BookingAdminFilterQuery request) {
         int page = Math.max(0, request.getPage());
         int size = Math.max(1, Math.min(request.getSize(), 100));
         String sortDir = request.getDirection() == null ? "desc" : request.getDirection().toLowerCase();

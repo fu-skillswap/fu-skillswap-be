@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
@@ -33,8 +31,6 @@ public class DiscoveryEnrichmentService {
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
     private final MentorServiceRepository mentorServiceRepository;
-    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     public Map<UUID, MentorEnrichedData> loadMentorEnrichedData(
             Collection<UUID> mentorUserIds,
@@ -67,7 +63,7 @@ public class DiscoveryEnrichmentService {
 
     private Set<UUID> loadMentorsWithAvailability(Collection<UUID> mentorUserIds, LocalDateTime now) {
         return new java.util.HashSet<>(Optional.ofNullable(
-                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(now))
+                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, com.fptu.exe.skillswap.shared.time.BookingTime.toInstant(now))
         ).orElse(List.of()));
     }
 

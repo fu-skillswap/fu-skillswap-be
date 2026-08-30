@@ -1,35 +1,29 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
-import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityPort;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceManagementResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorServiceActiveRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstraintsResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceManagementResponse;
+import com.fptu.exe.skillswap.modules.mentor.event.MentorBookingPolicyUpdatedEvent;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
-import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
+import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,19 +38,12 @@ public class MentorServiceManagementService {
 
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final UserRepository userRepository;
+    private final UserQueryPort userQueryPort;
     private final MentorProfileService mentorProfileService;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
-    private final BookingRepository bookingRepository;
-    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
-    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final BookingAvailabilityPort bookingAvailabilityPort;
     private final PaymentProperties paymentProperties;
-    private AvailabilityTemplateService availabilityTemplateService;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
-        this.availabilityTemplateService = availabilityTemplateService;
-    }
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional(readOnly = true)
     public List<MentorServiceManagementResponse> getMyServices(UUID mentorUserId, Boolean isActive) {
@@ -90,31 +77,26 @@ public class MentorServiceManagementService {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         requireRequest(request);
 
-        int durationMinutes = validateDuration(request.durationMinutes());
-        boolean isFree = Boolean.TRUE.equals(request.isFree());
-        String title = cleanRequired(request.title(), "Tiêu đề dịch vụ");
-        String description = cleanRequired(request.description(), "Mô tả dịch vụ");
-        String expectedOutcome = cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng");
-        Integer priceScoin = normalizePriceScoin(isFree, request.priceScoin(), durationMinutes);
-        MentorServiceDeliveryMode deliveryMode = request.deliveryMode() == null
-                ? MentorServiceDeliveryMode.ONE_TO_ONE
-                : request.deliveryMode();
-
         MentorService service = MentorService.builder()
                 .mentorProfile(mentorProfile)
-                .title(title)
-                .description(description)
-                .expectedOutcome(expectedOutcome)
-                .durationMinutes(durationMinutes)
-                .isFree(isFree)
-                .priceScoin(priceScoin)
-                .isActive(true)
+                .title(request.title().trim())
+                .description(request.description() == null ? null : request.description().trim())
+                .expectedOutcome(request.expectedOutcome() == null ? null : request.expectedOutcome().trim())
+                .durationMinutes(request.durationMinutes())
+                .isFree(request.isFree())
+                .priceScoin(request.isFree() ? 0 : request.priceScoin())
                 .maintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()))
-                .deliveryMode(deliveryMode)
+                .deliveryMode(request.deliveryMode())
+                .isActive(true)
                 .build();
 
+        validateServicePricingAndDuration(service.getDurationMinutes(), service.getPriceScoin(), service.isFree());
+        MentorService saved = mentorServiceRepository.save(service);
         touchMentorActivity(mentorProfile, DateTimeUtil.now());
-        return toResponse(mentorServiceRepository.save(service));
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(new MentorBookingPolicyUpdatedEvent(mentorUserId));
+        }
+        return toResponse(saved);
     }
 
     @Transactional
@@ -123,30 +105,58 @@ public class MentorServiceManagementService {
         requireRequest(request);
 
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
-        boolean isFree = Boolean.TRUE.equals(request.isFree());
-
         if (!java.util.Objects.equals(request.expectedVersion(), service.getVersion())) {
             throw versionConflict(serviceId, request.expectedVersion(), service.getVersion());
         }
 
-        service.setTitle(cleanRequired(request.title(), "Tiêu đề dịch vụ"));
-        service.setDescription(cleanRequired(request.description(), "Mô tả dịch vụ"));
-        service.setExpectedOutcome(cleanRequired(request.expectedOutcome(), "Kết quả kỳ vọng"));
-        service.setFree(isFree);
-        service.setPriceScoin(normalizePriceScoin(isFree, request.priceScoin(), service.getDurationMinutes()));
-        service.setMaintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()));
-        touchMentorActivity(mentorProfile, DateTimeUtil.now());
+        boolean durationChanged = request.durationMinutes() != null && !request.durationMinutes().equals(service.getDurationMinutes());
+        boolean deliveryModeChanged = request.deliveryMode() != null && request.deliveryMode() != service.getDeliveryMode();
+        if (request.title() != null) {
+            service.setTitle(request.title().trim());
+        }
+        if (request.description() != null) {
+            service.setDescription(request.description().trim());
+        }
+        if (request.expectedOutcome() != null) {
+            service.setExpectedOutcome(request.expectedOutcome().trim());
+        }
+        if (request.durationMinutes() != null) {
+            service.setDurationMinutes(request.durationMinutes());
+        }
+        if (request.isFree() != null) {
+            service.setFree(request.isFree());
+        }
+        if (Boolean.TRUE.equals(service.isFree())) {
+            service.setPriceScoin(0);
+        } else if (request.priceScoin() != null) {
+            service.setPriceScoin(request.priceScoin());
+        }
+        if (request.maintainPostSessionChat() != null) {
+            service.setMaintainPostSessionChat(request.maintainPostSessionChat());
+        }
+        if (request.deliveryMode() != null) {
+            service.setDeliveryMode(request.deliveryMode());
+        }
 
-        return toResponse(mentorServiceRepository.save(service));
+        validateServicePricingAndDuration(service.getDurationMinutes(), service.getPriceScoin(), service.isFree());
+        if (durationChanged || deliveryModeChanged) {
+            bookingAvailabilityPort.unpublishSlotsForService(service.getId());
+        }
+
+        MentorService saved = mentorServiceRepository.save(service);
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(new MentorBookingPolicyUpdatedEvent(mentorUserId));
+        }
+        return toResponse(saved);
     }
 
     @Transactional
-    public MentorServiceManagementResponse changeActiveStatus(UUID mentorUserId, UUID serviceId, MentorServiceActiveRequest request) {
+    public MentorServiceManagementResponse toggleActive(UUID mentorUserId, UUID serviceId, MentorServiceActiveRequest request) {
         MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
         if (request == null || request.isActive() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Trạng thái active không được để trống");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu isActive");
         }
-
         MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
         if (!java.util.Objects.equals(request.expectedVersion(), service.getVersion())) {
             throw versionConflict(serviceId, request.expectedVersion(), service.getVersion());
@@ -154,35 +164,19 @@ public class MentorServiceManagementService {
         if (Boolean.TRUE.equals(request.isActive()) && Boolean.TRUE.equals(request.rejectPendingBookings())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "rejectPendingBookings chỉ hợp lệ khi deactivate service");
         }
-        if (Boolean.TRUE.equals(request.isActive()) && !service.isActive()) {
-            // Activating service does not require mandatory Google Calendar connection
-        }
         if (!Boolean.TRUE.equals(request.isActive())) {
-            LocalDateTime now = DateTimeUtil.now();
-            List<Booking> affectedPending = bookingRepository.findByServiceIdAndStatus(serviceId, BookingStatus.PENDING).stream()
-                    .filter(booking -> booking.getSelectedStartTime() != null && booking.getSelectedStartTime().isAfter(now))
-                    .toList();
-            if (!affectedPending.isEmpty() && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
+            if (bookingAvailabilityPort.hasPendingFutureBookingsForService(serviceId) && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
                 throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SERVICE_HAS_PENDING_BOOKINGS");
             }
-            rejectPendingBookings(affectedPending, "MENTOR_SERVICE_DEACTIVATED");
-
-            // Retiring a service never changes confirmed booking snapshots, but it must stop
-            // reactivation from silently exposing the service through old future slots.
-            List<AvailabilitySlotService> futureBindings = availabilitySlotServiceRepository
-                    .findFutureActiveBindingsByServiceIdForUpdate(serviceId, now);
-            Set<UUID> changedSlotIds = futureBindings.stream()
-                    .map(binding -> binding.getSlot().getId())
-                    .collect(java.util.stream.Collectors.toSet());
-            if (!futureBindings.isEmpty()) {
-                availabilitySlotServiceRepository.deleteAll(futureBindings);
-                mentorAvailabilitySlotRepository.bumpVersions(changedSlotIds, DateTimeUtil.instantNow());
-            }
+            bookingAvailabilityPort.rejectPendingBookingsForService(serviceId, "MENTOR_SERVICE_DEACTIVATED");
+            bookingAvailabilityPort.unbindFutureSlotsForService(serviceId);
         }
         service.setActive(request.isActive());
         touchMentorActivity(mentorProfile, DateTimeUtil.now());
         MentorServiceManagementResponse response = toResponse(mentorServiceRepository.save(service));
-        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
+        if (applicationEventPublisher != null) {
+            applicationEventPublisher.publishEvent(new MentorBookingPolicyUpdatedEvent(mentorUserId));
+        }
         return response;
     }
 
@@ -202,28 +196,47 @@ public class MentorServiceManagementService {
 
     private MentorService loadOwnedService(UUID mentorUserId, UUID serviceId) {
         if (serviceId == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã dịch vụ không được để trống");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã dịch vụ không hợp lệ");
         }
         return mentorServiceRepository.findByIdAndMentorProfileUserId(serviceId, mentorUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy dịch vụ mentoring"));
     }
 
+    private void touchMentorActivity(MentorProfile mentorProfile, LocalDateTime at) {
+        mentorProfile.setLastActivityAt(at);
+        mentorProfileRepository.save(mentorProfile);
+    }
+
+    private void validateServicePricingAndDuration(Integer durationMinutes, Integer priceScoin, Boolean isFree) {
+        if (durationMinutes == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thời lượng dịch vụ không được để trống");
+        }
+        if (!PricingPolicy.isAllowedServiceDuration(durationMinutes, paymentProperties)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST,
+                    "Thời lượng dịch vụ không hợp lệ. Cho phép: "
+                            + PricingPolicy.allowedServiceDurations(paymentProperties));
+        }
+        if (Boolean.TRUE.equals(isFree)) {
+            return;
+        }
+        PricingPolicy.validatePaidServicePrice(priceScoin, durationMinutes, paymentProperties);
+    }
+
     private MentorServiceManagementResponse toResponse(MentorService service) {
-        int basePrice = service.isFree() ? 0 : defaultInteger(service.getPriceScoin());
+        int basePrice = Boolean.TRUE.equals(service.isFree()) ? 0 : (service.getPriceScoin() == null ? 0 : service.getPriceScoin());
         int publicPrice = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
         int payout = PricingPolicy.mentorNetScoin(basePrice, paymentProperties);
 
         return MentorServiceManagementResponse.builder()
-                .serviceId(service.getId())
-                .mentorUserId(service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId())
+                .id(service.getId())
                 .title(service.getTitle())
                 .description(service.getDescription())
                 .expectedOutcome(service.getExpectedOutcome())
                 .durationMinutes(service.getDurationMinutes())
                 .isFree(service.isFree())
                 .basePriceScoin(basePrice)
-                .publicPriceScoin(publicPrice)
-                .estimatedMentorPayoutScoin(payout)
+                .priceScoin(publicPrice)
+                .mentorPayoutScoin(payout)
                 .isActive(service.isActive())
                 .maintainPostSessionChat(service.isMaintainPostSessionChat())
                 .deliveryMode(service.getDeliveryMode())
@@ -233,63 +246,16 @@ public class MentorServiceManagementService {
                 .build();
     }
 
-    private Integer validateDuration(Integer durationMinutes) {
-        if (!PricingPolicy.isAllowedServiceDuration(durationMinutes, paymentProperties)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST,
-                    "Thời lượng dịch vụ không thuộc cấu hình cho phép: "
-                            + PricingPolicy.allowedServiceDurations(paymentProperties));
+    private void requireUserId(UUID mentorUserId) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
         }
-        return durationMinutes;
-    }
-
-    private Integer normalizePriceScoin(Boolean isFree, Integer priceScoin, Integer durationMinutes) {
-        if (Boolean.TRUE.equals(isFree)) {
-            if (priceScoin != null && priceScoin > 0) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ miễn phí phải có priceScoin bằng 0");
-            }
-            return 0;
-        }
-
-        PricingPolicy.validatePaidServicePrice(priceScoin, durationMinutes, paymentProperties);
-        return priceScoin;
-    }
-
-    private int minimumPriceForDuration(Integer durationMinutes) {
-        return PricingPolicy.minimumPriceForDuration(durationMinutes, paymentProperties);
-    }
-
-    private int maximumPriceForDuration(Integer durationMinutes) {
-        return PricingPolicy.maximumPriceForDuration(durationMinutes, paymentProperties);
-    }
-
-    private String cleanRequired(String value, String label) {
-        if (!hasText(value)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, label + " không được để trống");
-        }
-        return value.trim();
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
     }
 
     private void requireRequest(Object request) {
         if (request == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu dịch vụ mentoring không được để trống");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu yêu cầu không được để trống");
         }
-    }
-
-    private void requireUserId(UUID userId) {
-        if (userId == null) {
-            throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
-        }
-        if (userRepository.findById(userId).isEmpty()) {
-            throw new ResourceNotFoundException("Không tìm thấy người dùng");
-        }
-    }
-
-    private Integer defaultInteger(Integer value) {
-        return value == null ? 0 : value;
     }
 
     private VersionConflictException versionConflict(UUID serviceId, Integer expectedVersion, Integer currentVersion) {
@@ -301,26 +267,4 @@ public class MentorServiceManagementService {
                 currentVersion
         );
     }
-
-    private void rejectPendingBookings(List<Booking> bookings, String reason) {
-        LocalDateTime rejectedAt = DateTimeUtil.now();
-        for (Booking booking : bookings) {
-            if (booking.getStatus() != BookingStatus.PENDING) {
-                continue;
-            }
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, rejectedAt);
-            booking.setRejectReason(reason);
-        }
-        bookingRepository.saveAll(bookings);
-    }
-
-    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityTime) {
-        if (profile == null || activityTime == null) {
-            return;
-        }
-        if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(activityTime)) {
-            profile.setLastActiveAt(activityTime);
-        }
-    }
-
 }

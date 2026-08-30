@@ -108,4 +108,12 @@ public class UserQueryPortImpl implements UserQueryPort, UserLockPort {
                 com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN
         );
     }
+
+    @Override
+    public boolean hasCompletedStudentProfile(UUID userId) {
+        if (userId == null || studentProfileRepository == null) return false;
+        return studentProfileRepository.findWithDetailsByUserId(userId)
+                .map(sp -> sp.getProgram() != null && sp.getSpecialization() != null && sp.getCampus() != null)
+                .orElse(false);
+    }
 }

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.catalog.port.CatalogQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DiscoveryKeywordSupport {
 
-    private final TagRepository tagRepository;
+    private final CatalogQueryPort catalogQueryPort;
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
@@ -72,7 +72,7 @@ public class DiscoveryKeywordSupport {
             if (tagRepository == null || mentorServiceRepository == null) {
                 return;
             }
-            List<String> tags = tagRepository.findAll().stream()
+            List<String> tags = catalogQueryPort.findAllTags().stream()
                     .flatMap(tag -> Arrays.stream(new String[]{tag.getNameVi(), tag.getNameEn()}))
                     .filter(java.util.Objects::nonNull)
                     .map(this::normalizeSearchText)

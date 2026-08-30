@@ -2,12 +2,13 @@ package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponCreateRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponResponse;
-import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
-import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.CouponRepository;
+import com.fptu.exe.skillswap.modules.payment.port.CouponAdminPort;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponCreateCommand;
+import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponDto;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -16,12 +17,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,9 +32,7 @@ import static org.mockito.Mockito.when;
 class AdminCouponServiceTest {
 
     @Mock
-    private CouponRepository couponRepository;
-    @Mock
-    private CouponRedemptionRepository couponRedemptionRepository;
+    private CouponAdminPort couponAdminPort;
 
     @InjectMocks
     private AdminCouponService adminCouponService;
@@ -56,23 +57,35 @@ class AdminCouponServiceTest {
                     Collections.emptySet()
             );
 
-            Coupon savedCoupon = Coupon.builder()
-                    .id(UUID.randomUUID())
-                    .code("WELCOME50")
-                    .title("Giảm 50%")
-                    .discountType(CouponDiscountType.PERCENT)
-                    .discountValue(50)
-                    .status(CouponStatus.ACTIVE)
-                    .build();
+            AdminCouponDto mockDto = new AdminCouponDto(
+                    UUID.randomUUID(),
+                    "WELCOME50",
+                    "Giảm 50%",
+                    "Mô tả",
+                    CouponDiscountType.PERCENT,
+                    50,
+                    30000,
+                    CouponStatus.ACTIVE,
+                    null,
+                    null,
+                    100,
+                    1,
+                    0,
+                    Collections.emptySet(),
+                    Collections.emptySet(),
+                    0,
+                    0,
+                    LocalDateTime.now(),
+                    LocalDateTime.now()
+            );
 
-            when(couponRepository.existsByCode("WELCOME50")).thenReturn(false);
-            when(couponRepository.save(any(Coupon.class))).thenReturn(savedCoupon);
+            when(couponAdminPort.create(eq(adminId), any(AdminCouponCreateCommand.class))).thenReturn(mockDto);
 
             AdminCouponResponse response = adminCouponService.create(adminId, request);
 
             assertThat(response).isNotNull();
             assertThat(response.code()).isEqualTo("WELCOME50");
-            verify(couponRepository).save(any(Coupon.class));
+            verify(couponAdminPort).create(eq(adminId), any(AdminCouponCreateCommand.class));
         }
 
         @Test
@@ -84,7 +97,8 @@ class AdminCouponServiceTest {
                     CouponDiscountType.FIXED, 10000, null, null, null, null, null, null, null, null
             );
 
-            when(couponRepository.existsByCode("WELCOME50")).thenReturn(true);
+            when(couponAdminPort.create(eq(adminId), any(AdminCouponCreateCommand.class)))
+                    .thenThrow(new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mã giảm giá đã tồn tại trên hệ thống"));
 
             assertThatThrownBy(() -> adminCouponService.create(adminId, request))
                     .isInstanceOf(BaseException.class)
@@ -100,7 +114,8 @@ class AdminCouponServiceTest {
                     CouponDiscountType.PERCENT, 150, null, null, null, null, null, null, null, null
             );
 
-            when(couponRepository.existsByCode("OVER100")).thenReturn(false);
+            when(couponAdminPort.create(eq(adminId), any(AdminCouponCreateCommand.class)))
+                    .thenThrow(new BaseException(ErrorCode.BAD_REQUEST, "Phần trăm giảm giá không được vượt quá 100%"));
 
             assertThatThrownBy(() -> adminCouponService.create(adminId, request))
                     .isInstanceOf(BaseException.class)

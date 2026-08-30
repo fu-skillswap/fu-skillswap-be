@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.modules.system.domain.InternalTelemetryEvent;
 import com.fptu.exe.skillswap.modules.system.repository.InternalTelemetryEventRepository;
+import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class InternalTelemetryService {
+public class InternalTelemetryService implements TelemetryPort {
 
     private final InternalTelemetryEventRepository repository;
     private final ObjectMapper objectMapper;

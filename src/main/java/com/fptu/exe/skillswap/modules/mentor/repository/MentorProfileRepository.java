@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorAdminListItemDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -484,7 +484,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     List<UUID> findActiveMentorUserIds(@Param("mentorStatus") MentorStatus mentorStatus);
 
     @Query(value = """
-            select new com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse(
+            select new com.fptu.exe.skillswap.modules.mentor.port.dto.MentorAdminListItemDto(
                 mp.userId,
                 u.fullName,
                 u.email,
@@ -524,7 +524,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                     or function('translate', lower(u.fullName), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern
                     or function('translate', lower(coalesce(mp.headline, '')), :accentedCharacters, :plainCharacters) like :normalizedKeywordPattern)
             """)
-    Page<AdminMentorListItemResponse> searchForAdmin(
+    Page<MentorAdminListItemDto> searchForAdmin(
             @Param("keywordPattern") String keywordPattern,
             @Param("normalizedKeywordPattern") String normalizedKeywordPattern,
             @Param("accentedCharacters") String accentedCharacters,

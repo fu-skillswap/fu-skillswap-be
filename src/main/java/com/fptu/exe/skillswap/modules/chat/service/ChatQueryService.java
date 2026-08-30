@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
@@ -12,10 +11,8 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
-import com.fptu.exe.skillswap.modules.course.domain.Course;
-import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -44,8 +41,7 @@ public class ChatQueryService {
     private final ChatRoomService chatRoomService;
     private final ChatAccessResolutionService chatAccessResolutionService;
     private final ChatResponseMapper chatResponseMapper;
-    private final InternalTelemetryService internalTelemetryService;
-    private final ObjectProvider<CourseRepository> courseRepositoryProvider;
+    private final TelemetryPort internalTelemetryService;
 
     @Transactional(readOnly = true)
     public Page<ConversationResponse> getMyConversations(UUID userId, Pageable pageable) {
@@ -278,36 +274,6 @@ public class ChatQueryService {
         ));
     }
 
-    @Transactional(readOnly = true)
-    public Map<UUID, UUID> findConversationIdsForBookings(List<Booking> bookings) {
-        if (bookings == null || bookings.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<UUID> bookingIds = bookings.stream()
-                .filter(booking -> booking != null && booking.getId() != null)
-                .map(Booking::getId)
-                .toList();
-        Map<UUID, UUID> result = new HashMap<>(findConversationIdsByBookingIds(bookingIds));
-        for (Booking booking : bookings) {
-            if (booking == null || booking.getId() == null || result.containsKey(booking.getId())) {
-                continue;
-            }
-            User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
-            User menteeUser = booking.getMentee();
-            if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
-                continue;
-            }
-            Conversation directConversation = chatRoomService.findDirectByParticipants(mentorUser.getId(), menteeUser.getId());
-            if (directConversation != null) {
-                result.put(booking.getId(), directConversation.getId());
-            }
-        }
-        return result;
-    }
 
-    private String resolveCourseTitle(UUID courseId) {
-        if (courseId == null) return null;
-        var courseRepo = courseRepositoryProvider.getIfAvailable();
-        return courseRepo != null ? courseRepo.findById(courseId).map(Course::getTitle).orElse(null) : null;
-    }
+
 }

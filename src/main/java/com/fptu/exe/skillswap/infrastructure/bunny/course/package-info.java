@@ -1,2 +1,2 @@
-/** Adapter hạ tầng Bunny Stream cho các hợp đồng do Course sở hữu. */
+@org.springframework.modulith.NamedInterface("infrastructure")
 package com.fptu.exe.skillswap.infrastructure.bunny.course;

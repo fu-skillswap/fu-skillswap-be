@@ -1,2 +1,2 @@
-/** Servlet filter cho các xử lý chung ở tầng truyền tải. */
+@org.springframework.modulith.NamedInterface("infrastructure")
 package com.fptu.exe.skillswap.infrastructure.filter;

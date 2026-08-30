@@ -1,14 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationBookingLink;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantRole;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationStatus;
-import com.fptu.exe.skillswap.modules.chat.domain.ConversationType;
+import com.fptu.exe.skillswap.modules.chat.domain.*;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationBookingLinkRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
@@ -23,8 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -33,32 +24,24 @@ public class ChatRoomService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
     private final ConversationBookingLinkRepository conversationBookingLinkRepository;
-    private final ObjectProvider<com.fptu.exe.skillswap.modules.course.repository.CourseRepository> courseRepositoryProvider;
     private final ObjectProvider<UserQueryPort> userQueryPortProvider;
-    private final ObjectProvider<com.fptu.exe.skillswap.modules.identity.repository.UserRepository> userRepositoryProvider;
 
     @Transactional
-    public Conversation createDirectForAcceptedBooking(Booking booking) {
-        if (booking == null || booking.getId() == null) {
-            throw new IllegalArgumentException("Booking must not be null");
+    public Conversation createDirectForAcceptedBooking(UUID bookingId, UUID mentorUserId, UUID menteeUserId) {
+        if (bookingId == null || mentorUserId == null || menteeUserId == null) {
+            throw new IllegalArgumentException("Booking ID, mentor user ID and mentee user ID must not be null");
         }
 
-        User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
-        User menteeUser = booking.getMentee();
-        if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
-            throw new IllegalArgumentException("Booking must have mentor and mentee users");
-        }
-
-        Conversation conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
-                .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
+        Conversation conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)
+                .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUserId, menteeUserId))
                 .orElse(null);
         if (conversation == null) {
             try {
                 conversation = conversationRepository.save(Conversation.builder()
                         .sourceType(ConversationSourceType.BOOKING)
-                        .sourceId(booking.getId())
-                        .mentorUserId(mentorUser.getId())
-                        .menteeUserId(menteeUser.getId())
+                        .sourceId(bookingId)
+                        .mentorUserId(mentorUserId)
+                        .menteeUserId(menteeUserId)
                         .type(ConversationType.DIRECT)
                         .status(ConversationStatus.ACTIVE)
                         .build());
@@ -67,24 +50,34 @@ public class ChatRoomService {
             }
         }
         if (conversation == null) {
-            conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
-                    .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
+            conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)
+                    .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUserId, menteeUserId))
                     .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể tạo cuộc hội thoại trực tiếp"));
         }
 
-        addParticipantIfAbsent(conversation, mentorUser);
-        addParticipantIfAbsent(conversation, menteeUser);
-        if (conversationBookingLinkRepository != null && !conversationBookingLinkRepository.existsByBookingId(booking.getId())) {
-            conversationBookingLinkRepository.save(ConversationBookingLink.builder()
-                    .conversation(conversation)
-                    .booking(booking)
-                    .build());
-        }
+        User mentorUser = resolveUser(mentorUserId);
+        User menteeUser = resolveUser(menteeUserId);
+        if (mentorUser != null) addParticipantIfAbsent(conversation, mentorUser);
+        if (menteeUser != null) addParticipantIfAbsent(conversation, menteeUser);
+
+        Conversation finalConversation = conversation;
+        conversationBookingLinkRepository.findByConversationId(conversation.getId()).stream()
+                .filter(link -> bookingId.equals(link.getBookingId()))
+                .findFirst()
+                .orElseGet(() -> conversationBookingLinkRepository.save(
+                        ConversationBookingLink.builder()
+                                .conversation(finalConversation)
+                                .bookingId(bookingId)
+                                .linkedAt(DateTimeUtil.now())
+                                .build()
+                ));
+
         return conversation;
     }
 
     @Transactional
     public void addParticipantIfAbsent(Conversation conversation, User user) {
+        if (conversation == null || user == null) return;
         if (!participantRepository.existsByConversationIdAndUserId(conversation.getId(), user.getId())) {
             ConversationParticipant participant = ConversationParticipant.builder()
                     .conversation(conversation)
@@ -123,39 +116,51 @@ public class ChatRoomService {
         return conversations == null || conversations.isEmpty() ? null : conversations.getFirst();
     }
 
-    @Transactional
-    public Conversation ensureCourseGroupConversation(com.fptu.exe.skillswap.modules.course.domain.Course course) {
-        if (course == null || course.getId() == null) {
-            throw new IllegalArgumentException("Course must not be null");
+    @Transactional(readOnly = true)
+    public Map<UUID, UUID> getConversationIdsForBookings(Collection<UUID> bookingIds) {
+        if (bookingIds == null || bookingIds.isEmpty()) return Map.of();
+        List<ConversationBookingLink> links = conversationBookingLinkRepository.findByBookingIdIn(bookingIds);
+        Map<UUID, UUID> map = new HashMap<>();
+        for (ConversationBookingLink link : links) {
+            if (link.getConversation() != null && link.getBookingId() != null) {
+                map.put(link.getBookingId(), link.getConversation().getId());
+            }
         }
-        User mentorUser = course.getMentorProfile() == null ? null : course.getMentorProfile().getUser();
-        if (mentorUser == null || mentorUser.getId() == null) {
-            throw new IllegalArgumentException("Course must have mentor user");
+        return map;
+    }
+
+    @Transactional
+    public Conversation ensureCourseGroupConversation(UUID courseId, UUID mentorUserId) {
+        if (courseId == null || mentorUserId == null) {
+            throw new IllegalArgumentException("Course ID and mentor user ID must not be null");
         }
 
         Conversation conversation = conversationRepository
-                .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.getId())
+                .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, courseId)
                 .orElse(null);
         if (conversation == null) {
             try {
                 conversation = conversationRepository.save(Conversation.builder()
                         .sourceType(ConversationSourceType.COURSE)
-                        .sourceId(course.getId())
-                        .mentorUserId(mentorUser.getId())
+                        .sourceId(courseId)
+                        .mentorUserId(mentorUserId)
                         .menteeUserId(null)
                         .type(ConversationType.GROUP)
                         .status(ConversationStatus.ACTIVE)
                         .build());
             } catch (DataIntegrityViolationException ex) {
                 conversation = conversationRepository
-                        .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.getId())
+                        .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, courseId)
                         .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể tạo nhóm chat khóa học"));
             }
         }
 
-        addGroupParticipantIfAbsent(conversation, mentorUser,
-                ConversationParticipantRole.MENTOR,
-                ConversationParticipantAccess.ACTIVE);
+        User mentorUser = resolveUser(mentorUserId);
+        if (mentorUser != null) {
+            addGroupParticipantIfAbsent(conversation, mentorUser,
+                    ConversationParticipantRole.MENTOR,
+                    ConversationParticipantAccess.ACTIVE);
+        }
         return conversation;
     }
 
@@ -164,16 +169,20 @@ public class ChatRoomService {
         if (courseId == null || studentUserId == null) {
             return;
         }
-        var courseRepo = courseRepositoryProvider.getIfAvailable();
-        com.fptu.exe.skillswap.modules.course.domain.Course course = courseRepo != null
-                ? courseRepo.findById(courseId).orElse(null)
-                : null;
-        if (course == null) {
+        Conversation conversation = conversationRepository
+                .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, courseId)
+                .orElse(null);
+        if (conversation != null) {
+            addCourseStudentParticipant(courseId, conversation.getMentorUserId(), studentUserId);
+        }
+    }
+
+    @Transactional
+    public void addCourseStudentParticipant(UUID courseId, UUID mentorUserId, UUID studentUserId) {
+        if (courseId == null || studentUserId == null) {
             return;
         }
-
-        Conversation conversation = ensureCourseGroupConversation(course);
-
+        Conversation conversation = ensureCourseGroupConversation(courseId, mentorUserId);
         User studentUser = resolveUser(studentUserId);
         if (studentUser == null) {
             return;
@@ -254,11 +263,7 @@ public class ChatRoomService {
 
     private User resolveUser(UUID userId) {
         if (userId == null) return null;
-        var userPort = userQueryPortProvider.getIfAvailable();
-        if (userPort != null) {
-            return userPort.findUserById(userId).orElse(null);
-        }
-        var userRepo = userRepositoryProvider.getIfAvailable();
-        return userRepo != null ? userRepo.findById(userId).orElse(null) : null;
+        var userPort = userQueryPortProvider != null ? userQueryPortProvider.getIfAvailable() : null;
+        return userPort != null ? userPort.findUserById(userId).orElse(null) : null;
     }
 }

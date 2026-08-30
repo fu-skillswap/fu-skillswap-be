@@ -5,6 +5,8 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.admin.service.SystemUserRoleService;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
+import com.fptu.exe.skillswap.modules.identity.port.dto.SystemUserDto;
+import com.fptu.exe.skillswap.modules.identity.port.dto.UserAdminDto;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,12 +44,14 @@ class SystemUserRoleServiceTest {
     @Test
     void grantAdminRole_delegatesToPort() {
         UUID userId = UUID.randomUUID();
-        AdminUserResponse mockResponse = AdminUserResponse.builder()
+        UserAdminDto mockDto = UserAdminDto.builder()
                 .userId(userId)
                 .email("user@test.com")
+                .fullName("User Full Name")
+                .avatarUrl("avatar.jpg")
                 .status(UserStatus.ACTIVE)
                 .build();
-        when(userAdminPort.grantAdminRole(systemAdminId, "user@test.com")).thenReturn(mockResponse);
+        when(userAdminPort.grantAdminRole(systemAdminId, "user@test.com")).thenReturn(mockDto);
 
         AdminUserResponse response = systemUserRoleService.grantAdminRole(systemAdminId, "user@test.com");
 
@@ -58,12 +63,14 @@ class SystemUserRoleServiceTest {
     @Test
     void revokeAdminRole_delegatesToPort() {
         UUID userId = UUID.randomUUID();
-        AdminUserResponse mockResponse = AdminUserResponse.builder()
+        UserAdminDto mockDto = UserAdminDto.builder()
                 .userId(userId)
                 .email("user@test.com")
+                .fullName("User Full Name")
+                .avatarUrl("avatar.jpg")
                 .status(UserStatus.ACTIVE)
                 .build();
-        when(userAdminPort.revokeAdminRole("user@test.com")).thenReturn(mockResponse);
+        when(userAdminPort.revokeAdminRole("user@test.com")).thenReturn(mockDto);
 
         AdminUserResponse response = systemUserRoleService.revokeAdminRole("user@test.com");
 
@@ -73,12 +80,14 @@ class SystemUserRoleServiceTest {
 
     @Test
     void getAdminUsers_delegatesToPort() {
-        AdminUserResponse adminUser = AdminUserResponse.builder()
+        UserAdminDto adminUser = UserAdminDto.builder()
                 .userId(UUID.randomUUID())
                 .email("admin@test.com")
+                .fullName("Admin User")
+                .avatarUrl("avatar.jpg")
                 .status(UserStatus.ACTIVE)
                 .build();
-        PageResponse<AdminUserResponse> mockPage = PageResponse.<AdminUserResponse>builder()
+        PageResponse<UserAdminDto> mockPage = PageResponse.<UserAdminDto>builder()
                 .content(List.of(adminUser))
                 .page(0).size(20).totalElements(1).totalPages(1)
                 .build();
@@ -93,13 +102,17 @@ class SystemUserRoleServiceTest {
 
     @Test
     void getAllUsers_delegatesToPort() {
-        SystemUserResponse sysUser = SystemUserResponse.builder()
+        SystemUserDto sysUser = SystemUserDto.builder()
                 .userId(UUID.randomUUID())
                 .email("user@test.com")
+                .fullName("Test User")
+                .avatarUrl("avatar.jpg")
                 .status(UserStatus.ACTIVE)
                 .roles(List.of(RoleCode.MENTEE))
+                .createdAt(LocalDateTime.now())
+                .lastLoginAt(LocalDateTime.now())
                 .build();
-        PageResponse<SystemUserResponse> mockPage = PageResponse.<SystemUserResponse>builder()
+        PageResponse<SystemUserDto> mockPage = PageResponse.<SystemUserDto>builder()
                 .content(List.of(sysUser))
                 .page(0).size(20).totalElements(1).totalPages(1)
                 .build();

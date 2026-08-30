@@ -185,13 +185,13 @@ public class GoogleCalendarApiClient {
         Instant startUtc = session != null && session.getScheduledStartTimeUtc() != null
                 ? session.getScheduledStartTimeUtc()
                 : (session != null && session.getScheduledStartTime() != null
-                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledStartTime())
-                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedStartUtc(booking));
+                    ? com.fptu.exe.skillswap.shared.time.BookingTime.toInstant(session.getScheduledStartTime())
+                    : com.fptu.exe.skillswap.shared.time.BookingTime.resolveSelectedStartUtc(booking));
         Instant endUtc = session != null && session.getScheduledEndTimeUtc() != null
                 ? session.getScheduledEndTimeUtc()
                 : (session != null && session.getScheduledEndTime() != null
-                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledEndTime())
-                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedEndUtc(booking));
+                    ? com.fptu.exe.skillswap.shared.time.BookingTime.toInstant(session.getScheduledEndTime())
+                    : com.fptu.exe.skillswap.shared.time.BookingTime.resolveSelectedEndUtc(booking));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("summary", defaultText(serviceTitle, "SkillSwap Mentoring Session"));

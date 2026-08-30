@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("payment")
+@org.springframework.modulith.NamedInterface("port")
 package com.fptu.exe.skillswap.modules.payment.port;

@@ -1,2 +1,2 @@
-/** Phần gọi HTTP nội bộ cho Bunny Stream client. */
+@org.springframework.modulith.NamedInterface("infrastructure")
 package com.fptu.exe.skillswap.infrastructure.bunny.client.impl;

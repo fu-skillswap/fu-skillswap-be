@@ -17,9 +17,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlot
 import com.fptu.exe.skillswap.modules.booking.dto.request.DeactivateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilityResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.SlotMutationCapabilityResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
@@ -40,7 +40,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesR
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
-import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
+import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;

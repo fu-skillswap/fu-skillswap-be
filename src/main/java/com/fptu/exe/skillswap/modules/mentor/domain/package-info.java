@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("mentor")
+@org.springframework.modulith.NamedInterface("domain")
 package com.fptu.exe.skillswap.modules.mentor.domain;

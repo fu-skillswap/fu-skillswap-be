@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("catalog")
+@org.springframework.modulith.NamedInterface("domain")
 package com.fptu.exe.skillswap.modules.catalog.domain;

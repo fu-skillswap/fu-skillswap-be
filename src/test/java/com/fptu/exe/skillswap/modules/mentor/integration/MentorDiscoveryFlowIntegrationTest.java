@@ -184,7 +184,7 @@ class MentorDiscoveryFlowIntegrationTest {
 
     private MentorService activeOneToOneService(MentorProfile profile, String title) {
         return MentorService.builder()
-                .mentorProfile(profile)
+                .mentorUserId(profile.getUser().getId())
                 .title(title)
                 .description("Dich vu mentoring 1:1 dang mo")
                 .expectedOutcome("Nguoi hoc co huong giai quyet ro rang")
