@@ -247,6 +247,8 @@
                 <configuration>
                     <source>21</source>
                     <target>21</target>
+                    <!-- Keep Lombok/MapStruct processing explicit for both JDK 21 and newer CI images. -->
+                    <proc>full</proc>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>

@@ -837,10 +837,5 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("select case when count(b) > 0 then true else false end from Booking b where b.mentee.id = :menteeUserId and b.status in :statuses")
     boolean existsByMenteeIdAndStatusIn(@Param("menteeUserId") UUID menteeUserId, @Param("statuses") Collection<BookingStatus> statuses);
 
-    @Query("select count(b) from Booking b where b.mentee.id = :menteeUserId and b.status = :status")
-    long countByMenteeIdAndStatus(@Param("menteeUserId") UUID menteeUserId, @Param("status") BookingStatus status);
-
-    @Query("select count(b) from Booking b where b.mentee.id = :menteeUserId")
-    long countByMenteeId(@Param("menteeUserId") UUID menteeUserId);
 }
 
