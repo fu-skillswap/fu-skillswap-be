@@ -688,7 +688,7 @@ public class BlogService {
         if (author == null || author.getStatus() == UserStatus.BANNED || author.getStatus() == UserStatus.DELETED) {
             return false;
         }
-        return mentorQueryPort.findMentorProfileByUserId(author.getId())
+        return mentorProfileRepository.findById(author.getId())
                 .map(profile -> profile.getStatus() != MentorStatus.SUSPENDED)
                 .orElse(false);
     }

@@ -66,11 +66,13 @@ public class BookingResponseMapper {
 
     @Autowired
     public BookingResponseMapper(SessionService sessionService,
+                                 
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties,
                                  @Autowired(required = false) TimeProvider timeProvider,
                                  SessionAttendanceRepository sessionAttendanceRepository) {
         this.sessionService = sessionService;
+        this.conversationService = conversationService;
         this.paymentOrderRepository = paymentOrderRepository;
         this.paymentProperties = paymentProperties;
         this.timeProvider = timeProvider != null ? timeProvider : TimeProvider.from(Clock.systemUTC());
@@ -88,16 +90,18 @@ public class BookingResponseMapper {
     }
 
     public BookingResponseMapper(SessionService sessionService,
+                                 
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties,
                                  TimeProvider timeProvider) {
-        this(sessionService, paymentOrderRepository, paymentProperties, timeProvider, null);
+        this(sessionService, conversationService, paymentOrderRepository, paymentProperties, timeProvider, null);
     }
 
     public BookingResponseMapper(SessionService sessionService,
+                                 
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties) {
-        this(sessionService, paymentOrderRepository, paymentProperties, null, null);
+        this(sessionService, conversationService, paymentOrderRepository, paymentProperties, null, null);
     }
 
     public BookingResponse toBookingResponse(Booking booking) {
@@ -158,6 +162,14 @@ public class BookingResponseMapper {
         UUID conversationId = null;
         if (bookingToConversationMap != null && bookingToConversationMap.containsKey(booking.getId())) {
             conversationId = bookingToConversationMap.get(booking.getId());
+        } else if (conversationService != null) {
+            Conversation conv = conversationService.findByBookingId(booking.getId());
+            if (conv == null && mentee != null && mentee.getId() != null && mentorUser != null && mentorUser.getId() != null) {
+                conv = conversationService.findDirectByParticipants(mentorUser.getId(), mentee.getId());
+            }
+            if (conv != null) {
+                conversationId = conv.getId();
+            }
         }
 
         UUID currentUserId = null;

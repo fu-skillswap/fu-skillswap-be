@@ -11,7 +11,6 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
-import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -43,7 +42,6 @@ public class ChatQueryService {
     private final ChatAccessResolutionService chatAccessResolutionService;
     private final ChatResponseMapper chatResponseMapper;
     private final TelemetryPort internalTelemetryService;
-    private final CourseQueryPort courseQueryPort;
 
     @Transactional(readOnly = true)
     public Page<ConversationResponse> getMyConversations(UUID userId, Pageable pageable) {
@@ -276,7 +274,6 @@ public class ChatQueryService {
         ));
     }
 
-    private String resolveCourseTitle(UUID courseId) {
-        return courseQueryPort != null ? courseQueryPort.findCourseTitle(courseId) : null;
-    }
+
+
 }

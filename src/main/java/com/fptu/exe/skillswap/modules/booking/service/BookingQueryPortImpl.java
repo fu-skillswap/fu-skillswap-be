@@ -37,7 +37,7 @@ public class BookingQueryPortImpl implements BookingQueryPort {
     @Override
     public boolean hasActiveBookings(UUID userId) {
         if (userId == null) return false;
-        return bookingRepository.existsByMenteeIdAndStatusIn(userId, List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID, BookingStatus.UNDER_REVIEW));
+        return bookingRepository.existsByMenteeIdAndStatusIn(userId, List.of(BookingStatus.PENDING, BookingStatus.CONFIRMED, BookingStatus.PAID, BookingStatus.UNDER_REVIEW));
     }
 
     @Override

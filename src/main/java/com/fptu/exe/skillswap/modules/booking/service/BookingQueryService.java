@@ -126,8 +126,8 @@ public class BookingQueryService {
         };
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
-        Map<UUID, UUID> bookingToConvMap = chatPort != null
-                ? chatPort.getConversationIdsForBookings(bookingIds)
+        Map<UUID, UUID> bookingToConvMap = conversationService != null
+                ? conversationService.findConversationIdsForBookings(page.getContent())
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -182,8 +182,8 @@ public class BookingQueryService {
         );
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
-        Map<UUID, UUID> bookingToConvMap = chatPort != null
-                ? chatPort.getConversationIdsForBookings(bookingIds)
+        Map<UUID, UUID> bookingToConvMap = conversationService != null
+                ? conversationService.findConversationIdsForBookings(page.getContent())
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)

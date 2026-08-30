@@ -238,10 +238,10 @@ public class BookingDecisionService {
             if (sessionService != null) {
                 sessionService.createForAcceptedBooking(savedBooking);
             }
-            if (chatPort != null) {
+            if (conversationService != null) {
                 UUID mentorUid = (savedBooking.getMentorProfile() != null && savedBooking.getMentorProfile().getUser() != null) ? savedBooking.getMentorProfile().getUser().getId() : null;
                 UUID menteeUid = savedBooking.getMentee() != null ? savedBooking.getMentee().getId() : null;
-                if (mentorUid != null && menteeUid != null) {
+                if (chatPort != null && mentorUid != null && menteeUid != null) {
                     chatPort.createBookingConversation(savedBooking.getId(), menteeUid, mentorUid);
                 }
             }
