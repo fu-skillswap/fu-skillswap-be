@@ -1,5 +1,11 @@
 -- rollout: EXPAND
 -- Move the course curriculum from Chapter -> Lecture -> Resource to Chapter -> Material.
+-- V82 already used course_materials for the retired course/session resource model.
+-- Preserve that table under an explicit legacy name before creating the new
+-- chapter-scoped material table. This keeps the migration additive and avoids
+-- losing any legacy records during the curriculum cut-over.
+ALTER TABLE course_materials RENAME TO legacy_course_materials_v123;
+
 CREATE TABLE course_materials (
     id UUID PRIMARY KEY,
     chapter_id UUID NOT NULL,
