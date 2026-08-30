@@ -827,11 +827,5 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     List<Booking> findTop100ByStatusAndIssueSubmittedAtUtcBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtUtcAsc(
             @Param("status") BookingStatus status,
             @Param("issueSubmittedAtUtcBefore") Instant issueSubmittedAtUtcBefore);
-
-    @Query("select count(b) from Booking b where b.mentorProfile.userId = :mentorUserId and b.status in :statuses")
-    long countByMentorUserIdAndStatusIn(@Param("mentorUserId") UUID mentorUserId, @Param("statuses") List<BookingStatus> statuses);
-
-    @Query("select count(b) from Booking b where b.mentorProfile.userId = :mentorUserId")
-    long countByMentorUserId(@Param("mentorUserId") UUID mentorUserId);
 }
 

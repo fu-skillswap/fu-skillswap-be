@@ -17,7 +17,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
-import com.fptu.exe.skillswap.modules.payment.port.PaymentPort;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -49,7 +50,8 @@ public class BookingLifecycleMaintenanceService {
     );
 
     private final BookingRepository bookingRepository;
-    private final PaymentPort paymentPort;
+    private final PaymentOrderService paymentOrderService;
+    private final SettlementService settlementService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEventService bookingEventService;
     private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
@@ -61,6 +63,30 @@ public class BookingLifecycleMaintenanceService {
     private BookingDisputeNotificationService bookingDisputeNotificationService;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    public BookingLifecycleMaintenanceService(
+            BookingRepository bookingRepository,
+            PaymentOrderService paymentOrderService,
+            SettlementService settlementService,
+            ApplicationEventPublisher eventPublisher,
+            BookingEventService bookingEventService
+    ) {
+        this(bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, null, null);
+    }
+
+    public BookingLifecycleMaintenanceService(
+            BookingRepository bookingRepository,
+            com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository mentorProfileRepository,
+            PaymentOrderService paymentOrderService,
+            SettlementService settlementService,
+            ApplicationEventPublisher eventPublisher,
+            BookingEventService bookingEventService,
+            com.fptu.exe.skillswap.modules.identity.repository.UserRepository userRepository
+    ) {
+        this(bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService,
+                userRepository != null ? new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, null) : null,
+                mentorProfileRepository != null ? new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, null) : null);
+    }
 
     @Autowired(required = false)
     public void setTimeProvider(TimeProvider timeProvider) {

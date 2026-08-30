@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.blog.domain;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.Column;

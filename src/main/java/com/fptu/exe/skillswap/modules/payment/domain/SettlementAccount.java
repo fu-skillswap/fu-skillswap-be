@@ -70,14 +70,14 @@ public class SettlementAccount {
     @jakarta.persistence.PrePersist
     protected void onCreate() {
         java.time.Instant nowUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-        LocalDateTime nowHcm = com.fptu.exe.skillswap.shared.time.BookingTime.fromInstant(nowUtc);
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
         if (createdAt == null && createdAtUtc == null) {
             createdAtUtc = nowUtc;
             createdAt = nowHcm;
         } else if (createdAtUtc != null && createdAt == null) {
-            createdAt = com.fptu.exe.skillswap.shared.time.BookingTime.fromInstant(createdAtUtc);
+            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
         } else if (createdAt != null && createdAtUtc == null) {
-            createdAtUtc = com.fptu.exe.skillswap.shared.time.BookingTime.toInstant(createdAt);
+            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
         }
         updatedAtUtc = nowUtc;
         updatedAt = nowHcm;
@@ -86,6 +86,6 @@ public class SettlementAccount {
     @jakarta.persistence.PreUpdate
     protected void onUpdate() {
         updatedAtUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-        updatedAt = com.fptu.exe.skillswap.shared.time.BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(updatedAtUtc);
     }
 }

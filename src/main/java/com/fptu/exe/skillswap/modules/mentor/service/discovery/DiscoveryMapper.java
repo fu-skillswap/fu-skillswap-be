@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
@@ -11,7 +12,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
-import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -131,6 +132,17 @@ public class DiscoveryMapper {
                 .build();
     }
 
+    public MentorReviewResponse toMentorReviewResponse(MentorReviewQueryRow row) {
+        return MentorReviewResponse.builder()
+                .reviewId(row.reviewId())
+                .reviewerUserId(row.reviewerUserId())
+                .reviewerDisplayName(row.reviewerDisplayName())
+                .reviewerAvatarUrl(row.reviewerAvatarUrl())
+                .rating(row.rating())
+                .comment(row.comment())
+                .createdAt(row.createdAt())
+                .build();
+    }
 
     public static BigDecimal defaultDecimal(BigDecimal value) {
         return value == null ? ZERO : value;

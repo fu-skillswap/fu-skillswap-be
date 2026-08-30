@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.booking.domain;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;

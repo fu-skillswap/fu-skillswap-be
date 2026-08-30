@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ChatAttachmentRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.exception.BaseException;

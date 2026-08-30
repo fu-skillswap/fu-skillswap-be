@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponCreateCommand;
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponDto;
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponFilterQuery;
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponRedemptionDto;
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponStatusChangeCommand;
-import com.fptu.exe.skillswap.modules.payment.port.dto.AdminCouponUpdateCommand;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponCreateRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponStatusRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponUpdateRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponRedemptionResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
@@ -53,16 +53,16 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCouponDto> list(AdminCouponFilterQuery request) {
+    public PageResponse<AdminCouponResponse> list(AdminCouponListRequest request) {
         Specification<Coupon> spec = buildSpecification(request);
         Pageable pageable = request.getPageable();
         Page<Coupon> page = couponRepository.findAll(spec, pageable);
 
-        List<AdminCouponDto> content = page.getContent().stream()
+        List<AdminCouponResponse> content = page.getContent().stream()
                 .map(this::toResponse)
                 .toList();
 
-        return PageResponse.<AdminCouponDto>builder()
+        return PageResponse.<AdminCouponResponse>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -74,14 +74,14 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCouponDto getDetail(UUID couponId) {
+    public AdminCouponResponse getDetail(UUID couponId) {
         Coupon coupon = findCouponOrThrow(couponId);
         return toResponse(coupon);
     }
 
     @Override
     @Transactional
-    public AdminCouponDto create(UUID adminUserId, AdminCouponCreateCommand request) {
+    public AdminCouponResponse create(UUID adminUserId, AdminCouponCreateRequest request) {
         String cleanCode = request.code().trim().toUpperCase(Locale.ROOT);
         if (couponRepository.existsByCode(cleanCode)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mã coupon '" + cleanCode + "' đã tồn tại trên hệ thống");
@@ -114,7 +114,7 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional
-    public AdminCouponDto update(UUID adminUserId, UUID couponId, AdminCouponUpdateCommand request) {
+    public AdminCouponResponse update(UUID adminUserId, UUID couponId, AdminCouponUpdateRequest request) {
         Coupon coupon = findCouponOrThrow(couponId);
 
         if (coupon.getStatus() == CouponStatus.EXPIRED) {
@@ -158,7 +158,7 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional
-    public AdminCouponDto changeStatus(UUID adminUserId, UUID couponId, AdminCouponStatusChangeCommand request) {
+    public AdminCouponResponse changeStatus(UUID adminUserId, UUID couponId, AdminCouponStatusRequest request) {
         Coupon coupon = findCouponOrThrow(couponId);
         CouponStatus targetStatus = request.status();
 
@@ -174,7 +174,7 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCouponRedemptionDto> getRedemptions(UUID couponId, Pageable pageable) {
+    public PageResponse<AdminCouponRedemptionResponse> getRedemptions(UUID couponId, Pageable pageable) {
         findCouponOrThrow(couponId);
         Page<CouponRedemption> page = couponRedemptionRepository.findByCouponId(couponId, pageable);
 
@@ -185,11 +185,11 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         Map<UUID, User> userMap = userQueryPort.findUsersByIdIn(userIds).stream()
                 .collect(Collectors.toMap(User::getId, Function.identity()));
 
-        List<AdminCouponRedemptionDto> content = page.getContent().stream()
+        List<AdminCouponRedemptionResponse> content = page.getContent().stream()
                 .map(r -> {
                     User user = userMap.get(r.getRedeemerUserId());
                     String name = user == null ? "Unknown User" : user.getFullName();
-                    return new AdminCouponRedemptionDto(
+                    return new AdminCouponRedemptionResponse(
                             r.getId(),
                             r.getCouponId(),
                             r.getPaymentOrderId(),
@@ -202,7 +202,7 @@ public class CouponAdminPortImpl implements CouponAdminPort {
                 })
                 .toList();
 
-        return PageResponse.<AdminCouponRedemptionDto>builder()
+        return PageResponse.<AdminCouponRedemptionResponse>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -232,11 +232,11 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         }
     }
 
-    private AdminCouponDto toResponse(Coupon c) {
+    private AdminCouponResponse toResponse(Coupon c) {
         long totalRedemptions = couponRedemptionRepository.countByCouponId(c.getId());
         long activeRedemptions = couponRedemptionRepository.countByCouponIdAndStatusIn(c.getId(), ACTIVE_REDEMPTION_STATUSES);
 
-        return new AdminCouponDto(
+        return new AdminCouponResponse(
                 c.getId(),
                 c.getCode(),
                 c.getTitle(),
@@ -259,7 +259,7 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         );
     }
 
-    private Specification<Coupon> buildSpecification(AdminCouponFilterQuery request) {
+    private Specification<Coupon> buildSpecification(AdminCouponListRequest request) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 

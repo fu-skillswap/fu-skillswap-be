@@ -1,6 +1,4 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AvailabilitySlotServiceBasicResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.SlotMutationCapabilityResponse;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;

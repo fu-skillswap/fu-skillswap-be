@@ -9,7 +9,8 @@ import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityPort;
+import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.mentor.domain.*;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.*;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.*;
@@ -76,8 +77,9 @@ public class MentorVerificationService {
     private final ObjectProvider<StorageGateway> r2StorageProvider;
     private final MentorVerificationUploadIntentRepository uploadIntentRepository;
     private final MentorServiceRepository mentorServiceRepository;
-    private final BookingAvailabilityPort bookingAvailabilityPort;
-    
+    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private final BookingEligibilityPolicy bookingEligibilityPolicy;
+
     @Transactional
     public MentorVerificationRequestActionResult<MentorVerificationRequestResponse> requestToBecomeMentor(UUID userId) {
         requireUserId(userId);

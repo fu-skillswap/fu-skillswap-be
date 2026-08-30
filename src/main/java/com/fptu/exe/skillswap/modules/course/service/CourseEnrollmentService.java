@@ -9,7 +9,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
-import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

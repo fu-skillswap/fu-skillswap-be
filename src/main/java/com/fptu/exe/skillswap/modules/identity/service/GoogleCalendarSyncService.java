@@ -4,8 +4,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.identity.domain.*;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
@@ -39,7 +39,7 @@ public class GoogleCalendarSyncService {
 
     private final GoogleCalendarSyncJobRepository jobRepository;
     private final GoogleCalendarEventLinkRepository eventLinkRepository;
-    private final BookingQueryPort bookingQueryPort;
+    private final BookingRepository bookingRepository;
     private final SessionService sessionService;
     private final GoogleCalendarConnectionService connectionService;
     private final GoogleCalendarConnectionRepository connectionRepository;
@@ -108,7 +108,7 @@ public class GoogleCalendarSyncService {
         Booking booking;
         Session session;
         try {
-            booking = bookingQueryPort.findById(job.getBookingId())
+            booking = bookingRepository.findById(job.getBookingId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để sync Google Calendar"));
             Session existingSession = sessionService.findByBookingId(booking.getId());
             if (existingSession == null && job.getJobType() != GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT) {

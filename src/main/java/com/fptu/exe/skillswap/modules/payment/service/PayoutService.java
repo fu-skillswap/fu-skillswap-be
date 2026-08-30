@@ -204,8 +204,8 @@ public class PayoutService {
     }
 
     private static OffsetDateTime toOffset(Instant utc, java.time.LocalDateTime legacy) {
-        if (utc != null) return com.fptu.exe.skillswap.shared.time.BookingTime.toOffsetDateTime(utc);
-        if (legacy != null) return com.fptu.exe.skillswap.shared.time.BookingTime.toOffsetDateTime(legacy);
+        if (utc != null) return com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(utc);
+        if (legacy != null) return com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(legacy);
         return null;
     }
 }

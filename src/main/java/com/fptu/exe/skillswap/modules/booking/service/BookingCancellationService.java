@@ -18,7 +18,7 @@ import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCancelBookingRequestedEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
-import com.fptu.exe.skillswap.modules.payment.port.PaymentPort;
+import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -53,7 +53,7 @@ public class BookingCancellationService {
     private final MentorProfileRepository mentorProfileRepository;
     private final EntityManager entityManager;
     private final SessionService sessionService;
-    private final PaymentPort paymentPort;
+    private final PaymentOrderService paymentOrderService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
     private AvailabilityTemplateService availabilityTemplateService;

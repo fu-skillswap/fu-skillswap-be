@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.blog.domain;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.Column;
@@ -34,7 +35,7 @@ import java.util.UUID;
 public class BlogMentorFollow {
     @Id @GeneratedUuidV7 private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "user_id", nullable = false) private User user;
-    @Column(name = "mentor_user_id", nullable = false) private UUID mentorUserId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "mentor_user_id", nullable = false) private MentorProfile mentor;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
 
     @PrePersist

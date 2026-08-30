@@ -1,5 +1,4 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.AvailabilitySlotServiceBasicResponse;
 
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityTemplateConfiguredStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityTemplateEffectiveStatus;

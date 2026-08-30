@@ -1,17 +1,13 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryAcademicProfileResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryActivityResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryMentorProfileResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryResponse;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.identity.port.dto.UserSummaryAcademicDto;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorAdminPort;
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorSummaryProfileDto;
 import com.fptu.exe.skillswap.modules.payment.port.PaymentAdminPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -49,8 +45,8 @@ public class AdminUserSummaryService {
                 extractVisibleRoles(user),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),
-                toAcademicSummary(userAdminPort.getAcademicProfileSummary(userId)),
-                toMentorSummary(mentorAdminPort.getMentorProfileSummary(userId)),
+                userAdminPort.getAcademicProfileSummary(userId),
+                mentorAdminPort.getMentorProfileSummary(userId),
                 new AdminUserSummaryActivityResponse(
                         bookingQueryPort.countByMenteeId(userId),
                         bookingQueryPort.countByMentorProfileUserId(userId),
@@ -58,38 +54,6 @@ public class AdminUserSummaryService {
                         paymentAdminPort.countTotalPayoutRequestsByUserId(userId),
                         forumAdminPort.countReportsCreatedBy(userId)
                 )
-        );
-    }
-
-    private AdminUserSummaryAcademicProfileResponse toAcademicSummary(UserSummaryAcademicDto dto) {
-        if (dto == null) {
-            return null;
-        }
-        return new AdminUserSummaryAcademicProfileResponse(
-                dto.studentCode(),
-                dto.campusCode(),
-                dto.campusName(),
-                dto.programCode(),
-                dto.programName(),
-                dto.specializationCode(),
-                dto.specializationName(),
-                dto.semester(),
-                dto.isAlumni()
-        );
-    }
-
-    private AdminUserSummaryMentorProfileResponse toMentorSummary(MentorSummaryProfileDto dto) {
-        if (dto == null) {
-            return null;
-        }
-        return new AdminUserSummaryMentorProfileResponse(
-                dto.exists(),
-                dto.mentorStatus(),
-                dto.isAvailable(),
-                dto.verifiedAt(),
-                dto.headline(),
-                dto.averageRating(),
-                dto.totalCompletedSessions()
         );
     }
 

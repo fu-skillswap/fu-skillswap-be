@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
@@ -193,8 +194,8 @@ public class ChatMessageService {
     }
 
     @Transactional
-    public void createBookingConfirmedSystemMessage(UUID conversationId, UUID bookingId) {
-        if (bookingId == null || messageRepository.findByBookingIdAndSystemEventType(bookingId, "BOOKING_CONFIRMED").isPresent()) {
+    public void createBookingConfirmedSystemMessage(UUID conversationId, Booking booking) {
+        if (messageRepository.findByBookingIdAndSystemEventType(booking.getId(), "BOOKING_CONFIRMED").isPresent()) {
             return;
         }
         Conversation lockedConversation = conversationRepository.findByIdForUpdate(conversationId)
@@ -203,7 +204,7 @@ public class ChatMessageService {
                 .conversation(lockedConversation)
                 .messageType(MessageType.SYSTEM)
                 .content("Buổi mentoring đã được xác nhận.")
-                .bookingId(bookingId)
+                .bookingId(booking.getId())
                 .systemEventType("BOOKING_CONFIRMED")
                 .sequence(lockedConversation.getNextSequence() + 1)
                 .build();

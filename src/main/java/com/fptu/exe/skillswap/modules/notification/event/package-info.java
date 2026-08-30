@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("event")
+@org.springframework.modulith.NamedInterface("notification")
 package com.fptu.exe.skillswap.modules.notification.event;

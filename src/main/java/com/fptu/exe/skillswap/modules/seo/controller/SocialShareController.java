@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.seo.controller;
 
 import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
-import com.fptu.exe.skillswap.modules.blog.port.BlogQueryPort;
+import com.fptu.exe.skillswap.modules.blog.service.BlogService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,9 +30,10 @@ import java.util.UUID;
 @Tag(name = "SEO & Social Sharing", description = "Public endpoints for Open Graph link previews and redirection")
 public class SocialShareController {
 
-    private final BlogQueryPort blogQueryPort;
-    private final MentorQueryPort mentorQueryPort;
+    private final BlogService blogService;
+    private final MentorDiscoveryService mentorDiscoveryService;
 
+    // List of common social media bot user agents
     private static final List<String> SOCIAL_BOT_USER_AGENTS = List.of(
             "facebookexternalhit", "twitterbot", "linkedinbot", "googlebot",
             "bingbot", "slackbot", "vkshare", "whatsapp", "telegrambot", "discordbot"
@@ -54,7 +55,7 @@ public class SocialShareController {
         }
 
         try {
-            BlogPostReaderDetailResponse post = blogQueryPort.getBySlug(slug);
+            BlogPostReaderDetailResponse post = blogService.getBySlug(null, slug);
             String html = generateOgHtml(
                     post.title() != null ? post.title() : "SkillSwap Blog",
                     post.excerpt() != null ? post.excerpt() : "Đọc bài viết trên SkillSwap",
@@ -64,6 +65,7 @@ public class SocialShareController {
             return ResponseEntity.ok().contentType(MediaType.TEXT_HTML).body(html);
         } catch (Exception e) {
             log.warn("Error serving OG tags for blog slug: {}", slug, e);
+            // Fallback to redirect even for bots if not found or error
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(frontendUrl))
                     .build();
@@ -86,7 +88,7 @@ public class SocialShareController {
         }
 
         try {
-            MentorDiscoveryDetailResponse mentor = mentorQueryPort.getMentorDetail(id);
+            MentorDiscoveryDetailResponse mentor = mentorDiscoveryService.getMentorDetail(id);
             String title = mentor.identity().displayName() + " | Mentor trên SkillSwap";
             String description = mentor.identity().headline() != null ? mentor.identity().headline() : "Khám phá profile mentor trên SkillSwap";
             String imageUrl = mentor.identity().avatarUrl();
@@ -102,37 +104,47 @@ public class SocialShareController {
     }
 
     private boolean isSocialBot(String userAgent) {
-        if (userAgent == null || userAgent.isBlank()) {
-            return false;
+        if (userAgent == null || userAgent.isBlank()) return false;
+        String lowerAgent = userAgent.toLowerCase();
+        for (String botPattern : SOCIAL_BOT_USER_AGENTS) {
+            if (lowerAgent.contains(botPattern)) {
+                return true;
+            }
         }
-        String uaLower = userAgent.toLowerCase();
-        return SOCIAL_BOT_USER_AGENTS.stream().anyMatch(uaLower::contains);
+        return false;
     }
 
     private String generateOgHtml(String title, String description, String imageUrl, String url) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<!DOCTYPE html>\n<html lang=\"vi\">\n<head>\n<meta charset=\"UTF-8\">\n");
-        sb.append("<meta property=\"og:title\" content=\"").append(escapeHtml(title)).append("\" />\n");
-        sb.append("<meta property=\"og:description\" content=\"").append(escapeHtml(description)).append("\" />\n");
-        if (imageUrl != null && !imageUrl.isBlank()) {
-            sb.append("<meta property=\"og:image\" content=\"").append(escapeHtml(imageUrl)).append("\" />\n");
-        }
-        sb.append("<meta property=\"og:url\" content=\"").append(escapeHtml(url)).append("\" />\n");
-        sb.append("<meta property=\"og:type\" content=\"website\" />\n");
-        sb.append("<meta name=\"twitter:card\" content=\"summary_large_image\" />\n");
-        sb.append("<title>").append(escapeHtml(title)).append("</title>\n");
-        sb.append("</head>\n<body>\n");
-        sb.append("<p>Redirecting to <a href=\"").append(escapeHtml(url)).append("\">").append(escapeHtml(title)).append("</a>...</p>\n");
-        sb.append("</body>\n</html>");
-        return sb.toString();
+        title = escapeHtmlAttribute(title);
+        description = escapeHtmlAttribute(description);
+        imageUrl = escapeHtmlAttribute(imageUrl);
+        url = escapeHtmlAttribute(url);
+        
+        return """
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>%s</title>
+                    <meta property="og:title" content="%s" />
+                    <meta property="og:description" content="%s" />
+                    <meta property="og:type" content="website" />
+                    <meta property="og:url" content="%s" />
+                    <meta property="og:image" content="%s" />
+                    <meta name="twitter:card" content="summary_large_image" />
+                    <link rel="canonical" href="%s" />
+                </head>
+                <body>
+                    <p>Đang chuyển hướng... <a href="%s">Bấm vào đây nếu trình duyệt không tự chuyển</a>.</p>
+                </body>
+                </html>
+                """.formatted(title, title, description, url, imageUrl != null ? imageUrl : "", url, url);
     }
-
-    private String escapeHtml(String input) {
-        if (input == null) return "";
-        return input.replace("&", "&amp;")
+    
+    private String escapeHtmlAttribute(String value) {
+        if (value == null) return "";
+        return value.replace("\"", "&quot;")
                     .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace("\"", "&quot;")
-                    .replace("'", "&#39;");
+                    .replace(">", "&gt;");
     }
 }

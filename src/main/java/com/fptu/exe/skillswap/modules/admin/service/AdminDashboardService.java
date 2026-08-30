@@ -100,15 +100,7 @@ public class AdminDashboardService {
         LocalDateTime lastMonth = snapshotAt.minusDays(30);
         var retentionStats = adminDashboardQueryRepository.fetchRetentionOverview(yesterday, lastMonth);
 
-        var campaignOverviewDto = campaignAdminPort.getDashboardCampaignOverview();
-        AdminDashboardCampaignOverviewResponse campaignOverview = campaignOverviewDto == null ? null : new AdminDashboardCampaignOverviewResponse(
-                campaignOverviewDto.activeCampaignCount(),
-                campaignOverviewDto.scheduledCampaignCount(),
-                campaignOverviewDto.totalBudgetScoin(),
-                campaignOverviewDto.totalBudgetUsedScoin(),
-                campaignOverviewDto.activeCouponCount(),
-                campaignOverviewDto.totalCouponRedemptions()
-        );
+        AdminDashboardCampaignOverviewResponse campaignOverview = campaignAdminPort.getDashboardCampaignOverview();
 
         return new AdminDashboardOverviewResponse(
                 snapshotAt,

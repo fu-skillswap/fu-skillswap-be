@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("domain")
+@org.springframework.modulith.NamedInterface("filestorage")
 package com.fptu.exe.skillswap.modules.filestorage.domain;

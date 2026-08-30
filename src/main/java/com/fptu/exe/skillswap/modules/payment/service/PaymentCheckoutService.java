@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
-
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
@@ -24,7 +22,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
@@ -66,7 +64,7 @@ public class PaymentCheckoutService {
     private final PaymentLifecycleService paymentLifecycleService;
     private final PaymentOrderCodeGenerator paymentOrderCodeGenerator;
     private final PaymentResponseMapper paymentResponseMapper;
-    private final TelemetryPort internalTelemetryService;
+    private final InternalTelemetryService internalTelemetryService;
     private final TransactionTemplate transactionTemplate;
     private BookingPricingPreviewService bookingPricingPreviewService;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
@@ -318,7 +316,7 @@ public class PaymentCheckoutService {
     private OffsetDateTime paymentDeadline(Booking booking) {
         Instant deadlineUtc = paymentDeadlineUtc(booking);
         return deadlineUtc != null
-                ? com.fptu.exe.skillswap.shared.time.BookingTime.toOffsetDateTime(deadlineUtc)
+                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(deadlineUtc)
                 : null;
     }
 

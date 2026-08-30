@@ -13,12 +13,6 @@ class ModulithTest {
     @Test
     void verifyModulith() {
         ApplicationModules modules = ApplicationModules.of(ProjectApplication.class);
-        modules.forEach(m -> {
-            System.out.println("MODULE: " + m.getName() + " (base: " + m.getBasePackage().getName() + ")");
-            m.getNamedInterfaces().forEach(ni -> {
-                System.out.println("   NamedInterface: " + ni.getName());
-            });
-        });
 
         var booking = modules.getModuleByName("booking");
         assertThat(booking).isPresent();

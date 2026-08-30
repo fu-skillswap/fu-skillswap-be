@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorAdminDetailDto;
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorAdminFilterQuery;
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorAdminListItemDto;
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorSummaryProfileDto;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorDetailResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryMentorProfileResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -43,16 +43,16 @@ public class MentorAdminPortImpl implements MentorAdminPort {
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
     private final MentorProfileRepository mentorProfileRepository;
-    private final UserQueryPort userQueryPort;
+    private final StudentProfileRepository studentProfileRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<MentorAdminListItemDto> getMentors(MentorAdminFilterQuery request) {
-        MentorAdminFilterQuery safeRequest = request == null ? new MentorAdminFilterQuery() : request;
-        Page<MentorAdminListItemDto> page = mentorProfileRepository.searchForAdmin(
+    public PageResponse<AdminMentorListItemResponse> getMentors(AdminMentorListRequest request) {
+        AdminMentorListRequest safeRequest = request == null ? new AdminMentorListRequest() : request;
+        Page<AdminMentorListItemResponse> page = mentorProfileRepository.searchForAdmin(
                 buildKeywordPattern(safeRequest.getKeyword()),
                 buildNormalizedKeywordPattern(safeRequest.getKeyword()),
                 ACCENTED_CHARACTERS,
@@ -62,7 +62,7 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 adminMentorPageable(safeRequest)
         );
 
-        return PageResponse.<MentorAdminListItemDto>builder()
+        return PageResponse.<AdminMentorListItemResponse>builder()
                 .content(page.getContent())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -74,12 +74,12 @@ public class MentorAdminPortImpl implements MentorAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public MentorAdminDetailDto getMentorDetail(UUID mentorUserId) {
+    public AdminMentorDetailResponse getMentorDetail(UUID mentorUserId) {
         MentorProfile profile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thông tin mentor"));
 
         User user = profile.getUser();
-        String primaryLabel = userQueryPort.findStudentProfileWithDetailsByUserId(mentorUserId)
+        String primaryLabel = studentProfileRepository.findWithDetailsByUserId(mentorUserId)
                 .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
                 .orElse(null);
         List<MentorSubjectResultResponse> subjectResults = mentorSubjectResultRepository == null
@@ -101,7 +101,7 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .map(this::toAchievementResponse)
                 .toList();
 
-        return MentorAdminDetailDto.builder()
+        return AdminMentorDetailResponse.builder()
                 .mentorUserId(profile.getUserId())
                 .email(user == null ? null : user.getEmail())
                 .displayName(user == null ? null : user.getFullName())
@@ -138,12 +138,12 @@ public class MentorAdminPortImpl implements MentorAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public MentorSummaryProfileDto getMentorProfileSummary(UUID mentorUserId) {
+    public AdminUserSummaryMentorProfileResponse getMentorProfileSummary(UUID mentorUserId) {
         MentorProfile profile = mentorProfileRepository.findById(mentorUserId).orElse(null);
         if (profile == null) {
-            return new MentorSummaryProfileDto(false, null, null, null, null, null, null);
+            return new AdminUserSummaryMentorProfileResponse(false, null, null, null, null, null, null);
         }
-        return new MentorSummaryProfileDto(
+        return new AdminUserSummaryMentorProfileResponse(
                 true,
                 profile.getStatus() == null ? null : profile.getStatus().name(),
                 profile.isAvailable(),
@@ -159,7 +159,7 @@ public class MentorAdminPortImpl implements MentorAdminPort {
         return mentorProfileRepository.countByStatus(MentorStatus.PENDING_VERIFICATION);
     }
 
-    private Pageable adminMentorPageable(MentorAdminFilterQuery request) {
+    private Pageable adminMentorPageable(AdminMentorListRequest request) {
         int page = Math.max(request.getPage(), 0);
         int size = Math.min(Math.max(request.getSize(), 1), 100);
         Sort.Direction direction = request.resolveDirection();

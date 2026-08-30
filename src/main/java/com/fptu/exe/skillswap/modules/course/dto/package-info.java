@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("dto")
+@org.springframework.modulith.NamedInterface("course")
 package com.fptu.exe.skillswap.modules.course.dto;

@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
-import com.fptu.exe.skillswap.modules.mentor.controller.OnboardingStatusController;
+import com.fptu.exe.skillswap.modules.identity.controller.OnboardingStatusController;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;

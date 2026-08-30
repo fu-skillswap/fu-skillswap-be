@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionReasonCode;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminResolveIssueCommand;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 
@@ -15,7 +15,7 @@ public final class AdminBookingIssueResolutionPolicy {
     private AdminBookingIssueResolutionPolicy() {
     }
 
-    public static void validate(BookingAdminResolveIssueCommand request, BookingIssueType issueType) {
+    public static void validate(AdminResolveBookingIssueRequest request, BookingIssueType issueType) {
         if (request == null || request.action() == null || request.reasonCode() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "action và reasonCode là bắt buộc");
         }

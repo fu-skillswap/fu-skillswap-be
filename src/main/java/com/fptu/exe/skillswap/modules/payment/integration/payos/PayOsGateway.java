@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.integration.payos;
 
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 
 import java.time.Instant;

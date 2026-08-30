@@ -34,7 +34,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
-import com.fptu.exe.skillswap.modules.admin.port.AuditLogPort;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -71,7 +71,7 @@ public class AdminBlogService {
     private final CursorCodec cursorCodec;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
-    private final AuditLogPort adminAuditWriterService;
+    private final AdminAuditWriterService adminAuditWriterService;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminBlogPostCardResponse> listPosts(String cursor,

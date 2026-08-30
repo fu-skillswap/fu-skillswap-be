@@ -7,7 +7,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemRespo
 import com.fptu.exe.skillswap.modules.admin.repository.AdminQueueQueryRepository;
 import com.fptu.exe.skillswap.modules.admin.strategy.AdminQueueDescriptorRegistry;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;

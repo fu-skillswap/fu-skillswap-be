@@ -31,6 +31,4 @@ public interface UserQueryPort {
     List<User> findUsersByIdIn(java.util.Collection<UUID> userIds);
 
     Optional<User> findAdminVisibleUserById(UUID userId);
-
-    boolean hasCompletedStudentProfile(UUID userId);
 }

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.admin.port.AuditLogPort;
+import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReport;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReportStatus;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
@@ -42,7 +42,7 @@ public class ConversationSafetyService {
     private final ConversationParticipantRepository participantRepository;
     private final ConversationUserBlockRepository conversationUserBlockRepository;
     private final ChatReportRepository chatReportRepository;
-    private final AuditLogPort adminAuditWriterService;
+    private final AdminAuditWriterService adminAuditWriterService;
     private MentorViolationService mentorViolationService;
 
     @Autowired(required = false)

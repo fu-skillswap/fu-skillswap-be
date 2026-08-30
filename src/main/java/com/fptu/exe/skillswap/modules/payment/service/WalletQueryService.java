@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntry;
 import com.fptu.exe.skillswap.modules.payment.dto.response.CreditWalletResponse;

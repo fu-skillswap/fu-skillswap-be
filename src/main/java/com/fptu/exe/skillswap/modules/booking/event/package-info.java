@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("event")
+@org.springframework.modulith.NamedInterface("booking")
 package com.fptu.exe.skillswap.modules.booking.event;

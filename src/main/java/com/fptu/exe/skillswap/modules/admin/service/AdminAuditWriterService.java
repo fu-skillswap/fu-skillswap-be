@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.admin.service;
 import com.fptu.exe.skillswap.modules.admin.domain.AuditAction;
 import com.fptu.exe.skillswap.modules.admin.domain.AuditLog;
 import com.fptu.exe.skillswap.modules.admin.repository.AuditLogRepository;
-import com.fptu.exe.skillswap.modules.admin.port.AuditLogPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -18,7 +17,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class AdminAuditWriterService implements AuditLogPort {
+public class AdminAuditWriterService {
 
     private final AuditLogRepository auditLogRepository;
     private final UserRepository userRepository;

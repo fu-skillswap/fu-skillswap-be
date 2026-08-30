@@ -1,5 +1,11 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.service.SessionService;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutPreviewRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
@@ -9,7 +15,7 @@ import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutRespon
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,6 +41,81 @@ public class PaymentOrderService {
     private final PaymentOrderQueryService paymentOrderQueryService;
     private final PaymentOrderCodeGenerator paymentOrderCodeGenerator;
     private final PaymentResponseMapper paymentResponseMapper;
+
+    /**
+     * Constructor hỗ trợ khởi tạo trực tiếp với Spring DI và Factory.
+     */
+    public PaymentOrderService(
+            BookingQueryPort bookingQueryPort,
+            PaymentOrderRepository paymentOrderRepository,
+            PaymentAttemptRepository paymentAttemptRepository,
+            CouponService couponService,
+            CreditLedgerService creditLedgerService,
+            CampaignService campaignService,
+            PaymentProperties paymentProperties,
+            PaymentGatewayProviderFactory paymentGatewayProviderFactory,
+            SettlementService settlementService,
+            SessionService sessionService,
+            ConversationService conversationService,
+            NotificationService notificationService,
+            ApplicationEventPublisher eventPublisher,
+            InternalTelemetryService internalTelemetryService,
+            TransactionTemplate transactionTemplate
+    ) {
+        PaymentResponseMapper responseMapper = new PaymentResponseMapper(paymentProperties);
+        PaymentOrderCodeGenerator codeGenerator = new PaymentOrderCodeGenerator();
+        PaymentLifecycleService lifecycleService = new PaymentLifecycleService(
+                paymentOrderRepository,
+                creditLedgerService,
+                couponService,
+                settlementService
+        );
+        PaymentWebhookService webhookService = new PaymentWebhookService(
+                paymentOrderRepository,
+                paymentAttemptRepository,
+                bookingQueryPort,
+                creditLedgerService,
+                couponService,
+                settlementService,
+                sessionService,
+                conversationService,
+                paymentGatewayProviderFactory,
+                lifecycleService,
+                responseMapper,
+                eventPublisher,
+                internalTelemetryService,
+                transactionTemplate,
+                paymentProperties
+        );
+        PaymentCheckoutService checkoutService = new PaymentCheckoutService(
+                bookingQueryPort,
+                paymentOrderRepository,
+                paymentAttemptRepository,
+                couponService,
+                creditLedgerService,
+                campaignService,
+                paymentProperties,
+                paymentGatewayProviderFactory,
+                webhookService,
+                lifecycleService,
+                codeGenerator,
+                responseMapper,
+                internalTelemetryService,
+                transactionTemplate
+        );
+        PaymentOrderQueryService queryService = new PaymentOrderQueryService(
+                paymentOrderRepository,
+                paymentAttemptRepository,
+                responseMapper
+        );
+
+        this.paymentCheckoutService = checkoutService;
+        this.paymentWebhookService = webhookService;
+        this.paymentLifecycleService = lifecycleService;
+        this.paymentOrderQueryService = queryService;
+        this.paymentOrderCodeGenerator = codeGenerator;
+        this.paymentResponseMapper = responseMapper;
+    }
 
     @Autowired(required = false)
     void setBookingPricingPreviewService(BookingPricingPreviewService bookingPricingPreviewService) {

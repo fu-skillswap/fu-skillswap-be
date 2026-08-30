@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminResolveIssueCommand;
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminReverseResolutionCommand;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
@@ -28,8 +28,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
-import com.fptu.exe.skillswap.modules.payment.port.PaymentPort;
-import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -51,10 +51,10 @@ public class BookingCompletionService {
 
     private final BookingRepository bookingRepository;
     private final SessionFinalizationService sessionFinalizationService;
-    private final PaymentPort paymentPort;
+    private final SettlementService settlementService;
     private final BookingEventService bookingEventService;
     private final ApplicationEventPublisher eventPublisher;
-    private final TelemetryPort internalTelemetryService;
+    private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
     private final TimeProvider timeProvider;
     private MentorViolationService mentorViolationService;
@@ -66,16 +66,16 @@ public class BookingCompletionService {
     public BookingCompletionService(
             BookingRepository bookingRepository,
             SessionFinalizationService sessionFinalizationService,
-            PaymentPort paymentPort,
+            SettlementService settlementService,
             BookingEventService bookingEventService,
             ApplicationEventPublisher eventPublisher,
-            TelemetryPort internalTelemetryService,
+            InternalTelemetryService internalTelemetryService,
             BookingResponseMapper bookingResponseMapper,
             TimeProvider timeProvider
     ) {
         this.bookingRepository = bookingRepository;
         this.sessionFinalizationService = sessionFinalizationService;
-        this.paymentPort = paymentPort;
+        this.settlementService = settlementService;
         this.bookingEventService = bookingEventService;
         this.eventPublisher = eventPublisher;
         this.internalTelemetryService = internalTelemetryService;
@@ -86,13 +86,13 @@ public class BookingCompletionService {
     public BookingCompletionService(
             BookingRepository bookingRepository,
             SessionFinalizationService sessionFinalizationService,
-            PaymentPort paymentPort,
+            SettlementService settlementService,
             BookingEventService bookingEventService,
             ApplicationEventPublisher eventPublisher,
-            TelemetryPort internalTelemetryService,
+            InternalTelemetryService internalTelemetryService,
             BookingResponseMapper bookingResponseMapper
     ) {
-        this(bookingRepository, sessionFinalizationService, paymentPort, bookingEventService,
+        this(bookingRepository, sessionFinalizationService, settlementService, bookingEventService,
                 eventPublisher, internalTelemetryService, bookingResponseMapper, null);
     }
 
@@ -367,7 +367,7 @@ public class BookingCompletionService {
     }
 
     @Transactional
-    public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, BookingAdminResolveIssueCommand request) {
+    public BookingResponse resolveBookingIssue(UUID adminUserId, UUID bookingId, AdminResolveBookingIssueRequest request) {
         if (adminUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
@@ -446,7 +446,7 @@ public class BookingCompletionService {
     }
 
     @Transactional
-    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, BookingAdminReverseResolutionCommand request) {
+    public BookingResponse reverseBookingIssueResolution(UUID adminUserId, UUID bookingId, AdminReverseResolutionRequest request) {
         if (adminUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực admin");
         }

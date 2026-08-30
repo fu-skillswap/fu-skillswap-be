@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.chat.port.ChatPort;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
@@ -63,7 +63,7 @@ public class BookingDecisionService {
     private final MentorProfileRepository mentorProfileRepository;
     private final EntityManager entityManager;
     private final SessionService sessionService;
-    private final ChatPort chatPort;
+    private final ConversationService conversationService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
@@ -239,11 +239,7 @@ public class BookingDecisionService {
                 sessionService.createForAcceptedBooking(savedBooking);
             }
             if (conversationService != null) {
-                UUID mentorUid = (savedBooking.getMentorProfile() != null && savedBooking.getMentorProfile().getUser() != null) ? savedBooking.getMentorProfile().getUser().getId() : null;
-                UUID menteeUid = savedBooking.getMentee() != null ? savedBooking.getMentee().getId() : null;
-                if (chatPort != null && mentorUid != null && menteeUid != null) {
-                    chatPort.createBookingConversation(savedBooking.getId(), menteeUid, mentorUid);
-                }
+                conversationService.createDirectForAcceptedBooking(savedBooking);
             }
 
             eventPublisher.publishEvent(new NotificationEvent(

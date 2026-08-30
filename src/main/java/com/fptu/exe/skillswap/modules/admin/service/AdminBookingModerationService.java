@@ -5,9 +5,6 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssue
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.port.BookingAdminPort;
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminFilterQuery;
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminResolveIssueCommand;
-import com.fptu.exe.skillswap.modules.booking.port.dto.BookingAdminReverseResolutionCommand;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,17 +22,7 @@ public class AdminBookingModerationService {
 
     @Transactional(readOnly = true)
     public PageResponse<BookingResponse> getBookings(AdminBookingListRequest request) {
-        BookingAdminFilterQuery query = new BookingAdminFilterQuery();
-        if (request != null) {
-            query.setStatus(request.getStatus());
-            query.setMentorUserId(request.getMentorUserId());
-            query.setMenteeUserId(request.getMenteeUserId());
-            query.setPage(request.getPage());
-            query.setSize(request.getSize());
-            query.setSortBy(request.getSortBy());
-            query.setDirection(request.getDirection());
-        }
-        return bookingService.getAdminBookings(query);
+        return bookingService.getAdminBookings(request);
     }
 
     @Transactional(readOnly = true)
@@ -49,15 +36,7 @@ public class AdminBookingModerationService {
         BookingResponse booking = bookingService.getAdminBookingDetail(bookingId);
         String oldStatus = booking.status().name();
 
-        BookingAdminResolveIssueCommand command = new BookingAdminResolveIssueCommand(
-                request.action(),
-                request.reasonCode(),
-                request.adminNote(),
-                request.menteeBps(),
-                request.mentorBps(),
-                request.platformBps()
-        );
-        BookingResponse response = bookingService.resolveBookingIssue(adminUserId, bookingId, command);
+        BookingResponse response = bookingService.resolveBookingIssue(adminUserId, bookingId, request);
 
         // Save Audit Log
         adminAuditWriterService.writeOperatorEvent(
@@ -77,11 +56,7 @@ public class AdminBookingModerationService {
         BookingResponse booking = bookingService.getAdminBookingDetail(bookingId);
         String oldStatus = booking.status().name();
 
-        BookingAdminReverseResolutionCommand command = new BookingAdminReverseResolutionCommand(
-                request.reasonCode(),
-                request.adminNote()
-        );
-        BookingResponse response = bookingService.reverseBookingIssueResolution(adminUserId, bookingId, command);
+        BookingResponse response = bookingService.reverseBookingIssueResolution(adminUserId, bookingId, request);
 
         // Save Audit Log
         adminAuditWriterService.writeOperatorEvent(

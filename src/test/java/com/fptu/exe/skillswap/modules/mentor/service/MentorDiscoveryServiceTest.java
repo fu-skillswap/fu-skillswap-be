@@ -7,7 +7,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.Campus;
 import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.shared.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType;

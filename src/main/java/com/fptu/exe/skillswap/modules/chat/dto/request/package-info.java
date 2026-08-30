@@ -1,2 +1,2 @@
-@org.springframework.modulith.NamedInterface("dto-request")
+@org.springframework.modulith.NamedInterface({"conversation", "chat"})
 package com.fptu.exe.skillswap.modules.chat.dto.request;

@@ -1,6 +1,8 @@
 package com.fptu.exe.skillswap.modules.notification.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
@@ -32,6 +34,7 @@ import java.util.UUID;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final UserQueryPort userQueryPort;
     private final CursorCodec cursorCodec;
     private final DomainEventOutboxService domainEventOutboxService;
     private final RealtimeOutboxProperties realtimeOutboxProperties;
@@ -51,8 +54,11 @@ public class NotificationService {
             String relatedEntityType,
             UUID relatedEntityId,
             String deepLink) {
+        User recipient = userQueryPort.findUserById(recipientUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận"));
+
         Notification notification = Notification.builder()
-                .recipientUserId(recipientUserId)
+                .recipientUser(recipient)
                 .type(type)
                 .title(normalizeTitle(type, title))
                 .message(message)

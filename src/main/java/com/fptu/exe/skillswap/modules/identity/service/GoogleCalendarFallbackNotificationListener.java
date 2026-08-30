@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
-import com.fptu.exe.skillswap.modules.notification.port.NotificationPort;
+import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
@@ -23,7 +23,7 @@ public class GoogleCalendarFallbackNotificationListener {
 
     private final ApplicationEventPublisher eventPublisher;
     private final BookingRepository bookingRepository;
-    private final NotificationPort notificationPort;
+    private final EmailDispatchService emailDispatchService;
 
     @Async("notificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

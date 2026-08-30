@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorBlogAuthorSummary;
-
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import lombok.RequiredArgsConstructor;

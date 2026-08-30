@@ -25,13 +25,15 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.SessionAttendanceResp
 import com.fptu.exe.skillswap.modules.booking.port.BookingFeedbackPort;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
+import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.shared.policy.PricingPolicy;
+import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.springframework.security.core.Authentication;
@@ -56,7 +58,7 @@ import java.time.Clock;
 public class BookingResponseMapper {
 
     private final SessionService sessionService;
-    
+    private final ConversationService conversationService;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
     private final TimeProvider timeProvider;
@@ -66,7 +68,7 @@ public class BookingResponseMapper {
 
     @Autowired
     public BookingResponseMapper(SessionService sessionService,
-                                 
+                                 ConversationService conversationService,
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties,
                                  @Autowired(required = false) TimeProvider timeProvider,
@@ -90,7 +92,7 @@ public class BookingResponseMapper {
     }
 
     public BookingResponseMapper(SessionService sessionService,
-                                 
+                                 ConversationService conversationService,
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties,
                                  TimeProvider timeProvider) {
@@ -98,7 +100,7 @@ public class BookingResponseMapper {
     }
 
     public BookingResponseMapper(SessionService sessionService,
-                                 
+                                 ConversationService conversationService,
                                  PaymentOrderRepository paymentOrderRepository,
                                  PaymentProperties paymentProperties) {
         this(sessionService, conversationService, paymentOrderRepository, paymentProperties, null, null);

@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.shared.time.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -22,7 +22,7 @@ import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -52,7 +52,7 @@ public class BookingCreationService {
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final ApplicationEventPublisher eventPublisher;
-    private final TelemetryPort internalTelemetryService;
+    private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
     private final MentorBookingPolicyService mentorBookingPolicyService;
 

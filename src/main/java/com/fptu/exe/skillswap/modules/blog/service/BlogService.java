@@ -27,13 +27,14 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogMentorFollow;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.port.dto.MentorBlogAuthorSummary;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
-import com.fptu.exe.skillswap.modules.system.port.TelemetryPort;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorBlogAuthorSummary;
+import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
+import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -85,13 +86,13 @@ public class BlogService {
     private final BlogMapper blogMapper;
     private final CursorCodec cursorCodec;
     private final BlogContentPolicy contentPolicy;
-    private final MentorQueryPort mentorQueryPort;
-    private final TelemetryPort internalTelemetryService;
+    private final MentorContentAccessService mentorContentAccessService;
+    private final InternalTelemetryService internalTelemetryService;
     private final EntityManager entityManager;
     private final BlogTrendingCache trendingCache;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
-    
+    private final MentorProfileRepository mentorProfileRepository;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<BlogPostReaderCardResponse> listPosts(UserPrincipal principal,
@@ -322,10 +323,9 @@ public class BlogService {
     @Transactional
     public BlogFollowResponse followMentor(UserPrincipal principal, UUID mentorUserId) {
         UUID userId = requireAuthenticated(principal);
-        var summaries = mentorQueryPort.getBlogAuthorSummaries(List.of(mentorUserId));
-        if (summaries == null || !summaries.containsKey(mentorUserId)) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor đang hoạt động");
-        }
+        var mentor = mentorProfileRepository.findWithUserByUserId(mentorUserId)
+                .filter(profile -> profile.getStatus() == MentorStatus.ACTIVE && profile.getVerifiedAt() != null)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor đang hoạt động"));
         if (!blogMentorFollowRepository.existsByUserIdAndMentorUserId(userId, mentorUserId)) {
             if (blogMentorFollowRepository.countByUserId(userId) >= MAX_FOLLOWED_MENTORS) {
                 throw new BaseException(ErrorCode.BLOG_FOLLOW_LIMIT_REACHED, "Đã đạt giới hạn follow mentor");
@@ -333,7 +333,7 @@ public class BlogService {
             try {
                 blogMentorFollowRepository.save(BlogMentorFollow.builder()
                         .user(entityManager.getReference(User.class, userId))
-                        .mentorUserId(mentorUserId)
+                        .mentor(mentor)
                         .build());
                 internalTelemetryService.record("BLOG_MENTOR_FOLLOW", userId, "MENTOR", mentorUserId, Map.of());
             } catch (DataIntegrityViolationException ignored) {
@@ -356,19 +356,10 @@ public class BlogService {
         List<BlogCategoryResponse> categories = blogCategoryFollowRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
                 .map(follow -> blogMapper.toCategory(follow.getCategory()))
                 .toList();
-        List<BlogMentorFollow> follows = blogMentorFollowRepository.findByUserIdOrderByCreatedAtDesc(userId);
-        List<UUID> mentorUserIds = follows.stream().map(BlogMentorFollow::getMentorUserId).toList();
-        Map<UUID, MentorBlogAuthorSummary> summaries = mentorQueryPort.getBlogAuthorSummaries(mentorUserIds);
-        List<com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse> mentors = follows.stream()
-                .map(follow -> {
-                    MentorBlogAuthorSummary summary = summaries.get(follow.getMentorUserId());
-                    return new com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse(
-                            follow.getMentorUserId(),
-                            summary != null ? summary.fullName() : "Mentor",
-                            summary != null ? summary.avatarUrl() : null,
-                            com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR
-                    );
-                })
+        List<com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse> mentors = blogMentorFollowRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(follow -> new com.fptu.exe.skillswap.modules.blog.dto.BlogAuthorResponse(
+                        follow.getMentor().getUserId(), follow.getMentor().getUser().getFullName(),
+                        follow.getMentor().getUser().getAvatarUrl(), com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR))
                 .toList();
         return new BlogFollowResponse(categories, mentors);
     }
@@ -578,7 +569,7 @@ public class BlogService {
             return List.of();
         }
         Map<UUID, BlogEngagementState> engagement = engagementStates(principal, hydratedPosts.stream().map(BlogPost::getId).toList());
-        Map<UUID, MentorBlogAuthorSummary> authorSummaries = mentorQueryPort.getBlogAuthorSummaries(
+        Map<UUID, MentorBlogAuthorSummary> authorSummaries = mentorContentAccessService.getBlogAuthorSummaries(
                 hydratedPosts.stream().map(post -> post.getAuthorUser().getId()).collect(Collectors.toSet())
         );
         return hydratedPosts.stream()
@@ -647,7 +638,7 @@ public class BlogService {
         if (post == null || post.getAuthorUser() == null) {
             return null;
         }
-        return mentorQueryPort.getBlogAuthorSummaries(Set.of(post.getAuthorUser().getId()))
+        return mentorContentAccessService.getBlogAuthorSummaries(Set.of(post.getAuthorUser().getId()))
                 .get(post.getAuthorUser().getId());
     }
 

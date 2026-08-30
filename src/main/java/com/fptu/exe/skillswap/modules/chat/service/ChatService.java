@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
+import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
 import com.fptu.exe.skillswap.modules.chat.dto.request.ChatAttachmentUploadIntentRequest;
@@ -11,6 +12,10 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationReadResponse
 import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.event.ChatMessageRealtimeDelivery;
+import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
+import com.fptu.exe.skillswap.modules.course.domain.Course;
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -43,10 +48,15 @@ public class ChatService {
 
     // Room & Participant Lifecycle
     @Transactional
-    public Conversation createDirectForAcceptedBooking(UUID bookingId, UUID mentorUserId, UUID menteeUserId) {
-        Conversation conversation = chatRoomService.createDirectForAcceptedBooking(bookingId, mentorUserId, menteeUserId);
-        chatMessageService.createBookingConfirmedSystemMessage(conversation.getId(), bookingId);
+    public Conversation createDirectForAcceptedBooking(Booking booking) {
+        Conversation conversation = chatRoomService.createDirectForAcceptedBooking(booking);
+        chatMessageService.createBookingConfirmedSystemMessage(conversation.getId(), booking);
         return conversation;
+    }
+
+    @Transactional
+    public void addParticipantIfAbsent(Conversation conversation, User user) {
+        chatRoomService.addParticipantIfAbsent(conversation, user);
     }
 
     @Transactional(readOnly = true)
@@ -65,18 +75,13 @@ public class ChatService {
     }
 
     @Transactional
-    public Conversation ensureCourseGroupConversation(UUID courseId, UUID mentorUserId) {
-        return chatRoomService.ensureCourseGroupConversation(courseId, mentorUserId);
+    public Conversation ensureCourseGroupConversation(Course course) {
+        return chatRoomService.ensureCourseGroupConversation(course);
     }
 
     @Transactional
     public void addCourseStudentParticipant(UUID courseId, UUID studentUserId) {
         chatRoomService.addCourseStudentParticipant(courseId, studentUserId);
-    }
-
-    @Transactional
-    public void addCourseStudentParticipant(UUID courseId, UUID mentorUserId, UUID studentUserId) {
-        chatRoomService.addCourseStudentParticipant(courseId, mentorUserId, studentUserId);
     }
 
     @Transactional
@@ -103,6 +108,11 @@ public class ChatService {
     @Transactional
     public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request) {
         return chatMessageService.sendMessage(conversationId, userId, request);
+    }
+
+    @Transactional
+    public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request, MessageRepository messageRepoOverride, UserRepository userRepoOverride) {
+        return chatMessageService.sendMessage(conversationId, userId, request, messageRepoOverride, userRepoOverride);
     }
 
     @Transactional
@@ -154,8 +164,8 @@ public class ChatService {
     }
 
     @Transactional(readOnly = true)
-    public Page<MessageResponse> getMessages(UUID conversationId, UUID userId, Pageable pageable) {
-        return chatQueryService.getMessages(conversationId, userId, pageable, null);
+    public Page<MessageResponse> getMessages(UUID conversationId, UUID userId, Pageable pageable, MessageRepository messageRepoOverride) {
+        return chatQueryService.getMessages(conversationId, userId, pageable, messageRepoOverride);
     }
 
     @Transactional(readOnly = true)
@@ -181,5 +191,10 @@ public class ChatService {
     @Transactional(readOnly = true)
     public Map<UUID, UUID> findConversationIdsByBookingIds(List<UUID> bookingIds) {
         return chatQueryService.findConversationIdsByBookingIds(bookingIds);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, UUID> findConversationIdsForBookings(List<Booking> bookings) {
+        return chatQueryService.findConversationIdsForBookings(bookings);
     }
 }
