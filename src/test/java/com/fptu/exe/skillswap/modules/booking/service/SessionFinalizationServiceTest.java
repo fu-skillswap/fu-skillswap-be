@@ -18,13 +18,16 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingActivityCommandPort;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,7 +35,7 @@ class SessionFinalizationServiceTest {
 
     @Mock private SessionRepository sessionRepository;
     @Mock private SessionService sessionService;
-    @Mock private MentorQueryPort mentorQueryPort;
+    @Mock private MentorBookingActivityCommandPort mentorBookingActivityCommandPort;
 
     private SessionFinalizationService service;
     private Booking booking;
@@ -42,17 +45,17 @@ class SessionFinalizationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SessionFinalizationService(sessionRepository, sessionService, mentorQueryPort);
+        service = new SessionFinalizationService(sessionRepository, sessionService, mentorBookingActivityCommandPort);
         now = LocalDateTime.of(2026, 8, 24, 10, 0);
 
         UUID mentorId = UUID.randomUUID();
         User mentorUser = new User();
         mentorUser.setId(mentorId);
-        mentor = MentorProfile.builder().userId(mentorId).user(mentorUser)
+        mentor = MentorProfile.builder().userId(mentorId)
                 .totalSessions(4).totalCompletedSessions(3).build();
         booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentorProfile(mentor)
+                .mentorUserId(mentorId)
                 .selectedStartTime(now.minusHours(2))
                 .selectedEndTime(now.minusHours(1))
                 .build();
@@ -68,7 +71,7 @@ class SessionFinalizationServiceTest {
     void finalizeDeliveredSession_shouldCompleteSessionAndCountMentorExactlyOnce() {
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        doNothing().when(mentorBookingActivityCommandPort).recordCompletedSession(any(), any());
 
         service.finalizeDeliveredSession(booking, now);
 
@@ -81,7 +84,7 @@ class SessionFinalizationServiceTest {
         assertEquals(5, mentor.getTotalSessions());
         assertEquals(4, mentor.getTotalCompletedSessions());
         verify(sessionRepository).save(session);
-        verify(mentorQueryPort).saveMentorProfile(mentor);
+        verify(mentorBookingActivityCommandPort).recordCompletedSession(eq(mentor.getUserId()), any());
     }
 
     @Test
@@ -95,14 +98,14 @@ class SessionFinalizationServiceTest {
         assertEquals(SessionStatus.COMPLETED, session.getStatus());
         assertEquals(4, mentor.getTotalSessions());
         assertEquals(3, mentor.getTotalCompletedSessions());
-        verify(mentorQueryPort, never()).findMentorProfileByIdForUpdate(any());
+        verifyNoInteractions(mentorBookingActivityCommandPort);
     }
 
     @Test
     void recordMentorReportedCompletion_shouldNotFinalizeSessionOrIncreaseCounters() {
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        doNothing().when(mentorBookingActivityCommandPort).recordMentorActivity(any(), any());
 
         service.recordMentorReportedCompletion(booking, now);
 
@@ -119,7 +122,7 @@ class SessionFinalizationServiceTest {
         session.setScheduledEndTime(now.plusMinutes(15));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        doNothing().when(mentorBookingActivityCommandPort).recordMentorActivity(any(), any());
 
         service.finalizeDeliveredSession(booking, now);
 
@@ -133,7 +136,7 @@ class SessionFinalizationServiceTest {
         session.setActualStartTime(booking.getSelectedStartTime().plusMinutes(2));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        doNothing().when(mentorBookingActivityCommandPort).recordMentorActivity(any(), any());
 
         service.finalizeDeliveredSession(booking, now);
 
