@@ -16,6 +16,7 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
+import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
@@ -62,6 +63,7 @@ public class BookingDecisionService {
     private final BookingResponseMapper bookingResponseMapper;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
     private final MeetingProviderFactory meetingProviderFactory;
+    private ConversationService conversationService;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -70,6 +72,11 @@ public class BookingDecisionService {
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
         }
+    }
+
+    @Autowired(required = false)
+    void setConversationService(ConversationService conversationService) {
+        this.conversationService = conversationService;
     }
 
     @Transactional
@@ -224,6 +231,10 @@ public class BookingDecisionService {
         if (isFree) {
             if (sessionService != null) {
                 sessionService.createForAcceptedBooking(savedBooking);
+            }
+            if (conversationService != null) {
+                conversationService.createDirectForAcceptedBooking(
+                        savedBooking.getId(), savedBooking.getMentorUserId(), savedBooking.getMentee().getId());
             }
 
             eventPublisher.publishEvent(new NotificationEvent(

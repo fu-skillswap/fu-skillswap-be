@@ -140,6 +140,7 @@ class BookingDecisionServiceTest {
                 meetingProviderFactory
         );
         bookingDecisionService.setTimeProvider(TimeProvider.from(Clock.fixed(Instant.parse("2026-08-01T10:00:00Z"), ZoneOffset.UTC)));
+        bookingDecisionService.setConversationService(conversationService);
 
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(pendingBooking));
         when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
@@ -274,6 +275,6 @@ class BookingDecisionServiceTest {
 
         assertEquals(BookingStatus.PAID, pendingBooking.getStatus());
         verify(sessionService).createForAcceptedBooking(pendingBooking);
-        verify(conversationService).createDirectForAcceptedBooking(pendingBooking);
+        verify(conversationService).createDirectForAcceptedBooking(bookingId, mentorId, menteeId);
     }
 }
