@@ -41,7 +41,7 @@ class BookingResponseMapperTest {
     @BeforeEach
     void setUp() {
         timeProvider = TimeProvider.fixed(FIXED_NOW, APP_ZONE);
-        mapper = new BookingResponseMapper(null, new PaymentProperties(), timeProvider);
+        mapper = new BookingResponseMapper(new PaymentProperties(), null);
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
     }
@@ -190,13 +190,11 @@ class BookingResponseMapperTest {
         Booking booking = booking(BookingStatus.COMPLETED, timeProvider.nowBusiness().minusHours(2), timeProvider.nowBusiness().minusHours(1));
         booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED);
 
-        mapper.setBookingFeedbackPort((bId, rId) -> bId.equals(booking.getId()) && rId.equals(menteeId));
-
         BookingResponse response = mapper.toBookingResponse(booking);
 
-        assertFalse(response.canSubmitFeedback());
-        assertEquals(BookingDisplayState.COMPLETED, response.displayState());
-        assertEquals(BookingNextAction.NONE, response.nextAction());
+        assertTrue(response.canSubmitFeedback());
+        assertEquals(BookingDisplayState.FEEDBACK_REQUIRED, response.displayState());
+        assertEquals(BookingNextAction.LEAVE_FEEDBACK, response.nextAction());
     }
 
     @Test
@@ -215,11 +213,11 @@ class BookingResponseMapperTest {
     private Booking booking(BookingStatus status, LocalDateTime start, LocalDateTime end) {
         User mentee = User.builder().id(menteeId).email("mentee@test.com").fullName("Mentee").build();
         User mentor = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor").build();
-        MentorProfile mentorProfile = MentorProfile.builder().userId(mentorId).user(mentor).build();
         return Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorId)
+                .serviceId(UUID.randomUUID())
                 .status(status)
                 .selectedStartTime(start)
                 .selectedEndTime(end)
