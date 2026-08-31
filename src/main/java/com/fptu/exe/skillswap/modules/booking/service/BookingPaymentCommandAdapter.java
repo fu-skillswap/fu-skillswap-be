@@ -6,6 +6,9 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentCommandPort;
+import com.fptu.exe.skillswap.modules.booking.port.PaymentConfirmationResult;
+import com.fptu.exe.skillswap.modules.booking.port.PaymentExpiryResult;
+import com.fptu.exe.skillswap.modules.booking.port.SettlementResult;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,23 +26,29 @@ public class BookingPaymentCommandAdapter implements BookingPaymentCommandPort {
 
     @Override
     @Transactional
-    public void confirmPayment(UUID bookingId, Instant confirmedAtUtc) {
+    public PaymentConfirmationResult confirmPayment(UUID bookingId, Instant confirmedAtUtc) {
         Booking booking = lockedBooking(bookingId);
+        String previousStatus = booking.getStatus() == null ? null : booking.getStatus().name();
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.PAYMENT_CONFIRMED, confirmedAtUtc);
-        bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        return new PaymentConfirmationResult(bookingId, previousStatus,
+                saved.getStatus() == null ? null : saved.getStatus().name(), confirmedAtUtc);
     }
 
     @Override
     @Transactional
-    public void expirePayment(UUID bookingId, Instant expiredAtUtc) {
+    public PaymentExpiryResult expirePayment(UUID bookingId, Instant expiredAtUtc) {
         Booking booking = lockedBooking(bookingId);
+        String previousStatus = booking.getStatus() == null ? null : booking.getStatus().name();
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PAYMENT, expiredAtUtc);
-        bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        return new PaymentExpiryResult(bookingId, previousStatus,
+                saved.getStatus() == null ? null : saved.getStatus().name(), expiredAtUtc);
     }
 
     @Override
     @Transactional
-    public void completeSettlement(UUID bookingId, Instant completedAtUtc) {
+    public SettlementResult completeSettlement(UUID bookingId, Instant completedAtUtc) {
         Booking booking = lockedBooking(bookingId);
         bookingEventService.record(
                 booking,
@@ -48,6 +57,8 @@ public class BookingPaymentCommandAdapter implements BookingPaymentCommandPort {
                 BookingEventActorType.SYSTEM,
                 null,
                 "{\"completedAtUtc\":\"" + completedAtUtc + "\"}");
+        return new SettlementResult(bookingId, booking.getMentorUserId(),
+                booking.getServicePriceScoinSnapshot(), "COMPLETED", completedAtUtc);
     }
 
     private Booking lockedBooking(UUID bookingId) {

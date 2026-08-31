@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface BookingPaymentQueryPort {
 
     Optional<BookingPaymentSnapshot> findPaymentSnapshot(UUID bookingId);
+
+    Optional<BookingSettlementSnapshot> findSettlementSnapshot(UUID bookingId);
 }

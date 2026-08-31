@@ -6,9 +6,9 @@ import java.util.UUID;
 /** Public lifecycle command contract exposed by Booking to Payment. */
 public interface BookingPaymentCommandPort {
 
-    void confirmPayment(UUID bookingId, Instant confirmedAtUtc);
+    PaymentConfirmationResult confirmPayment(UUID bookingId, Instant confirmedAtUtc);
 
-    void expirePayment(UUID bookingId, Instant expiredAtUtc);
+    PaymentExpiryResult expirePayment(UUID bookingId, Instant expiredAtUtc);
 
-    void completeSettlement(UUID bookingId, Instant completedAtUtc);
+    SettlementResult completeSettlement(UUID bookingId, Instant completedAtUtc);
 }
