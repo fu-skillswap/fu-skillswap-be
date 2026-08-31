@@ -11,7 +11,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
@@ -56,9 +55,6 @@ class BookingLifecycleMaintenanceServiceTest {
     private BookingRepository bookingRepository;
 
     @Mock
-    private MentorProfileRepository mentorProfileRepository;
-
-    @Mock
     private PaymentOrderService paymentOrderService;
 
     @Mock
@@ -87,12 +83,10 @@ class BookingLifecycleMaintenanceServiceTest {
     void setUp() {
         maintenanceService = new BookingLifecycleMaintenanceService(
                 bookingRepository,
-                mentorProfileRepository,
                 paymentOrderService,
                 settlementService,
                 eventPublisher,
-                bookingEventService,
-                userRepository
+                bookingEventService
         );
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -128,13 +122,13 @@ class BookingLifecycleMaintenanceServiceTest {
 
         mentorProfile = MentorProfile.builder()
                 .userId(mentorId)
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .build();
 
         slot = MentorAvailabilitySlot.builder()
                 .id(UUID.randomUUID())
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .startTime(LocalDateTime.now().minusHours(10))
                 .endTime(LocalDateTime.now().minusHours(8))
                 .isActive(true)
@@ -147,7 +141,7 @@ class BookingLifecycleMaintenanceServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTOR_COMPLETION)
                 .selectedStartTime(now.minusHours(4))
@@ -173,7 +167,7 @@ class BookingLifecycleMaintenanceServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
                 .selectedStartTime(now.minusHours(25))
@@ -201,7 +195,7 @@ class BookingLifecycleMaintenanceServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
                 .selectedStartTime(now.minusHours(26))
@@ -232,7 +226,7 @@ class BookingLifecycleMaintenanceServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.UNDER_REVIEW)
                 .issueType(BookingIssueType.QUALITY_ISSUE)
@@ -280,7 +274,7 @@ class BookingLifecycleMaintenanceServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.UNDER_REVIEW)
                 .issueType(BookingIssueType.QUALITY_ISSUE)

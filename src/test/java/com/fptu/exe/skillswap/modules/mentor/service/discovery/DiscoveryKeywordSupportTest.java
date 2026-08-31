@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
-import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
-import com.fptu.exe.skillswap.modules.catalog.repository.TagRepository;
+import com.fptu.exe.skillswap.modules.catalog.port.CatalogKeywordQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
@@ -29,7 +27,7 @@ import static org.mockito.Mockito.when;
 class DiscoveryKeywordSupportTest {
 
     @Mock
-    private TagRepository tagRepository;
+    private CatalogKeywordQueryPort catalogKeywordQueryPort;
     @Mock
     private MentorServiceRepository mentorServiceRepository;
     @Mock
@@ -44,13 +42,13 @@ class DiscoveryKeywordSupportTest {
     @BeforeEach
     void setUp() {
         keywordSupport = new DiscoveryKeywordSupport(
-                tagRepository,
                 mentorServiceRepository,
                 mentorSubjectResultRepository,
                 mentorFeaturedProjectRepository,
-                mentorAchievementRepository
+                mentorAchievementRepository,
+                catalogKeywordQueryPort
         );
-        lenient().when(tagRepository.findAll()).thenReturn(List.of());
+        lenient().when(catalogKeywordQueryPort.findAllTagLabels()).thenReturn(List.of());
         lenient().when(mentorServiceRepository.findAllActiveServiceTitles()).thenReturn(List.of());
         lenient().when(mentorSubjectResultRepository.findAll()).thenReturn(List.of());
         lenient().when(mentorFeaturedProjectRepository.findAll()).thenReturn(List.of());
@@ -74,12 +72,6 @@ class DiscoveryKeywordSupportTest {
 
     @Test
     void refreshKeywordsCache_thenCorrectSpelling_shouldUseSnapshotCache() {
-        Tag tag = Tag.builder()
-                .id(UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e"))
-                .code("JAVA")
-                .nameVi("Java")
-                .type(TagType.TECH_SKILL)
-                .build();
         MentorSubjectResult subject = MentorSubjectResult.builder()
                 .id(UUID.fromString("018f3abf-0a22-7132-9748-6cf000c47b6e"))
                 .subjectCode("PRJ301")
@@ -99,7 +91,7 @@ class DiscoveryKeywordSupportTest {
                 .productDescription("Java backend")
                 .build();
 
-        when(tagRepository.findAll()).thenReturn(List.of(tag));
+        when(catalogKeywordQueryPort.findAllTagLabels()).thenReturn(List.of("Java"));
         when(mentorServiceRepository.findAllActiveServiceTitles()).thenReturn(List.of("Java mentoring"));
         when(mentorSubjectResultRepository.findAll()).thenReturn(List.of(subject));
         when(mentorFeaturedProjectRepository.findAll()).thenReturn(List.of(project));

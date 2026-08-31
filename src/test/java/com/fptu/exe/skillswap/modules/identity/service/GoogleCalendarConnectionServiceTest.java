@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleCalendarConnect
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.MentorCalendarEligibilityPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -39,6 +40,7 @@ class GoogleCalendarConnectionServiceTest {
     @Mock private GoogleTokenCryptoService googleTokenCryptoService;
     @Mock private GoogleOAuthStateService googleOAuthStateService;
     @Mock private MentorCalendarEligibilityPort mentorCalendarEligibilityPort;
+    @Mock private BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
     @Mock private TransactionTemplate transactionTemplate;
 
     private GoogleCalendarConnectionService service;
@@ -56,7 +58,8 @@ class GoogleCalendarConnectionServiceTest {
                 transactionTemplate,
                 googleOAuthStateService,
                 properties,
-                mentorCalendarEligibilityPort
+                mentorCalendarEligibilityPort,
+                bookingAvailabilityQueryPort
         );
         userId = UUID.randomUUID();
         org.mockito.Mockito.lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {

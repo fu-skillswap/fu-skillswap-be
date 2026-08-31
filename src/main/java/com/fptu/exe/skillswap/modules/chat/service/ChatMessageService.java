@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
@@ -20,7 +19,6 @@ import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
@@ -56,11 +54,10 @@ public class ChatMessageService {
     private final RealtimeOutboxProperties realtimeOutboxProperties;
     private final ObjectProvider<GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider;
     private final ObjectProvider<UserQueryPort> userQueryPortProvider;
-    private final ObjectProvider<UserRepository> userRepositoryProvider;
 
     @Transactional
     public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request) {
-        return sendMessage(conversationId, userId, request, null, (UserRepository) null);
+        return sendMessage(conversationId, userId, request, null, (UserQueryPort) null);
     }
 
     @Transactional
@@ -69,7 +66,7 @@ public class ChatMessageService {
             UUID userId,
             SendMessageRequest request,
             MessageRepository messageRepoOverride,
-            UserRepository userRepoOverride
+            UserQueryPort userPortOverride
     ) {
         MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
@@ -85,7 +82,7 @@ public class ChatMessageService {
             throw new BaseException(chatAccessResolutionService.resolveMessagingAccessError(access));
         }
 
-        User sender = resolveUser(userId, userRepoOverride);
+        User sender = resolveUser(userId, userPortOverride);
         if (sender == null) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng");
         }
@@ -194,8 +191,8 @@ public class ChatMessageService {
     }
 
     @Transactional
-    public void createBookingConfirmedSystemMessage(UUID conversationId, Booking booking) {
-        if (messageRepository.findByBookingIdAndSystemEventType(booking.getId(), "BOOKING_CONFIRMED").isPresent()) {
+    public void createBookingConfirmedSystemMessage(UUID conversationId, UUID bookingId) {
+        if (messageRepository.findByBookingIdAndSystemEventType(bookingId, "BOOKING_CONFIRMED").isPresent()) {
             return;
         }
         Conversation lockedConversation = conversationRepository.findByIdForUpdate(conversationId)
@@ -204,7 +201,7 @@ public class ChatMessageService {
                 .conversation(lockedConversation)
                 .messageType(MessageType.SYSTEM)
                 .content("Buổi mentoring đã được xác nhận.")
-                .bookingId(booking.getId())
+                .bookingId(bookingId)
                 .systemEventType("BOOKING_CONFIRMED")
                 .sequence(lockedConversation.getNextSequence() + 1)
                 .build();
@@ -341,15 +338,11 @@ public class ChatMessageService {
         return messageRepository.countUnreadMessages(conversationId, participant.getUser().getId(), participant.getLastReadSequence());
     }
 
-    private User resolveUser(UUID userId, UserRepository userRepoOverride) {
-        if (userRepoOverride != null) {
-            return userRepoOverride.findById(userId).orElse(null);
+    private User resolveUser(UUID userId, UserQueryPort userPortOverride) {
+        if (userPortOverride != null) {
+            return userPortOverride.findUserById(userId).orElse(null);
         }
         var userPort = userQueryPortProvider.getIfAvailable();
-        if (userPort != null) {
-            return userPort.findUserById(userId).orElse(null);
-        }
-        var userRepo = userRepositoryProvider.getIfAvailable();
-        return userRepo != null ? userRepo.findById(userId).orElse(null) : null;
+        return userPort != null ? userPort.findUserById(userId).orElse(null) : null;
     }
 }

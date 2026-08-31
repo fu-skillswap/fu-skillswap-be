@@ -1,15 +1,7 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignStatusRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignAnalyticsResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignBenefitResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignResponse;
+import com.fptu.exe.skillswap.modules.payment.port.CampaignAdminPort;
 import com.fptu.exe.skillswap.modules.admin.service.AdminCampaignService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -52,24 +44,24 @@ public class AdminCampaignController {
 
     @GetMapping
     @Operation(summary = "Lấy danh sách các campaign (paginated & filtered)", description = "Hỗ trợ lọc theo status, fundingSource, keyword.")
-    public ApiResponse<PageResponse<AdminCampaignResponse>> list(
-            @ParameterObject @ModelAttribute AdminCampaignListRequest request
+    public ApiResponse<PageResponse<CampaignAdminPort.CampaignView>> list(
+            @ParameterObject @ModelAttribute CampaignAdminPort.CampaignListQuery request
     ) {
         return ApiResponse.success(adminCampaignService.list(request));
     }
 
     @GetMapping("/{campaignId}")
     @Operation(summary = "Lấy chi tiết một campaign theo ID")
-    public ApiResponse<AdminCampaignResponse> getDetail(@PathVariable UUID campaignId) {
+    public ApiResponse<CampaignAdminPort.CampaignView> getDetail(@PathVariable UUID campaignId) {
         return ApiResponse.success(adminCampaignService.getDetail(campaignId));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Tạo campaign mới (Status ban đầu: DRAFT hoặc SCHEDULED)")
-    public ApiResponse<AdminCampaignResponse> create(
+    public ApiResponse<CampaignAdminPort.CampaignView> create(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody AdminCampaignCreateRequest request
+            @Valid @RequestBody CampaignAdminPort.CreateCampaignCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.created(adminCampaignService.create(principal.getPublicId(), request));
@@ -77,10 +69,10 @@ public class AdminCampaignController {
 
     @PutMapping("/{campaignId}")
     @Operation(summary = "Cập nhật thông tin campaign (Chỉ cập nhật khi DRAFT, SCHEDULED hoặc PAUSED)")
-    public ApiResponse<AdminCampaignResponse> update(
+    public ApiResponse<CampaignAdminPort.CampaignView> update(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID campaignId,
-            @Valid @RequestBody AdminCampaignUpdateRequest request
+            @Valid @RequestBody CampaignAdminPort.UpdateCampaignCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminCampaignService.update(principal.getPublicId(), campaignId, request));
@@ -88,10 +80,10 @@ public class AdminCampaignController {
 
     @PatchMapping("/{campaignId}/status")
     @Operation(summary = "Chuyển trạng thái của campaign (DRAFT -> SCHEDULED -> ACTIVE -> PAUSED -> ENDED -> ARCHIVED)")
-    public ApiResponse<AdminCampaignResponse> changeStatus(
+    public ApiResponse<CampaignAdminPort.CampaignView> changeStatus(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID campaignId,
-            @Valid @RequestBody AdminCampaignStatusRequest request
+            @Valid @RequestBody CampaignAdminPort.ChangeCampaignStatusCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminCampaignService.changeStatus(principal.getPublicId(), campaignId, request));
@@ -99,7 +91,7 @@ public class AdminCampaignController {
 
     @GetMapping("/{campaignId}/analytics")
     @Operation(summary = "Xem báo cáo phân tích hiệu quả chiến dịch (ROI, budget burn rate, số đơn hàng, doanh thu)")
-    public ApiResponse<AdminCampaignAnalyticsResponse> getAnalytics(@PathVariable UUID campaignId) {
+    public ApiResponse<CampaignAdminPort.CampaignAnalyticsView> getAnalytics(@PathVariable UUID campaignId) {
         return ApiResponse.success(adminCampaignService.getAnalytics(campaignId));
     }
 
@@ -107,17 +99,17 @@ public class AdminCampaignController {
 
     @GetMapping("/{campaignId}/benefits")
     @Operation(summary = "Lấy danh sách các quyền lợi (Benefits) của một campaign")
-    public ApiResponse<List<AdminCampaignBenefitResponse>> listBenefits(@PathVariable UUID campaignId) {
+    public ApiResponse<List<CampaignAdminPort.CampaignBenefitView>> listBenefits(@PathVariable UUID campaignId) {
         return ApiResponse.success(adminCampaignService.listBenefits(campaignId));
     }
 
     @PostMapping("/{campaignId}/benefits")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Thêm quyền lợi mới cho campaign")
-    public ApiResponse<AdminCampaignBenefitResponse> createBenefit(
+    public ApiResponse<CampaignAdminPort.CampaignBenefitView> createBenefit(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID campaignId,
-            @Valid @RequestBody AdminCampaignBenefitCreateRequest request
+            @Valid @RequestBody CampaignAdminPort.CreateCampaignBenefitCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.created(adminCampaignService.createBenefit(principal.getPublicId(), campaignId, request));
@@ -125,11 +117,11 @@ public class AdminCampaignController {
 
     @PutMapping("/{campaignId}/benefits/{benefitId}")
     @Operation(summary = "Cập nhật quyền lợi của campaign")
-    public ApiResponse<AdminCampaignBenefitResponse> updateBenefit(
+    public ApiResponse<CampaignAdminPort.CampaignBenefitView> updateBenefit(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID campaignId,
             @PathVariable UUID benefitId,
-            @Valid @RequestBody AdminCampaignBenefitUpdateRequest request
+            @Valid @RequestBody CampaignAdminPort.UpdateCampaignBenefitCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminCampaignService.updateBenefit(principal.getPublicId(), campaignId, benefitId, request));

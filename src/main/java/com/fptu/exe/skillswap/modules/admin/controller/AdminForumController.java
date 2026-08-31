@@ -1,17 +1,17 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumCommentListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumPostListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumReportListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseActiveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseCreateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseUpdateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReportResolveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProhibitedPhraseResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
+import com.fptu.exe.skillswap.modules.forum.port.CreateForumProhibitedPhraseCommand;
+import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseView;
+import com.fptu.exe.skillswap.modules.forum.port.SetForumProhibitedPhraseActiveCommand;
+import com.fptu.exe.skillswap.modules.forum.port.UpdateForumProhibitedPhraseCommand;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ResolveReportCommand;
 import com.fptu.exe.skillswap.modules.admin.service.AdminForumModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminForumProhibitedPhraseService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -52,7 +52,7 @@ public class AdminForumController {
 
     @GetMapping("/prohibited-phrases")
     @Operation(summary = "Lấy danh sách cụm từ cấm của forum")
-    public ApiResponse<CursorPageResponse<ForumProhibitedPhraseResponse>> getProhibitedPhrases(
+    public ApiResponse<CursorPageResponse<ForumProhibitedPhraseView>> getProhibitedPhrases(
             @RequestParam(required = false) Boolean isActive,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit
@@ -62,60 +62,60 @@ public class AdminForumController {
 
     @GetMapping("/prohibited-phrases/{ruleId}")
     @Operation(summary = "Lấy chi tiết cụm từ cấm của forum")
-    public ApiResponse<ForumProhibitedPhraseResponse> getProhibitedPhrase(@PathVariable UUID ruleId) {
+    public ApiResponse<ForumProhibitedPhraseView> getProhibitedPhrase(@PathVariable UUID ruleId) {
         return ApiResponse.success(prohibitedPhraseService.get(ruleId));
     }
 
     @PostMapping("/prohibited-phrases")
     @Operation(summary = "Thêm cụm từ cấm cho forum")
-    public ApiResponse<ForumProhibitedPhraseResponse> createProhibitedPhrase(
+    public ApiResponse<ForumProhibitedPhraseView> createProhibitedPhrase(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody ForumProhibitedPhraseCreateRequest request
+            @Valid @RequestBody CreateForumProhibitedPhraseCommand command
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.created(prohibitedPhraseService.create(principal.getPublicId(), request));
+        return ApiResponse.created(prohibitedPhraseService.create(principal.getPublicId(), command));
     }
 
     @org.springframework.web.bind.annotation.PutMapping("/prohibited-phrases/{ruleId}")
     @Operation(summary = "Cập nhật cụm từ cấm của forum")
-    public ApiResponse<ForumProhibitedPhraseResponse> updateProhibitedPhrase(
+    public ApiResponse<ForumProhibitedPhraseView> updateProhibitedPhrase(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID ruleId,
-            @Valid @RequestBody ForumProhibitedPhraseUpdateRequest request
+            @Valid @RequestBody UpdateForumProhibitedPhraseCommand command
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(prohibitedPhraseService.update(principal.getPublicId(), ruleId, request));
+        return ApiResponse.success(prohibitedPhraseService.update(principal.getPublicId(), ruleId, command));
     }
 
     @PatchMapping("/prohibited-phrases/{ruleId}/active")
     @Operation(summary = "Bật hoặc tắt cụm từ cấm của forum")
-    public ApiResponse<ForumProhibitedPhraseResponse> changeProhibitedPhraseActive(
+    public ApiResponse<ForumProhibitedPhraseView> changeProhibitedPhraseActive(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID ruleId,
-            @Valid @RequestBody ForumProhibitedPhraseActiveRequest request
+            @Valid @RequestBody SetForumProhibitedPhraseActiveCommand command
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(prohibitedPhraseService.changeActive(principal.getPublicId(), ruleId, request));
+        return ApiResponse.success(prohibitedPhraseService.changeActive(principal.getPublicId(), ruleId, command));
     }
 
     @GetMapping("/reports")
     @Operation(summary = "Lấy queue forum reports")
-    public ApiResponse<PageResponse<ForumReportResponse>> getReports(@ParameterObject @ModelAttribute AdminForumReportListRequest request) {
+    public ApiResponse<PageResponse<ReportView>> getReports(@ParameterObject @ModelAttribute ReportListQuery request) {
         return ApiResponse.success(adminForumModerationService.getReports(request));
     }
 
     @GetMapping("/reports/{reportId}")
     @Operation(summary = "Lấy chi tiết forum report")
-    public ApiResponse<ForumReportResponse> getReportDetail(@PathVariable UUID reportId) {
+    public ApiResponse<ReportView> getReportDetail(@PathVariable UUID reportId) {
         return ApiResponse.success(adminForumModerationService.getReportDetail(reportId));
     }
 
     @PostMapping("/reports/{reportId}/resolve")
     @Operation(summary = "Resolve forum report")
-    public ApiResponse<ForumReportResponse> resolveReport(
+    public ApiResponse<ReportView> resolveReport(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID reportId,
-            @Valid @RequestBody ForumReportResolveRequest request
+            @Valid @RequestBody ResolveReportCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminForumModerationService.resolveReport(principal.getPublicId(), reportId, request));
@@ -188,19 +188,19 @@ public class AdminForumController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin")
     })
-    public ApiResponse<CursorPageResponse<ForumPostResponse>> getPosts(@ParameterObject @ModelAttribute AdminForumPostListRequest request) {
+    public ApiResponse<CursorPageResponse<PostView>> getPosts(@ParameterObject @ModelAttribute PostListQuery request) {
         return ApiResponse.success(adminForumModerationService.getAdminPosts(request));
     }
 
     @GetMapping("/comments")
     @Operation(summary = "Lấy danh sách forum comments cho admin")
-    public ApiResponse<CursorPageResponse<ForumCommentResponse>> getComments(@ParameterObject @ModelAttribute AdminForumCommentListRequest request) {
+    public ApiResponse<CursorPageResponse<CommentView>> getComments(@ParameterObject @ModelAttribute CommentListQuery request) {
         return ApiResponse.success(adminForumModerationService.getAdminComments(request));
     }
 
     @PostMapping("/posts/{postId}/restore")
     @Operation(summary = "Khôi phục bài viết forum đã bị ẩn")
-    public ApiResponse<ForumPostResponse> restorePost(
+    public ApiResponse<PostView> restorePost(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId) {
         return ApiResponse.success(adminForumModerationService.restorePost(principal.getPublicId(), postId));
@@ -208,7 +208,7 @@ public class AdminForumController {
 
     @PostMapping("/comments/{commentId}/restore")
     @Operation(summary = "Khôi phục bình luận forum đã bị ẩn")
-    public ApiResponse<ForumCommentResponse> restoreComment(
+    public ApiResponse<CommentView> restoreComment(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID commentId) {
         return ApiResponse.success(adminForumModerationService.restoreComment(principal.getPublicId(), commentId));

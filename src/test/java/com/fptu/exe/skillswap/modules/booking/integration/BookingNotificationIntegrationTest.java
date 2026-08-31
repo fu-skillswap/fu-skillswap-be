@@ -151,7 +151,7 @@ class BookingNotificationIntegrationTest {
                 .build());
 
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now())
                 .isAvailable(true)
@@ -165,7 +165,7 @@ class BookingNotificationIntegrationTest {
                 .build());
 
         MentorAvailabilityRule availabilityRule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.DAILY)
                 .effectiveFrom(LocalDateTime.now().toLocalDate())
@@ -178,7 +178,7 @@ class BookingNotificationIntegrationTest {
 
         LocalDateTime slotStart = LocalDateTime.now().plusDays(2).withMinute(0).withSecond(0).withNano(0);
         testSlot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .rule(availabilityRule)
                 .startTime(slotStart)
                 .endTime(slotStart.plusHours(1))
@@ -187,7 +187,7 @@ class BookingNotificationIntegrationTest {
                 .build());
 
         mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .title("Java Mentoring")
                 .description("Support Java backend and REST API")
                 .durationMinutes(60)
@@ -199,7 +199,6 @@ class BookingNotificationIntegrationTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
                 .id(new AvailabilitySlotServiceId(testSlot.getId(), mentorService.getId()))
                 .slot(testSlot)
-                .service(mentorService)
                 .build());
     }
 

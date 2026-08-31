@@ -37,6 +37,14 @@ public class MentorQueryPortImpl implements MentorQueryPort, MentorDisciplinePor
     }
 
     @Override
+    public boolean isActiveVerifiedMentor(UUID userId) {
+        return userId != null && mentorProfileRepository.findWithUserByUserId(userId)
+                .map(profile -> profile.getStatus() == com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE
+                        && profile.getVerifiedAt() != null)
+                .orElse(false);
+    }
+
+    @Override
     public Optional<MentorService> findMentorServiceById(UUID serviceId) {
         return serviceId == null ? Optional.empty() : mentorServiceRepository.findById(serviceId);
     }
@@ -75,5 +83,37 @@ public class MentorQueryPortImpl implements MentorQueryPort, MentorDisciplinePor
     @Transactional
     public void incrementMentorCompletionOverdueCount(UUID mentorUserId) {
         // Deprecated: violations are recorded only through MentorViolationService.
+    }
+
+    @Override
+    public java.util.List<UUID> findActiveMentorUserIds() {
+        return mentorProfileRepository.findActiveMentorUserIds(com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE);
+    }
+
+    @Override
+    public Optional<MentorProfile> findWithUserByUserId(UUID userId) {
+        return userId == null ? Optional.empty() : mentorProfileRepository.findWithUserByUserId(userId);
+    }
+
+    @Override
+    public Optional<MentorService> findServiceByIdAndMentorProfileUserId(UUID serviceId, UUID mentorUserId) {
+        if (serviceId == null || mentorUserId == null) {
+            return Optional.empty();
+        }
+        return mentorServiceRepository.findByIdAndMentorProfileUserId(serviceId, mentorUserId);
+    }
+
+    @Override
+    public java.util.List<MentorService> findAllServicesByIdIn(java.util.Collection<UUID> serviceIds) {
+        if (serviceIds == null || serviceIds.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        return mentorServiceRepository.findAllById(serviceIds);
+    }
+
+    @Override
+    public java.util.List<MentorService> findActiveServicesByMentorUserId(UUID mentorUserId) {
+        return mentorUserId == null ? java.util.List.of()
+                : mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId);
     }
 }

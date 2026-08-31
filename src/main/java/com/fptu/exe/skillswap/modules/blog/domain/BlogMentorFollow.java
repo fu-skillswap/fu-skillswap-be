@@ -1,16 +1,11 @@
 package com.fptu.exe.skillswap.modules.blog.domain;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -34,8 +29,9 @@ import java.util.UUID;
 @AllArgsConstructor
 public class BlogMentorFollow {
     @Id @GeneratedUuidV7 private UUID id;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "user_id", nullable = false) private User user;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "mentor_user_id", nullable = false) private MentorProfile mentor;
+    @Column(name = "user_id", nullable = false) private UUID userId;
+    /** Mentor identity is represented by the owning user id, not a mentor aggregate association. */
+    @Column(name = "mentor_user_id", nullable = false) private UUID mentorUserId;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
 
     @PrePersist

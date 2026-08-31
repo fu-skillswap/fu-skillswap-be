@@ -14,12 +14,12 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorContentAccessPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import jakarta.persistence.EntityManager;
@@ -54,13 +54,13 @@ class BlogGrowthServiceTest {
     @Mock private BlogTagRepository blogTagRepository;
     @Mock private BlogMapper blogMapper;
     @Mock private CursorCodec cursorCodec;
-    @Mock private MentorContentAccessService mentorContentAccessService;
     @Mock private InternalTelemetryService internalTelemetryService;
     @Mock private EntityManager entityManager;
     @Mock private BlogTrendingCache trendingCache;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private BookingEligibilityPolicy bookingEligibilityPolicy;
-    @Mock private MentorProfileRepository mentorProfileRepository;
+    @Mock private ContentEntitlementQuery contentEntitlementQuery;
+    @Mock private MentorQueryPort mentorQueryPort;
+    @Mock private MentorContentAccessPort mentorContentAccessPort;
 
     private BlogService service;
     private UUID userId;
@@ -79,13 +79,13 @@ class BlogGrowthServiceTest {
                 blogMapper,
                 cursorCodec,
                 new BlogContentPolicy(),
-                mentorContentAccessService,
                 internalTelemetryService,
                 entityManager,
                 trendingCache,
                 eventPublisher,
-                bookingEligibilityPolicy,
-                mentorProfileRepository
+                contentEntitlementQuery,
+                mentorQueryPort,
+                mentorContentAccessPort
         );
         userId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         principal = UserPrincipal.create(userId, "user@example.com", List.of(RoleCode.MENTEE));
@@ -139,7 +139,6 @@ class BlogGrowthServiceTest {
         when(blogPostRepository.findReaderPostsWithAuthorByIdIn(List.of(postId))).thenReturn(List.of(post));
         when(blogPostLikeRepository.findLikedPostIds(userId, List.of(postId))).thenReturn(Set.of());
         when(blogBookmarkRepository.findBookmarkedPostIds(userId, List.of(postId))).thenReturn(Set.of());
-        when(mentorContentAccessService.getBlogAuthorSummaries(any())).thenReturn(Map.of());
         when(blogMapper.toReaderCard(any(), any(), any())).thenReturn(new BlogPostReaderCardResponse(
                 postId, "Post", "post", null, null, null, null, List.of(), List.of(), 0,
                 0L, 0L, 0L, false, false, false, post.getPublishedAt(), post.getPublishedAt(),

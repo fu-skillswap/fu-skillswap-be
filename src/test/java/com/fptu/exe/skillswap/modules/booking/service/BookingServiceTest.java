@@ -1,17 +1,18 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
+import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
-import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
-import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.BookingViewRole;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
@@ -20,25 +21,21 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.booking.service.BookingSlotValidator;
-import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
-import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -115,9 +112,6 @@ class BookingServiceTest {
     private com.fptu.exe.skillswap.modules.booking.repository.SessionRepository sessionRepository;
 
     @Mock
-    private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
-
-    @Mock
     private SettlementService settlementService;
 
     @Mock
@@ -130,9 +124,7 @@ class BookingServiceTest {
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
 
     private BookingSlotValidator bookingSlotValidator;
-
     private BookingEligibilityPolicy bookingEligibilityPolicy;
-
     private BookingService bookingService;
 
     private UUID menteeId;
@@ -147,17 +139,20 @@ class BookingServiceTest {
     void setUp() {
         bookingSlotValidator = new BookingSlotValidator(availabilitySlotServiceRepository, bookingRepository);
         bookingEligibilityPolicy = new BookingEligibilityPolicy(academicService);
+        com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl userPort =
+                new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, entityManager);
+        com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort mentorPort =
+                new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, mentorServiceRepository);
         bookingService = new BookingService(
                 bookingRepository,
                 mentorAvailabilitySlotRepository,
-                mentorServiceRepository,
-                userRepository,
+                mentorPort,
+                userPort,
+                userPort,
                 notificationService,
                 eventPublisher,
-                mentorProfileRepository,
                 entityManager,
                 sessionService,
-                conversationService,
                 settlementService,
                 paymentOrderService,
                 bookingSlotValidator,
@@ -1328,7 +1323,6 @@ class BookingServiceTest {
         assertTrue(slot.isBooked());
 
         verify(sessionService).createForAcceptedBooking(any(Booking.class));
-        verify(conversationService).createDirectForAcceptedBooking(any(Booking.class));
     }
 
     @Test
@@ -1358,6 +1352,5 @@ class BookingServiceTest {
         assertTrue(slot.isBooked());
 
         verify(sessionService, never()).createForAcceptedBooking(any(Booking.class));
-        verify(conversationService, never()).createDirectForAcceptedBooking(any(Booking.class));
     }
 }

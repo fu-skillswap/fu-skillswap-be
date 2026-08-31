@@ -1,17 +1,19 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorBookingPolicy;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorBookingPolicyRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorBookingPolicyResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSchedulingConstraintsResponse;
+import com.fptu.exe.skillswap.modules.mentor.event.MentorAvailabilityChangedEvent;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingPolicyQuery;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorBookingPolicyRepository;
-import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +23,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class MentorBookingPolicyService {
+public class MentorBookingPolicyService implements MentorBookingPolicyQuery {
 
     private static final int DEFAULT_LEAD_TIME_MINUTES = 120;
     private static final int DEFAULT_HORIZON_DAYS = 30;
@@ -29,13 +31,8 @@ public class MentorBookingPolicyService {
     private static final int MAXIMUM_PARENT_SLOT_DURATION_MINUTES = 720;
 
     private final MentorBookingPolicyRepository mentorBookingPolicyRepository;
-    private final UserRepository userRepository;
-    private AvailabilityTemplateService availabilityTemplateService;
-
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
-    void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
-        this.availabilityTemplateService = availabilityTemplateService;
-    }
+    private final UserQueryPort userQueryPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public MentorBookingPolicySnapshot getEffectivePolicy(UUID mentorUserId) {
@@ -76,7 +73,7 @@ public class MentorBookingPolicyService {
                 && request.timezone() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Phải cập nhật ít nhất một booking policy field");
         }
-        userRepository.findById(mentorUserId)
+        userQueryPort.findUserById(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor"));
 
         MentorBookingPolicy policy = mentorBookingPolicyRepository.findByMentorUserIdForUpdate(mentorUserId)
@@ -110,7 +107,7 @@ public class MentorBookingPolicyService {
             policy.setTimezone(timezone);
         }
         MentorBookingPolicy saved = mentorBookingPolicyRepository.saveAndFlush(policy);
-        if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
+        eventPublisher.publishEvent(new MentorAvailabilityChangedEvent(UUID.randomUUID(), mentorUserId, mentorUserId, true, true, DateTimeUtil.now()));
         return new MentorBookingPolicyResponse(
                 saved.getMinimumBookingLeadTimeMinutes(),
                 saved.getMaximumBookingHorizonDays(),
@@ -127,7 +124,7 @@ public class MentorBookingPolicyService {
         if (mentorUserId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
         }
-        userRepository.findById(mentorUserId)
+        userQueryPort.findUserById(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor"));
 
         boolean hasPayload = minimumBookingLeadTimeMinutes != null
@@ -160,6 +157,7 @@ public class MentorBookingPolicyService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public void validateBookingWindow(UUID mentorUserId, LocalDateTime selectedStartTime, LocalDateTime now) {
         if (mentorUserId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
@@ -181,6 +179,7 @@ public class MentorBookingPolicyService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public boolean isBookableStartTime(UUID mentorUserId, LocalDateTime selectedStartTime, LocalDateTime now) {
         if (mentorUserId == null || selectedStartTime == null || now == null) {
             return false;
@@ -190,6 +189,17 @@ public class MentorBookingPolicyService {
         LocalDateTime latestAllowed = now.plusDays(policy.maximumBookingHorizonDays());
         return selectedStartTime.isAfter(earliestAllowed.minusNanos(1))
                 && !selectedStartTime.isAfter(latestAllowed);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isPublicBookingOfferAvailable(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile profile,
+                                                 boolean hasActiveOneToOneService,
+                                                 LocalDateTime now) {
+        return profile != null
+                && profile.getStatus() == com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE
+                && profile.isAvailable()
+                && hasActiveOneToOneService
+                && (profile.getBookingSuspendedUntil() == null || !profile.getBookingSuspendedUntil().isAfter(now));
     }
 
     private int normalizeLeadTime(Integer value) {

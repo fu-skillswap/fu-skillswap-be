@@ -1,8 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -46,13 +45,11 @@ public class Booking {
     @JoinColumn(name = "mentee_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentee"))
     private User mentee;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentor"))
-    private MentorProfile mentorProfile;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "service_id", nullable = true, foreignKey = @ForeignKey(name = "fk_bookings_service"))
-    private MentorService service;
+    @Column(name = "service_id")
+    private UUID serviceId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "slot_id", foreignKey = @ForeignKey(name = "fk_bookings_slot"))

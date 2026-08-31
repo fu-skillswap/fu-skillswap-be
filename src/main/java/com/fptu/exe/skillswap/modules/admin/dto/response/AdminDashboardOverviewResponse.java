@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.admin.dto.response;
 
+import com.fptu.exe.skillswap.modules.payment.port.AdminDashboardCampaignOverview;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDateTime;
@@ -28,6 +29,6 @@ public record AdminDashboardOverviewResponse(
         @Schema(description = "Khối số liệu retention và conversion.")
         AdminDashboardRetentionOverviewResponse retention,
         @Schema(description = "Khối số liệu tổng quan về campaign và coupon khuyến mãi.")
-        AdminDashboardCampaignOverviewResponse campaigns
+        AdminDashboardCampaignOverview campaigns
 ) {
 }

@@ -2,13 +2,12 @@ package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.modules.admin.domain.AdminCaseType;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
-import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxPort;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;
+import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
+import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorVerificationAdminPort;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxAdminPort;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentAdminPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -20,20 +19,22 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class AdminCaseSupportService {
 
-    private final UserRepository userRepository;
-    private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
+    private final UserAdminPort userAdminPort;
+    private final MentorVerificationAdminPort mentorVerificationAdminPort;
     private final BookingQueryPort bookingQueryPort;
-    private final ForumReportRepository forumReportRepository;
-    private final PayoutRequestRepository payoutRequestRepository;
-    private final PaymentOrderRepository paymentOrderRepository;
-    private final EmailOutboxPort emailOutboxPort;
+    private final ForumAdminPort forumAdminPort;
+    private final PaymentAdminPort paymentAdminPort;
+    private final EmailOutboxAdminPort emailOutboxAdminPort;
 
-    public User requireAdminUser(UUID adminUserId) {
+    public AdminUserReference requireAdminUser(UUID adminUserId) {
         if (adminUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        return userRepository.findById(adminUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người quản trị"));
+        return userAdminPort.requireAdminReference(adminUserId);
+    }
+
+    public String findAdminDisplayName(UUID adminUserId) {
+        return userAdminPort.findReference(adminUserId).map(AdminUserReference::displayName).orElse(null);
     }
 
     public void assertCaseExists(AdminCaseType caseType, UUID caseId) {
@@ -42,12 +43,12 @@ public class AdminCaseSupportService {
         }
 
         boolean exists = switch (caseType) {
-            case MENTOR_VERIFICATION_REQUEST -> mentorVerificationRequestRepository.existsById(caseId);
+            case MENTOR_VERIFICATION_REQUEST -> mentorVerificationAdminPort.existsById(caseId);
             case BOOKING -> bookingQueryPort.existsById(caseId);
-            case FORUM_REPORT -> forumReportRepository.existsById(caseId);
-            case PAYOUT_REQUEST -> payoutRequestRepository.existsById(caseId);
-            case PAYMENT_ORDER -> paymentOrderRepository.existsById(caseId);
-            case EMAIL_OUTBOX -> emailOutboxPort.existsById(caseId);
+            case FORUM_REPORT -> forumAdminPort.existsReportById(caseId);
+            case PAYOUT_REQUEST -> paymentAdminPort.existsPayoutRequestById(caseId);
+            case PAYMENT_ORDER -> paymentAdminPort.existsPaymentOrderById(caseId);
+            case EMAIL_OUTBOX -> emailOutboxAdminPort.existsById(caseId);
         };
 
         if (!exists) {

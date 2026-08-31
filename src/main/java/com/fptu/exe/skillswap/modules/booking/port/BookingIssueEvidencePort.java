@@ -1,9 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.port;
 
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueDetailResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceDownloadResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
-
 import java.util.UUID;
 
 /**
@@ -12,10 +8,10 @@ import java.util.UUID;
  */
 public interface BookingIssueEvidencePort {
 
-    BookingIssueDetailResponse getForAdmin(UUID bookingId);
+    BookingIssueDetailView getForAdmin(UUID bookingId);
 
-    BookingIssueEvidenceDownloadResponse downloadForAdmin(UUID bookingId, UUID evidenceId);
+    BookingIssueEvidenceDownloadView downloadForAdmin(UUID bookingId, UUID evidenceId);
 
-    BookingIssueEvidenceResponse setAdminVisibility(UUID bookingId, UUID evidenceId,
-                                                     UUID adminUserId, boolean hidden, String reason);
+    BookingIssueEvidenceView setAdminVisibility(UUID bookingId, UUID evidenceId,
+                                                UUID adminUserId, boolean hidden, String reason);
 }

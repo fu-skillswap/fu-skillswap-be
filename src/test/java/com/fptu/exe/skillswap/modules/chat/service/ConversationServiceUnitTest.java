@@ -19,7 +19,7 @@ import com.fptu.exe.skillswap.modules.chat.service.ConversationSafetyPolicy;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
@@ -315,7 +315,7 @@ class ConversationServiceUnitTest {
                 ));
 
 
-        MessageResponse response = conversationService.sendMessage(conversationId, senderId, request, messageRepository, userRepository);
+        MessageResponse response = conversationService.sendMessage(conversationId, senderId, request);
 
         assertNotNull(response);
         assertEquals("Hello world!", response.content());

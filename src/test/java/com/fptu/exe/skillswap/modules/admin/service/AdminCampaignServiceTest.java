@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignCreateRequest;
 import com.fptu.exe.skillswap.modules.payment.port.CampaignAdminPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,10 +23,10 @@ class AdminCampaignServiceTest {
     @Test
     void create_delegatesToCampaignAdminPort() {
         UUID adminId = UUID.randomUUID();
-        when(campaignAdminPort.create(eq(adminId), isNull(AdminCampaignCreateRequest.class))).thenReturn(null);
+        when(campaignAdminPort.create(eq(adminId), isNull(CampaignAdminPort.CreateCampaignCommand.class))).thenReturn(null);
 
         assertThat(service.create(adminId, null)).isNull();
 
-        verify(campaignAdminPort).create(eq(adminId), isNull(AdminCampaignCreateRequest.class));
+        verify(campaignAdminPort).create(eq(adminId), isNull(CampaignAdminPort.CreateCampaignCommand.class));
     }
 }

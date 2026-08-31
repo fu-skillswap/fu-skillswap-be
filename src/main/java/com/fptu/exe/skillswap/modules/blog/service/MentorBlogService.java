@@ -15,21 +15,17 @@ import com.fptu.exe.skillswap.modules.blog.event.BlogTrendingRankingChangedEvent
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.filestorage.service.PublicAssetUploadService;
-import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetResponse;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -50,12 +46,11 @@ public class MentorBlogService {
     private final BlogPostRepository postRepository;
     private final BlogCategoryRepository categoryRepository;
     private final BlogTagRepository tagRepository;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorQueryPort mentorQueryPort;
     private final BlogContentPolicy contentPolicy;
-    private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
-    private final PublicAssetUploadService publicAssetUploadService;
+    private final PublicAssetUploadPort publicAssetUploadPort;
+    private final PublicUserQueryPort publicUserQueryPort;
 
     @Transactional(readOnly = true)
     public List<MentorBlogPostDetailResponse> list(UUID mentorId) {
@@ -65,15 +60,15 @@ public class MentorBlogService {
     }
 
     @Transactional
-    public PublicAssetUploadIntentResponse createImageUploadIntent(UUID mentorId, PublicAssetUploadIntentRequest request) {
+    public PublicAssetUploadPort.UploadIntent createImageUploadIntent(UUID mentorId, PublicAssetUploadPort.UploadRequest request) {
         requireEligibleAuthor(mentorId);
-        return publicAssetUploadService.createBlogImageIntent(mentorId, request);
+        return publicAssetUploadPort.createBlogImageIntent(mentorId, request);
     }
 
     @Transactional
-    public PublicAssetResponse confirmImageUpload(UUID mentorId, UUID intentId) {
+    public PublicAssetUploadPort.FileAssetMetadata confirmImageUpload(UUID mentorId, UUID intentId) {
         requireEligibleAuthor(mentorId);
-        return publicAssetUploadService.confirmBlogImage(mentorId, intentId);
+        return publicAssetUploadPort.confirmBlogImage(mentorId, intentId);
     }
 
     @Transactional(readOnly = true)
@@ -83,7 +78,7 @@ public class MentorBlogService {
     public MentorBlogPostDetailResponse create(UUID mentorId, MentorBlogPostCreateRequest request) {
         requireEligibleAuthor(mentorId);
         BlogPost post = BlogPost.builder()
-                .authorUser(entityManager.getReference(com.fptu.exe.skillswap.modules.identity.domain.User.class, mentorId))
+                .authorUserId(mentorId)
                 .authorType(BlogAuthorType.MENTOR)
                 .title(contentPolicy.cleanRequired(request.title(), "Tiêu đề bài blog"))
                 .slug(uniqueSlug(request.title(), null))
@@ -119,7 +114,7 @@ public class MentorBlogService {
         post.setLastPublishedAt(now); post.setStatus(BlogPostStatus.PUBLISHED); post.setSlugLocked(true);
         BlogPost saved = postRepository.save(post);
         eventPublisher.publishEvent(new BlogPostPublishedEvent(UuidUtil.generateUuidV7(), saved.getId(), saved.getSlug(), saved.getTitle(),
-                mentorId, saved.getAuthorUser().getFullName(), saved.getVisibility(),
+                mentorId, publicUserQueryPort.findUserSummaryById(mentorId).map(summary -> summary.fullName()).orElse(""), saved.getVisibility(),
                 saved.getCategories().stream().map(BlogCategory::getId).collect(java.util.stream.Collectors.toSet()),
                 saved.getEntitledServices().stream().map(MentorService::getId).collect(java.util.stream.Collectors.toSet()), now));
         eventPublisher.publishEvent(new BlogTrendingRankingChangedEvent(saved.getId()));
@@ -151,7 +146,7 @@ public class MentorBlogService {
     }
 
     private void requireEligibleAuthor(UUID mentorId) {
-        MentorProfile profile = mentorProfileRepository.findWithUserByUserId(mentorId)
+        MentorProfile profile = mentorQueryPort.findWithUserByUserId(mentorId)
                 .orElseThrow(() -> new BaseException(ErrorCode.ACCESS_DENIED, "Chỉ mentor được xác minh mới có thể viết blog"));
         if (profile.getStatus() != MentorStatus.ACTIVE || profile.getVerifiedAt() == null) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Mentor hiện chưa đủ điều kiện xuất bản blog");
@@ -159,7 +154,7 @@ public class MentorBlogService {
     }
 
     private BlogPost loadOwned(UUID mentorId, UUID postId) {
-        return postRepository.findById(postId).filter(post -> post.getAuthorType() == BlogAuthorType.MENTOR && post.getAuthorUser().getId().equals(mentorId))
+        return postRepository.findById(postId).filter(post -> post.getAuthorType() == BlogAuthorType.MENTOR && mentorId.equals(post.getAuthorUserId()))
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
     }
 
@@ -172,7 +167,7 @@ public class MentorBlogService {
     private List<BlogTag> loadTags(List<UUID> ids) { return ids == null || ids.isEmpty() ? List.of() : tagRepository.findByIdInAndActiveTrue(new LinkedHashSet<>(ids)); }
     private List<MentorService> loadOwnedServices(UUID mentorId, List<UUID> ids) {
         if (ids == null || ids.isEmpty()) return List.of();
-        List<MentorService> services = ids.stream().distinct().map(id -> mentorServiceRepository.findByIdAndMentorProfileUserId(id, mentorId)
+        List<MentorService> services = ids.stream().distinct().map(id -> mentorQueryPort.findServiceByIdAndMentorProfileUserId(id, mentorId)
                 .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ entitlement không thuộc mentor"))).toList();
         return services;
     }
@@ -182,13 +177,13 @@ public class MentorBlogService {
         return value;
     }
     private String resolveAssetUrl(UUID ownerId, UUID assetId) {
-        return assetId == null ? null : publicAssetUploadService.requireOwnedBlogImage(ownerId, assetId).getPublicUrl();
+        return assetId == null ? null : publicAssetUploadPort.requireOwnedBlogImage(ownerId, assetId).publicUrl();
     }
 
     private void validateOwnedInlineImages(UUID mentorId, String markdown) {
         if (markdown == null || markdown.isBlank()) return;
         Matcher matcher = MARKDOWN_IMAGE.matcher(markdown);
-        while (matcher.find()) publicAssetUploadService.requireOwnedBlogImageUrl(mentorId, matcher.group(1));
+        while (matcher.find()) publicAssetUploadPort.requireOwnedBlogImageUrl(mentorId, matcher.group(1));
     }
     private MentorBlogPostDetailResponse toResponse(BlogPost post) {
         return new MentorBlogPostDetailResponse(post.getId(), post.getTitle(), post.getSlug(), post.isSlugLocked(), post.getExcerpt(), post.getContentMarkdown(),

@@ -6,15 +6,14 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseSettlementStatus;
 import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentSettlementRepository;
-import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
-import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
-import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.course.event.CourseEnrollmentEndedEvent;
+import com.fptu.exe.skillswap.modules.payment.port.CoursePaymentPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
@@ -33,9 +32,8 @@ public class CourseSettlementService {
 
     private final CourseEnrollmentSettlementRepository settlementRepository;
     private final CourseEnrollmentRepository enrollmentRepository;
-    private final CreditLedgerService creditLedgerService;
-    private final SettlementService settlementService;
-    private final org.springframework.beans.factory.ObjectProvider<com.fptu.exe.skillswap.modules.chat.service.ConversationService> conversationServiceProvider;
+    private final CoursePaymentPort coursePaymentPort;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void generateSettlements(CourseEnrollment enrollment) {
@@ -96,16 +94,14 @@ public class CourseSettlementService {
             return false;
         }
         String operationKey = "COURSE_SETTLEMENT_RELEASE:" + allocation.getId();
-        settlementService.releaseCourseAllocation(
+        coursePaymentPort.releaseAllocation(new CoursePaymentPort.CourseAllocationRelease(
                 enrollment.getCourse().getMentorProfile().getUserId(),
                 allocation.getId(),
                 allocation.getMentorPayoutScoin(),
                 allocation.getPlatformRevenueScoin(),
                 allocation.getBasePriceScoin(),
                 allocation.getBuyerFeeScoin(),
-                allocation.getMentorCommissionScoin(),
-                operationKey
-        );
+                allocation.getMentorCommissionScoin(), operationKey));
         allocation.setStatus(CourseSettlementStatus.RELEASED);
         allocation.setReleasedAt(now);
         allocation.setReleaseOperationKey(operationKey);
@@ -125,9 +121,9 @@ public class CourseSettlementService {
 
         int refundable = allocation.getStudentRefundableScoin();
         String operationKey = "COURSE_REFUND:" + enrollmentId;
-        creditLedgerService.refundCredit(
-                enrollment.getStudentUserId(), CreditOriginType.REFUND, LedgerSourceType.COURSE_ENROLLMENT,
-                enrollmentId, refundable, "Course refund: " + enrollmentId, operationKey);
+        coursePaymentPort.refundEnrollment(new CoursePaymentPort.CourseEnrollmentRefund(
+                enrollment.getStudentUserId(), enrollmentId, refundable,
+                "Course refund: " + enrollmentId, operationKey));
 
         allocation.setStatus(CourseSettlementStatus.REFUNDED);
         allocation.setRefundedAt(Instant.now());
@@ -135,13 +131,9 @@ public class CourseSettlementService {
         allocation.setRefundOperationKey(operationKey + ":" + allocation.getId());
 
         enrollment.setStatus(EnrollmentStatus.REFUNDED);
-        var conversationService = conversationServiceProvider.getIfAvailable();
-        if (conversationService != null && enrollment.getCourse() != null) {
-            try {
-                conversationService.revokeCourseStudentParticipant(enrollment.getCourse().getId(), enrollment.getStudentUserId());
-            } catch (Exception ex) {
-                log.warn("Failed to revoke student {} from course group chat {}: {}", enrollment.getStudentUserId(), enrollment.getCourse().getId(), ex.getMessage());
-            }
+        if (enrollment.getCourse() != null) {
+            eventPublisher.publishEvent(new CourseEnrollmentEndedEvent(
+                    UUID.randomUUID(), enrollmentId, enrollment.getCourse().getId(), enrollment.getStudentUserId()));
         }
         return refundable;
     }

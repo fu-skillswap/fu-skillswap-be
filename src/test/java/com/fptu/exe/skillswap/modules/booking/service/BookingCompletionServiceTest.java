@@ -12,13 +12,14 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -287,7 +288,7 @@ class BookingCompletionServiceTest {
         var response = service.reverseBookingIssueResolution(
                 UUID.randomUUID(),
                 bookingId,
-                new com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest(
+                new AdminReverseResolutionRequest(
                         AdminBookingIssueResolutionReasonCode.OTHER,
                         "Phát hiện sai sót trong biên bản đối soát, cần xem xét lại"
                 )
@@ -323,7 +324,7 @@ class BookingCompletionServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> service.reverseBookingIssueResolution(
                 UUID.randomUUID(),
                 bookingId,
-                new com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest(
+                new AdminReverseResolutionRequest(
                         AdminBookingIssueResolutionReasonCode.OTHER,
                         "Duplicate reversal attempt"
                 )
@@ -348,13 +349,13 @@ class BookingCompletionServiceTest {
         mentorUser.setId(mentorId);
         MentorProfile mentor = MentorProfile.builder()
                 .userId(mentorId)
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .build();
         LocalDateTime now = LocalDateTime.ofInstant(FIXED_NOW, APP_ZONE);
         return Booking.builder()
                 .id(bookingId)
                 .mentee(mentee)
-                .mentorProfile(mentor)
+                .mentorUserId(mentor.getUserId())
                 .status(status)
                 .selectedStartTime(now.minusHours(2))
                 .selectedEndTime(now.minusHours(1))

@@ -1,0 +1,780 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------------< com.fptu.exe:skillswap >-----------------------
+[INFO] Building skillswap 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ skillswap ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 124 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ skillswap ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ skillswap ---
+[INFO] Copying 2 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ skillswap ---
+[INFO] Changes detected - recompiling the module! :input tree
+[INFO] Compiling 206 source files with javac [debug release 21] to target\test-classes
+[INFO] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java: Some input files use or override a deprecated API.
+[INFO] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java: Recompile with -Xlint:deprecation for details.
+[INFO] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorServiceManagementServiceTest.java: Some input files additionally use or override a deprecated API that is marked for removal.
+[INFO] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/infrastructure/config/StompRelayWebSocketConfigTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/infrastructure/config/StompRelayWebSocketConfigTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] Some messages have been simplified; recompile with -Xdiags:verbose to get full output
+[INFO] -------------------------------------------------------------
+[WARNING] COMPILATION WARNING : 
+[INFO] -------------------------------------------------------------
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[388,16] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[117,49] CreateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[126,89] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[126,118] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[126,133] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[126,162] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[132,35] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[133,33] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[147,59] startTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[148,57] endTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[155,49] CreateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[164,89] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[164,118] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[164,133] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[164,162] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[166,89] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[166,118] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[166,133] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[166,162] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[178,49] CreateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[192,89] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[192,118] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[192,133] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[192,162] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[200,35] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[201,33] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[222,49] CreateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[231,89] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[231,118] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[231,133] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[231,162] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[246,49] UpdateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[265,108] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[265,137] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[265,152] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[265,181] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[277,29] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[277,51] startTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[278,29] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[278,49] endTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[286,49] UpdateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[312,49] UpdateAvailabilitySlotRequest(java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.util.List<java.util.UUID>) in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[331,108] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[331,137] startTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[331,152] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[331,181] endTime() in com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[122,36] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[124,34] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[134,37] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[136,35] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[199,38] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[202,39] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[205,45] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[208,42] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[211,40] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[327,37] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[369,37] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[20,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[23,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[32,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[35,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[46,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[53,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[65,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[72,17] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[84,38] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[88,38] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[92,37] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[104,27] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[105,54] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDeadlinePolicyTest.java:[106,53] com.fptu.exe.skillswap.modules.booking.service.BookingDeadlinePolicy in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[202,72] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[148,57] startTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[149,55] endTime() in com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[271,37] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[357,37] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[375,30] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[377,28] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[383,41] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[385,39] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingConcurrencyIntegrationTest.java:[174,17] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingConcurrencyIntegrationTest.java:[178,17] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingConcurrencyIntegrationTest.java:[343,25] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingConcurrencyIntegrationTest.java:[465,17] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingConcurrencyIntegrationTest.java:[470,17] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[96,36] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[99,40] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/controller/BookingControllerAuthorizationTest.java:[90,16] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[211,46] CreateBookingRequest(java.util.UUID,java.util.UUID,java.time.LocalDateTime,java.time.LocalDateTime,java.lang.String,java.lang.String) in com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[278,43] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[280,41] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[311,36] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[313,34] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[321,37] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[323,35] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingRescheduleServiceTest.java:[134,25] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingRescheduleServiceTest.java:[135,25] com.fptu.exe.skillswap.modules.booking.service.BookingTime in com.fptu.exe.skillswap.modules.booking.service has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/discovery/DiscoveryMapperTest.java:[81,63] toCardResponse(com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow,java.util.List<?>,java.math.BigDecimal,java.util.List<?>,java.util.List<?>,java.util.List<?>) in com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/discovery/DiscoveryMapperTest.java:[118,63] toCardResponse(com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow,java.util.List<?>,java.math.BigDecimal,java.util.List<?>,java.util.List<?>,java.util.List<?>) in com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper has been deprecated and marked for removal
+[WARNING] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/discovery/DiscoveryMapperTest.java:[164,29] free() in com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse has been deprecated and marked for removal
+[INFO] 100 warnings 
+[INFO] -------------------------------------------------------------
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[154,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[168,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[181,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[202,17] cannot find symbol
+  symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/integration/PaymentConcurrencyIntegrationTest.java:[109,21] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/integration/PaymentConcurrencyIntegrationTest.java:[126,21] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[88,37] constructor MentorAvailabilityService in class com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository,com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.notification.service.NotificationService,com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator,com.fptu.exe.skillswap.infrastructure.config.PaymentProperties
+  found:    com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository,com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.notification.service.NotificationService,com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator,com.fptu.exe.skillswap.infrastructure.config.PaymentProperties,com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[106,22] cannot find symbol
+  symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[131,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[199,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[256,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[295,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[322,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[380,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[389,17] cannot find symbol
+  symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarApiClientTest.java:[46,18] constructor GoogleCalendarApiClient in class com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarApiClient cannot be applied to given types;
+  required: com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties,com.fasterxml.jackson.databind.ObjectMapper,com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarDateTimeMapper,com.fptu.exe.skillswap.modules.identity.repository.UserRepository
+  found:    com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties,com.fasterxml.jackson.databind.ObjectMapper,com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarDateTimeMapper
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarApiClientTest.java:[108,55] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[159,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[165,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[787,22] cannot find symbol
+  symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[792,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/blog/service/BlogEngagementServiceTest.java:[81,17] incompatible types: com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService cannot be converted to com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[97,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[108,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[138,17] cannot find symbol
+  symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[147,17] cannot find symbol
+  symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/blog/service/BlogGrowthServiceTest.java:[82,17] incompatible types: com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService cannot be converted to com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[72,79] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[79,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[88,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[114,33] constructor BookingMeetingService in class com.fptu.exe.skillswap.modules.booking.service.BookingMeetingService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort
+  found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[83,22] cannot find symbol
+  symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[92,16] cannot find symbol
+  symbol:   method setMentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[222,34] cannot find symbol
+  symbol:   method getMentorProfile()
+  location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[243,34] cannot find symbol
+  symbol:   method getMentorProfile()
+  location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[142,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[155,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[308,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[317,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[178,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[462,39] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.lang.Object,java.lang.Object)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; inference variable T has incompatible bounds
+          upper bounds: java.util.UUID,java.lang.Object
+          lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; inference variable T has incompatible bounds
+          upper bounds: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.lang.Object
+          lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[472,42] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.lang.Object,java.lang.Object)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; inference variable T has incompatible bounds
+          upper bounds: java.util.UUID,java.lang.Object
+          lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; inference variable T has incompatible bounds
+          upper bounds: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.lang.Object
+          lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[65,48] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[67,39] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[71,46] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[82,107] cannot find symbol
+  symbol:   method getUser()
+  location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[86,42] constructor BookingDecisionService in class com.fptu.exe.skillswap.modules.booking.service.BookingDecisionService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+  found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[106,46] constructor BookingCancellationService in class com.fptu.exe.skillswap.modules.booking.service.BookingCancellationService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+  found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[106,69] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[112,93] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[117,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[140,26] constructor SessionService in class com.fptu.exe.skillswap.modules.booking.service.SessionService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.booking.repository.SessionRepository,jakarta.persistence.EntityManager
+  found:    com.fptu.exe.skillswap.modules.booking.repository.SessionRepository
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[284,27] cannot find symbol
+  symbol:   method setMentorViolationService(com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService)
+  location: variable maintenanceService of type com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[321,27] cannot find symbol
+  symbol:   method setMentorViolationService(com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService)
+  location: variable maintenanceService of type com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarSyncIntegrationTest.java:[86,21] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarSyncIntegrationTest.java:[99,21] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[94,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[100,13] cannot find symbol
+  symbol:   method setMentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: variable slot of type com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[107,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[128,34] constructor BookingDecisionService in class com.fptu.exe.skillswap.modules.booking.service.BookingDecisionService cannot be applied to given types;
+  required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+  found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+  reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/repository/MentorDiscoveryRepositoryTest.java:[58,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[111,75] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[112,75] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[120,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[131,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[141,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[207,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[213,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[140,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[175,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[187,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[199,17] cannot find symbol
+  symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorVerificationFlowIntegrationTest.java:[247,16] cannot find symbol
+  symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: variable profile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorDiscoveryFlowIntegrationTest.java:[136,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorDiscoveryFlowIntegrationTest.java:[168,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorAchievementPictureFlowIntegrationTest.java:[80,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[128,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[264,17] cannot find symbol
+  symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[282,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[78,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[99,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[111,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[134,17] cannot find symbol
+  symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[154,83] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.time.LocalDate,java.time.LocalDate)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile cannot be converted to java.util.UUID)
+    method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+      (argument mismatch; com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile cannot be converted to com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[154,88] incompatible types: com.fptu.exe.skillswap.modules.identity.dto.request.AdminUserListRequest cannot be converted to com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListFilterRequest
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCompletionServiceTest.java:[352,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCompletionServiceTest.java:[358,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[125,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[131,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[144,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[170,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[198,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[229,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[277,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorProfileServiceTest.java:[69,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[148,17] cannot find symbol
+  symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+  location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[182,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[195,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[207,17] cannot find symbol
+  symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[306,17] cannot find symbol
+  symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+  location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[INFO] 100 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  35.714 s
+[INFO] Finished at: 2026-08-31T13:29:25+07:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:testCompile (default-testCompile) on project skillswap: Compilation failure: Compilation failure: 
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[154,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[168,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[181,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingNotificationIntegrationTest.java:[202,17] cannot find symbol
+[ERROR]   symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/integration/PaymentConcurrencyIntegrationTest.java:[109,21] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/integration/PaymentConcurrencyIntegrationTest.java:[126,21] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[88,37] constructor MentorAvailabilityService in class com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository,com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.notification.service.NotificationService,com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator,com.fptu.exe.skillswap.infrastructure.config.PaymentProperties
+[ERROR]   found:    com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository,com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.notification.service.NotificationService,com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator,com.fptu.exe.skillswap.infrastructure.config.PaymentProperties,com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[106,22] cannot find symbol
+[ERROR]   symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[131,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[199,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[256,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[295,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[322,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[380,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/MentorAvailabilityServiceTest.java:[389,17] cannot find symbol
+[ERROR]   symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarApiClientTest.java:[46,18] constructor GoogleCalendarApiClient in class com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarApiClient cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties,com.fasterxml.jackson.databind.ObjectMapper,com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarDateTimeMapper,com.fptu.exe.skillswap.modules.identity.repository.UserRepository
+[ERROR]   found:    com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties,com.fasterxml.jackson.databind.ObjectMapper,com.fptu.exe.skillswap.modules.identity.service.GoogleCalendarDateTimeMapper
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarApiClientTest.java:[108,55] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[159,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[165,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[787,22] cannot find symbol
+[ERROR]   symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/payment/service/PaymentOrderServiceTest.java:[792,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/blog/service/BlogEngagementServiceTest.java:[81,17] incompatible types: com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService cannot be converted to com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[97,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[108,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[138,17] cannot find symbol
+[ERROR]   symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminOperationsWorkbenchIntegrationTest.java:[147,17] cannot find symbol
+[ERROR]   symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/blog/service/BlogGrowthServiceTest.java:[82,17] incompatible types: com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService cannot be converted to com.fptu.exe.skillswap.modules.mentor.service.MentorContentAccessService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[72,79] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[79,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[88,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingMeetingServiceTest.java:[114,33] constructor BookingMeetingService in class com.fptu.exe.skillswap.modules.booking.service.BookingMeetingService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort
+[ERROR]   found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[83,22] cannot find symbol
+[ERROR]   symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[92,16] cannot find symbol
+[ERROR]   symbol:   method setMentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[222,34] cannot find symbol
+[ERROR]   symbol:   method getMentorProfile()
+[ERROR]   location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/feedback/SessionFeedbackServiceTest.java:[243,34] cannot find symbol
+[ERROR]   symbol:   method getMentorProfile()
+[ERROR]   location: variable booking of type com.fptu.exe.skillswap.modules.booking.domain.Booking
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[142,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[155,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[308,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDataCenterControllerIntegrationTest.java:[317,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[178,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[462,39] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.lang.Object,java.lang.Object)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; inference variable T has incompatible bounds
+[ERROR]           upper bounds: java.util.UUID,java.lang.Object
+[ERROR]           lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; inference variable T has incompatible bounds
+[ERROR]           upper bounds: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.lang.Object
+[ERROR]           lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorDiscoveryServiceTest.java:[472,42] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.lang.Object,java.lang.Object)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; inference variable T has incompatible bounds
+[ERROR]           upper bounds: java.util.UUID,java.lang.Object
+[ERROR]           lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; inference variable T has incompatible bounds
+[ERROR]           upper bounds: com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.lang.Object
+[ERROR]           lower bounds: com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[65,48] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[67,39] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[71,46] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[82,107] cannot find symbol
+[ERROR]   symbol:   method getUser()
+[ERROR]   location: variable mentorProfile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[86,42] constructor BookingDecisionService in class com.fptu.exe.skillswap.modules.booking.service.BookingDecisionService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+[ERROR]   found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCommandLockOrderTest.java:[106,46] constructor BookingCancellationService in class com.fptu.exe.skillswap.modules.booking.service.BookingCancellationService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+[ERROR]   found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[106,69] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[112,93] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[117,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[140,26] constructor SessionService in class com.fptu.exe.skillswap.modules.booking.service.SessionService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.booking.repository.SessionRepository,jakarta.persistence.EntityManager
+[ERROR]   found:    com.fptu.exe.skillswap.modules.booking.repository.SessionRepository
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[284,27] cannot find symbol
+[ERROR]   symbol:   method setMentorViolationService(com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService)
+[ERROR]   location: variable maintenanceService of type com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/SessionCompletionUtcTest.java:[321,27] cannot find symbol
+[ERROR]   symbol:   method setMentorViolationService(com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService)
+[ERROR]   location: variable maintenanceService of type com.fptu.exe.skillswap.modules.booking.service.BookingLifecycleMaintenanceService
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarSyncIntegrationTest.java:[86,21] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/identity/service/GoogleCalendarSyncIntegrationTest.java:[99,21] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[94,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[100,13] cannot find symbol
+[ERROR]   symbol:   method setMentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: variable slot of type com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[107,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingDecisionServiceTest.java:[128,34] constructor BookingDecisionService in class com.fptu.exe.skillswap.modules.booking.service.BookingDecisionService cannot be applied to given types;
+[ERROR]   required: com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.identity.port.UserQueryPort,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+[ERROR]   found:    com.fptu.exe.skillswap.modules.booking.repository.BookingRepository,com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository,com.fptu.exe.skillswap.modules.identity.port.UserLockPort,com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort,jakarta.persistence.EntityManager,com.fptu.exe.skillswap.modules.booking.service.SessionService,org.springframework.context.ApplicationEventPublisher,com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper,com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort,com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory
+[ERROR]   reason: actual and formal argument lists differ in length
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/repository/MentorDiscoveryRepositoryTest.java:[58,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[111,75] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[112,75] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[120,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[131,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[141,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[207,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingReminderEmailServiceTest.java:[213,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[140,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[175,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[187,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingOwnershipIntegrationTest.java:[199,17] cannot find symbol
+[ERROR]   symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorVerificationFlowIntegrationTest.java:[247,16] cannot find symbol
+[ERROR]   symbol:   method setUser(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: variable profile of type com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorDiscoveryFlowIntegrationTest.java:[136,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorDiscoveryFlowIntegrationTest.java:[168,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/integration/MentorAchievementPictureFlowIntegrationTest.java:[80,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[128,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[264,17] cannot find symbol
+[ERROR]   symbol:   method mentor(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest.MentorVerificationRequestBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/admin/integration/AdminDashboardControllerIntegrationTest.java:[282,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[78,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[99,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[111,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[134,17] cannot find symbol
+[ERROR]   symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/MentorAvailabilityWindowIntegrationTest.java:[154,83] no suitable method found for getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile,java.time.LocalDate,java.time.LocalDate)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(java.util.UUID,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile cannot be converted to java.util.UUID)
+[ERROR]     method com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService.getAvailableSlots(com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability,java.time.LocalDate,java.time.LocalDate) is not applicable
+[ERROR]       (argument mismatch; com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile cannot be converted to com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability)
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/smoke/CoreMentorshipFlowSmokeTest.java:[154,88] incompatible types: com.fptu.exe.skillswap.modules.identity.dto.request.AdminUserListRequest cannot be converted to com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListFilterRequest
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCompletionServiceTest.java:[352,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingCompletionServiceTest.java:[358,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[125,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[131,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[144,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[170,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[198,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[229,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/service/BookingLifecycleMaintenanceServiceTest.java:[277,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/mentor/service/MentorProfileServiceTest.java:[69,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[148,17] cannot find symbol
+[ERROR]   symbol:   method user(com.fptu.exe.skillswap.modules.identity.domain.User)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.MentorProfileBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[182,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule.MentorAvailabilityRuleBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[195,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot.MentorAvailabilitySlotBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[207,17] cannot find symbol
+[ERROR]   symbol:   method service(com.fptu.exe.skillswap.modules.mentor.domain.MentorService)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService.AvailabilitySlotServiceBuilder
+[ERROR] /E:/FPTU/SU26/EXE201/project/src/test/java/com/fptu/exe/skillswap/modules/booking/integration/BookingFlowIntegrationTest.java:[306,17] cannot find symbol
+[ERROR]   symbol:   method mentorProfile(com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile)
+[ERROR]   location: class com.fptu.exe.skillswap.modules.booking.domain.Booking.BookingBuilder
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

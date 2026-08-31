@@ -14,6 +14,8 @@ public interface MentorQueryPort {
 
     boolean existsByUserId(UUID userId);
 
+    boolean isActiveVerifiedMentor(UUID userId);
+
     Optional<MentorService> findMentorServiceById(UUID serviceId);
 
     Optional<MentorService> findActiveServiceByIdAndMentorUserId(UUID serviceId, UUID mentorUserId);
@@ -23,4 +25,14 @@ public interface MentorQueryPort {
     Optional<MentorProfile> findMentorProfileByIdForUpdate(UUID mentorUserId);
 
     MentorProfile saveMentorProfile(MentorProfile profile);
+
+    java.util.List<UUID> findActiveMentorUserIds();
+
+    Optional<MentorProfile> findWithUserByUserId(UUID userId);
+
+    Optional<MentorService> findServiceByIdAndMentorProfileUserId(UUID serviceId, UUID mentorUserId);
+
+    java.util.List<MentorService> findAllServicesByIdIn(java.util.Collection<UUID> serviceIds);
+
+    java.util.List<MentorService> findActiveServicesByMentorUserId(UUID mentorUserId);
 }

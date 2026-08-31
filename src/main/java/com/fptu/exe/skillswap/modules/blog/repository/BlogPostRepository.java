@@ -21,6 +21,16 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 
 public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogPostRepositoryCustom {
 
+    @Query("""
+            select p.slug
+            from BlogPost p
+            where p.visibility = com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility.PUBLIC
+              and p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
+              and p.publishedAt is not null
+            order by p.publishedAt desc, p.id desc
+            """)
+    List<String> findPublicPublishedSlugs();
+
     interface MentorPublicAuthorityProjection {
         long getPublishedArticleCount();
         LocalDateTime getLatestPublishedAt();
@@ -30,7 +40,7 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
             select count(p) as publishedArticleCount, max(p.publishedAt) as latestPublishedAt
             from BlogPost p
             where p.authorType = com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR
-              and p.authorUser.id = :mentorUserId
+              and p.authorUserId = :mentorUserId
               and p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
               and p.visibility = com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility.PUBLIC
               and p.publishedAt is not null
@@ -41,7 +51,7 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
             select p
             from BlogPost p
             where p.authorType = :authorType
-              and p.authorUser.id = :mentorUserId
+              and p.authorUserId = :mentorUserId
               and p.status = :status
               and p.visibility = :visibility
               and p.publishedAt is not null
@@ -59,17 +69,16 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
 
     boolean existsBySlugAndIdNot(String slug, UUID id);
 
-    @EntityGraph(attributePaths = {"authorUser", "categories", "tags"})
+    @EntityGraph(attributePaths = {"categories", "tags"})
     Optional<BlogPost> findById(UUID id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from BlogPost p where p.id = :postId")
     Optional<BlogPost> findByIdForEngagementUpdate(@Param("postId") UUID postId);
 
-    @EntityGraph(attributePaths = {"authorUser", "categories", "tags"})
+    @EntityGraph(attributePaths = {"categories", "tags"})
     Optional<BlogPost> findBySlug(String slug);
 
-    @EntityGraph(attributePaths = "authorUser")
     @Query("select p from BlogPost p where p.id in :postIds")
     List<BlogPost> findReaderPostsWithAuthorByIdIn(@Param("postIds") Collection<UUID> postIds);
 
@@ -82,7 +91,6 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
     @Query("""
             select p
             from BlogPost p
-            join fetch p.authorUser
             left join fetch p.categories
             left join fetch p.tags
             where p.status = :status
@@ -119,7 +127,6 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
     @Query("""
             select distinct p
             from BlogPost p
-            join fetch p.authorUser
             left join fetch p.categories c
             left join fetch p.tags t
             where p.status = :status
@@ -161,7 +168,7 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"authorUser", "categories", "tags", "entitledServices"})
+    @EntityGraph(attributePaths = {"categories", "tags", "entitledServices"})
     @Query("""
             select distinct p from BlogPost p join p.entitledServices s
             where p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
@@ -195,7 +202,7 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, UUID>, BlogP
                 p.featuredOrder = null,
                 p.featuredUntil = null
             where p.authorType = com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType.MENTOR
-              and p.authorUser.id = :authorUserId
+              and p.authorUserId = :authorUserId
               and p.status = com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus.PUBLISHED
             """)
     int archivePublishedMentorPostsByAuthor(@Param("authorUserId") UUID authorUserId);

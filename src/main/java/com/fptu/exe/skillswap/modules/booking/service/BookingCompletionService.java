@@ -1,20 +1,21 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingEventActorType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingEventType;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.ConfirmBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RespondBookingIssueRequest;
@@ -22,14 +23,12 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.SubmitBookingIssueRequ
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplineCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -41,14 +40,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.List;
 import java.util.UUID;
 
 @Service
 public class BookingCompletionService {
-
     private final BookingRepository bookingRepository;
     private final SessionFinalizationService sessionFinalizationService;
     private final SettlementService settlementService;
@@ -57,7 +53,7 @@ public class BookingCompletionService {
     private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
     private final TimeProvider timeProvider;
-    private MentorViolationService mentorViolationService;
+    private MentorDisciplineCommandPort mentorDisciplineCommandPort;
     private BookingIssueEvidenceService bookingIssueEvidenceService;
     private BookingDisputeNotificationService bookingDisputeNotificationService;
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
@@ -97,8 +93,8 @@ public class BookingCompletionService {
     }
 
     @Autowired(required = false)
-    void setMentorViolationService(MentorViolationService mentorViolationService) {
-        this.mentorViolationService = mentorViolationService;
+    void setMentorDisciplineCommandPort(MentorDisciplineCommandPort mentorDisciplineCommandPort) {
+        this.mentorDisciplineCommandPort = mentorDisciplineCommandPort;
     }
 
     @Autowired
@@ -182,7 +178,7 @@ public class BookingCompletionService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã xác nhận hoàn tất buổi học.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -238,7 +234,7 @@ public class BookingCompletionService {
                     "BOOKING",
                     savedBooking.getId(),
                     Map.of(
-                            "mentorUserId", String.valueOf(savedBooking.getMentorProfile() == null ? null : savedBooking.getMentorProfile().getUserId()),
+                            "mentorUserId", String.valueOf(savedBooking.getMentorUserId()),
                             "completionOutcome", String.valueOf(savedBooking.getCompletionOutcome())
                     )
             );
@@ -246,7 +242,7 @@ public class BookingCompletionService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentee xác nhận hoàn tất buổi học thành công.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -311,7 +307,7 @@ public class BookingCompletionService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Buổi học đã được báo cáo vấn đề và đang được xem xét.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -352,8 +348,7 @@ public class BookingCompletionService {
         booking.setIssueRespondedByUserId(currentUserId);
         booking.setIssueResponseNote(trimToNull(request.responseNote()));
         requireEvidenceService().attachResponderEvidence(booking, currentUserId, request.evidenceIds(), nowUtc);
-        // Both sides have now submitted their one allowed statement/evidence packet.
-        // Move to the admin queue in this same transaction so the 48-hour SLA begins now.
+
         booking.setIssueHumanReviewEscalatedAtUtc(nowUtc);
         Booking saved = bookingRepository.save(booking);
         recordBookingEvent(saved, BookingEventType.ISSUE_RESPONDED,
@@ -479,11 +474,9 @@ public class BookingCompletionService {
 
         Instant nowUtc = timeProvider.instant();
 
-        // Mark original resolution as REVERSED
         originalResolution.setStatus(BookingIssueResolutionStatus.REVERSED);
         requireIssueResolutionRepository().save(originalResolution);
 
-        // Create new immutable REVERSAL record referencing original
         BookingIssueResolution reversalRecord = requireIssueResolutionRepository().saveAndFlush(BookingIssueResolution.builder()
                 .bookingId(bookingId)
                 .resolvedByUserId(adminUserId)
@@ -499,13 +492,11 @@ public class BookingCompletionService {
                 .createdAtUtc(nowUtc)
                 .build());
 
-        // Apply financial reversal
         if (settlementService != null) {
             settlementService.applyReversal(booking, originalResolution, reversalRecord);
         }
         requireIssueResolutionRepository().save(reversalRecord);
 
-        // Return booking state to UNDER_REVIEW
         BookingStatus oldStatus = booking.getStatus();
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.ADMIN_REVERSE_RESOLUTION, nowUtc);
         booking.setIssueResolvedAtUtc(null);
@@ -527,9 +518,9 @@ public class BookingCompletionService {
     }
 
     private void recordMentorNoShowViolation(Booking booking) {
-        if (mentorViolationService == null || booking == null || booking.getMentorProfile() == null) return;
-        mentorViolationService.record(booking.getMentorProfile().getUserId(), booking.getId(),
-                MentorViolationType.MENTOR_NO_SHOW, "Admin xác nhận mentor không có mặt trong buổi học.");
+        if (mentorDisciplineCommandPort == null || booking == null || booking.getMentorUserId() == null) return;
+        mentorDisciplineCommandPort.recordMentorNoShow(booking.getMentorUserId(), booking.getId(),
+                "Admin xác nhận mentor không có mặt trong buổi học.");
     }
 
     private BookingIssueResponse toIssueResponse(Booking booking) {
@@ -585,15 +576,15 @@ public class BookingCompletionService {
 
     private void assertBookingAccess(Booking booking, UUID currentUserId) {
         boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
-        boolean isMentor = booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId());
+        boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem hoặc thao tác booking này");
         }
     }
 
     private boolean isMentorOfBooking(Booking booking, UUID currentUserId) {
-        return booking != null && booking.getMentorProfile() != null
-                && currentUserId != null && currentUserId.equals(booking.getMentorProfile().getUserId());
+        return booking != null && booking.getMentorUserId() != null
+                && currentUserId != null && currentUserId.equals(booking.getMentorUserId());
     }
 
     private void requireDirectBooking(Booking booking) {
@@ -631,7 +622,7 @@ public class BookingCompletionService {
 
     private void validateIssueReporter(Booking booking, UUID currentUserId, BookingIssueType issueType) {
         boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
-        boolean isMentor = booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId());
+        boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền báo cáo vấn đề cho booking này");
         }

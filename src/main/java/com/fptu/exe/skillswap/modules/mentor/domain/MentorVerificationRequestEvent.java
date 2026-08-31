@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,9 +47,8 @@ public class MentorVerificationRequestEvent {
     @Column(name = "event_type", nullable = false)
     private MentorVerificationEventType eventType;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "actor_user_id", foreignKey = @ForeignKey(name = "fk_mentor_verification_event_actor"))
-    private User actorUser;
+    @Column(name = "actor_user_id")
+    private UUID actorUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "from_status")
@@ -72,7 +69,3 @@ public class MentorVerificationRequestEvent {
         createdAt = DateTimeUtil.now();
     }
 }
-
-
-
-

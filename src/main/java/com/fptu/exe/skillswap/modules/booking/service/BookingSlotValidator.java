@@ -5,9 +5,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingPolicyQuery;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +30,7 @@ public class BookingSlotValidator {
 
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     private final BookingRepository bookingRepository;
-    private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final MentorBookingPolicyQuery mentorBookingPolicyQuery;
 
     private AvailabilityTemplateService availabilityTemplateService;
 
@@ -47,7 +46,7 @@ public class BookingSlotValidator {
 
     public void validateSelectedRange(
             MentorAvailabilitySlot slot,
-            MentorService mentorService,
+            ServiceSlotCandidate service,
             Instant selectedStartAt,
             Instant selectedEndAt,
             Instant nowUtc
@@ -76,17 +75,15 @@ public class BookingSlotValidator {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khoảng thời gian đã chọn đã bắt đầu hoặc đã trôi qua");
         }
         long durationMinutes = Duration.between(selectedStartAt, selectedEndAt).toMinutes();
-        if (mentorService == null || mentorService.getDurationMinutes() == null) {
+        if (service == null || service.durationMinutes() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring không hợp lệ");
         }
-        if (durationMinutes != mentorService.getDurationMinutes()) {
+        if (durationMinutes != service.durationMinutes()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải đúng bằng thời lượng của service");
         }
-        if (mentorBookingPolicyService != null
-                && slot.getMentorProfile() != null
-                && slot.getMentorProfile().getUserId() != null) {
-            mentorBookingPolicyService.validateBookingWindow(
-                    slot.getMentorProfile().getUserId(),
+        if (mentorBookingPolicyQuery != null && slot.getMentorUserId() != null) {
+            mentorBookingPolicyQuery.validateBookingWindow(
+                    slot.getMentorUserId(),
                     BookingTime.fromInstant(selectedStartAt),
                     BookingTime.fromInstant(nowUtc)
             );
@@ -95,7 +92,7 @@ public class BookingSlotValidator {
 
     public void validateSelectedRange(
             MentorAvailabilitySlot slot,
-            MentorService mentorService,
+            ServiceSlotCandidate service,
             LocalDateTime selectedStartTime,
             LocalDateTime selectedEndTime,
             LocalDateTime now
@@ -103,7 +100,7 @@ public class BookingSlotValidator {
         Instant selectedStartAt = BookingTime.toInstant(selectedStartTime);
         Instant selectedEndAt = BookingTime.toInstant(selectedEndTime);
         Instant nowUtc = BookingTime.toInstant(now);
-        validateSelectedRange(slot, mentorService, selectedStartAt, selectedEndAt, nowUtc);
+        validateSelectedRange(slot, service, selectedStartAt, selectedEndAt, nowUtc);
     }
 
     public void validateServiceAttachedToSlot(UUID slotId, UUID serviceId) {
@@ -114,14 +111,14 @@ public class BookingSlotValidator {
 
     public void validateCandidateSelection(
             MentorAvailabilitySlot slot,
-            MentorService mentorService,
+            ServiceSlotCandidate service,
             UUID menteeUserId,
             Instant selectedStartAt,
             Instant selectedEndAt
     ) {
         Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
         long offsetMinutes = Duration.between(slotStartUtc, selectedStartAt).toMinutes();
-        if (offsetMinutes < 0 || offsetMinutes % mentorService.getDurationMinutes() != 0) {
+        if (offsetMinutes < 0 || offsetMinutes % service.durationMinutes() != 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "selectedStartTime phải khớp với candidate segment hợp lệ của service trong slot");
         }
 
@@ -159,14 +156,14 @@ public class BookingSlotValidator {
 
     public void validateCandidateSelection(
             MentorAvailabilitySlot slot,
-            MentorService mentorService,
+            ServiceSlotCandidate service,
             UUID menteeUserId,
             LocalDateTime selectedStartTime,
             LocalDateTime selectedEndTime
     ) {
         validateCandidateSelection(
                 slot,
-                mentorService,
+                service,
                 menteeUserId,
                 BookingTime.toInstant(selectedStartTime),
                 BookingTime.toInstant(selectedEndTime)

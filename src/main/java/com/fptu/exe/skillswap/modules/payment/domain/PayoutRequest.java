@@ -112,23 +112,23 @@ public class PayoutRequest {
     @jakarta.persistence.PrePersist
     protected void onCreate() {
         java.time.Instant nowUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(nowUtc);
         if (requestedAtUtc == null && requestedAt == null) {
             requestedAtUtc = nowUtc;
             requestedAt = nowHcm;
         } else if (requestedAtUtc != null && requestedAt == null) {
-            requestedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(requestedAtUtc);
+            requestedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(requestedAtUtc);
         } else if (requestedAt != null && requestedAtUtc == null) {
-            requestedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(requestedAt);
+            requestedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(requestedAt);
         }
 
         if (createdAt == null && createdAtUtc == null) {
             createdAtUtc = nowUtc;
             createdAt = nowHcm;
         } else if (createdAtUtc != null && createdAt == null) {
-            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
+            createdAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(createdAtUtc);
         } else if (createdAt != null && createdAtUtc == null) {
-            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
+            createdAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(createdAt);
         }
         updatedAtUtc = nowUtc;
         updatedAt = nowHcm;
@@ -138,33 +138,33 @@ public class PayoutRequest {
     @jakarta.persistence.PreUpdate
     protected void onUpdate() {
         updatedAtUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-        updatedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(updatedAtUtc);
         syncShadowFields();
     }
 
     private void syncShadowFields() {
         if (reviewedAtUtc != null) {
-            reviewedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(reviewedAtUtc);
+            reviewedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(reviewedAtUtc);
         } else if (reviewedAt != null) {
-            reviewedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(reviewedAt);
+            reviewedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(reviewedAt);
         }
 
         if (approvedAtUtc != null) {
-            approvedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(approvedAtUtc);
+            approvedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(approvedAtUtc);
         } else if (approvedAt != null) {
-            approvedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(approvedAt);
+            approvedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(approvedAt);
         }
 
         if (paidAtUtc != null) {
-            paidAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(paidAtUtc);
+            paidAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(paidAtUtc);
         } else if (paidAt != null) {
-            paidAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(paidAt);
+            paidAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(paidAt);
         }
 
         if (rejectedAtUtc != null) {
-            rejectedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(rejectedAtUtc);
+            rejectedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(rejectedAtUtc);
         } else if (rejectedAt != null) {
-            rejectedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(rejectedAt);
+            rejectedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(rejectedAt);
         }
     }
 }

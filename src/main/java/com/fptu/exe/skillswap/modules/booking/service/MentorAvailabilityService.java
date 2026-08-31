@@ -1,21 +1,21 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
-import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateAvailabilitySlotRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.DeactivateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.ReplaceAvailabilitySlotServicesRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.UpdateAvailabilitySlotRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.UpsertAvailabilityRuleRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilityRuleResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.MentorManagedAvailabilitySlotResponse;
@@ -23,32 +23,23 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilit
 import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidateItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.mentor.port.EffectiveBookingPolicy;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -56,6 +47,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
@@ -63,8 +55,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -75,19 +65,19 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor(onConstructor_ = @Autowired)
 @Slf4j
 public class MentorAvailabilityService {
 
-    private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String APP_TIMEZONE = "Asia/Ho_Chi_Minh";
-    private static final String RULE_UPDATED_PENDING_REJECTION_REASON = "Khung giờ mentoring đã được mentor cập nhật nên yêu cầu chờ không còn hiệu lực.";
-    private static final String RULE_DELETED_PENDING_REJECTION_REASON = "Khung giờ mentoring đã bị mentor gỡ khỏi lịch nên yêu cầu chờ không còn hiệu lực.";
+    private static final ZoneId APP_ZONE = ZoneId.of(APP_TIMEZONE);
+    private static final String RULE_UPDATED_PENDING_REJECTION_REASON = "Mentor đã thay đổi lịch rảnh";
+    private static final String RULE_DELETED_PENDING_REJECTION_REASON = "Mentor đã hủy lịch rảnh";
     private static final String BLOCKED_BY_ACCEPTED_REASON = "Đã có booking được mentor chấp nhận trùng với khoảng thời gian này";
     private static final String BLOCKED_BY_PENDING_QUOTA_REASON = "Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận";
     private static final String BLOCKED_BY_PAST_TIME_REASON = "Segment này đã bắt đầu hoặc đã trôi qua";
@@ -107,16 +97,14 @@ public class MentorAvailabilityService {
             BookingStatus.PAID
     );
 
-    private final MentorProfileRepository mentorProfileRepository;
+    private final MentorBookingQueryPort mentorBookingQueryPort;
     private final MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
-    private final MentorServiceRepository mentorServiceRepository;
     private final BookingRepository bookingRepository;
-    private final NotificationService notificationService;
+    private final NotificationCommandPort notificationCommandPort;
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
     private final PaymentProperties paymentProperties;
-    private final MentorBookingPolicyService mentorBookingPolicyService;
 
     private AvailabilityTemplateService availabilityTemplateService;
 
@@ -125,33 +113,31 @@ public class MentorAvailabilityService {
         this.availabilityTemplateService = availabilityTemplateService;
     }
 
+    @Autowired
     public MentorAvailabilityService(
-            MentorProfileRepository mentorProfileRepository,
+            MentorBookingQueryPort mentorBookingQueryPort,
             MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository,
             MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository,
             AvailabilitySlotServiceRepository availabilitySlotServiceRepository,
-            MentorServiceRepository mentorServiceRepository,
             BookingRepository bookingRepository,
-            NotificationService notificationService,
+            NotificationCommandPort notificationCommandPort,
             AvailabilityCalendarWindowCalculator calendarWindowCalculator,
             PaymentProperties paymentProperties
     ) {
-        this(mentorProfileRepository,
-                mentorAvailabilityRuleRepository,
-                mentorAvailabilitySlotRepository,
-                availabilitySlotServiceRepository,
-                mentorServiceRepository,
-                bookingRepository,
-                notificationService,
-                calendarWindowCalculator,
-                paymentProperties,
-                null);
+        this.mentorBookingQueryPort = mentorBookingQueryPort;
+        this.mentorAvailabilityRuleRepository = mentorAvailabilityRuleRepository;
+        this.mentorAvailabilitySlotRepository = mentorAvailabilitySlotRepository;
+        this.availabilitySlotServiceRepository = availabilitySlotServiceRepository;
+        this.bookingRepository = bookingRepository;
+        this.notificationCommandPort = notificationCommandPort;
+        this.calendarWindowCalculator = calendarWindowCalculator;
+        this.paymentProperties = paymentProperties;
     }
 
     @Transactional
     public MentorManagedAvailabilitySlotResponse createSlotDirectly(UUID mentorUserId, CreateAvailabilitySlotRequest request) {
         requireUserId(mentorUserId);
-        MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
+        validateManagedActiveMentor(mentorUserId);
 
         LocalDateTime start = toUtcLocal(request.legacyJavaBridge() ? request.startAt() : normalizeToWholeMinute(request.startAt()));
         LocalDateTime end = toUtcLocal(request.legacyJavaBridge() ? request.endAt() : normalizeToWholeMinute(request.endAt()));
@@ -177,7 +163,7 @@ public class MentorAvailabilityService {
         }
 
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .startTime(start)
                 .endTime(end)
                 .timezone(APP_TIMEZONE)
@@ -188,15 +174,14 @@ public class MentorAvailabilityService {
                 .build();
         MentorAvailabilitySlot savedSlot = mentorAvailabilitySlotRepository.save(slot);
 
-        List<MentorService> services = resolveManagedServices(mentorUserId, request.serviceIds());
+        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> buildSlotServiceBinding(savedSlot, service))
+                    .map(service -> AvailabilitySlotService.of(savedSlot, service.serviceId()))
                     .toList();
             replaceSlotServices(savedSlot, slotServices);
         }
-        touchMentorActivity(mentorProfile, now());
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         return toManagedSlotResponse(savedSlot);
@@ -214,7 +199,7 @@ public class MentorAvailabilityService {
         if (slot.getTemplate() != null) {
             throw new BaseException(ErrorCode.GENERATED_SLOT_MANAGED_BY_TEMPLATE);
         }
-        if (!java.util.Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
+        if (!Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
             throw slotVersionConflict(slotId, request.expectedVersion(), normalizedVersion(slot));
         }
 
@@ -253,12 +238,12 @@ public class MentorAvailabilityService {
             mentorAvailabilityRuleRepository.save(rule);
         }
 
-        Set<UUID> oldServiceIds = slot.getSlotServices().stream().map(item -> item.getService().getId()).collect(Collectors.toSet());
+        Set<UUID> oldServiceIds = slot.getSlotServices().stream().map(AvailabilitySlotService::getServiceId).collect(Collectors.toSet());
         Set<UUID> newServiceIds = new LinkedHashSet<>(request.serviceIds());
         boolean timeChanged = !start.equals(previousStart) || !end.equals(previousEnd);
         List<Booking> affectedPending = bookingRepository.findBySlotIdAndStatus(slotId, BookingStatus.PENDING).stream()
                 .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
-                .filter(booking -> timeChanged || (booking.getService() != null && !newServiceIds.contains(booking.getService().getId())))
+                .filter(booking -> timeChanged || (booking.getServiceId() != null && !newServiceIds.contains(booking.getServiceId())))
                 .toList();
         if (!affectedPending.isEmpty() && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_HAS_PENDING_BOOKINGS");
@@ -278,15 +263,14 @@ public class MentorAvailabilityService {
         availabilitySlotServiceRepository.deleteBySlotId(slotId);
         slot.getSlotServices().clear();
 
-        List<MentorService> services = resolveManagedServices(mentorUserId, request.serviceIds());
+        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
 
         if (!services.isEmpty()) {
             List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> buildSlotServiceBinding(slot, service))
+                    .map(service -> AvailabilitySlotService.of(slot, service.serviceId()))
                     .toList();
             replaceSlotServices(slot, slotServices);
         }
-        touchMentorActivity(slot.getMentorProfile(), now());
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
@@ -317,7 +301,7 @@ public class MentorAvailabilityService {
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SLOT_ALREADY_INACTIVE");
         }
-        if (request == null || !java.util.Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
+        if (request == null || !Objects.equals(request.expectedVersion(), normalizedVersion(slot))) {
             throw slotVersionConflict(slotId, request == null ? null : request.expectedVersion(), normalizedVersion(slot));
         }
 
@@ -340,7 +324,6 @@ public class MentorAvailabilityService {
             rule.setActive(false);
             mentorAvailabilityRuleRepository.save(rule);
         }
-        touchMentorActivity(slot.getMentorProfile(), now());
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
         return toManagedSlotResponse(slot);
     }
@@ -354,7 +337,6 @@ public class MentorAvailabilityService {
         if (toDate.isBefore(fromDate) || java.time.temporal.ChronoUnit.DAYS.between(fromDate, toDate) + 1 > 31) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng ngày availability không hợp lệ hoặc vượt quá giới hạn 31 ngày");
         }
-        ZoneId policyZone = resolvePolicyZone(mentorUserId);
         LocalDateTime start = fromDate.atStartOfDay();
         LocalDateTime end = toDate.plusDays(1).atStartOfDay();
 
@@ -365,16 +347,21 @@ public class MentorAvailabilityService {
     }
 
     private MentorManagedAvailabilitySlotResponse toManagedSlotResponse(MentorAvailabilitySlot slot) {
-        List<AvailabilitySlotServiceBasicResponse> services = slot.getSlotServices().stream()
-                .map(ss -> new AvailabilitySlotServiceBasicResponse(
-                        ss.getService().getId(),
-                        ss.getService().getTitle(),
-                        ss.getService().getDurationMinutes(),
-                        ss.getService().isFree(),
-                        normalizedServicePrice(ss.getService()),
-                        bindingRemovalCapability(slot, ss.getService().getId())
+        Set<UUID> serviceIds = slot.getSlotServices().stream().map(AvailabilitySlotService::getServiceId).collect(Collectors.toSet());
+        Map<UUID, ServiceSlotCandidate> servicesMap = mentorBookingQueryPort.getServicesByIds(serviceIds);
+        List<AvailabilitySlotServiceBasicResponse> services = serviceIds.stream()
+                .map(servicesMap::get)
+                .filter(Objects::nonNull)
+                .map(s -> new AvailabilitySlotServiceBasicResponse(
+                        s.serviceId(),
+                        s.title(),
+                        s.durationMinutes(),
+                        Boolean.TRUE.equals(s.isFree()),
+                        normalizedServicePrice(s),
+                        bindingRemovalCapability(slot, s.serviceId())
                 ))
                 .collect(Collectors.toList());
+
         return new MentorManagedAvailabilitySlotResponse(
                 slot.getId(),
                 toInstant(slot.getStartTime()),
@@ -394,8 +381,18 @@ public class MentorAvailabilityService {
     }
 
     @Transactional(readOnly = true)
-    public List<MentorAvailabilitySlotResponse> getAvailableSlots(MentorProfile mentorProfile, LocalDate fromDate, LocalDate toDate) {
-        if (mentorProfile == null || mentorProfile.getUserId() == null) {
+    public List<MentorPublicAvailability> getAvailableSlots(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor");
+        }
+        MentorBookingCapability capability = mentorBookingQueryPort.getBookingCapability(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor"));
+        return getAvailableSlots(capability, fromDate, toDate);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MentorPublicAvailability> getAvailableSlots(MentorBookingCapability mentorProfile, LocalDate fromDate, LocalDate toDate) {
+        if (mentorProfile == null || mentorProfile.mentorUserId() == null) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy mentor");
         }
 
@@ -409,7 +406,7 @@ public class MentorAvailabilityService {
         LocalDateTime toTimeExclusive = dateRange.endDate().plusDays(1).atStartOfDay();
 
         List<MentorAvailabilitySlot> slots = mentorAvailabilitySlotRepository.findVisibleSlotsByMentorUserId(
-                mentorProfile.getUserId(),
+                mentorProfile.mentorUserId(),
                 toInstant(fromTime),
                 toInstant(toTimeExclusive)
         );
@@ -430,19 +427,27 @@ public class MentorAvailabilityService {
                 ).stream()
                 .collect(Collectors.groupingBy(slotService -> slotService.getSlot().getId(), LinkedHashMap::new, Collectors.toList()));
 
+        Set<UUID> allServiceIds = servicesBySlot.values().stream()
+                .flatMap(List::stream)
+                .map(AvailabilitySlotService::getServiceId)
+                .collect(Collectors.toSet());
+        Map<UUID, ServiceSlotCandidate> activeCandidatesMap = mentorBookingQueryPort.getServicesByIds(allServiceIds);
+
         return slots.stream()
                 .filter(slot -> servicesBySlot.containsKey(slot.getId())
-                        && servicesBySlot.get(slot.getId()).stream().anyMatch(binding -> binding.getService().isActive()
-                        && binding.getService().getDeliveryMode() == MentorServiceDeliveryMode.ONE_TO_ONE))
-                .map(slot -> toPublicSlotResponse(slot, mentorProfile.getTeachingMode(), servicesBySlot.getOrDefault(slot.getId(), List.of())))
+                        && servicesBySlot.get(slot.getId()).stream().anyMatch(binding -> {
+                            ServiceSlotCandidate c = activeCandidatesMap.get(binding.getServiceId());
+                            return c != null && Boolean.TRUE.equals(c.active());
+                        }))
+                .map(slot -> toPublicSlotResponse(slot, servicesBySlot.getOrDefault(slot.getId(), List.of()), activeCandidatesMap))
                 .toList();
     }
 
     private boolean isSlotEligibleByPolicy(MentorAvailabilitySlot slot, LocalDateTime now) {
-        if (mentorBookingPolicyService == null || slot.getMentorProfile() == null || slot.getMentorProfile().getUserId() == null) {
+        if (slot.getMentorUserId() == null) {
             return true;
         }
-        var policy = mentorBookingPolicyService.getEffectivePolicy(slot.getMentorProfile().getUserId());
+        EffectiveBookingPolicy policy = mentorBookingQueryPort.getEffectiveBookingPolicy(slot.getMentorUserId());
         int leadTimeMinutes = policy.minimumBookingLeadTimeMinutes();
         int horizonDays = policy.maximumBookingHorizonDays();
         LocalDateTime earliestAllowed = now.plusMinutes(leadTimeMinutes);
@@ -458,22 +463,17 @@ public class MentorAvailabilityService {
 
         MentorAvailabilitySlot slot = resolvePublicActiveSlot(mentorUserId, slotId);
 
-        AvailabilitySlotService slotService = availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)
+        availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Service chưa được gắn vào availability slot này"));
 
-        MentorService service = slotService.getService();
-        if (!service.isActive()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn hoạt động");
-        }
-        if (service.getDeliveryMode() != MentorServiceDeliveryMode.ONE_TO_ONE) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Group service chưa mở candidate booking trong Phase 1");
-        }
+        ServiceSlotCandidate service = mentorBookingQueryPort.getActiveServiceCandidate(serviceId, mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn hoạt động hoặc không thuộc mentor"));
 
         List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service);
         return ServiceSlotCandidatesResponse.builder()
                 .slotId(slotId)
                 .serviceId(serviceId)
-                .serviceDurationMinutes(service.getDurationMinutes())
+                .serviceDurationMinutes(service.durationMinutes())
                 .candidateServiceSlots(candidates)
                 .build();
     }
@@ -482,8 +482,8 @@ public class MentorAvailabilityService {
     @Transactional
     public void generateSlotsForMentorAsync(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
         try {
-            MentorProfile mentorProfile = getManagedActiveMentorProfile(mentorUserId);
-            generateSlotsForDateRange(mentorProfile, fromDate, toDate);
+            validateManagedActiveMentor(mentorUserId);
+            generateSlotsForDateRange(mentorUserId, fromDate, toDate);
         } catch (Exception exception) {
             log.error(
                     "Failed to generate mentor availability windows asynchronously for mentor {} from {} to {}",
@@ -496,9 +496,9 @@ public class MentorAvailabilityService {
     }
 
     @Transactional
-    public void generateSlotsForDateRange(MentorProfile mentorProfile, LocalDate fromDate, LocalDate toDate) {
+    public void generateSlotsForDateRange(UUID mentorUserId, LocalDate fromDate, LocalDate toDate) {
         List<MentorAvailabilityRule> rules = mentorAvailabilityRuleRepository.findActiveRulesOverlapping(
-                mentorProfile.getUserId(),
+                mentorUserId,
                 fromDate,
                 toDate
         );
@@ -513,19 +513,16 @@ public class MentorAvailabilityService {
             }
             List<MentorAvailabilityRule> closedRules = matchingRulesForDate(rules, date, AvailabilityRuleType.CLOSED);
             for (MentorAvailabilityRule openRule : openRules) {
-                generateWindowForOpenRule(mentorProfile, openRule, closedRules, date);
+                generateWindowForOpenRule(mentorUserId, openRule, closedRules, date);
             }
         }
     }
 
-    private List<ServiceSlotCandidateItemResponse> buildSegmentCandidates(MentorAvailabilitySlot slot, MentorService service) {
+    private List<ServiceSlotCandidateItemResponse> buildSegmentCandidates(MentorAvailabilitySlot slot, ServiceSlotCandidate service) {
         validateSlotSegmentBase(slot, service);
 
-        UUID mentorUserId = slot.getMentorProfile() != null ? slot.getMentorProfile().getUserId() : null;
-
-        var policy = mentorUserId != null && mentorBookingPolicyService != null
-                ? mentorBookingPolicyService.getEffectivePolicy(mentorUserId)
-                : MentorBookingPolicyService.MentorBookingPolicySnapshot.defaults();
+        UUID mentorUserId = slot.getMentorUserId();
+        EffectiveBookingPolicy policy = mentorBookingQueryPort.getEffectiveBookingPolicy(mentorUserId);
         int leadTimeMinutes = policy.minimumBookingLeadTimeMinutes();
         int horizonDays = policy.maximumBookingHorizonDays();
 
@@ -537,7 +534,7 @@ public class MentorAvailabilityService {
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
         );
 
-        int durationMinutes = service.getDurationMinutes();
+        int durationMinutes = service.durationMinutes();
         LocalDateTime current = slot.getStartTime();
         LocalDateTime now = now();
         LocalDateTime earliestAllowed = now.plusMinutes(leadTimeMinutes);
@@ -555,16 +552,9 @@ public class MentorAvailabilityService {
                     .orElse(null);
             boolean blockedByAccepted = blockingAcceptedBooking != null;
 
-            UUID blockingServiceId = blockingAcceptedBooking != null && blockingAcceptedBooking.getService() != null
-                    ? blockingAcceptedBooking.getService().getId()
-                    : null;
-            String blockingServiceTitle = blockingAcceptedBooking != null
-                    ? firstNonBlank(
-                    blockingAcceptedBooking.getServiceTitleSnapshot(),
-                    blockingAcceptedBooking.getService() == null ? null : blockingAcceptedBooking.getService().getTitle()
-            )
-                    : null;
-            boolean blockedBySameService = blockedByAccepted && blockingServiceId != null && blockingServiceId.equals(service.getId());
+            UUID blockingServiceId = blockingAcceptedBooking != null ? blockingAcceptedBooking.getServiceId() : null;
+            String blockingServiceTitle = blockingAcceptedBooking != null ? blockingAcceptedBooking.getServiceTitleSnapshot() : null;
+            boolean blockedBySameService = blockedByAccepted && blockingServiceId != null && blockingServiceId.equals(service.serviceId());
             boolean blockedByDifferentService = blockedByAccepted && !blockedBySameService;
 
             String reasonIfBlocked = null;
@@ -623,7 +613,7 @@ public class MentorAvailabilityService {
     private MentorAvailabilitySlot resolvePublicActiveSlot(UUID mentorUserId, UUID slotId) {
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findById(slotId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy availability slot"));
-        if (slot.getMentorProfile() == null || !mentorUserId.equals(slot.getMentorProfile().getUserId())) {
+        if (slot.getMentorUserId() == null || !mentorUserId.equals(slot.getMentorUserId())) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Availability slot không thuộc về mentor này");
         }
         if (!slot.isActive()) {
@@ -635,15 +625,15 @@ public class MentorAvailabilityService {
         return slot;
     }
 
-    private void validateSlotSegmentBase(MentorAvailabilitySlot slot, MentorService service) {
+    private void validateSlotSegmentBase(MentorAvailabilitySlot slot, ServiceSlotCandidate service) {
         if (slot == null || slot.getStartTime() == null || slot.getEndTime() == null || !slot.getEndTime().isAfter(slot.getStartTime())) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Availability slot không hợp lệ");
         }
-        if (service == null || service.getDurationMinutes() == null || service.getDurationMinutes() <= 0) {
+        if (service == null || service.durationMinutes() == null || service.durationMinutes() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Service không hợp lệ");
         }
         long slotMinutes = Duration.between(slot.getStartTime(), slot.getEndTime()).toMinutes();
-        if (service.getDurationMinutes() > slotMinutes) {
+        if (service.durationMinutes() > slotMinutes) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service có thời lượng lớn hơn availability slot");
         }
     }
@@ -666,20 +656,10 @@ public class MentorAvailabilityService {
         return startTime + "|" + endTime;
     }
 
-    private String firstNonBlank(String first, String second) {
-        if (first != null && !first.isBlank()) {
-            return first;
-        }
-        if (second != null && !second.isBlank()) {
-            return second;
-        }
-        return null;
-    }
-
-    private MentorAvailabilitySlotResponse toPublicSlotResponse(
+    private MentorPublicAvailability toPublicSlotResponse(
             MentorAvailabilitySlot slot,
-            TeachingMode teachingMode,
-            List<AvailabilitySlotService> slotServices
+            List<AvailabilitySlotService> slotServices,
+            Map<UUID, ServiceSlotCandidate> candidatesMap
     ) {
         Map<String, Integer> pendingCounts = toPendingSegmentCountMap(
                 bookingRepository.countPendingSegmentsBySlotId(slot.getId(), BookingStatus.PENDING)
@@ -693,51 +673,42 @@ public class MentorAvailabilityService {
                 BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCounts.values().stream().max(Integer::compareTo).orElse(0)
         );
 
-        return MentorAvailabilitySlotResponse.builder()
-                .slotId(slot.getId())
-                .startTime(slot.getStartTime())
-                .endTime(slot.getEndTime())
-                .timezone(slot.getTimezone())
-                .durationMinutes((int) Duration.between(slot.getStartTime(), slot.getEndTime()).toMinutes())
-                .teachingMode(teachingMode)
-                .pendingRequestCount(totalPendingRequests)
-                .acceptedSlotCount(acceptedSlotCount)
-                .maxPendingRequests(BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT)
-                .remainingRequestSlots(remainingRequestSlots)
-                .services(slotServices.stream()
-                        .map(AvailabilitySlotService::getService)
-                        .filter(MentorService::isActive)
-                        .filter(service -> service.getDeliveryMode() == MentorServiceDeliveryMode.ONE_TO_ONE)
-                        .map(this::toSlotServiceBasicResponse)
-                        .toList())
-                .build();
+        List<ServiceSlotCandidate> serviceResponses = slotServices.stream()
+                .map(s -> candidatesMap.get(s.getServiceId()))
+                .filter(Objects::nonNull)
+                .filter(s -> Boolean.TRUE.equals(s.active()))
+                .toList();
+
+        return new MentorPublicAvailability(slot.getId(), slot.getStartTime(), slot.getEndTime(), slot.getTimezone(),
+                (int) Duration.between(slot.getStartTime(), slot.getEndTime()).toMinutes(), totalPendingRequests,
+                acceptedSlotCount, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT, remainingRequestSlots, serviceResponses);
     }
 
-    private AvailabilitySlotServiceBasicResponse toSlotServiceBasicResponse(MentorService service) {
+    private AvailabilitySlotServiceBasicResponse toSlotServiceBasicResponse(ServiceSlotCandidate service) {
         return AvailabilitySlotServiceBasicResponse.builder()
-                .serviceId(service.getId())
-                .title(service.getTitle())
-                .durationMinutes(service.getDurationMinutes())
-                .isFree(service.isFree())
-                .priceScoin(service.isFree() || service.getPriceScoin() == null || service.getPriceScoin() == 0 ? 0
-                        : PricingPolicy.menteePayableScoin(service.getPriceScoin(), paymentProperties))
+                .serviceId(service.serviceId())
+                .title(service.title())
+                .durationMinutes(service.durationMinutes())
+                .isFree(Boolean.TRUE.equals(service.isFree()))
+                .priceScoin(Boolean.TRUE.equals(service.isFree()) || service.priceScoin() == null || service.priceScoin() == 0 ? 0
+                        : PricingPolicy.menteePayableScoin(service.priceScoin(), paymentProperties))
                 .build();
     }
 
-    private Integer normalizedServicePrice(MentorService service) {
-        if (service == null || service.isFree()) {
+    private Integer normalizedServicePrice(ServiceSlotCandidate service) {
+        if (service == null || Boolean.TRUE.equals(service.isFree())) {
             return 0;
         }
-        return service.getPriceScoin() == null ? 0 : service.getPriceScoin();
+        return service.priceScoin() == null ? 0 : service.priceScoin();
     }
 
     private void validateMentorOwnsSlot(UUID mentorUserId, MentorAvailabilitySlot slot) {
-        if (slot.getMentorProfile() == null || !mentorUserId.equals(slot.getMentorProfile().getUserId())) {
+        if (slot.getMentorUserId() == null || !mentorUserId.equals(slot.getMentorUserId())) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền cập nhật availability slot này");
         }
     }
 
-    private void generatePlanningWindowsForRule(MentorProfile mentorProfile, MentorAvailabilityRule rule) {
+    private void generatePlanningWindowsForRule(UUID mentorUserId, MentorAvailabilityRule rule) {
         if (!rule.isActive()) {
             return;
         }
@@ -749,18 +720,18 @@ public class MentorAvailabilityService {
         }
 
         for (AvailabilityCalendarWindowCalculator.DateRange range : planningRanges) {
-            generateRuleWindowsForRange(mentorProfile, rule, range.startDate(), range.endDate());
+            generateRuleWindowsForRange(mentorUserId, rule, range.startDate(), range.endDate());
         }
     }
 
     private void generateRuleWindowsForRange(
-            MentorProfile mentorProfile,
+            UUID mentorUserId,
             MentorAvailabilityRule rule,
             LocalDate fromDate,
             LocalDate toDate
     ) {
         List<MentorAvailabilityRule> activeRules = mentorAvailabilityRuleRepository.findActiveRulesOverlapping(
-                mentorProfile.getUserId(),
+                mentorUserId,
                 fromDate,
                 toDate
         );
@@ -772,25 +743,25 @@ public class MentorAvailabilityService {
             if (!appliesOnDate(rule, date)) {
                 continue;
             }
-            generateWindowForOpenRule(mentorProfile, rule, closedRules, date);
+            generateWindowForOpenRule(mentorUserId, rule, closedRules, date);
         }
     }
 
     private void generateWindowForOpenRule(
-            MentorProfile mentorProfile,
+            UUID mentorUserId,
             MentorAvailabilityRule openRule,
             List<MentorAvailabilityRule> closedRules,
             LocalDate date
     ) {
         LocalDateTime start = LocalDateTime.of(date, openRule.getStartTime());
         LocalDateTime end = LocalDateTime.of(date, openRule.getEndTime());
-        if (!shouldCreateWindow(mentorProfile.getUserId(), start, end, closedRules)) {
+        if (!shouldCreateWindow(mentorUserId, start, end, closedRules)) {
             return;
         }
 
         try {
             MentorAvailabilitySlot savedSlot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorUserId)
                     .rule(openRule)
                     .startTime(start)
                     .endTime(end)
@@ -803,7 +774,7 @@ public class MentorAvailabilityService {
         } catch (DataIntegrityViolationException exception) {
             log.warn(
                     "Skipped overlapping availability window for mentor {} at {} - {} due to database constraint",
-                    mentorProfile.getUserId(),
+                    mentorUserId,
                     start,
                     end
             );
@@ -822,40 +793,24 @@ public class MentorAvailabilityService {
     }
 
     private void attachAllActiveServicesForGeneratedSlot(MentorAvailabilitySlot slot) {
-        if (slot == null || slot.getMentorProfile() == null || slot.getMentorProfile().getUserId() == null) {
+        if (slot == null || slot.getMentorUserId() == null) {
             return;
         }
-        List<MentorService> services = mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(
-                slot.getMentorProfile().getUserId()
-        );
+        List<ServiceSlotCandidate> services = mentorBookingQueryPort.getActiveServicesForMentor(slot.getMentorUserId());
         if (services.isEmpty()) {
             return;
         }
         replaceSlotServices(
                 slot,
                 services.stream()
-                        .map(service -> buildSlotServiceBinding(slot, service))
+                        .map(service -> AvailabilitySlotService.of(slot, service.serviceId()))
                         .toList()
         );
     }
 
-    private AvailabilitySlotService buildSlotServiceBinding(MentorAvailabilitySlot slot, MentorService service) {
-        if (slot == null || slot.getId() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Availability slot chưa sẵn sàng để gắn service");
-        }
-        if (service == null || service.getId() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Service chưa sẵn sàng để gắn vào slot");
-        }
-        return AvailabilitySlotService.builder()
-                .id(new AvailabilitySlotServiceId(slot.getId(), service.getId()))
-                .slot(slot)
-                .service(service)
-                .build();
-    }
-
     private void replaceSlotServices(MentorAvailabilitySlot slot, List<AvailabilitySlotService> bindings) {
         if (slot.getSlotServices() == null) {
-            slot.setSlotServices(new java.util.LinkedHashSet<>());
+            slot.setSlotServices(new LinkedHashSet<>());
         } else {
             slot.getSlotServices().clear();
         }
@@ -944,55 +899,42 @@ public class MentorAvailabilityService {
         }
         bookingRepository.saveAll(pendingBookings);
         for (Booking pendingBooking : pendingBookings) {
-            notificationService.createNotification(
-                    pendingBooking.getMentee().getId(),
-                    NotificationType.BOOKING_AUTO_REJECTED,
+            notificationCommandPort.publish(new NotificationCommandPort.NotificationIntent(
+                    pendingBooking.getMentee().getId(), "BOOKING_AUTO_REJECTED",
                     "Yêu cầu đặt lịch không còn hiệu lực",
                     "Yêu cầu đặt lịch của bạn đã bị từ chối: " + reason,
-                    "BOOKING",
-                    pendingBooking.getId()
-            );
+                    "BOOKING", pendingBooking.getId(), "/bookings/" + pendingBooking.getId()));
         }
     }
 
-    private MentorProfile getManagedActiveMentorProfile(UUID mentorUserId) {
+    private void validateManagedActiveMentor(UUID mentorUserId) {
         requireUserId(mentorUserId);
-        MentorProfile mentorProfile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-        if (mentorProfile.getUser() == null || mentorProfile.getUser().getStatus() != UserStatus.ACTIVE) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Tài khoản mentor hiện không thể cấu hình lịch rảnh");
-        }
-        if (mentorProfile.getStatus() != MentorStatus.ACTIVE || mentorProfile.getVerifiedAt() == null) {
+        MentorBookingCapability capability = mentorBookingQueryPort.getBookingCapability(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không tìm thấy thông tin mentor"));
+        if (!capability.isActiveMentor()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ mentor đã được xác thực mới có thể cấu hình lịch rảnh");
         }
-        return mentorProfile;
     }
 
-    private List<MentorService> resolveManagedServices(UUID mentorUserId, Collection<UUID> requestedServiceIds) {
-        List<MentorService> services = mentorServiceRepository.findAllById(requestedServiceIds);
+    private List<ServiceSlotCandidate> resolveManagedServices(UUID mentorUserId, Collection<UUID> requestedServiceIds) {
+        if (requestedServiceIds == null || requestedServiceIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, ServiceSlotCandidate> services = mentorBookingQueryPort.getServicesByIds(requestedServiceIds);
 
         Set<UUID> missingServiceIds = requestedServiceIds.stream()
-                .filter(serviceId -> services.stream().noneMatch(service -> service.getId().equals(serviceId)))
+                .filter(serviceId -> !services.containsKey(serviceId))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (!missingServiceIds.isEmpty()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Một hoặc nhiều dịch vụ không tồn tại");
         }
 
-        for (MentorService service : services) {
-            if (service.getMentorProfile() == null || !service.getMentorProfile().getUserId().equals(mentorUserId) || !service.isActive()) {
+        for (ServiceSlotCandidate service : services.values()) {
+            if (service.mentorUserId() == null || !service.mentorUserId().equals(mentorUserId) || !Boolean.TRUE.equals(service.active())) {
                 throw new BaseException(ErrorCode.ACCESS_DENIED, "Dịch vụ không hợp lệ hoặc không thuộc về bạn");
             }
         }
-        return services;
-    }
-
-    private void touchMentorActivity(MentorProfile mentorProfile, LocalDateTime activityTime) {
-        if (mentorProfile == null || activityTime == null) {
-            return;
-        }
-        if (mentorProfile.getLastActiveAt() == null || mentorProfile.getLastActiveAt().isBefore(activityTime)) {
-            mentorProfile.setLastActiveAt(activityTime);
-        }
+        return new ArrayList<>(services.values());
     }
 
     private UpsertAvailabilityRuleRequest validateRuleRequest(UpsertAvailabilityRuleRequest request) {
@@ -1089,21 +1031,6 @@ public class MentorAvailabilityService {
         return booking.getSelectedEndTime();
     }
 
-    private ZoneId resolvePolicyZone(UUID mentorUserId) {
-        if (mentorBookingPolicyService == null || mentorUserId == null) {
-            return APP_ZONE;
-        }
-        var policy = mentorBookingPolicyService.getEffectivePolicy(mentorUserId);
-        if (policy == null || policy.timezone() == null || policy.timezone().isBlank()) {
-            return APP_ZONE;
-        }
-        try {
-            return ZoneId.of(policy.timezone());
-        } catch (Exception ex) {
-            return APP_ZONE;
-        }
-    }
-
     private MentorAvailabilitySlot findSlotForUpdateOrLegacyRead(UUID slotId) {
         return mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
                 .or(() -> mentorAvailabilitySlotRepository.findById(slotId))
@@ -1166,7 +1093,7 @@ public class MentorAvailabilityService {
             return new SlotMutationCapabilityResponse(SlotMutationMode.BLOCKED_BY_LOCKING_BOOKING, "SLOT_HAS_LOCKING_BOOKINGS", 0);
         }
         int affected = Math.toIntExact(bookingRepository.findBySlotIdAndStatus(slot.getId(), BookingStatus.PENDING).stream()
-                .filter(booking -> booking.getService() != null && serviceId.equals(booking.getService().getId()))
+                .filter(booking -> booking.getServiceId() != null && serviceId.equals(booking.getServiceId()))
                 .filter(booking -> selectedStartTime(booking) != null && selectedStartTime(booking).isAfter(now()))
                 .count());
         return affected == 0

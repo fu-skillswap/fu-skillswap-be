@@ -1,34 +1,18 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorVerificationQueueFilterRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationLockResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationQueueItemResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationDocument;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationEventType;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequestEvent;
-import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
-import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorProfileResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationChecklistResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationTimelineEventResponse;
+import com.fptu.exe.skillswap.modules.mentor.domain.*;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerificationQueueFilterRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.*;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorVerificationAdminPort;
-import com.fptu.exe.skillswap.modules.mentor.repository.AdminMentorVerificationQueueProjection;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestEventRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
-import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -50,10 +34,7 @@ import org.springframework.util.StringUtils;
 import java.text.Normalizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -65,11 +46,16 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
             "submittedAt",
             "createdAt",
             "updatedAt",
-            "mentorFullName",
-            "mentorEmail",
             "status",
             "revisionCount"
     );
+
+    private final UserQueryPort userQueryPort;
+
+    @Override
+    public List<String> verificationStatusNames() {
+        return java.util.Arrays.stream(VerificationStatus.values()).map(Enum::name).toList();
+    }
 
     @Value("${application.mentor-verification.terms-version:SKILLSWAP_MENTOR_TERMS_V1}")
     private String mentorTermsVersion = "SKILLSWAP_MENTOR_TERMS_V1";
@@ -84,7 +70,6 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     private final MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
     private final MentorVerificationRequestEventRepository mentorVerificationRequestEventRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final UserRepository userRepository;
     private final AcademicService academicService;
     private final MentorProfileService mentorProfileService;
     private final ApplicationEventPublisher eventPublisher;
@@ -95,31 +80,27 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         AdminMentorVerificationQueueFilterRequest resolvedFilter = filterRequest == null
                 ? new AdminMentorVerificationQueueFilterRequest()
                 : filterRequest;
-        String keyword = trimToNull(resolvedFilter.getKeyword());
-        String normalizedKeyword = normalizeSearchText(keyword);
-        String keywordPattern = toLikePattern(keyword);
-        String normalizedKeywordPattern = toLikePattern(normalizedKeyword);
         Pageable pageable = buildQueuePageable(resolvedFilter);
-        Page<AdminMentorVerificationQueueProjection> page = keywordPattern == null
-                ? mentorVerificationRequestRepository.findAdminQueueWithoutKeyword(
+        Page<MentorVerificationRequest> page = mentorVerificationRequestRepository.findAdminQueue(
                 resolvedFilter.getStatus(),
-                resolvedFilter.getSubmittedFrom(),
-                resolvedFilter.getSubmittedTo(),
-                pageable
-        )
-                : mentorVerificationRequestRepository.searchAdminQueue(
-                resolvedFilter.getStatus(),
-                keyword,
-                normalizedKeyword,
-                keywordPattern,
-                normalizedKeywordPattern,
                 resolvedFilter.getSubmittedFrom(),
                 resolvedFilter.getSubmittedTo(),
                 pageable
         );
 
+        List<UUID> mentorUserIds = page.getContent().stream()
+                .map(MentorVerificationRequest::getMentorUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<UUID, UserSummaryRecord> userMap = userQueryPort.findUserSummariesByIdIn(mentorUserIds);
+
+        List<AdminMentorVerificationQueueItemResponse> items = page.getContent().stream()
+                .map(req -> mapQueueItem(req, userMap.get(req.getMentorUserId())))
+                .toList();
+
         return PageResponse.<AdminMentorVerificationQueueItemResponse>builder()
-                .content(page.getContent().stream().map(this::mapQueueItem).toList())
+                .content(items)
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -131,20 +112,20 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationRequestResponse getRequestDetail(UUID adminUserId, UUID requestId) {
-        User admin = getRequiredUser(adminUserId);
+        requireActiveUser(adminUserId);
         if (requestId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã hồ sơ xác thực không được để trống");
         }
         MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
-        claimLockIfAvailable(request, admin);
+        claimLockIfAvailable(request, adminUserId);
         return mapDetail(request, adminUserId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public AdminMentorVerificationLockResponse getLockStatus(UUID adminUserId, UUID requestId) {
-        getRequiredUser(adminUserId);
+        requireActiveUser(adminUserId);
         MentorVerificationRequest request = getRequiredRequest(requestId);
         return mapLockStatus(request, adminUserId);
     }
@@ -152,12 +133,12 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationLockResponse refreshLock(UUID adminUserId, UUID requestId) {
-        User admin = getRequiredUser(adminUserId);
+        requireActiveUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
 
         LocalDateTime now = DateTimeUtil.now();
-        request.setLockedBy(admin);
+        request.setLockedByUserId(adminUserId);
         request.setLockedAt(now);
         request.setLockExpiresAt(now.plusMinutes(LOCK_TTL_MINUTES));
         mentorVerificationRequestRepository.save(request);
@@ -168,10 +149,10 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationLockResponse releaseLock(UUID adminUserId, Set<RoleCode> roles, UUID requestId) {
-        getRequiredUser(adminUserId);
+        requireActiveUser(adminUserId);
         MentorVerificationRequest request = mentorVerificationRequestRepository.findByIdForUpdate(requestId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
-        if (request.getLockedBy() == null && request.getLockedAt() == null && request.getLockExpiresAt() == null) {
+        if (request.getLockedByUserId() == null && request.getLockedAt() == null && request.getLockExpiresAt() == null) {
             return mapLockStatus(request, adminUserId);
         }
 
@@ -189,7 +170,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationRequestResponse requestRevision(UUID adminUserId, UUID requestId, String reviewNote) {
-        User reviewer = getRequiredUser(adminUserId);
+        UserSummaryRecord reviewer = requireActiveUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
         String normalizedNote = normalizeRequiredReviewText(reviewNote, "Nội dung yêu cầu chỉnh sửa không được để trống");
@@ -198,7 +179,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         request.setStatus(VerificationStatus.NEEDS_REVISION);
         request.setReviewNote(normalizedNote);
         request.setRejectionReason(null);
-        request.setReviewedBy(reviewer);
+        request.setReviewedByUserId(adminUserId);
         request.setReviewedAt(DateTimeUtil.now());
         request.setApprovedAt(null);
         clearLock(request);
@@ -206,15 +187,15 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         appendEvent(
                 request,
                 MentorVerificationEventType.REVISION_REQUESTED,
-                reviewer,
+                adminUserId,
                 previousStatus,
                 VerificationStatus.NEEDS_REVISION,
                 normalizedNote
         );
 
-        updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
+        updateMentorProfileStatus(request.getMentorUserId(), MentorStatus.DRAFT, null);
         publishMentorVerificationNotification(
-                request.getMentor().getId(),
+                request.getMentorUserId(),
                 NotificationType.MENTOR_VERIFICATION_NEEDS_REVISION,
                 "Hồ sơ mentor cần được bổ sung",
                 "Hồ sơ mentor của bạn cần được bổ sung thông tin trước khi xét duyệt.",
@@ -232,14 +213,15 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationRequestResponse approve(UUID adminUserId, UUID requestId, String reviewNote) {
-        User reviewer = getRequiredUser(adminUserId);
+        UserSummaryRecord reviewer = requireActiveUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
         ensureApprovalEligible(request);
         String normalizedReviewNote = normalizeOptionalReviewText(reviewNote);
 
-        User mentor = request.getMentor();
-        if (mentor.getRoles().contains(RoleCode.ADMIN) || mentor.getRoles().contains(RoleCode.SYSTEM_ADMIN)) {
+        UserSummaryRecord mentor = userQueryPort.findUserSummaryById(request.getMentorUserId())
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy thông tin mentor"));
+        if (mentor.hasRole(RoleCode.ADMIN) || mentor.hasRole(RoleCode.SYSTEM_ADMIN)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể duyệt quyền Mentor cho tài khoản quản trị viên");
         }
 
@@ -247,7 +229,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         request.setStatus(VerificationStatus.APPROVED);
         request.setReviewNote(normalizedReviewNote);
         request.setRejectionReason(null);
-        request.setReviewedBy(reviewer);
+        request.setReviewedByUserId(adminUserId);
         request.setReviewedAt(DateTimeUtil.now());
         request.setApprovedAt(DateTimeUtil.now());
         clearLock(request);
@@ -255,22 +237,17 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         appendEvent(
                 request,
                 MentorVerificationEventType.APPROVED,
-                reviewer,
+                adminUserId,
                 previousStatus,
                 VerificationStatus.APPROVED,
                 request.getReviewNote()
         );
 
-        updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.ACTIVE, reviewer);
-
-        boolean roleChanged = mentor.getRoles().remove(RoleCode.MENTEE);
-        roleChanged |= mentor.getRoles().add(RoleCode.MENTOR);
-        if (roleChanged) {
-            userRepository.save(mentor);
-        }
+        updateMentorProfileStatus(request.getMentorUserId(), MentorStatus.ACTIVE, adminUserId);
+        userQueryPort.grantMentorRole(request.getMentorUserId());
 
         publishMentorVerificationNotification(
-                mentor.getId(),
+                mentor.userId(),
                 NotificationType.MENTOR_VERIFICATION_APPROVED,
                 "Yêu cầu trở thành mentor đã được duyệt",
                 "Hồ sơ mentor của bạn đã được duyệt. Bạn có thể bắt đầu nhận yêu cầu đặt lịch.",
@@ -288,7 +265,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     @Override
     @Transactional
     public AdminMentorVerificationRequestResponse reject(UUID adminUserId, UUID requestId, String rejectionReason) {
-        User reviewer = getRequiredUser(adminUserId);
+        UserSummaryRecord reviewer = requireActiveUser(adminUserId);
         MentorVerificationRequest request = getPendingRequest(requestId);
         assertReviewLockOwnership(request, adminUserId);
         String normalizedReason = normalizeRequiredReviewText(rejectionReason, "Lý do từ chối không được để trống");
@@ -297,7 +274,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         request.setStatus(VerificationStatus.REJECTED);
         request.setReviewNote(null);
         request.setRejectionReason(normalizedReason);
-        request.setReviewedBy(reviewer);
+        request.setReviewedByUserId(adminUserId);
         request.setReviewedAt(DateTimeUtil.now());
         request.setApprovedAt(null);
         clearLock(request);
@@ -305,15 +282,15 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         appendEvent(
                 request,
                 MentorVerificationEventType.REJECTED,
-                reviewer,
+                adminUserId,
                 previousStatus,
                 VerificationStatus.REJECTED,
                 normalizedReason
         );
 
-        updateMentorProfileStatus(request.getMentor().getId(), MentorStatus.DRAFT);
+        updateMentorProfileStatus(request.getMentorUserId(), MentorStatus.DRAFT, null);
         publishMentorVerificationNotification(
-                request.getMentor().getId(),
+                request.getMentorUserId(),
                 NotificationType.MENTOR_VERIFICATION_REJECTED,
                 "Yêu cầu trở thành mentor đã bị từ chối",
                 "Hồ sơ mentor của bạn chưa được duyệt. Vui lòng xem lý do từ chối và cập nhật lại nếu cần.",
@@ -362,43 +339,39 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         return request;
     }
 
-    private User getRequiredUser(UUID userId) {
+    private UserSummaryRecord requireActiveUser(UUID userId) {
         if (userId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng thực hiện duyệt"));
+        return userQueryPort.findUserSummaryById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
     }
 
-    private void updateMentorProfileStatus(UUID mentorUserId, MentorStatus targetStatus) {
-        updateMentorProfileStatus(mentorUserId, targetStatus, null);
-    }
-
-    private void updateMentorProfileStatus(UUID mentorUserId, MentorStatus targetStatus, User reviewer) {
+    private void updateMentorProfileStatus(UUID mentorUserId, MentorStatus targetStatus, UUID reviewerUserId) {
         MentorProfile mentorProfile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor liên kết"));
         mentorProfile.setStatus(targetStatus);
         if (targetStatus == MentorStatus.ACTIVE) {
             mentorProfile.setVerifiedAt(DateTimeUtil.now());
-            if (reviewer != null) {
-                mentorProfile.setVerifiedBy(reviewer);
+            if (reviewerUserId != null) {
+                mentorProfile.setVerifiedByUserId(reviewerUserId);
             }
         }
         mentorProfileRepository.save(mentorProfile);
     }
 
-    private AdminMentorVerificationQueueItemResponse mapQueueItem(AdminMentorVerificationQueueProjection projection) {
+    private AdminMentorVerificationQueueItemResponse mapQueueItem(MentorVerificationRequest req, UserSummaryRecord mentor) {
         return AdminMentorVerificationQueueItemResponse.builder()
-                .requestId(projection.getRequestId())
-                .mentorUserId(projection.getMentorUserId())
-                .mentorEmail(projection.getMentorEmail())
-                .mentorFullName(projection.getMentorFullName())
-                .mentorAvatarUrl(projection.getMentorAvatarUrl())
-                .status(projection.getStatus())
-                .revisionCount(projection.getRevisionCount())
-                .submittedAt(projection.getSubmittedAt())
-                .createdAt(projection.getCreatedAt())
-                .updatedAt(projection.getUpdatedAt())
+                .requestId(req.getId())
+                .mentorUserId(req.getMentorUserId())
+                .mentorEmail(mentor != null ? mentor.email() : null)
+                .mentorFullName(mentor != null ? mentor.fullName() : null)
+                .mentorAvatarUrl(mentor != null ? mentor.avatarUrl() : null)
+                .status(req.getStatus())
+                .revisionCount(req.getRevisionCount())
+                .submittedAt(req.getSubmittedAt())
+                .createdAt(req.getCreatedAt())
+                .updatedAt(req.getUpdatedAt())
                 .build();
     }
 
@@ -414,31 +387,35 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .map(this::mapTimelineEventResponse)
                 .toList();
 
-        User mentor = request.getMentor();
-        User reviewer = request.getReviewedBy();
-        User lockedBy = request.getLockedBy();
+        UserSummaryRecord mentor = userQueryPort.findUserSummaryById(request.getMentorUserId()).orElse(null);
+        UserSummaryRecord reviewer = request.getReviewedByUserId() != null
+                ? userQueryPort.findUserSummaryById(request.getReviewedByUserId()).orElse(null)
+                : null;
+        UserSummaryRecord lockedBy = request.getLockedByUserId() != null
+                ? userQueryPort.findUserSummaryById(request.getLockedByUserId()).orElse(null)
+                : null;
 
-        MentorProfileResponse mentorProfile = mentorProfileService.getMyProfile(mentor.getId());
+        MentorProfileResponse mentorProfile = mentorProfileService.getMyProfile(request.getMentorUserId());
         StudentProfileResponse studentProfile = null;
         try {
-            studentProfile = academicService.getStudentProfile(mentor.getId());
+            studentProfile = academicService.getStudentProfile(request.getMentorUserId());
         } catch (ResourceNotFoundException ex) {
             studentProfile = null;
         }
 
         return AdminMentorVerificationRequestResponse.builder()
                 .requestId(request.getId())
-                .mentorUserId(mentor.getId())
-                .mentorEmail(mentor.getEmail())
-                .mentorFullName(mentor.getFullName())
-                .mentorAvatarUrl(mentor.getAvatarUrl())
+                .mentorUserId(request.getMentorUserId())
+                .mentorEmail(mentor != null ? mentor.email() : null)
+                .mentorFullName(mentor != null ? mentor.fullName() : null)
+                .mentorAvatarUrl(mentor != null ? mentor.avatarUrl() : null)
                 .status(request.getStatus())
                 .submitNote(request.getSubmittedNote())
                 .reviewNote(request.getReviewNote())
                 .rejectionReason(request.getRejectionReason())
                 .revisionCount(request.getRevisionCount())
-                .reviewerEmail(reviewer == null ? null : reviewer.getEmail())
-                .lockedByAdminEmail(lockedBy == null ? null : lockedBy.getEmail())
+                .reviewerEmail(reviewer == null ? null : reviewer.email())
+                .lockedByAdminEmail(lockedBy == null ? null : lockedBy.email())
                 .lockedAt(request.getLockedAt())
                 .lockExpiresAt(request.getLockExpiresAt())
                 .canReview(canReview(request, adminUserId))
@@ -452,22 +429,24 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .updatedAt(request.getUpdatedAt())
                 .documents(documents)
                 .timeline(timeline)
-                .checklist(buildChecklist(mentor.getId(), documents))
+                .checklist(buildChecklist(request.getMentorUserId(), documents))
                 .mentorProfile(mentorProfile)
                 .studentProfile(studentProfile)
                 .build();
     }
 
     private MentorVerificationTimelineEventResponse mapTimelineEventResponse(MentorVerificationRequestEvent event) {
-        User actor = event.getActorUser();
+        UserSummaryRecord actor = event.getActorUserId() != null
+                ? userQueryPort.findUserSummaryById(event.getActorUserId()).orElse(null)
+                : null;
         return MentorVerificationTimelineEventResponse.builder()
                 .id(event.getId())
                 .eventType(event.getEventType())
                 .fromStatus(event.getFromStatus())
                 .toStatus(event.getToStatus())
-                .actorUserId(actor == null ? null : actor.getId())
-                .actorEmail(actor == null ? null : actor.getEmail())
-                .actorFullName(actor == null ? null : actor.getFullName())
+                .actorUserId(event.getActorUserId())
+                .actorEmail(actor == null ? null : actor.email())
+                .actorFullName(actor == null ? null : actor.fullName())
                 .note(event.getNote())
                 .createdAt(event.getCreatedAt())
                 .build();
@@ -476,7 +455,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     private void appendEvent(
             MentorVerificationRequest request,
             MentorVerificationEventType eventType,
-            User actorUser,
+            UUID actorUserId,
             VerificationStatus fromStatus,
             VerificationStatus toStatus,
             String note
@@ -484,19 +463,19 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         mentorVerificationRequestEventRepository.save(MentorVerificationRequestEvent.builder()
                 .request(request)
                 .eventType(eventType)
-                .actorUser(actorUser)
+                .actorUserId(actorUserId)
                 .fromStatus(fromStatus)
                 .toStatus(toStatus)
                 .note(trimToNull(note))
                 .build());
     }
 
-    private void claimLockIfAvailable(MentorVerificationRequest request, User admin) {
-        if (request == null || admin == null || request.getStatus() != VerificationStatus.PENDING_REVIEW) {
+    private void claimLockIfAvailable(MentorVerificationRequest request, UUID adminUserId) {
+        if (request == null || adminUserId == null || request.getStatus() != VerificationStatus.PENDING_REVIEW) {
             return;
         }
-        if (!hasActiveLock(request) || isLockedBy(request, admin.getId())) {
-            request.setLockedBy(admin);
+        if (!hasActiveLock(request) || isLockedBy(request, adminUserId)) {
+            request.setLockedByUserId(adminUserId);
             request.setLockedAt(DateTimeUtil.now());
             request.setLockExpiresAt(DateTimeUtil.now().plusMinutes(LOCK_TTL_MINUTES));
             mentorVerificationRequestRepository.save(request);
@@ -524,7 +503,8 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
 
     private AdminMentorVerificationLockResponse mapLockStatus(MentorVerificationRequest request, UUID adminUserId) {
         boolean activeLock = request.getStatus() == VerificationStatus.PENDING_REVIEW && hasActiveLock(request);
-        User lockedBy = activeLock ? request.getLockedBy() : null;
+        UUID lockedByUserId = activeLock ? request.getLockedByUserId() : null;
+        UserSummaryRecord lockedBy = lockedByUserId != null ? userQueryPort.findUserSummaryById(lockedByUserId).orElse(null) : null;
         LocalDateTime lockExpiresAt = activeLock ? request.getLockExpiresAt() : null;
         long secondsRemaining = lockExpiresAt == null
                 ? 0L
@@ -534,9 +514,9 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .requestId(request.getId())
                 .locked(activeLock)
                 .canReview(activeLock && isLockedBy(request, adminUserId))
-                .lockedByAdminId(lockedBy == null ? null : lockedBy.getId())
-                .lockedByAdminEmail(lockedBy == null ? null : lockedBy.getEmail())
-                .lockedByAdminFullName(lockedBy == null ? null : lockedBy.getFullName())
+                .lockedByAdminId(lockedBy == null ? null : lockedBy.userId())
+                .lockedByAdminEmail(lockedBy == null ? null : lockedBy.email())
+                .lockedByAdminFullName(lockedBy == null ? null : lockedBy.fullName())
                 .lockedAt(activeLock ? request.getLockedAt() : null)
                 .lockExpiresAt(lockExpiresAt)
                 .secondsRemaining(secondsRemaining)
@@ -544,19 +524,17 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     }
 
     private boolean hasActiveLock(MentorVerificationRequest request) {
-        return request.getLockedBy() != null
+        return request.getLockedByUserId() != null
                 && request.getLockExpiresAt() != null
                 && request.getLockExpiresAt().isAfter(DateTimeUtil.now());
     }
 
     private boolean isLockedBy(MentorVerificationRequest request, UUID adminUserId) {
-        return request.getLockedBy() != null
-                && request.getLockedBy().getId() != null
-                && request.getLockedBy().getId().equals(adminUserId);
+        return request.getLockedByUserId() != null && request.getLockedByUserId().equals(adminUserId);
     }
 
     private void clearLock(MentorVerificationRequest request) {
-        request.setLockedBy(null);
+        request.setLockedByUserId(null);
         request.setLockedAt(null);
         request.setLockExpiresAt(null);
     }
@@ -587,7 +565,7 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .stream()
                 .map(this::mapDocumentResponse)
                 .toList();
-        MentorVerificationChecklistResponse checklist = buildChecklist(request.getMentor().getId(), documents);
+        MentorVerificationChecklistResponse checklist = buildChecklist(request.getMentorUserId(), documents);
         if (requireCompletedStudentProfile && !checklist.academicProfileCompleted()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa hoàn tất hồ sơ học thuật");
         }
@@ -595,37 +573,28 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa hoàn tất hồ sơ mentor");
         }
         if (!checklist.hasAffiliationProof()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi chưa có minh chứng FPTU");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi thiếu minh chứng liên kết FPTU");
         }
         if (!checklist.hasExpertiseProof()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi chưa có minh chứng năng lực mentoring");
-        }
-        if (request.getSubmittedAt() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ chưa được nộp chính thức");
-        }
-        if (!hasAcceptedCurrentTerms(request)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi người dùng chưa xác nhận điều khoản mentor hiện hành");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể duyệt hồ sơ khi thiếu minh chứng chuyên môn");
         }
     }
 
-    private boolean hasAcceptedCurrentTerms(MentorVerificationRequest request) {
-        return request != null
-                && request.getTermsAcceptedAt() != null
-                && StringUtils.hasText(request.getTermsVersion())
-                && request.getTermsVersion().equals(mentorTermsVersion);
+    @Override
+    public boolean existsById(UUID verificationRequestId) {
+        return verificationRequestId != null && mentorVerificationRequestRepository.existsById(verificationRequestId);
     }
 
     private MentorVerificationDocumentResponse mapDocumentResponse(MentorVerificationDocument document) {
-        StoredFile storedFile = document.getStoredFile();
         return MentorVerificationDocumentResponse.builder()
                 .id(document.getId())
                 .documentType(document.getDocumentType())
                 .status(document.getStatus())
                 .storageKind(document.getStorageKind())
-                .originalFilename(storedFile == null ? null : storedFile.getOriginalName())
-                .contentType(storedFile == null ? null : storedFile.getMimeType())
-                .sizeBytes(storedFile == null ? null : storedFile.getSizeBytes())
-                .fileUrl(storedFile == null ? null : storedFile.getPublicUrl())
+                .originalFilename(document.getOriginalFilename())
+                .contentType(document.getContentType())
+                .sizeBytes(document.getSizeBytes())
+                .fileUrl(document.getFileUrl())
                 .isActive(document.isActive())
                 .version(document.getVersion())
                 .reviewNote(document.getReviewNote())
@@ -634,89 +603,68 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .build();
     }
 
+    private String normalizeRequiredReviewText(String raw, String emptyMessage) {
+        if (!StringUtils.hasText(raw)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, emptyMessage);
+        }
+        String normalized = raw.trim();
+        if (normalized.length() > MAX_REVIEW_NOTE_LENGTH) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Ghi chú không được vượt quá " + MAX_REVIEW_NOTE_LENGTH + " ký tự");
+        }
+        return normalized;
+    }
+
+    private String normalizeOptionalReviewText(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String normalized = raw.trim();
+        if (normalized.length() > MAX_REVIEW_NOTE_LENGTH) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Ghi chú không được vượt quá " + MAX_REVIEW_NOTE_LENGTH + " ký tự");
+        }
+        return normalized;
+    }
+
+    private void publishMentorVerificationNotification(
+            UUID recipientId,
+            NotificationType type,
+            String title,
+            String message,
+            UUID targetId
+    ) {
+        eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.notification.NotificationEvent(
+                recipientId,
+                type,
+                title,
+                message,
+                "MENTOR_VERIFICATION",
+                targetId
+        ));
+    }
+
     private void publishMentorVerificationEmail(
             MentorVerificationEmailNotificationEvent.EventType eventType,
             MentorVerificationRequest request,
-            User reviewer,
-            String reviewNote
+            UserSummaryRecord reviewer,
+            String note
     ) {
-        User mentor = request == null ? null : request.getMentor();
-        if (mentor == null || mentor.getEmail() == null || mentor.getEmail().isBlank()) {
+        UserSummaryRecord mentor = userQueryPort.findUserSummaryById(request.getMentorUserId()).orElse(null);
+        if (mentor == null || mentor.email() == null || mentor.email().isBlank()) {
             return;
         }
         eventPublisher.publishEvent(MentorVerificationEmailNotificationEvent.builder()
                 .eventType(eventType)
+                .recipientEmail(mentor.email())
+                .recipientName(mentor.fullName())
+                .reviewerName(reviewer != null ? reviewer.fullName() : null)
+                .reviewNote(note)
                 .requestId(request.getId())
-                .recipientEmail(mentor.getEmail())
-                .recipientName(mentor.getFullName())
-                .reviewerName(reviewer == null ? null : reviewer.getFullName())
-                .reviewNote(reviewNote)
-                .submittedAt(request.getSubmittedAt())
+                .submittedAt(request.getCreatedAt())
                 .reviewedAt(request.getReviewedAt())
                 .build());
     }
 
-    private void publishMentorVerificationNotification(
-            UUID recipientUserId,
-            NotificationType notificationType,
-            String title,
-            String message,
-            UUID requestId
-    ) {
-        if (recipientUserId == null) {
-            return;
-        }
-        eventPublisher.publishEvent(new NotificationEvent(
-                recipientUserId,
-                notificationType,
-                title,
-                message,
-                "MENTOR_VERIFICATION",
-                requestId
-        ));
-    }
-
     private String trimToNull(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private String normalizeOptionalReviewText(String value) {
-        String normalized = trimToNull(value);
-        if (normalized != null && normalized.length() > MAX_REVIEW_NOTE_LENGTH) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Nội dung phản hồi không được vượt quá 2000 ký tự");
-        }
-        return normalized;
-    }
-
-    private String normalizeRequiredReviewText(String value, String requiredMessage) {
-        String normalized = normalizeOptionalReviewText(value);
-        if (normalized == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, requiredMessage);
-        }
-        return normalized;
-    }
-
-    private String normalizeSearchText(String keyword) {
-        String normalized = trimToNull(keyword);
-        if (normalized == null) {
-            return null;
-        }
-        return Normalizer.normalize(normalized, Normalizer.Form.NFD)
-                .replaceAll("\\p{M}+", "")
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}]+", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
-    }
-
-    private String toLikePattern(String keyword) {
-        String normalized = trimToNull(keyword);
-        if (normalized == null) {
-            return null;
-        }
-        return "%" + normalized.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ") + "%";
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 }

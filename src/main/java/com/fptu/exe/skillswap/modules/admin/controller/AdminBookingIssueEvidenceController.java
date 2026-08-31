@@ -3,9 +3,9 @@ package com.fptu.exe.skillswap.modules.admin.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingIssueEvidenceVisibilityRequest;
 import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueDetailResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceDownloadResponse;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueDetailView;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidenceDownloadView;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidenceView;
 import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,23 +38,23 @@ public class AdminBookingIssueEvidenceController {
 
     @GetMapping("/{bookingId}/issue/detail")
     @Operation(summary = "Xem dispute và minh chứng", description = "Lấy toàn bộ dispute của booking cho vận hành, bao gồm file đang active, bị ẩn hoặc đã hết hạn lưu trữ.")
-    public ApiResponse<BookingIssueDetailResponse> detail(@PathVariable UUID bookingId) {
+    public ApiResponse<BookingIssueDetailView> detail(@PathVariable UUID bookingId) {
         return ApiResponse.success(evidenceService.getForAdmin(bookingId));
     }
 
     @GetMapping("/{bookingId}/issue/evidence/{evidenceId}/download")
     @Operation(summary = "Tải minh chứng dispute", description = "Trả URL private ngắn hạn để admin xem file minh chứng, kể cả file đã bị ẩn với participant.")
-    public ApiResponse<BookingIssueEvidenceDownloadResponse> download(@PathVariable UUID bookingId, @PathVariable UUID evidenceId) {
+    public ApiResponse<BookingIssueEvidenceDownloadView> download(@PathVariable UUID bookingId, @PathVariable UUID evidenceId) {
         return ApiResponse.success(evidenceService.downloadForAdmin(bookingId, evidenceId));
     }
 
     @PostMapping("/{bookingId}/issue/evidence/{evidenceId}/visibility")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     @Operation(summary = "Ẩn hoặc khôi phục minh chứng", description = "Admin ẩn file không phù hợp khỏi mentor/mentee hoặc khôi phục lại. Thao tác luôn được lưu audit và không xóa dấu vết evidence.")
-    public ApiResponse<BookingIssueEvidenceResponse> visibility(@AuthenticationPrincipal UserPrincipal principal,
+    public ApiResponse<BookingIssueEvidenceView> visibility(@AuthenticationPrincipal UserPrincipal principal,
                                                                   @PathVariable UUID bookingId, @PathVariable UUID evidenceId,
                                                                   @Valid @RequestBody AdminBookingIssueEvidenceVisibilityRequest request) {
-        BookingIssueEvidenceResponse response = evidenceService.setAdminVisibility(bookingId, evidenceId, principal.getPublicId(), request.hidden(), request.reason());
+        BookingIssueEvidenceView response = evidenceService.setAdminVisibility(bookingId, evidenceId, principal.getPublicId(), request.hidden(), request.reason());
         Map<String, Object> auditPayload = new LinkedHashMap<>();
         auditPayload.put("bookingId", bookingId);
         if (request.reason() != null) auditPayload.put("reason", request.reason());

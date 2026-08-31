@@ -1,9 +1,5 @@
 package com.fptu.exe.skillswap.infrastructure.realtime;
 
-import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
-import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
-import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
-import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -25,11 +21,13 @@ public class RealtimeFanoutService {
 
     private final ObjectProvider<SimpMessagingTemplate> simpMessagingTemplateProvider;
 
-    public void pushChatMessage(UUID recipientUserId, ChatMessageEvent payload) {
+    /** Payload must be an immutable event/projection produced by the owner module. */
+    public void pushChatMessage(UUID recipientUserId, Object payload) {
         sendStomp(recipientUserId, USER_QUEUE_CHAT_MESSAGES, payload);
     }
 
-    public void pushConversationSummary(UUID recipientUserId, ConversationResponse payload) {
+    /** Payload must be an immutable conversation projection produced by Chat. */
+    public void pushConversationSummary(UUID recipientUserId, Object payload) {
         sendStomp(recipientUserId, USER_QUEUE_CHAT_INBOX, payload);
     }
 
@@ -38,11 +36,13 @@ public class RealtimeFanoutService {
         sendStomp(recipientUserId, USER_QUEUE_CHAT_UNREAD, payload);
     }
 
-    public void pushBookingStatus(UUID recipientUserId, BookingStatusUpdatedEvent payload) {
+    /** Payload must be an immutable booking status event produced by Booking. */
+    public void pushBookingStatus(UUID recipientUserId, Object payload) {
         sendStomp(recipientUserId, USER_QUEUE_BOOKING_STATUS, payload);
     }
 
-    public void pushNotificationItem(UUID recipientUserId, NotificationResponse payload) {
+    /** Payload must be an immutable notification projection produced by Notification. */
+    public void pushNotificationItem(UUID recipientUserId, Object payload) {
         sendStomp(recipientUserId, USER_QUEUE_NOTIFICATION_ITEMS, payload);
     }
 

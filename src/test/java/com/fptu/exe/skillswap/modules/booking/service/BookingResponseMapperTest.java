@@ -41,7 +41,7 @@ class BookingResponseMapperTest {
     @BeforeEach
     void setUp() {
         timeProvider = TimeProvider.fixed(FIXED_NOW, APP_ZONE);
-        mapper = new BookingResponseMapper(null, null, null, new PaymentProperties(), timeProvider);
+        mapper = new BookingResponseMapper(null, new PaymentProperties(), timeProvider);
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
     }

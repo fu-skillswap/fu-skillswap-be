@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.domain;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -14,7 +13,7 @@ import java.util.UUID;
 public class ConversationBookingLink {
     @Id @GeneratedUuidV7 private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "conversation_id") private Conversation conversation;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "booking_id") private Booking booking;
+    @Column(name = "booking_id", nullable = false) private UUID bookingId;
     @Column(name = "linked_at", nullable = false) private LocalDateTime linkedAt;
     @PrePersist void onCreate() { if (linkedAt == null) linkedAt = DateTimeUtil.now(); }
 }

@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.dto.request;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fptu.exe.skillswap.shared.time.FlexibleInstantDeserializer;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -33,34 +32,6 @@ public record CreateBookingRequest(
 
         @Schema(description = "Mô tả chi tiết vấn đề mentee muốn mentor hỗ trợ", nullable = true, example = "Em muốn được góp ý CV backend, định hướng học PRJ301 và cách làm project REST API với PostgreSQL.")
         @Size(max = 2000, message = "learningGoalDescription không được vượt quá 2000 ký tự")
-        String learningGoalDescription,
-
-        @JsonIgnore
-        java.time.LocalDateTime legacySelectedEndTime
+        String learningGoalDescription
 ) {
-    public CreateBookingRequest(UUID slotId, UUID serviceId, Instant startAt,
-                                String learningGoalTitle, String learningGoalDescription) {
-        this(slotId, serviceId, startAt, learningGoalTitle, learningGoalDescription, null);
-    }
-    /** Java-only bridge for internal callers/tests compiled against the pre-launch DTO. */
-    @Deprecated(forRemoval = true)
-    public CreateBookingRequest(UUID availabilitySlotId, UUID serviceId,
-                                java.time.LocalDateTime selectedStartTime,
-                                java.time.LocalDateTime ignoredSelectedEndTime,
-                                String learningGoalTitle, String learningGoalDescription) {
-        this(availabilitySlotId, serviceId,
-                selectedStartTime == null ? null : selectedStartTime.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
-                learningGoalTitle, learningGoalDescription, ignoredSelectedEndTime);
-    }
-
-    @Deprecated(forRemoval = true)
-    public java.time.LocalDateTime selectedStartTime() {
-        return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
-    }
-
-    @Deprecated(forRemoval = true)
-    public java.time.LocalDateTime selectedEndTime() {
-        return legacySelectedEndTime != null ? legacySelectedEndTime
-                : (startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt.plusSeconds(3600), java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
-    }
 }

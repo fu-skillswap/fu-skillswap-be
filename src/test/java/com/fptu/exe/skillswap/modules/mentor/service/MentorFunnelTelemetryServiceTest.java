@@ -1,14 +1,14 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFunnelEventRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFunnelEventType;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFunnelSource;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,7 +31,7 @@ class MentorFunnelTelemetryServiceTest {
     @Mock
     private MentorProfileRepository mentorProfileRepository;
     @Mock
-    private MentorAvailabilitySlotRepository slotRepository;
+    private BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
     @Mock
     private InternalTelemetryService internalTelemetryService;
     @Mock
@@ -44,7 +44,7 @@ class MentorFunnelTelemetryServiceTest {
         MentorFunnelTelemetryService service = new MentorFunnelTelemetryService(
                 mentorServiceRepository,
                 mentorProfileRepository,
-                slotRepository,
+                bookingAvailabilityQueryPort,
                 internalTelemetryService,
                 rateLimitService,
                 new CacheProperties()

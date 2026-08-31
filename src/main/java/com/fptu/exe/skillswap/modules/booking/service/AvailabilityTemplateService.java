@@ -11,11 +11,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationCapabilit
 import com.fptu.exe.skillswap.modules.booking.dto.response.SlotMutationMode;
 import com.fptu.exe.skillswap.modules.booking.event.AvailabilityTemplateReconciliationRequestedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.*;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingPolicyQuery;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
@@ -50,18 +48,16 @@ public class AvailabilityTemplateService {
     private static final List<BookingStatus> LOCKING_STATUSES = List.of(
             BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID);
 
-
     private final AvailabilityTemplateRepository templateRepository;
     private final AvailabilityTemplateExceptionRepository exceptionRepository;
     private final AvailabilityTemplateReconciliationRepository reconciliationRepository;
     private final AvailabilityMentorMutationLockRepository mutationLockRepository;
     private final MentorAvailabilitySlotRepository slotRepository;
     private final AvailabilitySlotServiceRepository slotServiceRepository;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final MentorServiceRepository mentorServiceRepository;
+    private final MentorBookingQueryPort mentorBookingQueryPort;
     private final BookingRepository bookingRepository;
 
-    private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final MentorBookingPolicyQuery mentorBookingPolicyQuery;
     private final AvailabilityTemplateProperties properties;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
@@ -82,11 +78,9 @@ public class AvailabilityTemplateService {
                                        AvailabilityMentorMutationLockRepository mutationLockRepository,
                                        MentorAvailabilitySlotRepository slotRepository,
                                        AvailabilitySlotServiceRepository slotServiceRepository,
-                                       MentorProfileRepository mentorProfileRepository,
-                                       MentorServiceRepository mentorServiceRepository,
+                                       MentorBookingQueryPort mentorBookingQueryPort,
                                        BookingRepository bookingRepository,
-
-                                       @Lazy MentorBookingPolicyService mentorBookingPolicyService,
+                                       @Lazy MentorBookingPolicyQuery mentorBookingPolicyQuery,
                                        AvailabilityTemplateProperties properties,
                                        EntityManager entityManager,
                                        ApplicationEventPublisher eventPublisher,
@@ -98,10 +92,9 @@ public class AvailabilityTemplateService {
         this.mutationLockRepository = mutationLockRepository;
         this.slotRepository = slotRepository;
         this.slotServiceRepository = slotServiceRepository;
-        this.mentorProfileRepository = mentorProfileRepository;
-        this.mentorServiceRepository = mentorServiceRepository;
+        this.mentorBookingQueryPort = mentorBookingQueryPort;
         this.bookingRepository = bookingRepository;
-        this.mentorBookingPolicyService = mentorBookingPolicyService;
+        this.mentorBookingPolicyQuery = mentorBookingPolicyQuery;
         this.properties = properties;
         this.entityManager = entityManager;
         this.eventPublisher = eventPublisher;
@@ -114,18 +107,19 @@ public class AvailabilityTemplateService {
     @Transactional
     public AvailabilityTemplateResponse create(UUID mentorUserId, CreateAvailabilityTemplateRequest request) {
         lockMentor(mentorUserId);
-        MentorProfile mentor = requireMentor(mentorUserId);
+        requireMentor(mentorUserId);
         LocalDate today = today();
         LocalTime startTime = request.startTime() == null ? null : request.startTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
         LocalTime endTime = request.endTime() == null ? null : request.endTime().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
         validateCreate(startTime, endTime, request.weekdays(), request.effectiveFrom(), request.effectiveTo(), today);
         validateActiveLimit(mentorUserId, null, today);
+        List<ServiceSlotCandidate> services = resolveActiveServices(mentorUserId, request.serviceIds());
         AvailabilityTemplate template = AvailabilityTemplate.builder()
-                .mentorProfile(mentor).startTime(startTime).endTime(endTime)
+                .mentorUserId(mentorUserId).startTime(startTime).endTime(endTime)
                 .weekdays(encodeDays(request.weekdays())).effectiveFrom(request.effectiveFrom())
                 .effectiveTo(request.effectiveTo()).note(trimToNull(request.note()))
                 .configuredStatus(AvailabilityTemplateConfiguredStatus.ACTIVE)
-                .services(new LinkedHashSet<>(resolveActiveServices(mentorUserId, request.serviceIds())))
+                .serviceIds(services.stream().map(ServiceSlotCandidate::serviceId).collect(Collectors.toCollection(LinkedHashSet::new)))
                 .build();
         validateRecurrenceOverlap(template, null, today);
         templateRepository.saveAndFlush(template);
@@ -184,11 +178,11 @@ public class AvailabilityTemplateService {
         template.setStartTime(startTime); template.setEndTime(endTime);
         template.setWeekdays(encodeDays(request.weekdays())); template.setEffectiveFrom(effectiveFrom);
         template.setEffectiveTo(request.effectiveTo()); template.setNote(trimToNull(request.note()));
-        template.setServices(new LinkedHashSet<>(resolveActiveServices(mentorUserId, request.serviceIds())));
+        List<ServiceSlotCandidate> services = resolveActiveServices(mentorUserId, request.serviceIds());
+        template.setServiceIds(services.stream().map(ServiceSlotCandidate::serviceId).collect(Collectors.toCollection(LinkedHashSet::new)));
         validateRecurrenceOverlap(template, template.getId(), today);
         bumpConfigVersion(template);
-        reconcileLocked(template, Boolean.TRUE.equals(request.rejectPendingBookings()));
-        markDue(template.getId());
+        reconcileLocked(template, request.rejectPendingBookings() != null && request.rejectPendingBookings());
         return toResponse(template);
     }
 
@@ -197,10 +191,12 @@ public class AvailabilityTemplateService {
         lockMentor(mentorUserId);
         AvailabilityTemplate template = loadOwnedForUpdate(templateId, mentorUserId);
         requireVersion(template, request.expectedVersion());
-        if (template.getConfiguredStatus() == AvailabilityTemplateConfiguredStatus.ARCHIVED) throw conflict("AVAILABILITY_TEMPLATE_ARCHIVED");
+        if (template.getConfiguredStatus() == AvailabilityTemplateConfiguredStatus.ARCHIVED || effectiveStatus(template) == AvailabilityTemplateEffectiveStatus.EXPIRED) {
+            throw conflict("AVAILABILITY_TEMPLATE_EXPIRED");
+        }
         template.setConfiguredStatus(AvailabilityTemplateConfiguredStatus.PAUSED);
         bumpConfigVersion(template);
-        reconcileLocked(template, Boolean.TRUE.equals(request.rejectPendingBookings()));
+        reconcileLocked(template, request.rejectPendingBookings() != null && request.rejectPendingBookings());
         return toResponse(template);
     }
 
@@ -209,96 +205,70 @@ public class AvailabilityTemplateService {
         lockMentor(mentorUserId);
         AvailabilityTemplate template = loadOwnedForUpdate(templateId, mentorUserId);
         requireVersion(template, request.expectedVersion());
-        if (template.getConfiguredStatus() == AvailabilityTemplateConfiguredStatus.ARCHIVED) throw conflict("AVAILABILITY_TEMPLATE_ARCHIVED");
-        if (effectiveStatus(template) == AvailabilityTemplateEffectiveStatus.EXPIRED) throw conflict("AVAILABILITY_TEMPLATE_EXPIRED");
+        if (template.getConfiguredStatus() == AvailabilityTemplateConfiguredStatus.ARCHIVED || effectiveStatus(template) == AvailabilityTemplateEffectiveStatus.EXPIRED) {
+            throw conflict("AVAILABILITY_TEMPLATE_EXPIRED");
+        }
         validateActiveLimit(mentorUserId, template.getId(), today());
         template.setConfiguredStatus(AvailabilityTemplateConfiguredStatus.ACTIVE);
         validateRecurrenceOverlap(template, template.getId(), today());
         bumpConfigVersion(template);
-        reconcileLocked(template, Boolean.TRUE.equals(request.rejectPendingBookings()));
+        reconcileLocked(template, false);
         return toResponse(template);
     }
 
     @Transactional
-    public AvailabilityTemplateResponse archive(UUID mentorUserId, UUID templateId, AvailabilityTemplateVersionRequest request) {
+    public void archive(UUID mentorUserId, UUID templateId, AvailabilityTemplateVersionRequest request) {
         lockMentor(mentorUserId);
         AvailabilityTemplate template = loadOwnedForUpdate(templateId, mentorUserId);
         requireVersion(template, request.expectedVersion());
         template.setConfiguredStatus(AvailabilityTemplateConfiguredStatus.ARCHIVED);
         bumpConfigVersion(template);
-        reconcileLocked(template, Boolean.TRUE.equals(request.rejectPendingBookings()));
-        return toResponse(template);
+        reconcileLocked(template, request.rejectPendingBookings() != null && request.rejectPendingBookings());
     }
 
     @Transactional
-    public AvailabilityTemplateResponse addException(UUID mentorUserId, UUID templateId, LocalDate date,
-                                                     AvailabilityTemplateExceptionRequest request) {
+    public AvailabilityTemplateResponse addException(UUID mentorUserId, UUID templateId, LocalDate occurrenceDate, AvailabilityTemplateExceptionRequest request) {
         lockMentor(mentorUserId);
         AvailabilityTemplate template = loadOwnedForUpdate(templateId, mentorUserId);
         requireVersion(template, request.expectedVersion());
-        validateOccurrence(template, date);
-        if (exceptionRepository.findByTemplateIdAndOccurrenceDate(templateId, date).isPresent()) throw conflict("AVAILABILITY_TEMPLATE_EXCEPTION_EXISTS");
-        MentorAvailabilitySlot slot = slotRepository.findByTemplateIdAndOccurrenceDate(templateId, date).orElse(null);
-        deactivateForExplicitMutation(slot, Boolean.TRUE.equals(request.rejectPendingBookings()));
-        exceptionRepository.save(AvailabilityTemplateException.builder().template(template).occurrenceDate(date)
+        validateOccurrence(template, occurrenceDate);
+        if (exceptionRepository.findByTemplateIdAndOccurrenceDate(template.getId(), occurrenceDate).isPresent()) {
+            throw conflict("AVAILABILITY_TEMPLATE_EXCEPTION_EXISTS");
+        }
+        MentorAvailabilitySlot slot = slotRepository.findByTemplateIdAndOccurrenceDate(template.getId(), occurrenceDate).orElse(null);
+        if (slot != null) {
+            deactivateForExplicitMutation(slot, request.rejectPendingBookings() != null && request.rejectPendingBookings());
+        }
+        exceptionRepository.save(AvailabilityTemplateException.builder().template(template).occurrenceDate(occurrenceDate)
                 .provenance(AvailabilityTemplateExceptionProvenance.MENTOR).build());
         bumpConfigVersion(template);
-        markDue(templateId);
         return toResponse(template);
     }
 
     @Transactional
-    public AvailabilityTemplateResponse restoreException(UUID mentorUserId, UUID templateId, LocalDate date,
-                                                          AvailabilityTemplateVersionRequest request) {
+    public AvailabilityTemplateResponse restoreException(UUID mentorUserId, UUID templateId, LocalDate occurrenceDate, AvailabilityTemplateVersionRequest request) {
         lockMentor(mentorUserId);
         AvailabilityTemplate template = loadOwnedForUpdate(templateId, mentorUserId);
-        requireVersion(template, request.expectedVersion());
-        AvailabilityTemplateException exception = exceptionRepository.findByTemplateIdAndOccurrenceDate(templateId, date)
+        if (request != null && request.expectedVersion() != null) {
+            requireVersion(template, request.expectedVersion());
+        }
+        AvailabilityTemplateException exception = exceptionRepository.findByTemplateIdAndOccurrenceDate(template.getId(), occurrenceDate)
                 .orElseThrow(() -> conflict("AVAILABILITY_TEMPLATE_EXCEPTION_NOT_FOUND"));
         exceptionRepository.delete(exception);
         bumpConfigVersion(template);
-        reconcileLocked(template, Boolean.TRUE.equals(request.rejectPendingBookings()));
+        reconcileLocked(template, false);
         return toResponse(template);
     }
 
-    /** Called by direct-slot mutations before their own overlap check. */
     @Transactional
-    public void replaceGeneratedOccurrences(UUID mentorUserId, LocalDateTime start, LocalDateTime end,
-                                            boolean requested, boolean rejectPending,
-                                            List<ExpectedTemplateVersionRequest> expectedVersions) {
-        lockMentor(mentorUserId);
-        List<MentorAvailabilitySlot> overlaps = slotRepository.findActiveGeneratedOverlaps(mentorUserId, BookingTime.toInstant(start), BookingTime.toInstant(end));
-        if (overlaps.isEmpty()) return;
-        if (!requested) {
-            throw new GeneratedOccurrenceReplacementException(overlaps.stream()
-                    .filter(slot -> slot.getTemplate() != null)
-                    .map(slot -> new AvailabilityTemplateReplacementConflictResponse(slot.getTemplate().getId(),
-                            slot.getTemplateOccurrenceDate(), slot.getTemplate().getConfigVersion()))
-                    .distinct().toList());
-        }
-        Map<UUID, Integer> supplied = expectedVersions == null ? Map.of() : expectedVersions.stream()
-                .collect(Collectors.toMap(ExpectedTemplateVersionRequest::templateId, ExpectedTemplateVersionRequest::expectedVersion, (a, b) -> a));
-        List<AvailabilityTemplate> templates = overlaps.stream().map(MentorAvailabilitySlot::getTemplate)
-                .filter(Objects::nonNull).collect(Collectors.collectingAndThen(Collectors.toMap(AvailabilityTemplate::getId, t -> t), map -> map.values().stream().sorted(Comparator.comparing(AvailabilityTemplate::getId)).toList()));
-        for (AvailabilityTemplate template : templates) {
-            AvailabilityTemplate locked = templateRepository.findOwnedForUpdate(template.getId(), mentorUserId)
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Availability template không tồn tại"));
-            if (!Objects.equals(supplied.get(locked.getId()), locked.getConfigVersion())) throw conflict("AVAILABILITY_TEMPLATE_VERSION_CONFLICT");
-        }
-        for (MentorAvailabilitySlot slot : overlaps) {
-            deactivateForExplicitMutation(slot, rejectPending);
-            AvailabilityTemplate template = slot.getTemplate();
-            exceptionRepository.findByTemplateIdAndOccurrenceDate(template.getId(), slot.getTemplateOccurrenceDate())
-                    .orElseGet(() -> exceptionRepository.save(AvailabilityTemplateException.builder().template(template)
-                            .occurrenceDate(slot.getTemplateOccurrenceDate())
-                            .provenance(AvailabilityTemplateExceptionProvenance.MANUAL_REPLACEMENT).build()));
-            bumpConfigVersion(template);
-        }
+    public AvailabilityTemplateResponse removeException(UUID mentorUserId, UUID templateId, LocalDate occurrenceDate) {
+        return restoreException(mentorUserId, templateId, occurrenceDate, null);
     }
 
     @Transactional
-    public void deactivateGeneratedSlot(UUID mentorUserId, MentorAvailabilitySlot slot, Integer expectedTemplateVersion,
-                                        boolean rejectPending) {
+    public void recordOccurrenceMutation(MentorAvailabilitySlot slot, Integer expectedTemplateVersion, boolean rejectPending) {
+        if (slot == null || slot.getTemplate() == null) return;
+        UUID mentorUserId = slot.getMentorUserId();
         lockMentor(mentorUserId);
         AvailabilityTemplate template = slot.getTemplate();
         if (template == null) throw invalid("GENERATED_SLOT_MANAGED_BY_TEMPLATE");
@@ -312,6 +282,41 @@ public class AvailabilityTemplateService {
         bumpConfigVersion(locked);
     }
 
+    @Transactional
+    public void deactivateGeneratedSlot(UUID mentorUserId, MentorAvailabilitySlot slot, Integer expectedTemplateVersion, boolean rejectPending) {
+        recordOccurrenceMutation(slot, expectedTemplateVersion, rejectPending);
+    }
+
+    @Transactional
+    public void replaceGeneratedOccurrences(
+            UUID mentorUserId,
+            LocalDateTime start,
+            LocalDateTime end,
+            boolean replaceGenerated,
+            boolean rejectPending,
+            List<ExpectedTemplateVersionRequest> expectedTemplateVersions
+    ) {
+        if (!replaceGenerated || start == null || end == null) {
+            return;
+        }
+        List<MentorAvailabilitySlot> overlaps = slotRepository.findVisibleSlotsByMentorUserId(
+                mentorUserId, BookingTime.toInstant(start), BookingTime.toInstant(end)
+        );
+        for (MentorAvailabilitySlot overlap : overlaps) {
+            if (overlap.getTemplate() != null) {
+                Integer expectedVersion = null;
+                if (expectedTemplateVersions != null) {
+                    expectedVersion = expectedTemplateVersions.stream()
+                            .filter(v -> v != null && Objects.equals(v.templateId(), overlap.getTemplate().getId()))
+                            .map(ExpectedTemplateVersionRequest::expectedVersion)
+                            .findFirst()
+                            .orElse(null);
+                }
+                recordOccurrenceMutation(overlap, expectedVersion, rejectPending);
+            }
+        }
+    }
+
     @Transactional(readOnly = true)
     public boolean isGeneratedSlotEligible(MentorAvailabilitySlot slot) {
         if (slot == null || slot.getTemplate() == null) return true;
@@ -323,7 +328,7 @@ public class AvailabilityTemplateService {
         LocalDateTime expectedStart = toStored(date, template.getStartTime());
         LocalDateTime expectedEnd = toStored(date, template.getEndTime());
         return expectedStart.equals(slot.getStartTime()) && expectedEnd.equals(slot.getEndTime())
-                && template.getServices().stream().anyMatch(MentorService::isActive);
+                && hasActiveService(template);
     }
 
     @Transactional
@@ -333,8 +338,9 @@ public class AvailabilityTemplateService {
             if (slot.getTemplate() != null) {
                 markDue(slot.getTemplate().getId());
                 eventPublisher.publishEvent(new AvailabilityTemplateReconciliationRequestedEvent(slot.getTemplate().getId()));
+            } else if (slot.getMentorUserId() != null) {
+                markMentorDue(slot.getMentorUserId());
             }
-            else markMentorDue(slot.getMentorProfile().getUserId());
         });
     }
 
@@ -350,8 +356,8 @@ public class AvailabilityTemplateService {
     public void reconcileImmediately(UUID templateId) {
         AvailabilityTemplate template = templateRepository.findWithServicesById(templateId).orElse(null);
         if (template == null) return;
-        lockMentor(template.getMentorProfile().getUserId());
-        AvailabilityTemplate locked = templateRepository.findOwnedForUpdate(templateId, template.getMentorProfile().getUserId()).orElse(null);
+        lockMentor(template.getMentorUserId());
+        AvailabilityTemplate locked = templateRepository.findOwnedForUpdate(templateId, template.getMentorUserId()).orElse(null);
         if (locked == null) return;
         try {
             reconcileLocked(locked, false);
@@ -388,8 +394,8 @@ public class AvailabilityTemplateService {
         ClaimedTemplate claimed = ClaimedTemplate.decode(claim);
         AvailabilityTemplate template = templateRepository.findWithServicesById(claimed.templateId()).orElse(null);
         if (template == null) return false;
-        lockMentor(template.getMentorProfile().getUserId());
-        AvailabilityTemplate locked = templateRepository.findOwnedForUpdate(template.getId(), template.getMentorProfile().getUserId()).orElse(null);
+        lockMentor(template.getMentorUserId());
+        AvailabilityTemplate locked = templateRepository.findOwnedForUpdate(template.getId(), template.getMentorUserId()).orElse(null);
         AvailabilityTemplateReconciliation state = reconciliationRepository.findByTemplateIdForUpdate(template.getId()).orElse(null);
         if (locked == null || state == null || !claimed.token().equals(state.getClaimToken())) return false;
         try {
@@ -427,15 +433,15 @@ public class AvailabilityTemplateService {
             LocalDateTime start = toStored(date, template.getStartTime());
             LocalDateTime end = toStored(date, template.getEndTime());
             if (existing != null && existing.isActive() && start.equals(existing.getStartTime()) && end.equals(existing.getEndTime())) continue;
-            if (!slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).isEmpty()) continue;
-            if (existing == null && slotRepository.existsOverlappingActiveSlot(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end))) continue;
-            if (existing == null) existing = MentorAvailabilitySlot.builder().mentorProfile(template.getMentorProfile())
+            if (!slotRepository.findActiveManualOverlaps(template.getMentorUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).isEmpty()) continue;
+            if (existing == null && slotRepository.existsOverlappingActiveSlot(template.getMentorUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end))) continue;
+            if (existing == null) existing = MentorAvailabilitySlot.builder().mentorUserId(template.getMentorUserId())
                     .template(template).templateOccurrenceDate(date).timezone("Asia/Ho_Chi_Minh").isBooked(false)
                     .recurrenceRule("TEMPLATE").note(template.getNote()).build();
             existing.setStartTime(start); existing.setEndTime(end); existing.setActive(true); existing.setNote(template.getNote());
             existing.setTemplate(template); existing.setTemplateOccurrenceDate(date);
             MentorAvailabilitySlot saved = slotRepository.saveAndFlush(existing);
-            replaceBindings(saved, template.getServices().stream().filter(MentorService::isActive).toList());
+            replaceBindings(saved, template.getServiceIds());
         }
     }
 
@@ -480,12 +486,11 @@ public class AvailabilityTemplateService {
         if (!bookings.isEmpty()) bookingRepository.saveAll(bookings);
     }
 
-    private void replaceBindings(MentorAvailabilitySlot slot, List<MentorService> services) {
+    private void replaceBindings(MentorAvailabilitySlot slot, Collection<UUID> serviceIds) {
         slotServiceRepository.deleteBySlotId(slot.getId());
         slot.getSlotServices().clear();
-        for (MentorService service : services) {
-            AvailabilitySlotService binding = AvailabilitySlotService.builder()
-                    .id(new AvailabilitySlotServiceId(slot.getId(), service.getId())).slot(slot).service(service).build();
+        for (UUID serviceId : serviceIds) {
+            AvailabilitySlotService binding = AvailabilitySlotService.of(slot, serviceId);
             slot.getSlotServices().add(binding);
         }
         slotRepository.save(slot);
@@ -504,7 +509,7 @@ public class AvailabilityTemplateService {
 
     private void validateRecurrenceOverlap(AvailabilityTemplate candidate, UUID selfId, LocalDate today) {
         if (candidate.getConfiguredStatus() != AvailabilityTemplateConfiguredStatus.ACTIVE || effectiveStatus(candidate) == AvailabilityTemplateEffectiveStatus.EXPIRED) return;
-        for (AvailabilityTemplate other : templateRepository.findAllByMentorForOverlap(candidate.getMentorProfile().getUserId())) {
+        for (AvailabilityTemplate other : templateRepository.findAllByMentorForOverlap(candidate.getMentorUserId())) {
             if (Objects.equals(other.getId(), selfId) || other.getConfiguredStatus() != AvailabilityTemplateConfiguredStatus.ACTIVE
                     || effectiveStatus(other) == AvailabilityTemplateEffectiveStatus.EXPIRED) continue;
             if (recurrencesIntersect(candidate, other)) throw conflict("AVAILABILITY_TEMPLATE_OVERLAP");
@@ -533,14 +538,14 @@ public class AvailabilityTemplateService {
         if (active >= 20) throw conflict("AVAILABILITY_TEMPLATE_LIMIT_EXCEEDED");
     }
 
-    private List<MentorService> resolveActiveServices(UUID mentorUserId, List<UUID> ids) {
+    private List<ServiceSlotCandidate> resolveActiveServices(UUID mentorUserId, List<UUID> ids) {
         if (ids == null || ids.isEmpty() || new HashSet<>(ids).size() != ids.size()) throw invalid("AVAILABILITY_TEMPLATE_INACTIVE_SERVICE");
-        List<MentorService> services = mentorServiceRepository.findAllById(ids);
-        if (services.size() != ids.size() || services.stream().anyMatch(service -> !service.isActive()
-                || service.getMentorProfile() == null || !mentorUserId.equals(service.getMentorProfile().getUserId()))) {
+        Map<UUID, ServiceSlotCandidate> candidates = mentorBookingQueryPort.getServicesByIds(ids);
+        if (candidates.size() != ids.size() || candidates.values().stream().anyMatch(service -> !Boolean.TRUE.equals(service.active())
+                || service.mentorUserId() == null || !mentorUserId.equals(service.mentorUserId()))) {
             throw invalid("AVAILABILITY_TEMPLATE_INACTIVE_SERVICE");
         }
-        return services;
+        return new ArrayList<>(candidates.values());
     }
 
     private void validateOccurrence(AvailabilityTemplate template, LocalDate date) {
@@ -554,11 +559,17 @@ public class AvailabilityTemplateService {
 
     private boolean canMaterialize(AvailabilityTemplate template, LocalDate date) {
         LocalDateTime start = toStored(date, template.getStartTime());
-        return template.getServices().stream().filter(MentorService::isActive).anyMatch(service ->
-                mentorBookingPolicyService.isBookableStartTime(template.getMentorProfile().getUserId(), start, now()));
+        Map<UUID, ServiceSlotCandidate> services = mentorBookingQueryPort.getServicesByIds(template.getServiceIds());
+        return services.values().stream().filter(s -> Boolean.TRUE.equals(s.active())).anyMatch(service ->
+                mentorBookingPolicyQuery.isBookableStartTime(template.getMentorUserId(), start, now()));
     }
 
-    private boolean hasActiveService(AvailabilityTemplate template) { return template.getServices().stream().anyMatch(MentorService::isActive); }
+    private boolean hasActiveService(AvailabilityTemplate template) {
+        if (template.getServiceIds().isEmpty()) return false;
+        Map<UUID, ServiceSlotCandidate> services = mentorBookingQueryPort.getServicesByIds(template.getServiceIds());
+        return services.values().stream().anyMatch(s -> Boolean.TRUE.equals(s.active()));
+    }
+
     private boolean isHistorical(MentorAvailabilitySlot slot) { return slot.getEndTime() == null || !slot.getEndTime().isAfter(now()); }
 
     private AvailabilityTemplateResponse toResponse(AvailabilityTemplate template) {
@@ -567,15 +578,25 @@ public class AvailabilityTemplateService {
         List<AvailabilityTemplateBlockedOccurrenceResponse> blocked = new ArrayList<>();
         for (LocalDate date : dates(from, to)) if (appliesOn(template, date)) {
             LocalDateTime start = toStored(date, template.getStartTime()), end = toStored(date, template.getEndTime());
-            slotRepository.findActiveManualOverlaps(template.getMentorProfile().getUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).stream().findFirst()
+            slotRepository.findActiveManualOverlaps(template.getMentorUserId(), BookingTime.toInstant(start), BookingTime.toInstant(end)).stream().findFirst()
                     .ifPresent(slot -> blocked.add(new AvailabilityTemplateBlockedOccurrenceResponse(date, "MANUAL_SLOT_OVERLAP", slot.getId())));
         }
+        Map<UUID, ServiceSlotCandidate> servicesMap = mentorBookingQueryPort.getServicesByIds(template.getServiceIds());
+        List<AvailabilitySlotServiceBasicResponse> serviceResponses = template.getServiceIds().stream()
+                .map(servicesMap::get)
+                .filter(Objects::nonNull)
+                .map(candidate -> new AvailabilitySlotServiceBasicResponse(
+                        candidate.serviceId(), candidate.title(), candidate.durationMinutes(),
+                        Boolean.TRUE.equals(candidate.isFree()),
+                        Boolean.TRUE.equals(candidate.isFree()) ? 0 : (candidate.priceScoin() != null ? candidate.priceScoin() : 0),
+                        new SlotMutationCapabilityResponse(SlotMutationMode.ALLOWED, null, 0)
+                ))
+                .toList();
+
         return new AvailabilityTemplateResponse(template.getId(), template.getStartTime(), template.getEndTime(),
                 decodeDays(template.getWeekdays()).stream().sorted().toList(), template.getEffectiveFrom(), template.getEffectiveTo(),
                 template.getTimezone(), template.getNote(), template.getConfiguredStatus(), effectiveStatus(template),
-                template.getConfigVersion(), template.getServices().stream().map(service -> new AvailabilitySlotServiceBasicResponse(
-                        service.getId(), service.getTitle(), service.getDurationMinutes(), service.isFree(),
-                        service.isFree() ? 0 : service.getPriceScoin(), new SlotMutationCapabilityResponse(SlotMutationMode.ALLOWED, null, 0))).toList(),
+                template.getConfigVersion(), serviceResponses,
                 hasActiveService(template) ? null : "NO_ACTIVE_SERVICE", exceptions.stream().map(AvailabilityTemplateException::getOccurrenceDate).sorted().toList(),
                 blocked, BookingTime.toOffsetDateTime(template.getCreatedAt()), BookingTime.toOffsetDateTime(template.getUpdatedAt()));
     }
@@ -587,12 +608,15 @@ public class AvailabilityTemplateService {
     }
 
     private AvailabilityTemplate loadOwned(UUID id, UUID mentorUserId) { return templateRepository.findWithServicesById(id)
-            .filter(template -> template.getMentorProfile().getUserId().equals(mentorUserId))
+            .filter(template -> template.getMentorUserId().equals(mentorUserId))
             .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Availability template không tồn tại")); }
     private AvailabilityTemplate loadOwnedForUpdate(UUID id, UUID mentorUserId) { return templateRepository.findOwnedForUpdate(id, mentorUserId)
             .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Availability template không tồn tại")); }
-    private MentorProfile requireMentor(UUID mentorUserId) { return mentorProfileRepository.findWithUserByUserId(mentorUserId)
-            .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor")); }
+    private void requireMentor(UUID mentorUserId) {
+        if (mentorUserId == null || !mentorBookingQueryPort.existsById(mentorUserId)) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor");
+        }
+    }
     private void lockMentor(UUID mentorUserId) {
         mutationLockRepository.findByMentorUserIdForUpdate(mentorUserId).orElseGet(() -> {
             mutationLockRepository.saveAndFlush(new AvailabilityMentorMutationLock(mentorUserId));

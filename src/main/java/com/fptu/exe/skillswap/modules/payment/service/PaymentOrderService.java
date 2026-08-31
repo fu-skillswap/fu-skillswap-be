@@ -15,7 +15,7 @@ import com.fptu.exe.skillswap.modules.payment.dto.response.PaymentCheckoutRespon
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +74,7 @@ public class PaymentOrderService {
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 bookingQueryPort,
+                null,
                 creditLedgerService,
                 couponService,
                 settlementService,

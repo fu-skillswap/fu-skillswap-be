@@ -11,7 +11,7 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCaseOwnershipRespo
 import com.fptu.exe.skillswap.modules.admin.repository.AdminCaseAssignmentRepository;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminNoteRepository;
 import com.fptu.exe.skillswap.modules.admin.repository.AuditLogRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -60,12 +60,12 @@ public class AdminCaseService {
     public AdminCaseOwnershipResponse assignToCurrentAdmin(UUID adminUserId, String rawCaseType, UUID caseId) {
         AdminCaseType caseType = AdminCaseType.parse(rawCaseType);
         adminCaseSupportService.assertCaseExists(caseType, caseId);
-        User adminUser = adminCaseSupportService.requireAdminUser(adminUserId);
+        AdminUserReference adminUser = adminCaseSupportService.requireAdminUser(adminUserId);
 
         Optional<AdminCaseAssignment> existingAssignment = adminCaseAssignmentRepository.findByCaseTypeAndCaseId(caseType.name(), caseId);
         if (existingAssignment.isPresent()) {
             AdminCaseAssignment assignment = existingAssignment.get();
-            if (assignment.getAssignedAdminUser().getId().equals(adminUserId)) {
+            if (assignment.getAssignedAdminUserId().equals(adminUserId)) {
                 return toOwnershipResponse(caseType, caseId, assignment);
             }
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Case này đang được admin khác xử lý");
@@ -75,7 +75,7 @@ public class AdminCaseService {
             AdminCaseAssignment assignment = adminCaseAssignmentRepository.save(AdminCaseAssignment.builder()
                     .caseType(caseType.name())
                     .caseId(caseId)
-                    .assignedAdminUser(adminUser)
+                    .assignedAdminUserId(adminUser.userId())
                     .build());
             adminAuditWriterService.writeOperatorEvent(
                     adminUserId,
@@ -85,14 +85,14 @@ public class AdminCaseService {
                     null,
                     Map.of(
                             "assignedAdminUserId", adminUserId,
-                            "assignedAdminDisplayName", adminUser.getFullName()
+                            "assignedAdminDisplayName", adminUser.displayName()
                     )
             );
             return toOwnershipResponse(caseType, caseId, assignment);
         } catch (DataIntegrityViolationException ex) {
             AdminCaseAssignment assignment = adminCaseAssignmentRepository.findByCaseTypeAndCaseId(caseType.name(), caseId)
                     .orElseThrow(() -> ex);
-            if (assignment.getAssignedAdminUser().getId().equals(adminUserId)) {
+            if (assignment.getAssignedAdminUserId().equals(adminUserId)) {
                 return toOwnershipResponse(caseType, caseId, assignment);
             }
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Case này đang được admin khác xử lý");
@@ -110,15 +110,15 @@ public class AdminCaseService {
             return toOwnershipResponse(caseType, caseId, null);
         }
 
-        boolean isOwner = assignment.getAssignedAdminUser().getId().equals(adminUserId);
+        boolean isOwner = assignment.getAssignedAdminUserId().equals(adminUserId);
         boolean isSystemAdmin = roles != null && roles.contains(RoleCode.SYSTEM_ADMIN);
         if (!isOwner && !isSystemAdmin) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền gỡ ownership của case này");
         }
 
         Map<String, Object> oldValue = Map.of(
-                "assignedAdminUserId", assignment.getAssignedAdminUser().getId(),
-                "assignedAdminDisplayName", assignment.getAssignedAdminUser().getFullName(),
+                "assignedAdminUserId", assignment.getAssignedAdminUserId(),
+                "assignedAdminDisplayName", adminCaseSupportService.findAdminDisplayName(assignment.getAssignedAdminUserId()),
                 "assignedAt", assignment.getAssignedAt()
         );
         adminCaseAssignmentRepository.delete(assignment);
@@ -143,8 +143,8 @@ public class AdminCaseService {
                 .forEach(note -> items.add(new AdminCaseActivityItemResponse(
                         AdminCaseActivityEventType.ADMIN_NOTE.name(),
                         note.getCreatedAt(),
-                        note.getAdminUser().getId(),
-                        note.getAdminUser().getFullName(),
+                        note.getAdminUserId(),
+                        adminCaseSupportService.findAdminDisplayName(note.getAdminUserId()),
                         "Ghi chú nội bộ",
                         note.getNote(),
                         "ADMIN_NOTE"
@@ -196,8 +196,8 @@ public class AdminCaseService {
         return new AdminCaseActivityItemResponse(
                 eventType.name(),
                 auditLog.getCreatedAt(),
-                auditLog.getActor() == null ? null : auditLog.getActor().getId(),
-                auditLog.getActor() == null ? null : auditLog.getActor().getFullName(),
+                auditLog.getActorUserId(),
+                adminCaseSupportService.findAdminDisplayName(auditLog.getActorUserId()),
                 title,
                 description,
                 "AUDIT_LOG"
@@ -231,8 +231,8 @@ public class AdminCaseService {
                 caseType.name(),
                 caseId,
                 assignment != null,
-                assignment == null ? null : assignment.getAssignedAdminUser().getId(),
-                assignment == null ? null : assignment.getAssignedAdminUser().getFullName(),
+                assignment == null ? null : assignment.getAssignedAdminUserId(),
+                assignment == null ? null : adminCaseSupportService.findAdminDisplayName(assignment.getAssignedAdminUserId()),
                 assignment == null ? null : assignment.getAssignedAt()
         );
     }

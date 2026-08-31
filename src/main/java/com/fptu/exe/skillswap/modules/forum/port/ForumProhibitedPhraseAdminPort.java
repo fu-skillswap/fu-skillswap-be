@@ -1,17 +1,13 @@
 package com.fptu.exe.skillswap.modules.forum.port;
 
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseActiveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseCreateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseUpdateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProhibitedPhraseResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 
 import java.util.UUID;
 
 public interface ForumProhibitedPhraseAdminPort {
-    CursorPageResponse<ForumProhibitedPhraseResponse> list(Boolean isActive, String cursor, Integer limit);
-    ForumProhibitedPhraseResponse get(UUID ruleId);
-    ForumProhibitedPhraseResponse create(UUID adminUserId, ForumProhibitedPhraseCreateRequest request);
-    ForumProhibitedPhraseResponse update(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseUpdateRequest request);
-    ForumProhibitedPhraseResponse setActive(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseActiveRequest request);
+    CursorPageResponse<ForumProhibitedPhraseView> list(Boolean isActive, String cursor, Integer limit);
+    ForumProhibitedPhraseView get(UUID ruleId);
+    ForumProhibitedPhraseView create(UUID adminUserId, CreateForumProhibitedPhraseCommand command);
+    ForumProhibitedPhraseView update(UUID adminUserId, UUID ruleId, UpdateForumProhibitedPhraseCommand command);
+    ForumProhibitedPhraseView setActive(UUID adminUserId, UUID ruleId, SetForumProhibitedPhraseActiveCommand command);
 }

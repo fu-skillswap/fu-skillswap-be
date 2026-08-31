@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.modules.mentor.port.MentorViolationCommandPort;
+
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationEvent;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSeverity;
@@ -25,7 +27,7 @@ import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
-public class MentorViolationService {
+public class MentorViolationService implements MentorViolationCommandPort {
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int ACTIVE_SCORE_WINDOW_DAYS = 90;
@@ -71,6 +73,25 @@ public class MentorViolationService {
                                      String reason, String decisionNote) {
         if (mentorUserId == null || !mentorProfileRepository.existsById(mentorUserId)) return;
         record(mentorUserId, null, sourceModule, sourceReferenceId, type, severity, adminUserId, reason, decisionNote);
+    }
+
+    @Override
+    @Transactional
+    public void recordConfirmedViolation(MentorViolationCommand command) {
+        if (command == null || command.mentorUserId() == null || command.type() == null) {
+            return;
+        }
+        try {
+            recordAdminConfirmed(
+                    command.mentorUserId(),
+                    command.source() == null ? MentorViolationSource.ADMIN : MentorViolationSource.valueOf(command.source()),
+                    command.sourceReferenceId(),
+                    MentorViolationType.valueOf(command.type()),
+                    command.severity() == null ? null : MentorViolationSeverity.valueOf(command.severity()),
+                    command.decidedByUserId(), command.reason(), command.decisionNote());
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu mentor violation không hợp lệ");
+        }
     }
 
     @Transactional

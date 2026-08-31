@@ -1,48 +1,25 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.blog.port.BlogQueryPort;
+import com.fptu.exe.skillswap.modules.blog.port.BlogMentorArticlePreview;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
+import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.Campus;
 import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
-import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
-import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogAuthorType;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogPostStatus;
-import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
-import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
-import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
-import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
-import com.fptu.exe.skillswap.modules.blog.service.BlogMapper;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAuthorityContentResponse;
-import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
-
-import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicAvailabilityPreviewResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilityResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorEducationResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorEvidenceResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorIdentityResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorMentoringResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorReputationResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSupportLevelsResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.*;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -54,14 +31,15 @@ import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryRankingS
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorEnrichedData;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorRecommendationFacade;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.port.FeedbackQueryPort;
+import com.fptu.exe.skillswap.modules.feedback.port.MentorReviewProjection;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -87,13 +65,10 @@ public class MentorDiscoveryService {
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final MentorProfileRepository mentorProfileRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final UserQueryPort userQueryPort;
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorAvailabilityService mentorAvailabilityService;
-    private final SessionFeedbackRepository sessionFeedbackRepository;
-    private final BlogPostRepository blogPostRepository;
-    private final BlogMapper blogMapper;
-    private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final FeedbackQueryPort feedbackQueryPort;
 
     private final PaymentProperties paymentProperties;
     private final InternalTelemetryService internalTelemetryService;
@@ -105,6 +80,8 @@ public class MentorDiscoveryService {
 
     private final DiscoveryProperties discoveryProperties;
     private final MentorRecommendationFacade mentorRecommendationFacade;
+    private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final BlogQueryPort blogQueryPort;
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
@@ -214,7 +191,6 @@ public class MentorDiscoveryService {
             List<DiscoveryRankingService.RankedSearchCandidate> rankedCandidates = discoveryRankingService.rankSearchCandidates(
                     rows,
                     menteeProfile,
-
                     normalizedKeyword,
                     enrichedDataByMentor,
                     evaluatedAt
@@ -239,7 +215,6 @@ public class MentorDiscoveryService {
             List<DiscoveryRankingService.RankedSearchCandidate> rankedPageRows = discoveryRankingService.rankSearchCandidates(
                     pageRows,
                     menteeProfile,
-
                     normalizedKeyword,
                     enrichedDataByMentor,
                     evaluatedAt
@@ -267,7 +242,7 @@ public class MentorDiscoveryService {
     public MentorDiscoveryDetailResponse getMentorDetail(UUID mentorUserId) {
         MentorProfile mentorProfile = getDiscoverableMentorProfile(mentorUserId);
         internalTelemetryService.record("MENTOR_VIEWED", null, "MENTOR", mentorUserId, Map.of());
-        StudentProfile studentProfile = studentProfileRepository.findWithDetailsByUserId(mentorUserId).orElse(null);
+        StudentProfile studentProfile = userQueryPort.findStudentProfileWithDetailsByUserId(mentorUserId).orElse(null);
         MentorEnrichedData enrichedData = discoveryEnrichmentService.loadMentorEnrichedData(List.of(mentorUserId), currentTime())
                 .getOrDefault(mentorUserId, MentorEnrichedData.empty());
         List<MentorSubjectResultResponse> subjectResults = enrichedData.subjectResults();
@@ -285,23 +260,22 @@ public class MentorDiscoveryService {
 
         int reviews = defaultInteger(mentorProfile.getTotalReviews());
         boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::isActive);
-        boolean canRequestBooking = bookingEligibilityPolicy.isPublicBookingOfferAvailable(
+        boolean canRequestBooking = mentorBookingPolicyService.isPublicBookingOfferAvailable(
                 mentorProfile, hasActiveServices, currentTime());
-        BlogPostRepository.MentorPublicAuthorityProjection authority = blogPostRepository.getMentorPublicAuthority(mentorUserId);
-        List<com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicArticlePreviewResponse> recentPublicArticles =
-                blogPostRepository.findMentorPublicProfilePreviews(
-                                mentorUserId,
-                                BlogAuthorType.MENTOR,
-                                BlogPostStatus.PUBLISHED,
-                                BlogVisibility.PUBLIC,
-                                PageRequest.of(0, 3))
-                        .stream()
-                        .map(blogMapper::toMentorPublicArticlePreview)
+        long authorityCount = blogQueryPort.getMentorPublicArticleCount(mentorUserId);
+        LocalDateTime authorityLatest = blogQueryPort.getMentorLatestPublishedAt(mentorUserId);
+        List<MentorPublicArticlePreviewResponse> recentPublicArticles =
+                blogQueryPort.findMentorPublicProfilePreviews(mentorUserId, 3).stream()
+                        .map(this::toMentorPublicArticlePreview)
                         .toList();
+
+        UserSummaryRecord userSummary = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+        String mentorFullName = userSummary != null ? userSummary.fullName() : null;
+        String mentorAvatarUrl = userSummary != null ? userSummary.avatarUrl() : null;
 
         return MentorDiscoveryDetailResponse.builder()
                 .identity(new MentorIdentityResponse(
-                        mentorProfile.getUserId(), mentorProfile.getUser().getFullName(), mentorProfile.getUser().getAvatarUrl(),
+                        mentorProfile.getUserId(), mentorFullName, mentorAvatarUrl,
                         mentorProfile.getHeadline(), mentorProfile.getVerifiedAt() != null, mentorProfile.getVerifiedAt()))
                 .mentoring(new MentorMentoringResponse(
                         studentProfile == null ? null : studentProfile.getBio(),
@@ -319,8 +293,7 @@ public class MentorDiscoveryService {
                                 studentProfile != null && studentProfile.isAlumni()),
                         subjectResults, featuredProjects, achievements, mentorProfile.getPortfolioUrl(), mentorProfile.getGithubUrl(),
                         new MentorAuthorityContentResponse(
-                                authority == null ? 0L : authority.getPublishedArticleCount(),
-                                authority == null ? null : authority.getLatestPublishedAt(), recentPublicArticles)))
+                                authorityCount, authorityLatest, recentPublicArticles)))
                 .reputation(new MentorReputationResponse(
                         reviews == 0 ? MentorRatingState.NO_REVIEWS : MentorRatingState.RATED,
                         reviews == 0 ? null : mentorProfile.getAverageRating(),
@@ -328,6 +301,12 @@ public class MentorDiscoveryService {
                 .availability(new MentorAvailabilityResponse(
                         mentorProfile.isAvailable(), mentorProfile.getBookingSuspendedUntil(), canRequestBooking))
                 .build();
+    }
+
+    private MentorPublicArticlePreviewResponse toMentorPublicArticlePreview(BlogMentorArticlePreview article) {
+        return new MentorPublicArticlePreviewResponse(
+                article.id(), article.title(), article.slug(), article.excerpt(), article.coverImageUrl(),
+                article.readingTimeMinutes(), article.publishedAt());
     }
 
     @Transactional
@@ -338,7 +317,8 @@ public class MentorDiscoveryService {
             return List.of();
         }
         AvailabilityQueryRequest safeRequest = request == null ? new AvailabilityQueryRequest() : request;
-        return mentorAvailabilityService.getAvailableSlots(mentorProfile, safeRequest.getFromDate(), safeRequest.getToDate());
+        return mentorAvailabilityService.getAvailableSlots(mentorUserId, safeRequest.getFromDate(), safeRequest.getToDate())
+                .stream().map(this::toMentorAvailabilitySlotResponse).toList();
     }
 
     /**
@@ -356,13 +336,13 @@ public class MentorDiscoveryService {
         }
 
         AvailabilityQueryRequest safeRequest = request == null ? new AvailabilityQueryRequest() : request;
-        List<MentorAvailabilitySlotResponse> slots = mentorAvailabilityService.getAvailableSlots(
-                mentorProfile, safeRequest.getFromDate(), safeRequest.getToDate());
+        List<com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability> slots = mentorAvailabilityService.getAvailableSlots(
+                mentorUserId, safeRequest.getFromDate(), safeRequest.getToDate());
         boolean hasActiveService = mentorServiceRepository
                 .findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(mentorUserId)
                 .stream()
                 .anyMatch(service -> service.getDeliveryMode() == com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode.ONE_TO_ONE);
-        boolean offerAvailable = bookingEligibilityPolicy.isPublicBookingOfferAvailable(
+        boolean offerAvailable = mentorBookingPolicyService.isPublicBookingOfferAvailable(
                 mentorProfile, hasActiveService, currentTime()) && !slots.isEmpty();
 
         List<MentorPublicAvailabilityPreviewResponse.Slot> previewSlots = slots.stream()
@@ -392,14 +372,12 @@ public class MentorDiscoveryService {
         getDiscoverableMentorProfile(mentorUserId);
 
         BasePageRequest safeRequest = pageRequest == null ? new BasePageRequest() : pageRequest;
-        Page<MentorReviewQueryRow> page = sessionFeedbackRepository.findPublicMentorReviews(
-                mentorUserId,
-                reviewPageable(safeRequest)
-        );
+        PageResponse<MentorReviewProjection> page = feedbackQueryPort.findPublicMentorReviews(
+                mentorUserId, safeRequest.getPage(), safeRequest.getSize());
 
         return PageResponse.<MentorReviewResponse>builder()
                 .content(page.getContent().stream().map(discoveryMapper::toMentorReviewResponse).toList())
-                .page(page.getNumber())
+                .page(page.getPage())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
                 .totalPages(page.getTotalPages())
@@ -411,7 +389,7 @@ public class MentorDiscoveryService {
         if (currentUserId == null) {
             return null;
         }
-        return studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
+        return userQueryPort.findStudentProfileWithDetailsByUserId(currentUserId).orElse(null);
     }
 
     private MentorProfile getDiscoverableMentorProfile(UUID mentorUserId) {
@@ -428,13 +406,15 @@ public class MentorDiscoveryService {
     }
 
     private boolean isDiscoverableMentor(MentorProfile mentorProfile) {
-        return mentorProfile != null
-                && mentorProfile.getStatus() == MentorStatus.ACTIVE
-                && mentorProfile.getUser() != null
-                && mentorProfile.getUser().getStatus() == com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
-                && mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)
-                && !mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.ADMIN)
-                && !mentorProfile.getUser().getRoles().contains(com.fptu.exe.skillswap.shared.constant.RoleCode.SYSTEM_ADMIN)
+        if (mentorProfile == null || mentorProfile.getStatus() != MentorStatus.ACTIVE) {
+            return false;
+        }
+        UserSummaryRecord user = userQueryPort.findUserSummaryById(mentorProfile.getUserId()).orElse(null);
+        return user != null
+                && user.isActive()
+                && user.hasRole(RoleCode.MENTOR)
+                && !user.hasRole(RoleCode.ADMIN)
+                && !user.hasRole(RoleCode.SYSTEM_ADMIN)
                 && mentorProfile.getVerifiedAt() != null
                 && hasText(mentorProfile.getHeadline())
                 && hasText(mentorProfile.getExpertiseDescription())
@@ -443,10 +423,23 @@ public class MentorDiscoveryService {
     }
 
     private MentorPublicAvailabilityPreviewResponse.Service toPublicAvailabilityPreviewService(
-            AvailabilitySlotServiceBasicResponse service
+            com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate service
     ) {
         return new MentorPublicAvailabilityPreviewResponse.Service(
-                service.serviceId(), service.title(), service.durationMinutes(), service.isFree(), service.priceScoin());
+                service.serviceId(), service.title(), service.durationMinutes(), Boolean.TRUE.equals(service.isFree()), service.priceScoin());
+    }
+
+    private MentorAvailabilitySlotResponse toMentorAvailabilitySlotResponse(
+            com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability slot) {
+        return MentorAvailabilitySlotResponse.builder()
+                .slotId(slot.slotId()).startTime(slot.startTime()).endTime(slot.endTime()).timezone(slot.timezone())
+                .durationMinutes(slot.durationMinutes()).teachingMode(null)
+                .pendingRequestCount(slot.pendingRequestCount()).acceptedSlotCount(slot.acceptedSlotCount())
+                .maxPendingRequests(slot.maxPendingRequests()).remainingRequestSlots(slot.remainingRequestSlots())
+                .services(slot.services().stream().map(service -> AvailabilitySlotServiceBasicResponse.builder()
+                        .serviceId(service.serviceId()).title(service.title()).durationMinutes(service.durationMinutes())
+                        .isFree(Boolean.TRUE.equals(service.isFree())).priceScoin(service.priceScoin()).build()).toList())
+                .build();
     }
 
     private boolean isBookingSuspended(MentorProfile mentorProfile) {

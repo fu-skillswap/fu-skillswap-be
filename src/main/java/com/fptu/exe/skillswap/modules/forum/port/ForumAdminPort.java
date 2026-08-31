@@ -1,25 +1,21 @@
 package com.fptu.exe.skillswap.modules.forum.port;
 
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumCommentListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumPostListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.AdminForumReportListRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReportResolveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 
 import java.util.UUID;
+import java.util.List;
 
 public interface ForumAdminPort {
-    PageResponse<ForumReportResponse> getReports(AdminForumReportListRequest request);
-    ForumReportResponse getReportDetail(UUID reportId);
-    ForumReportResponse resolveReport(UUID adminUserId, UUID reportId, ForumReportResolveRequest request);
-    CursorPageResponse<ForumPostResponse> getAdminPosts(AdminForumPostListRequest request);
-    CursorPageResponse<ForumCommentResponse> getAdminComments(AdminForumCommentListRequest request);
-    ForumPostResponse restorePost(UUID adminUserId, UUID postId);
-    ForumCommentResponse restoreComment(UUID adminUserId, UUID commentId);
+    PageResponse<ForumAdminPortModels.ReportView> getReports(ForumAdminPortModels.ReportListQuery request);
+    ForumAdminPortModels.ReportView getReportDetail(UUID reportId);
+    ForumAdminPortModels.ReportView resolveReport(UUID adminUserId, UUID reportId, ForumAdminPortModels.ResolveReportCommand request);
+    CursorPageResponse<ForumAdminPortModels.PostView> getAdminPosts(ForumAdminPortModels.PostListQuery request);
+    CursorPageResponse<ForumAdminPortModels.CommentView> getAdminComments(ForumAdminPortModels.CommentListQuery request);
+    ForumAdminPortModels.PostView restorePost(UUID adminUserId, UUID postId);
+    ForumAdminPortModels.CommentView restoreComment(UUID adminUserId, UUID commentId);
     long countPendingReports();
     long countReportsCreatedBy(UUID userId);
+    boolean existsReportById(UUID reportId);
+    List<String> reportStatusNames();
 }

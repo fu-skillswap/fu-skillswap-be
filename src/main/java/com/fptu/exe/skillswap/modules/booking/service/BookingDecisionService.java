@@ -3,11 +3,11 @@ package com.fptu.exe.skillswap.modules.booking.service;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.RejectBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
@@ -16,26 +16,22 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
-import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
-import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import jakarta.persistence.EntityManager;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-
-import com.fptu.exe.skillswap.shared.time.TimeProvider;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -60,10 +56,8 @@ public class BookingDecisionService {
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final UserLockPort userLockPort;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final EntityManager entityManager;
+    private final UserQueryPort userQueryPort;
     private final SessionService sessionService;
-    private final ConversationService conversationService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
@@ -84,8 +78,6 @@ public class BookingDecisionService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
 
-        // Canonical order for existing booking commands:
-        // Booking -> participant users -> MentorProfile -> Slot -> PaymentOrder -> PaymentAttempt.
         Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
         UUID slotId = booking.getSlot() == null ? null : booking.getSlot().getId();
         UUID menteeId = booking.getMentee() == null ? null : booking.getMentee().getId();
@@ -100,8 +92,6 @@ public class BookingDecisionService {
         if (userLockPort.lockUsersForUpdate(participantIds).size() != participantIds.size()) {
             throw new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng tham gia booking");
         }
-        MentorProfile lockedMentorProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
 
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(slotId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
@@ -206,13 +196,6 @@ public class BookingDecisionService {
         booking.setMeetingLink(selectedMeetingLink);
         slot.setBooked(true);
 
-        if (entityManager != null) {
-            entityManager.refresh(lockedMentorProfile);
-        }
-        lockedMentorProfile.setTotalAcceptedBookings(defaultInteger(lockedMentorProfile.getTotalAcceptedBookings()) + 1);
-        touchMentorActivity(lockedMentorProfile, nowBusiness);
-        mentorProfileRepository.save(lockedMentorProfile);
-
         for (Booking pendingBooking : pendingBookings) {
             if (pendingBooking.getId().equals(booking.getId())) {
                 continue;
@@ -234,19 +217,20 @@ public class BookingDecisionService {
                 .values()));
         Booking savedBooking = bookingRepository.save(booking);
 
+        UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+        String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
+        String mentorEmail = mentorSummary == null ? null : mentorSummary.email();
+
         if (isFree) {
             if (sessionService != null) {
                 sessionService.createForAcceptedBooking(savedBooking);
-            }
-            if (conversationService != null) {
-                conversationService.createDirectForAcceptedBooking(savedBooking);
             }
 
             eventPublisher.publishEvent(new NotificationEvent(
                     savedBooking.getMentee().getId(),
                     NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu học miễn phí",
-                    savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring miễn phí của bạn. Buổi học đã được xác nhận.",
+                    mentorName + " đã chấp nhận lịch mentoring miễn phí của bạn. Buổi học đã được xác nhận.",
                     "BOOKING",
                     savedBooking.getId()
             ));
@@ -256,7 +240,7 @@ public class BookingDecisionService {
                     .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
                     .recipientEmail(savedBooking.getMentee().getEmail())
                     .recipientName(savedBooking.getMentee().getFullName())
-                    .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                    .actorName(mentorName)
                     .bookingStartTime(savedBooking.getSelectedStartTime())
                     .bookingEndTime(savedBooking.getSelectedEndTime())
                     .learningGoalTitle(savedBooking.getLearningGoalTitle())
@@ -271,32 +255,34 @@ public class BookingDecisionService {
                     .createdAt(timeProvider.nowBusiness())
                     .build());
 
-            eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
-                    .bookingId(savedBooking.getId())
-                    .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
-                    .recipientEmail(savedBooking.getMentorProfile().getUser().getEmail())
-                    .recipientName(savedBooking.getMentorProfile().getUser().getFullName())
-                    .actorName(savedBooking.getMentee().getFullName())
-                    .bookingStartTime(savedBooking.getSelectedStartTime())
-                    .bookingEndTime(savedBooking.getSelectedEndTime())
-                    .learningGoalTitle(savedBooking.getLearningGoalTitle())
-                    .learningGoalDescription(savedBooking.getLearningGoalDescription())
-                    .serviceTitle(savedBooking.getServiceTitleSnapshot())
-                    .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
-                    .serviceFree(savedBooking.getServiceIsFreeSnapshot())
-                    .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
-                    .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
-                    .mentorResponseNote(savedBooking.getMentorResponseNote())
-                    .meetingLink(selectedMeetingLink)
-                    .createdAt(timeProvider.nowBusiness())
-                    .build());
+            if (mentorEmail != null) {
+                eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
+                        .bookingId(savedBooking.getId())
+                        .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
+                        .recipientEmail(mentorEmail)
+                        .recipientName(mentorName)
+                        .actorName(savedBooking.getMentee().getFullName())
+                        .bookingStartTime(savedBooking.getSelectedStartTime())
+                        .bookingEndTime(savedBooking.getSelectedEndTime())
+                        .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                        .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                        .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                        .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                        .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                        .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                        .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                        .mentorResponseNote(savedBooking.getMentorResponseNote())
+                        .meetingLink(selectedMeetingLink)
+                        .createdAt(timeProvider.nowBusiness())
+                        .build());
+            }
         } else {
             eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                     .bookingId(savedBooking.getId())
                     .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
                     .recipientEmail(savedBooking.getMentee().getEmail())
                     .recipientName(savedBooking.getMentee().getFullName())
-                    .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                    .actorName(mentorName)
                     .bookingStartTime(savedBooking.getSelectedStartTime())
                     .bookingEndTime(savedBooking.getSelectedEndTime())
                     .learningGoalTitle(savedBooking.getLearningGoalTitle())
@@ -316,7 +302,7 @@ public class BookingDecisionService {
                     savedBooking.getMentee().getId(),
                     NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu",
-                    savedBooking.getMentorProfile().getUser().getFullName() + " đã chấp nhận lịch mentoring của bạn. Vui lòng thanh toán để xác nhận buổi học.",
+                    mentorName + " đã chấp nhận lịch mentoring của bạn. Vui lòng thanh toán để xác nhận buổi học.",
                     "BOOKING",
                     savedBooking.getId()
             ));
@@ -325,14 +311,14 @@ public class BookingDecisionService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 isFree ? "Mentor đã chấp nhận yêu cầu học miễn phí. Buổi học đã được xác nhận."
                        : "Mentor đã chấp nhận yêu cầu và đang chờ bạn thanh toán.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
         if (isFree && hasActiveCalendar) {
-            eventPublisher.publishEvent(new GoogleCalendarCreateBookingRequestedEvent(savedBooking.getId()));
+            eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(savedBooking.getId(), savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CREATE));
         }
 
         for (Booking pendingBooking : pendingBookings) {
@@ -350,7 +336,7 @@ public class BookingDecisionService {
                         .eventType(BookingEmailNotificationEvent.EventType.BOOKING_REJECTED_EMAIL)
                         .recipientEmail(pendingBooking.getMentee().getEmail())
                         .recipientName(pendingBooking.getMentee().getFullName())
-                        .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                        .actorName(mentorName)
                         .bookingStartTime(pendingBooking.getSelectedStartTime())
                         .bookingEndTime(pendingBooking.getSelectedEndTime())
                         .learningGoalTitle(pendingBooking.getLearningGoalTitle())
@@ -365,7 +351,7 @@ public class BookingDecisionService {
                 eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                         pendingBooking.getId(),
                         pendingBooking.getMentee().getId(),
-                        pendingBooking.getMentorProfile().getUserId(),
+                        pendingBooking.getMentorUserId(),
                         BookingStatus.REJECTED,
                         "Yêu cầu đặt lịch không còn khả dụng.",
                         pendingBooking.getUpdatedAt() != null ? pendingBooking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -392,25 +378,16 @@ public class BookingDecisionService {
         booking.setRejectReason(trim(request.rejectReason()));
         booking.setMentorResponseNote(trimToNull(request.mentorResponseNote()));
 
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        if (mentorProfile != null) {
-            MentorProfile lockedProfile = mentorProfileRepository.findByIdForUpdate(mentorProfile.getUserId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-            if (entityManager != null) {
-                entityManager.refresh(lockedProfile);
-            }
-            lockedProfile.setTotalRejectedBookings(defaultInteger(lockedProfile.getTotalRejectedBookings()) + 1);
-            touchMentorActivity(lockedProfile, nowBusiness);
-            mentorProfileRepository.save(lockedProfile);
-        }
-
         Booking savedBooking = bookingRepository.save(booking);
+
+        UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+        String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
 
         eventPublisher.publishEvent(new NotificationEvent(
                 savedBooking.getMentee().getId(),
                 NotificationType.BOOKING_REJECTED,
                 "Yêu cầu đặt lịch đã bị từ chối",
-                savedBooking.getMentorProfile().getUser().getFullName() + " đã từ chối yêu cầu đặt lịch của bạn.",
+                mentorName + " đã từ chối yêu cầu đặt lịch của bạn.",
                 "BOOKING",
                 savedBooking.getId()
         ));
@@ -420,7 +397,7 @@ public class BookingDecisionService {
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_REJECTED_EMAIL)
                 .recipientEmail(savedBooking.getMentee().getEmail())
                 .recipientName(savedBooking.getMentee().getFullName())
-                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                .actorName(mentorName)
                 .reason(savedBooking.getRejectReason())
                 .createdAt(nowBusiness)
                 .build());
@@ -428,7 +405,7 @@ public class BookingDecisionService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Yêu cầu đặt lịch đã bị từ chối.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
@@ -446,21 +423,10 @@ public class BookingDecisionService {
         }
         Booking booking = bookingRepository.findByIdForMentorDecision(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        if (booking.getMentorProfile() == null || !mentorUserId.equals(booking.getMentorProfile().getUserId())) {
+        if (booking.getMentorUserId() == null || !mentorUserId.equals(booking.getMentorUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền thao tác trên booking này");
         }
         return booking;
-    }
-
-    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityAt) {
-        if (profile == null) {
-            return;
-        }
-        profile.setLastActiveAt(activityAt != null ? activityAt : timeProvider.nowBusiness());
-    }
-
-    private int defaultInteger(Integer value) {
-        return value == null ? 0 : value;
     }
 
     private String trim(String value) {

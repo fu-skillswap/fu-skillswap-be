@@ -22,9 +22,9 @@ public interface BlogCategoryFollowRepository extends JpaRepository<BlogCategory
     @EntityGraph(attributePaths = "category")
     List<BlogCategoryFollow> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    @Query("select f.category.id from BlogCategoryFollow f where f.user.id = :userId")
+    @Query("select f.category.id from BlogCategoryFollow f where f.userId = :userId")
     Set<UUID> findCategoryIdsByUserId(@Param("userId") UUID userId);
 
-    @Query("select distinct f.user.id from BlogCategoryFollow f where f.category.id in :categoryIds")
+    @Query("select distinct f.userId from BlogCategoryFollow f where f.category.id in :categoryIds")
     Set<UUID> findFollowerUserIdsByCategoryIds(@Param("categoryIds") Collection<UUID> categoryIds);
 }

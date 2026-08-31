@@ -156,7 +156,7 @@ class AdminOperationsWorkbenchIntegrationTest {
         adminNoteRepository.save(AdminNote.builder()
                 .targetType("BOOKING")
                 .targetId(underReviewBooking.getId())
-                .adminUser(adminUser)
+                .adminUserId(adminUser.getId())
                 .note("Can theo doi de xu ly tiep")
                 .build());
 

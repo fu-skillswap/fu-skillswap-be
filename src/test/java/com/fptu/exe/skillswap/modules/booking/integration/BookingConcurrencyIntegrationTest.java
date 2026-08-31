@@ -125,7 +125,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             completeAcademicProfile(menteeB.getId(), "SE" + randomSixDigits());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser)
+                    .userId(mentorUser.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -144,7 +144,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .withNano(0);
             LocalDateTime slotEnd = slotStart.plusHours(1);
             MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slotStart, slotEnd))
                     .startTime(slotStart)
                     .endTime(slotEnd)
@@ -154,7 +154,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                    .mentorProfile(mentorProfile)
                     .title("Spring Transaction Mentoring")
                     .description("Support Java backend and transaction handling")
                     .durationMinutes(60)
@@ -163,11 +162,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isActive(true)
                     .build());
 
-            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                    .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
-                    .slot(slot)
-                    .service(mentorService)
-                    .build());
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot, mentorService.getId()));
 
             return new SetupData(mentorUser.getId(), slot.getId(), menteeA.getId(), menteeB.getId(), mentorService.getId(), slot.getStartTime(), slot.getEndTime());
         });
@@ -175,11 +170,11 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
         BookingResponse bookingA = bookingService.createBooking(
                 setupData.menteeAId(),
-                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart(), setupData.slotStart().plusMinutes(60), "Need help A", "Spring transaction")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help A", "Spring transaction")
         );
         BookingResponse bookingB = bookingService.createBooking(
                 setupData.menteeBId(),
-                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart(), setupData.slotStart().plusMinutes(60), "Need help B", "REST API")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help B", "REST API")
         );
 
         CountDownLatch readyLatch = new CountDownLatch(2);
@@ -254,7 +249,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser)
+                    .userId(mentorUser.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -275,7 +270,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             var service = mentorServiceRepository.saveAndFlush(
                     com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                            .mentorProfile(mentorProfile)
                             .title("Pending quota service")
                             .description("Service dùng cho concurrency quota test")
                             .durationMinutes(60)
@@ -289,7 +283,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             for (int index = 0; index < 4; index++) {
                 bookingRepository.save( com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                         .mentee(mentee)
-                        .mentorProfile(mentorProfile)
+                        .mentorUserId(mentorProfile.getUserId())
                         .slot(existingSlot)
                         .status(BookingStatus.PENDING)
                         .learningGoalTitle("Existing pending " + index)
@@ -344,7 +338,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             assertTrue(startLatch.await(5, TimeUnit.SECONDS));
             try {
                 bookingService.createBooking(menteeId,
-                        new CreateBookingRequest(slotId, serviceId, start, end,
+                        new CreateBookingRequest(slotId, serviceId, start.toInstant(java.time.ZoneOffset.UTC),
                                 "Concurrent quota request", "Verify pending quota lock"));
                 return true;
             } catch (BaseException exception) {
@@ -377,7 +371,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
 
             MentorProfile mentorProfile1 = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser1)
+                    .userId(mentorUser1.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -391,7 +385,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             MentorProfile mentorProfile2 = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser2)
+                    .userId(mentorUser2.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -411,7 +405,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             LocalDateTime slotEnd = slotStart.plusHours(1);
 
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile1)
+                    .mentorUserId(mentorProfile1.getUserId())
                     .rule(createAvailabilityRule(mentorProfile1, slotStart, slotEnd))
                     .startTime(slotStart)
                     .endTime(slotEnd)
@@ -421,7 +415,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile2)
+                    .mentorUserId(mentorProfile2.getUserId())
                     .rule(createAvailabilityRule(mentorProfile2, slotStart, slotEnd))
                     .startTime(slotStart)
                     .endTime(slotEnd)
@@ -431,7 +425,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService1 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                    .mentorProfile(mentorProfile1)
                     .title("Service 1")
                     .description("Desc 1")
                     .durationMinutes(60)
@@ -441,7 +434,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService2 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                    .mentorProfile(mentorProfile2)
                     .title("Service 2")
                     .description("Desc 2")
                     .durationMinutes(60)
@@ -450,17 +442,8 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isActive(true)
                     .build());
 
-            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                    .id(new AvailabilitySlotServiceId(slot1.getId(), mentorService1.getId()))
-                    .slot(slot1)
-                    .service(mentorService1)
-                    .build());
-
-            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                    .id(new AvailabilitySlotServiceId(slot2.getId(), mentorService2.getId()))
-                    .slot(slot2)
-                    .service(mentorService2)
-                    .build());
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot1, mentorService1.getId()));
+            availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot2, mentorService2.getId()));
 
             return new SetupMenteeDoubleBookingData(
                     mentee.getId(),
@@ -475,12 +458,12 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
         // Mentee tạo 2 booking trùng thời gian
         BookingResponse booking1 = bookingService.createBooking(
                 setupData.menteeId(),
-                new CreateBookingRequest(setupData.slot1Id(), setupData.service1Id(), setupData.slotStart(), setupData.slotEnd(), "Need help 1", "Goal 1")
+                new CreateBookingRequest(setupData.slot1Id(), setupData.service1Id(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help 1", "Goal 1")
         );
 
         BookingResponse booking2 = bookingService.createBooking(
                 setupData.menteeId(),
-                new CreateBookingRequest(setupData.slot2Id(), setupData.service2Id(), setupData.slotStart(), setupData.slotEnd(), "Need help 2", "Goal 2")
+                new CreateBookingRequest(setupData.slot2Id(), setupData.service2Id(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help 2", "Goal 2")
         );
 
         CountDownLatch readyLatch = new CountDownLatch(2);
@@ -576,7 +559,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             completeAcademicProfile(mentee3.getId(), "SE" + randomSixDigits());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser)
+                    .userId(mentorUser.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -595,7 +578,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .withNano(0);
             LocalDateTime slot1End = slot1Start.plusHours(1);
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slot1Start, slot1End))
                     .startTime(slot1Start)
                     .endTime(slot1End)
@@ -610,7 +593,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .withNano(0);
             LocalDateTime slot2End = slot2Start.plusHours(1);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slot2Start, slot2End))
                     .startTime(slot2Start)
                     .endTime(slot2End)
@@ -625,7 +608,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .withNano(0);
             LocalDateTime slot3End = slot3Start.plusHours(1);
             MentorAvailabilitySlot slot3 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slot3Start, slot3End))
                     .startTime(slot3Start)
                     .endTime(slot3End)
@@ -636,7 +619,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                     .mentee(mentee1)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .slot(slot1)
                     .learningGoalTitle("Goal 1")
                     .status(BookingStatus.COMPLETED)
@@ -648,7 +631,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                     .mentee(mentee2)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .slot(slot2)
                     .learningGoalTitle("Goal 2")
                     .status(BookingStatus.COMPLETED)
@@ -660,7 +643,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking3 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                     .mentee(mentee3)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .slot(slot3)
                     .learningGoalTitle("Goal 3")
                     .status(BookingStatus.COMPLETED)
@@ -722,7 +705,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             completeAcademicProfile(mentee2.getId(), "SE" + randomSixDigits());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser)
+                    .userId(mentorUser.getId())
                     .status(MentorStatus.ACTIVE)
                     .verifiedAt(DateTimeUtil.now().minusDays(1))
                     .isAvailable(true)
@@ -741,7 +724,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             LocalDateTime slot1End = DateTimeUtil.now().plusDays(2).plusHours(1);
             slot1End = slot1End.withSecond(0).withNano(0);
             MentorAvailabilitySlot slot1 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slot1Start, slot1End))
                     .startTime(slot1Start)
                     .endTime(slot1End)
@@ -757,7 +740,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .withSecond(0)
                     .withNano(0);
             MentorAvailabilitySlot slot2 = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .rule(createAvailabilityRule(mentorProfile, slot2Start, slot2End))
                     .startTime(slot2Start)
                     .endTime(slot2End)
@@ -768,7 +751,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                     .mentee(mentee1)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .slot(slot1)
                     .learningGoalTitle("Completed Booking")
                     .status(BookingStatus.COMPLETED)
@@ -780,7 +763,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                     .mentee(mentee2)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .slot(slot2)
                     .learningGoalTitle("Accepted Booking")
                     .status(BookingStatus.PAID)
@@ -850,7 +833,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
     private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {
         return mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.NONE)
                 .effectiveFrom(startTime.toLocalDate())
@@ -866,7 +849,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                                               LocalDateTime startTime,
                                               LocalDateTime endTime) {
         return mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .rule(createAvailabilityRule(mentorProfile, startTime, endTime))
                 .startTime(startTime)
                 .endTime(endTime)
@@ -878,11 +861,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
     private void linkSlotToService(MentorAvailabilitySlot slot,
                                    com.fptu.exe.skillswap.modules.mentor.domain.MentorService service) {
-        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                .id(new AvailabilitySlotServiceId(slot.getId(), service.getId()))
-                .slot(slot)
-                .service(service)
-                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot, service.getId()));
     }
 
     private record SetupData(UUID mentorId, UUID slotId, UUID menteeAId, UUID menteeBId, UUID serviceId, LocalDateTime slotStart, LocalDateTime slotEnd) {}

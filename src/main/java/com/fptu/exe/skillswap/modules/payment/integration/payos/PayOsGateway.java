@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.integration.payos;
 
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 
 import java.time.Instant;
@@ -50,7 +50,7 @@ public interface PayOsGateway {
                                        String checkoutUrl,
                                        Instant expiresAtUtc) {
             this(providerOrderCode, providerPaymentLinkId, providerStatus, checkoutUrl, expiresAtUtc,
-                    expiresAtUtc != null ? BookingTime.fromInstant(expiresAtUtc) : null);
+                    expiresAtUtc != null ? BusinessTime.fromInstant(expiresAtUtc) : null);
         }
 
         public CreatePaymentLinkResult(String providerOrderCode,
@@ -59,7 +59,7 @@ public interface PayOsGateway {
                                        String checkoutUrl,
                                        LocalDateTime expiresAt) {
             this(providerOrderCode, providerPaymentLinkId, providerStatus, checkoutUrl,
-                    expiresAt != null ? BookingTime.toInstant(expiresAt) : null, expiresAt);
+                    expiresAt != null ? BusinessTime.toInstant(expiresAt) : null, expiresAt);
         }
     }
 
@@ -76,8 +76,8 @@ public interface PayOsGateway {
                                   Instant createdAtUtc,
                                   Instant cancelledAtUtc) {
             this(providerPaymentLinkId, providerStatus, createdAtUtc, cancelledAtUtc,
-                    createdAtUtc != null ? BookingTime.fromInstant(createdAtUtc) : null,
-                    cancelledAtUtc != null ? BookingTime.fromInstant(cancelledAtUtc) : null);
+                    createdAtUtc != null ? BusinessTime.fromInstant(createdAtUtc) : null,
+                    cancelledAtUtc != null ? BusinessTime.fromInstant(cancelledAtUtc) : null);
         }
 
         public PaymentLinkDetails(String providerPaymentLinkId,
@@ -85,8 +85,8 @@ public interface PayOsGateway {
                                   LocalDateTime createdAt,
                                   LocalDateTime cancelledAt) {
             this(providerPaymentLinkId, providerStatus,
-                    createdAt != null ? BookingTime.toInstant(createdAt) : null,
-                    cancelledAt != null ? BookingTime.toInstant(cancelledAt) : null,
+                    createdAt != null ? BusinessTime.toInstant(createdAt) : null,
+                    cancelledAt != null ? BusinessTime.toInstant(cancelledAt) : null,
                     createdAt, cancelledAt);
         }
     }
@@ -111,7 +111,7 @@ public interface PayOsGateway {
                                Instant paidAtUtc,
                                long amount) {
             this(providerOrderCode, providerPaymentLinkId, providerEventId, providerTransactionId, providerStatus,
-                    success, paidAtUtc, paidAtUtc != null ? BookingTime.fromInstant(paidAtUtc) : null, amount);
+                    success, paidAtUtc, paidAtUtc != null ? BusinessTime.fromInstant(paidAtUtc) : null, amount);
         }
 
         public VerifiedWebhook(String providerOrderCode,
@@ -123,7 +123,7 @@ public interface PayOsGateway {
                                LocalDateTime paidAt,
                                long amount) {
             this(providerOrderCode, providerPaymentLinkId, providerEventId, providerTransactionId, providerStatus,
-                    success, paidAt != null ? BookingTime.toInstant(paidAt) : null, paidAt, amount);
+                    success, paidAt != null ? BusinessTime.toInstant(paidAt) : null, paidAt, amount);
         }
     }
 }

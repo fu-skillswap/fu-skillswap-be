@@ -49,7 +49,10 @@ public class AvailabilityTemplateController {
     @PostMapping("/{templateId}/resume") @Operation(summary = "Resume availability template")
     public ApiResponse<AvailabilityTemplateResponse> resume(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID templateId, @Valid @RequestBody AvailabilityTemplateVersionRequest request) { return ApiResponse.success(templateService.resume(id(principal), templateId, request)); }
     @PostMapping("/{templateId}/archive") @Operation(summary = "Archive availability template")
-    public ApiResponse<AvailabilityTemplateResponse> archive(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID templateId, @Valid @RequestBody AvailabilityTemplateVersionRequest request) { return ApiResponse.success(templateService.archive(id(principal), templateId, request)); }
+    public ApiResponse<Void> archive(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID templateId, @Valid @RequestBody AvailabilityTemplateVersionRequest request) {
+        templateService.archive(id(principal), templateId, request);
+        return ApiResponse.success(null);
+    }
     @PutMapping("/{templateId}/exceptions/{occurrenceDate}") @Operation(summary = "Skip a template occurrence")
     public ApiResponse<AvailabilityTemplateResponse> addException(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID templateId, @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate occurrenceDate, @Valid @RequestBody AvailabilityTemplateExceptionRequest request) { return ApiResponse.success(templateService.addException(id(principal), templateId, occurrenceDate, request)); }
     @PostMapping("/{templateId}/exceptions/{occurrenceDate}/restore") @Operation(summary = "Restore skipped template occurrence")

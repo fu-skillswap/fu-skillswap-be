@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.booking.domain;
 
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 
 public final class BookingStateMapper {
 
@@ -48,7 +47,8 @@ public final class BookingStateMapper {
             return BookingPaymentStatus.NOT_REQUIRED;
         }
         if (paymentOrder != null && paymentOrder.getStatus() != null) {
-            if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.REFUNDED) {
+            if (paymentOrder.getSettlementStatus() != null
+                    && "REFUNDED".equals(paymentOrder.getSettlementStatus().name())) {
                 return BookingPaymentStatus.REFUNDED;
             }
             return switch (paymentOrder.getStatus()) {

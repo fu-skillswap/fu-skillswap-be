@@ -12,7 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingType;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingSettlementStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -90,7 +90,7 @@ public record BookingResponse(
         @Schema(description = "Canonical payment lifecycle status dùng cho public contract mới", example = "PENDING")
         BookingPaymentStatus paymentStatus,
         @Schema(description = "Settlement summary của payment order; null khi booking free/chưa có payment order", nullable = true)
-        PaymentSettlementStatus settlementStatus,
+        BookingSettlementStatus settlementStatus,
         @Schema(nullable = true)
         OffsetDateTime releasedAt,
         @Schema(nullable = true)

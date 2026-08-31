@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.notification.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
@@ -31,7 +31,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class NotificationService {
+public class NotificationService implements NotificationCommandPort {
 
     private final NotificationRepository notificationRepository;
     private final UserQueryPort userQueryPort;
@@ -46,6 +46,22 @@ public class NotificationService {
         createNotification(recipientUserId, type, title, message, relatedEntityType, relatedEntityId, null);
     }
 
+    @Override
+    @Transactional
+    public void publish(NotificationIntent intent) {
+        if (intent == null || intent.type() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu notification intent");
+        }
+        final NotificationType type;
+        try {
+            type = NotificationType.valueOf(intent.type());
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại thông báo không hợp lệ");
+        }
+        createNotification(intent.recipientUserId(), type, intent.title(), intent.message(),
+                intent.relatedEntityType(), intent.relatedEntityId(), intent.deepLink());
+    }
+
     @Transactional
     public void createNotification(UUID recipientUserId,
             NotificationType type,
@@ -54,11 +70,12 @@ public class NotificationService {
             String relatedEntityType,
             UUID relatedEntityId,
             String deepLink) {
-        User recipient = userQueryPort.findUserById(recipientUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận"));
+        if (!userQueryPort.existsById(recipientUserId)) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận");
+        }
 
         Notification notification = Notification.builder()
-                .recipientUser(recipient)
+                .recipientUserId(recipientUserId)
                 .type(type)
                 .title(normalizeTitle(type, title))
                 .message(message)
@@ -290,9 +307,9 @@ public class NotificationService {
                 "NOTIFICATION",
                 notification.getId(),
                 DomainEventOutboxEventTypes.NOTIFICATION_CREATED,
-                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUser().getId(),
+                new NotificationCreatedPayload(notification.getId(), notification.getRecipientUserId(),
                         notification.getType().name(), eventKind, unreadCount));
-        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUser().getId(), unreadCount,
+        enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUserId(), unreadCount,
                 eventKind);
     }
 

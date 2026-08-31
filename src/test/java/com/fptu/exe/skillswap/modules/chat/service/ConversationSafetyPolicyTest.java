@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatMessagingAccess;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationUserBlockRepository;

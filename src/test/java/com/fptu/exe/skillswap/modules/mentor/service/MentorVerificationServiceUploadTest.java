@@ -2,13 +2,11 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
+import com.fptu.exe.skillswap.modules.filestorage.port.VerificationDocumentStoragePort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorVerificationUploadIntent;
@@ -64,10 +62,6 @@ class MentorVerificationServiceUploadTest {
     @Mock
     private MentorProfileService mentorProfileService;
     @Mock
-    private UserRepository userRepository;
-    @Mock
-    private StoredFileRepository storedFileRepository;
-    @Mock
     private MentorVerificationUploadIntentRepository uploadIntentRepository;
     @Mock
     private ObjectProvider<StorageGateway> r2StorageProvider;
@@ -76,9 +70,11 @@ class MentorVerificationServiceUploadTest {
     @Mock
     private MentorServiceRepository mentorServiceRepository;
     @Mock
-    private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
+    private UserQueryPort userQueryPort;
     @Mock
-    private BookingEligibilityPolicy bookingEligibilityPolicy;
+    private BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
+    @Mock
+    private VerificationDocumentStoragePort verificationDocumentStoragePort;
 
     private MentorVerificationService service;
     private UUID userId;
@@ -102,7 +98,7 @@ class MentorVerificationServiceUploadTest {
                 .status(VerificationStatus.DRAFT)
                 .build();
 
-        lenient().when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        lenient().when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
         lenient().when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), anyCollection()))
                 .thenReturn(Optional.of(request));
         lenient().when(mentorVerificationRequestRepository.findByIdForUpdate(request.getId()))
@@ -115,7 +111,12 @@ class MentorVerificationServiceUploadTest {
                 .thenReturn(Collections.emptyList());
         lenient().when(mentorVerificationRequestEventRepository.findByRequestIdOrderByCreatedAtAsc(any()))
                 .thenReturn(Collections.emptyList());
-        lenient().when(storedFileRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        lenient().when(verificationDocumentStoragePort.registerVerificationDocument(any())).thenAnswer(invocation -> {
+            VerificationDocumentStoragePort.VerificationDocumentRegistration command = invocation.getArgument(0);
+            return new VerificationDocumentStoragePort.VerificationDocumentMetadata(
+                    UUID.randomUUID(), command.originalFilename(), command.contentType(), command.sizeBytes(),
+                    "private://" + command.storageKey());
+        });
         lenient().when(uploadIntentRepository.save(any())).thenAnswer(invocation -> {
             MentorVerificationUploadIntent intent = invocation.getArgument(0);
             if (intent.getId() == null) intent.setId(UUID.randomUUID());
@@ -142,13 +143,12 @@ class MentorVerificationServiceUploadTest {
                 mentorProfileRepository,
                 academicService,
                 mentorProfileService,
-                userRepository,
-                storedFileRepository,
                 r2StorageProvider,
                 uploadIntentRepository,
                 mentorServiceRepository,
-                mentorAvailabilitySlotRepository,
-                bookingEligibilityPolicy
+                userQueryPort,
+                bookingAvailabilityQueryPort,
+                verificationDocumentStoragePort
         );
         ReflectionTestUtils.setField(service, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(service, "requireCompletedStudentProfile", false);
@@ -166,11 +166,11 @@ class MentorVerificationServiceUploadTest {
 
         service.uploadDocument(userId, uploadRequest);
 
-        ArgumentCaptor<StoredFile> fileCaptor = ArgumentCaptor.forClass(StoredFile.class);
-        verify(storedFileRepository).save(fileCaptor.capture());
-        assertThat(fileCaptor.getValue().getStorageProvider()).isEqualTo("R2");
-        assertThat(fileCaptor.getValue().getStorageKey()).isEqualTo(intent.getStorageKey());
-        assertThat(fileCaptor.getValue().getPublicUrl()).isEqualTo("private://" + intent.getStorageKey());
+        ArgumentCaptor<VerificationDocumentStoragePort.VerificationDocumentRegistration> fileCaptor =
+                ArgumentCaptor.forClass(VerificationDocumentStoragePort.VerificationDocumentRegistration.class);
+        verify(verificationDocumentStoragePort).registerVerificationDocument(fileCaptor.capture());
+        assertThat(fileCaptor.getValue().storageProvider()).isEqualTo("R2");
+        assertThat(fileCaptor.getValue().storageKey()).isEqualTo(intent.getStorageKey());
         assertThat(intent.getStatus()).isEqualTo(MentorVerificationUploadIntentStatus.CONFIRMED);
     }
 
@@ -190,7 +190,7 @@ class MentorVerificationServiceUploadTest {
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.NOT_FOUND);
 
-        verify(storedFileRepository, never()).save(any());
+        verify(verificationDocumentStoragePort, never()).registerVerificationDocument(any());
     }
 
     @Test

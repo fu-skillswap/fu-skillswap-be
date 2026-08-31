@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponStatusRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponRedemptionResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponCreateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponListRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponStatusRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponUpdateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponRedemptionResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
@@ -53,16 +53,17 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCouponResponse> list(AdminCouponListRequest request) {
+    public PageResponse<CouponAdminPort.CouponView> list(CouponAdminPort.CouponListQuery query) {
+        AdminCouponListRequest request = listRequest(query);
         Specification<Coupon> spec = buildSpecification(request);
         Pageable pageable = request.getPageable();
         Page<Coupon> page = couponRepository.findAll(spec, pageable);
 
-        List<AdminCouponResponse> content = page.getContent().stream()
-                .map(this::toResponse)
+        List<CouponAdminPort.CouponView> content = page.getContent().stream()
+                .map(item -> view(toResponse(item)))
                 .toList();
 
-        return PageResponse.<AdminCouponResponse>builder()
+        return PageResponse.<CouponAdminPort.CouponView>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -74,14 +75,15 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCouponResponse getDetail(UUID couponId) {
+    public CouponAdminPort.CouponView getDetail(UUID couponId) {
         Coupon coupon = findCouponOrThrow(couponId);
-        return toResponse(coupon);
+        return view(toResponse(coupon));
     }
 
     @Override
     @Transactional
-    public AdminCouponResponse create(UUID adminUserId, AdminCouponCreateRequest request) {
+    public CouponAdminPort.CouponView create(UUID adminUserId, CouponAdminPort.CreateCouponCommand command) {
+        AdminCouponCreateRequest request = createRequest(command);
         String cleanCode = request.code().trim().toUpperCase(Locale.ROOT);
         if (couponRepository.existsByCode(cleanCode)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mã coupon '" + cleanCode + "' đã tồn tại trên hệ thống");
@@ -109,12 +111,13 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
         Coupon saved = couponRepository.save(coupon);
         log.info("Admin {} created coupon {} with code {}", adminUserId, saved.getId(), cleanCode);
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional
-    public AdminCouponResponse update(UUID adminUserId, UUID couponId, AdminCouponUpdateRequest request) {
+    public CouponAdminPort.CouponView update(UUID adminUserId, UUID couponId, CouponAdminPort.UpdateCouponCommand command) {
+        AdminCouponUpdateRequest request = updateRequest(command);
         Coupon coupon = findCouponOrThrow(couponId);
 
         if (coupon.getStatus() == CouponStatus.EXPIRED) {
@@ -153,12 +156,13 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
         Coupon saved = couponRepository.save(coupon);
         log.info("Admin {} updated coupon {}", adminUserId, saved.getId());
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional
-    public AdminCouponResponse changeStatus(UUID adminUserId, UUID couponId, AdminCouponStatusRequest request) {
+    public CouponAdminPort.CouponView changeStatus(UUID adminUserId, UUID couponId, CouponAdminPort.ChangeCouponStatusCommand command) {
+        AdminCouponStatusRequest request = new AdminCouponStatusRequest(enumValue(CouponStatus.class, command.status()));
         Coupon coupon = findCouponOrThrow(couponId);
         CouponStatus targetStatus = request.status();
 
@@ -169,12 +173,13 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         coupon.setStatus(targetStatus);
         Coupon saved = couponRepository.save(coupon);
         log.info("Admin {} changed coupon {} status to {}", adminUserId, saved.getId(), targetStatus);
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCouponRedemptionResponse> getRedemptions(UUID couponId, Pageable pageable) {
+    public PageResponse<CouponAdminPort.CouponRedemptionView> getRedemptions(UUID couponId, CouponAdminPort.CouponPageQuery query) {
+        Pageable pageable = pageRequest(query);
         findCouponOrThrow(couponId);
         Page<CouponRedemption> page = couponRedemptionRepository.findByCouponId(couponId, pageable);
 
@@ -185,24 +190,24 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         Map<UUID, User> userMap = userQueryPort.findUsersByIdIn(userIds).stream()
                 .collect(Collectors.toMap(User::getId, Function.identity()));
 
-        List<AdminCouponRedemptionResponse> content = page.getContent().stream()
+        List<CouponAdminPort.CouponRedemptionView> content = page.getContent().stream()
                 .map(r -> {
                     User user = userMap.get(r.getRedeemerUserId());
                     String name = user == null ? "Unknown User" : user.getFullName();
-                    return new AdminCouponRedemptionResponse(
+                    return new CouponAdminPort.CouponRedemptionView(
                             r.getId(),
                             r.getCouponId(),
                             r.getPaymentOrderId(),
                             r.getRedeemerUserId(),
                             name,
-                            r.getStatus(),
+                            r.getStatus().name(),
                             r.getDiscountScoin(),
                             r.getCreatedAt()
                     );
                 })
                 .toList();
 
-        return PageResponse.<AdminCouponRedemptionResponse>builder()
+        return PageResponse.<CouponAdminPort.CouponRedemptionView>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -258,6 +263,13 @@ public class CouponAdminPortImpl implements CouponAdminPort {
                 c.getUpdatedAt()
         );
     }
+
+    private CouponAdminPort.CouponView view(AdminCouponResponse r) { return new CouponAdminPort.CouponView(r.id(),r.code(),r.title(),r.description(),r.discountType().name(),r.discountValue(),r.maxDiscountScoin(),r.status().name(),r.startAt(),r.endAt(),r.quotaTotal(),r.quotaPerUser(),r.minOrderValueScoin(),r.applicableServiceIds(),r.applicableMentorIds(),r.totalRedemptions(),r.activeRedemptions(),r.createdAt(),r.updatedAt()); }
+    private AdminCouponListRequest listRequest(CouponAdminPort.CouponListQuery q) { AdminCouponListRequest r=new AdminCouponListRequest(); if(q==null)return r; r.setStatus(q.status()==null?null:enumValue(CouponStatus.class,q.status())); r.setDiscountType(q.discountType()==null?null:enumValue(CouponDiscountType.class,q.discountType())); r.setKeyword(q.keyword()); r.setPage(Math.max(0,q.page())); r.setSize(Math.max(1,q.size())); r.setSortBy(q.sortBy()); r.setDirection(q.direction()); return r; }
+    private AdminCouponCreateRequest createRequest(CouponAdminPort.CreateCouponCommand c) { return new AdminCouponCreateRequest(c.code(),c.title(),c.description(),enumValue(CouponDiscountType.class,c.discountType()),c.discountValue(),c.maxDiscountScoin(),c.startAt(),c.endAt(),c.quotaTotal(),c.quotaPerUser(),c.minOrderValueScoin(),c.applicableServiceIds(),c.applicableMentorIds()); }
+    private AdminCouponUpdateRequest updateRequest(CouponAdminPort.UpdateCouponCommand c) { return new AdminCouponUpdateRequest(c.code(),c.title(),c.description(),c.discountType()==null?null:enumValue(CouponDiscountType.class,c.discountType()),c.discountValue(),c.maxDiscountScoin(),c.startAt(),c.endAt(),c.quotaTotal(),c.quotaPerUser(),c.minOrderValueScoin(),c.applicableServiceIds(),c.applicableMentorIds()); }
+    private Pageable pageRequest(CouponAdminPort.CouponPageQuery q) { int page=q==null?0:Math.max(0,q.page()); int size=q==null?20:Math.min(100,Math.max(1,q.size())); String sort=q==null||q.sortBy()==null?"createdAt":q.sortBy(); org.springframework.data.domain.Sort.Direction dir; try {dir=org.springframework.data.domain.Sort.Direction.valueOf(q==null||q.direction()==null?"DESC":q.direction().toUpperCase(Locale.ROOT));}catch(Exception e){dir=org.springframework.data.domain.Sort.Direction.DESC;} return org.springframework.data.domain.PageRequest.of(page,size,org.springframework.data.domain.Sort.by(dir,sort)); }
+    private <E extends Enum<E>> E enumValue(Class<E> type,String value) { try{return Enum.valueOf(type,value);}catch(RuntimeException e){throw new BaseException(ErrorCode.BAD_REQUEST,"Giá trị coupon không hợp lệ");} }
 
     private Specification<Coupon> buildSpecification(AdminCouponListRequest request) {
         return (root, query, cb) -> {

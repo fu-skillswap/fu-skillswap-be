@@ -1,12 +1,12 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListRequest;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListFilterRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.request.BanUserRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryResponse;
 import com.fptu.exe.skillswap.modules.admin.service.AdminUserSummaryService;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserListItemResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.SystemUserResponse;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.SystemUserView;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserListItem;
 import com.fptu.exe.skillswap.modules.admin.dto.request.UnbanUserRequest;
 import com.fptu.exe.skillswap.modules.admin.service.AdminUserModerationService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -48,8 +48,8 @@ public class AdminUserController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin")
     })
     @GetMapping
-    public ApiResponse<PageResponse<AdminUserListItemResponse>> getUsers(
-            @ParameterObject @ModelAttribute AdminUserListRequest request
+    public ApiResponse<PageResponse<UserListItem>> getUsers(
+            @ParameterObject @ModelAttribute AdminUserListFilterRequest request
     ) {
         return ApiResponse.success(AdminUserModerationService.getVisibleUsers(request));
     }
@@ -77,7 +77,7 @@ public class AdminUserController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy người dùng")
     })
     @PostMapping("/{userId}/ban")
-    public ApiResponse<SystemUserResponse> banUser(
+    public ApiResponse<SystemUserView> banUser(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID userId,
             @Valid @RequestBody BanUserRequest request
@@ -96,7 +96,7 @@ public class AdminUserController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy người dùng")
     })
     @PostMapping("/{userId}/unban")
-    public ApiResponse<SystemUserResponse> unbanUser(
+    public ApiResponse<SystemUserView> unbanUser(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID userId,
             @Valid @RequestBody UnbanUserRequest request

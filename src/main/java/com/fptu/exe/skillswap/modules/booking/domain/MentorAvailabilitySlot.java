@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -33,9 +33,8 @@ public class MentorAvailabilitySlot {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_mentor"))
-    private MentorProfile mentorProfile;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "rule_id", foreignKey = @ForeignKey(name = "fk_availability_rule"))
@@ -108,20 +107,20 @@ public class MentorAvailabilitySlot {
         syncTimestampPairs();
         Instant nowUtc = DateTimeUtil.instantNow();
         if (createdAtUtc == null) createdAtUtc = nowUtc;
-        if (createdAt == null) createdAt = BookingTime.fromInstant(createdAtUtc);
+        if (createdAt == null) createdAt = BusinessTime.fromInstant(createdAtUtc);
         if (updatedAtUtc == null) updatedAtUtc = nowUtc;
-        if (updatedAt == null) updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        if (updatedAt == null) updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 
     @PreUpdate
     protected void onUpdate() {
         syncTimestampPairs();
         updatedAtUtc = DateTimeUtil.instantNow();
-        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 
     private void syncTimestampPairs() {
-        if (startTimeUtc == null) startTimeUtc = BookingTime.toInstant(startTime); else if (startTime == null) startTime = BookingTime.fromInstant(startTimeUtc);
-        if (endTimeUtc == null) endTimeUtc = BookingTime.toInstant(endTime); else if (endTime == null) endTime = BookingTime.fromInstant(endTimeUtc);
+        if (startTimeUtc == null) startTimeUtc = BusinessTime.toInstant(startTime); else if (startTime == null) startTime = BusinessTime.fromInstant(startTimeUtc);
+        if (endTimeUtc == null) endTimeUtc = BusinessTime.toInstant(endTime); else if (endTime == null) endTime = BusinessTime.fromInstant(endTimeUtc);
     }
 }

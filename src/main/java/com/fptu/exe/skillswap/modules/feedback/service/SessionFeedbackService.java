@@ -11,10 +11,10 @@ import com.fptu.exe.skillswap.modules.feedback.dto.response.SessionFeedbackRespo
 import com.fptu.exe.skillswap.modules.feedback.dto.request.SubmitFeedbackRequest;
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import jakarta.persistence.EntityManager;
@@ -33,7 +33,8 @@ public class SessionFeedbackService implements BookingFeedbackPort {
     private final SessionFeedbackRepository sessionFeedbackRepository;
     private final BookingQueryPort bookingQueryPort;
     private final MentorQueryPort mentorQueryPort;
-    private final NotificationService notificationService;
+    private final UserQueryPort userQueryPort;
+    private final NotificationCommandPort notificationCommandPort;
     private final EntityManager entityManager;
 
     @Override
@@ -51,7 +52,6 @@ public class SessionFeedbackService implements BookingFeedbackPort {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
 
-        // Lock the booking and associated mentor profile early to establish lock order and avoid deadlock
         Booking booking = bookingQueryPort.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
@@ -62,11 +62,13 @@ public class SessionFeedbackService implements BookingFeedbackPort {
         }
 
         User mentee = booking.getMentee();
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        User mentor = mentorProfile.getUser();
+        UUID mentorUserId = booking.getMentorUserId();
+        if (mentorUserId == null || (userQueryPort != null && !userQueryPort.existsById(mentorUserId))) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thông tin mentor");
+        }
 
         if (!reviewerId.equals(mentee.getId())) {
-            if (reviewerId.equals(mentor.getId())) {
+            if (reviewerId.equals(mentorUserId)) {
                 throw new BaseException(ErrorCode.ACCESS_DENIED, "Chỉ Mentee mới được quyền đánh giá Mentor");
             } else {
                 throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không tham gia buổi học này để gửi đánh giá");
@@ -74,7 +76,7 @@ public class SessionFeedbackService implements BookingFeedbackPort {
         }
 
         User reviewer = mentee;
-        User reviewee = mentor;
+        User reviewee = entityManager.getReference(User.class, mentorUserId);
 
         if (sessionFeedbackRepository.existsByBookingIdAndReviewerId(bookingId, reviewerId)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã gửi đánh giá cho buổi học này rồi");
@@ -93,20 +95,19 @@ public class SessionFeedbackService implements BookingFeedbackPort {
 
         feedback = sessionFeedbackRepository.saveAndFlush(feedback);
 
-        // If the reviewee is a Mentor, recalculate and update their MentorProfile stats
-        if (reviewee.getId().equals(mentor.getId())) {
-            updateMentorRatingStats(mentorProfile.getUserId(), request.getRating());
+        if (reviewee.getId().equals(mentorUserId)) {
+            updateMentorRatingStats(mentorUserId, request.getRating());
         }
 
-        notificationService.createNotification(
+        notificationCommandPort.publish(new NotificationCommandPort.NotificationIntent(
                 reviewee.getId(),
-                NotificationType.FEEDBACK_RECEIVED,
+                "FEEDBACK_RECEIVED",
                 "Bạn vừa nhận được đánh giá mới",
                 reviewer.getFullName() + " đã gửi đánh giá sau buổi mentoring.",
                 "BOOKING",
                 booking.getId(),
                 "/bookings/" + booking.getId()
-        );
+        ));
 
         return toResponse(feedback);
     }
@@ -124,8 +125,7 @@ public class SessionFeedbackService implements BookingFeedbackPort {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy buổi học"));
 
         UUID menteeId = booking.getMentee() != null ? booking.getMentee().getId() : null;
-        UUID mentorId = (booking.getMentorProfile() != null && booking.getMentorProfile().getUser() != null)
-                ? booking.getMentorProfile().getUser().getId() : null;
+        UUID mentorId = booking.getMentorUserId();
 
         if (!currentUserId.equals(menteeId) && !currentUserId.equals(mentorId)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền xem đánh giá của buổi học này");

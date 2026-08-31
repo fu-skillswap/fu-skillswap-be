@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
@@ -16,14 +16,18 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class GoogleCalendarFallbackNotificationListener {
 
     private final ApplicationEventPublisher eventPublisher;
-    private final BookingRepository bookingRepository;
+    private final BookingQueryPort bookingQueryPort;
     private final EmailDispatchService emailDispatchService;
+    private final UserRepository userRepository;
 
     @Async("notificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -74,7 +78,7 @@ public class GoogleCalendarFallbackNotificationListener {
     }
 
     private void sendEmailBestEffort(java.util.UUID bookingId, String errorMessage) {
-        bookingRepository.findByIdForSessionUpdate(bookingId).ifPresent(booking -> {
+        bookingQueryPort.findByIdForSessionUpdate(bookingId).ifPresent(booking -> {
             String subject = "[SkillSwap] Google Calendar chưa đồng bộ được cho buổi mentoring";
             String summary = "Hệ thống chưa thể tự đồng bộ lịch lên Google Calendar, nhưng booking của bạn trên SkillSwap vẫn còn hiệu lực.";
             String detailRows = HtmlEmailTemplate.detailRow("Mã booking", HtmlEmailTemplate.escape(bookingId.toString()))
@@ -105,14 +109,19 @@ public class GoogleCalendarFallbackNotificationListener {
                         plain,
                         "GOOGLE_CALENDAR_SYNC_FALLBACK"
                 );
-                emailDispatchService.sendHtmlOnce(
-                        "GCALENDAR_FALLBACK:" + bookingId + ":" + booking.getMentorProfile().getUser().getEmail(),
-                        booking.getMentorProfile().getUser().getEmail(),
-                        subject,
-                        html,
-                        plain,
-                        "GOOGLE_CALENDAR_SYNC_FALLBACK"
-                );
+                String mentorEmail = booking.getMentorUserId() != null
+                        ? userRepository.findById(booking.getMentorUserId()).map(User::getEmail).orElse(null)
+                        : null;
+                if (mentorEmail != null) {
+                    emailDispatchService.sendHtmlOnce(
+                            "GCALENDAR_FALLBACK:" + bookingId + ":" + mentorEmail,
+                            mentorEmail,
+                            subject,
+                            html,
+                            plain,
+                            "GOOGLE_CALENDAR_SYNC_FALLBACK"
+                    );
+                }
             } catch (Exception ex) {
                 log.warn("Google calendar fallback email failed for booking {}", bookingId, ex);
             }

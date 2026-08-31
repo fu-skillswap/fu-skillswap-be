@@ -75,7 +75,7 @@ class MentorAvailabilityWindowIntegrationTest {
                 .build());
 
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now().minusDays(1))
                 .isAvailable(true)
@@ -96,7 +96,7 @@ class MentorAvailabilityWindowIntegrationTest {
         slotEndTime = LocalDateTime.of(queryStartDate, LocalTime.of(1, 0));
 
         MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.NONE)
                 .effectiveFrom(slotStartTime.toLocalDate())
@@ -108,7 +108,7 @@ class MentorAvailabilityWindowIntegrationTest {
                 .build());
 
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .rule(rule)
                 .startTime(slotStartTime)
                 .endTime(slotEndTime)
@@ -119,7 +119,7 @@ class MentorAvailabilityWindowIntegrationTest {
                 .build());
 
         MentorService mentorService = mentorServiceRepository.saveAndFlush(MentorService.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .title("Overnight Support")
                 .description("Service bound to overnight slot")
                 .durationMinutes(60)
@@ -131,7 +131,6 @@ class MentorAvailabilityWindowIntegrationTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
                 .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
                 .slot(slot)
-                .service(mentorService)
                 .build());
     }
 
@@ -152,7 +151,7 @@ class MentorAvailabilityWindowIntegrationTest {
     @Test
     void getAvailableSlots_shouldIncludeSlotThatStartsBeforeWindowButOverlapsWindow() {
         List<MentorAvailabilitySlotResponse> responses = mentorAvailabilityService.getAvailableSlots(
-                mentorProfile,
+                mentorProfile.getUserId(),
                 queryStartDate,
                 queryStartDate.plusDays(4)
         );

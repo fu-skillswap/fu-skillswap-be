@@ -21,8 +21,8 @@ public class BlogBookmarkRepositoryImpl implements BlogBookmarkRepositoryCustom 
                 select b
                 from BlogBookmark b
                 join fetch b.post p
-                join fetch p.authorUser
-                where b.user.id = :userId
+
+                where b.userId = :userId
                 """);
         if (cursorCreatedAt != null && cursorPostId != null) {
             jpql.append(" and (b.createdAt < :cursorCreatedAt or (b.createdAt = :cursorCreatedAt and p.id < :cursorPostId))");

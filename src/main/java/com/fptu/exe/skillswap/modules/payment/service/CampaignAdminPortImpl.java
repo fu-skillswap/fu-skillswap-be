@@ -1,21 +1,24 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignBenefitUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignStatusRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCampaignUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignAnalyticsResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignBenefitResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCampaignResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignBenefitCreateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignBenefitUpdateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignCreateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignListRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignStatusRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignUpdateRequest;
+import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignAnalyticsResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignBenefitResponse;
+import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignResponse;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
+import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefitType;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.FundingSource;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.port.CampaignAdminPort;
+import com.fptu.exe.skillswap.modules.payment.port.AdminDashboardCampaignOverview;
 import com.fptu.exe.skillswap.modules.payment.repository.CampaignBenefitRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.CampaignRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.CouponRedemptionRepository;
@@ -57,16 +60,17 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCampaignResponse> list(AdminCampaignListRequest request) {
+    public PageResponse<CampaignAdminPort.CampaignView> list(CampaignAdminPort.CampaignListQuery query) {
+        AdminCampaignListRequest request = listRequest(query);
         Specification<Campaign> spec = buildSpecification(request);
         Pageable pageable = request.getPageable();
         Page<Campaign> page = campaignRepository.findAll(spec, pageable);
 
-        List<AdminCampaignResponse> content = page.getContent().stream()
-                .map(this::toResponse)
+        List<CampaignAdminPort.CampaignView> content = page.getContent().stream()
+                .map(item -> view(toResponse(item)))
                 .toList();
 
-        return PageResponse.<AdminCampaignResponse>builder()
+        return PageResponse.<CampaignAdminPort.CampaignView>builder()
                 .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -78,14 +82,15 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCampaignResponse getDetail(UUID campaignId) {
+    public CampaignAdminPort.CampaignView getDetail(UUID campaignId) {
         Campaign campaign = findCampaignOrThrow(campaignId);
-        return toResponse(campaign);
+        return view(toResponse(campaign));
     }
 
     @Override
     @Transactional
-    public AdminCampaignResponse create(UUID adminUserId, AdminCampaignCreateRequest request) {
+    public CampaignAdminPort.CampaignView create(UUID adminUserId, CampaignAdminPort.CreateCampaignCommand command) {
+        AdminCampaignCreateRequest request = createRequest(command);
         validateTimeWindow(request.startAt(), request.endAt());
 
         CampaignStatus initialStatus = CampaignStatus.DRAFT;
@@ -110,12 +115,13 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         Campaign saved = campaignRepository.save(campaign);
         log.info("Admin {} created campaign {} with status {}", adminUserId, saved.getId(), saved.getStatus());
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional
-    public AdminCampaignResponse update(UUID adminUserId, UUID campaignId, AdminCampaignUpdateRequest request) {
+    public CampaignAdminPort.CampaignView update(UUID adminUserId, UUID campaignId, CampaignAdminPort.UpdateCampaignCommand command) {
+        AdminCampaignUpdateRequest request = updateRequest(command);
         Campaign campaign = findCampaignOrThrow(campaignId);
 
         if (campaign.getStatus() == CampaignStatus.ACTIVE) {
@@ -156,12 +162,13 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         Campaign saved = campaignRepository.save(campaign);
         log.info("Admin {} updated campaign {}", adminUserId, saved.getId());
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional
-    public AdminCampaignResponse changeStatus(UUID adminUserId, UUID campaignId, AdminCampaignStatusRequest request) {
+    public CampaignAdminPort.CampaignView changeStatus(UUID adminUserId, UUID campaignId, CampaignAdminPort.ChangeCampaignStatusCommand command) {
+        AdminCampaignStatusRequest request = new AdminCampaignStatusRequest(enumValue(CampaignStatus.class, command.status()));
         Campaign campaign = findCampaignOrThrow(campaignId);
         CampaignStatus targetStatus = request.status();
 
@@ -170,12 +177,12 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         campaign.setStatus(targetStatus);
         Campaign saved = campaignRepository.save(campaign);
         log.info("Admin {} changed campaign {} status from {} to {}", adminUserId, saved.getId(), campaign.getStatus(), targetStatus);
-        return toResponse(saved);
+        return view(toResponse(saved));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public AdminCampaignAnalyticsResponse getAnalytics(UUID campaignId) {
+    public CampaignAdminPort.CampaignAnalyticsView getAnalytics(UUID campaignId) {
         Campaign campaign = findCampaignOrThrow(campaignId);
         int budget = campaign.getBudgetScoin() == null ? 0 : campaign.getBudgetScoin();
         int budgetUsed = getUsedBudget(campaign.getId());
@@ -201,10 +208,10 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
             }
         }
 
-        return new AdminCampaignAnalyticsResponse(
+        return new CampaignAdminPort.CampaignAnalyticsView(
                 campaign.getId(),
                 campaign.getName(),
-                campaign.getStatus(),
+                campaign.getStatus().name(),
                 budget,
                 budgetUsed,
                 budgetRemaining,
@@ -222,16 +229,17 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public List<AdminCampaignBenefitResponse> listBenefits(UUID campaignId) {
+    public List<CampaignAdminPort.CampaignBenefitView> listBenefits(UUID campaignId) {
         findCampaignOrThrow(campaignId);
         return campaignBenefitRepository.findByCampaignId(campaignId).stream()
-                .map(this::toBenefitResponse)
+                .map(item -> benefitView(toBenefitResponse(item)))
                 .toList();
     }
 
     @Override
     @Transactional
-    public AdminCampaignBenefitResponse createBenefit(UUID adminUserId, UUID campaignId, AdminCampaignBenefitCreateRequest request) {
+    public CampaignAdminPort.CampaignBenefitView createBenefit(UUID adminUserId, UUID campaignId, CampaignAdminPort.CreateCampaignBenefitCommand command) {
+        AdminCampaignBenefitCreateRequest request = createBenefitRequest(command);
         Campaign campaign = findCampaignOrThrow(campaignId);
 
         CampaignBenefit benefit = CampaignBenefit.builder()
@@ -250,12 +258,13 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         CampaignBenefit saved = campaignBenefitRepository.save(benefit);
         log.info("Admin {} created benefit {} for campaign {}", adminUserId, saved.getId(), campaignId);
-        return toBenefitResponse(saved);
+        return benefitView(toBenefitResponse(saved));
     }
 
     @Override
     @Transactional
-    public AdminCampaignBenefitResponse updateBenefit(UUID adminUserId, UUID campaignId, UUID benefitId, AdminCampaignBenefitUpdateRequest request) {
+    public CampaignAdminPort.CampaignBenefitView updateBenefit(UUID adminUserId, UUID campaignId, UUID benefitId, CampaignAdminPort.UpdateCampaignBenefitCommand command) {
+        AdminCampaignBenefitUpdateRequest request = updateBenefitRequest(command);
         findCampaignOrThrow(campaignId);
         CampaignBenefit benefit = campaignBenefitRepository.findById(benefitId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy benefit"));
@@ -277,7 +286,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         CampaignBenefit saved = campaignBenefitRepository.save(benefit);
         log.info("Admin {} updated benefit {} for campaign {}", adminUserId, saved.getId(), campaignId);
-        return toBenefitResponse(saved);
+        return benefitView(toBenefitResponse(saved));
     }
 
     @Override
@@ -297,7 +306,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminDashboardCampaignOverviewResponse getDashboardCampaignOverview() {
+    public AdminDashboardCampaignOverview getDashboardCampaignOverview() {
         long activeCampaigns = campaignRepository.countByStatus(CampaignStatus.ACTIVE);
         long scheduledCampaigns = campaignRepository.countByStatus(CampaignStatus.SCHEDULED);
         List<Campaign> activeCampaignList = campaignRepository.findByStatus(CampaignStatus.ACTIVE);
@@ -310,7 +319,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         long activeCoupons = couponRepository.countByStatus(CouponStatus.ACTIVE);
         long totalRedemptions = couponRedemptionRepository.count();
 
-        return new AdminDashboardCampaignOverviewResponse(
+        return new AdminDashboardCampaignOverview(
                 activeCampaigns,
                 scheduledCampaigns,
                 totalBudgetScoin,
@@ -403,6 +412,15 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 b.getUpdatedAt()
         );
     }
+
+    private CampaignAdminPort.CampaignView view(AdminCampaignResponse r) { return new CampaignAdminPort.CampaignView(r.id(), r.name(), r.description(), r.status().name(), r.fundingSource().name(), r.startAt(), r.endAt(), r.budgetScoin(), r.budgetUsedScoin(), r.budgetRemainingScoin(), r.audienceRoleCodes(), r.audienceCampusIds(), r.audienceProgramIds(), r.audienceSpecializationIds(), r.benefitCount(), r.totalBookingsCreated(), r.createdAt(), r.updatedAt()); }
+    private CampaignAdminPort.CampaignBenefitView benefitView(AdminCampaignBenefitResponse r) { return new CampaignAdminPort.CampaignBenefitView(r.id(), r.campaignId(), r.benefitType().name(), r.creditScoin(), r.couponCode(), r.couponDiscountType() == null ? null : r.couponDiscountType().name(), r.couponDiscountValue(), r.couponMaxDiscountScoin(), r.couponQuotaTotal(), r.couponQuotaPerUser(), r.couponMinOrderValueScoin(), r.active(), r.createdAt(), r.updatedAt()); }
+    private AdminCampaignListRequest listRequest(CampaignAdminPort.CampaignListQuery q) { AdminCampaignListRequest r = new AdminCampaignListRequest(); if(q==null)return r; r.setStatus(q.status()==null?null:enumValue(CampaignStatus.class,q.status())); r.setFundingSource(q.fundingSource()==null?null:enumValue(FundingSource.class,q.fundingSource())); r.setKeyword(q.keyword()); r.setPage(Math.max(0,q.page())); r.setSize(Math.max(1,q.size())); r.setSortBy(q.sortBy()); r.setDirection(q.direction()); return r; }
+    private AdminCampaignCreateRequest createRequest(CampaignAdminPort.CreateCampaignCommand c) { return new AdminCampaignCreateRequest(c.name(),c.description(),enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
+    private AdminCampaignUpdateRequest updateRequest(CampaignAdminPort.UpdateCampaignCommand c) { return new AdminCampaignUpdateRequest(c.name(),c.description(),c.fundingSource()==null?null:enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
+    private AdminCampaignBenefitCreateRequest createBenefitRequest(CampaignAdminPort.CreateCampaignBenefitCommand c) { return new AdminCampaignBenefitCreateRequest(enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin()); }
+    private AdminCampaignBenefitUpdateRequest updateBenefitRequest(CampaignAdminPort.UpdateCampaignBenefitCommand c) { return new AdminCampaignBenefitUpdateRequest(c.benefitType()==null?null:enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin(),c.active()); }
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value) { try { return Enum.valueOf(type, value); } catch (RuntimeException e) { throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị campaign không hợp lệ"); } }
 
     private Specification<Campaign> buildSpecification(AdminCampaignListRequest request) {
         return (root, query, cb) -> {

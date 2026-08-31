@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.admin.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -32,9 +31,8 @@ public class AdminNote {
     @Column(name = "target_id", nullable = false)
     private UUID targetId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "admin_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_admin_notes_admin"))
-    private User adminUser;
+    @Column(name = "admin_user_id", nullable = false)
+    private UUID adminUserId;
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String note;

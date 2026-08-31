@@ -5,6 +5,8 @@ import com.fptu.exe.skillswap.modules.admin.domain.AuditLog;
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminAuditLogListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminAuditLogItemResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AuditLogRepository;
+import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
+import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -27,6 +29,7 @@ public class AdminAuditLogService {
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "action", "entityType", "entityId");
 
     private final AuditLogRepository auditLogRepository;
+    private final UserAdminPort userAdminPort;
 
     public PageResponse<AdminAuditLogItemResponse> getAuditLogs(AdminAuditLogListRequest request) {
         AdminAuditLogListRequest safeRequest = request == null ? new AdminAuditLogListRequest() : request;
@@ -54,8 +57,8 @@ public class AdminAuditLogService {
         return new AdminAuditLogItemResponse(
                 auditLog.getId(),
                 auditLog.getCreatedAt(),
-                auditLog.getActor() == null ? null : auditLog.getActor().getId(),
-                auditLog.getActor() == null ? null : auditLog.getActor().getFullName(),
+                auditLog.getActorUserId(),
+                userAdminPort.findReference(auditLog.getActorUserId()).map(AdminUserReference::displayName).orElse(null),
                 auditLog.getEntityType(),
                 auditLog.getEntityId(),
                 auditLog.getAction().name(),

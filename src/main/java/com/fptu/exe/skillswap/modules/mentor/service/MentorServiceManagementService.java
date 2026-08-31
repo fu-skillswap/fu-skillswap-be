@@ -1,16 +1,9 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
-import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.port.MentorServiceRetirementPort;
 import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
@@ -35,7 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -44,13 +36,11 @@ public class MentorServiceManagementService {
 
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final UserRepository userRepository;
     private final MentorProfileService mentorProfileService;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
-    private final BookingRepository bookingRepository;
-    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
-    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final PaymentProperties paymentProperties;
+    private final UserQueryPort userQueryPort;
+    private final MentorServiceRetirementPort mentorServiceRetirementPort;
     private AvailabilityTemplateService availabilityTemplateService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -158,26 +148,8 @@ public class MentorServiceManagementService {
             // Activating service does not require mandatory Google Calendar connection
         }
         if (!Boolean.TRUE.equals(request.isActive())) {
-            LocalDateTime now = DateTimeUtil.now();
-            List<Booking> affectedPending = bookingRepository.findByServiceIdAndStatus(serviceId, BookingStatus.PENDING).stream()
-                    .filter(booking -> booking.getSelectedStartTime() != null && booking.getSelectedStartTime().isAfter(now))
-                    .toList();
-            if (!affectedPending.isEmpty() && !Boolean.TRUE.equals(request.rejectPendingBookings())) {
-                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "SERVICE_HAS_PENDING_BOOKINGS");
-            }
-            rejectPendingBookings(affectedPending, "MENTOR_SERVICE_DEACTIVATED");
-
-            // Retiring a service never changes confirmed booking snapshots, but it must stop
-            // reactivation from silently exposing the service through old future slots.
-            List<AvailabilitySlotService> futureBindings = availabilitySlotServiceRepository
-                    .findFutureActiveBindingsByServiceIdForUpdate(serviceId, now);
-            Set<UUID> changedSlotIds = futureBindings.stream()
-                    .map(binding -> binding.getSlot().getId())
-                    .collect(java.util.stream.Collectors.toSet());
-            if (!futureBindings.isEmpty()) {
-                availabilitySlotServiceRepository.deleteAll(futureBindings);
-                mentorAvailabilitySlotRepository.bumpVersions(changedSlotIds, DateTimeUtil.instantNow());
-            }
+            mentorServiceRetirementPort.retireFutureOffers(
+                    mentorUserId, serviceId, Boolean.TRUE.equals(request.rejectPendingBookings()));
         }
         service.setActive(request.isActive());
         touchMentorActivity(mentorProfile, DateTimeUtil.now());
@@ -283,7 +255,7 @@ public class MentorServiceManagementService {
         if (userId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        if (userRepository.findById(userId).isEmpty()) {
+        if (userQueryPort.findUserById(userId).isEmpty()) {
             throw new ResourceNotFoundException("Không tìm thấy người dùng");
         }
     }
@@ -300,18 +272,6 @@ public class MentorServiceManagementService {
                 expectedVersion,
                 currentVersion
         );
-    }
-
-    private void rejectPendingBookings(List<Booking> bookings, String reason) {
-        LocalDateTime rejectedAt = DateTimeUtil.now();
-        for (Booking booking : bookings) {
-            if (booking.getStatus() != BookingStatus.PENDING) {
-                continue;
-            }
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.SYSTEM_REJECT, rejectedAt);
-            booking.setRejectReason(reason);
-        }
-        bookingRepository.saveAll(bookings);
     }
 
     private void touchMentorActivity(MentorProfile profile, LocalDateTime activityTime) {

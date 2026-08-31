@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -16,25 +16,25 @@ import java.time.ZoneId;
  */
 public final class BookingTime {
 
-    public static final ZoneId BUSINESS_ZONE = TimeProvider.BUSINESS_ZONE;
+    public static final ZoneId BUSINESS_ZONE = BusinessTime.BUSINESS_ZONE;
 
     private BookingTime() {
     }
 
     public static LocalDateTime fromInstant(Instant value) {
-        return value == null ? null : LocalDateTime.ofInstant(value, BUSINESS_ZONE);
+        return BusinessTime.fromInstant(value);
     }
 
     public static Instant toInstant(LocalDateTime value) {
-        return value == null ? null : value.atZone(BUSINESS_ZONE).toInstant();
+        return BusinessTime.toInstant(value);
     }
 
     public static OffsetDateTime toOffsetDateTime(Instant value) {
-        return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
+        return BusinessTime.toOffsetDateTime(value);
     }
 
     public static OffsetDateTime toOffsetDateTime(LocalDateTime value) {
-        return value == null ? null : value.atZone(BUSINESS_ZONE).toOffsetDateTime();
+        return BusinessTime.toOffsetDateTime(value);
     }
 
     public static Instant resolveSelectedStartUtc(Booking booking) {

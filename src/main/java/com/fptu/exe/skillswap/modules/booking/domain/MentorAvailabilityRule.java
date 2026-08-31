@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.booking.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,9 +46,8 @@ public class MentorAvailabilityRule {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_rules_mentor"))
-    private MentorProfile mentorProfile;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "rule_type", nullable = false, length = 20)

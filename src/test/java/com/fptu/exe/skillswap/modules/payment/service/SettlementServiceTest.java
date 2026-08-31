@@ -86,7 +86,7 @@ class SettlementServiceTest {
         booking = Booking.builder()
                 .id(bookingId)
                 .mentee(mentee)
-                .mentorProfile(MentorProfile.builder().userId(mentorId).build())
+                .mentorUserId(mentorId)
                 .build();
 
         paymentOrder = PaymentOrder.builder()

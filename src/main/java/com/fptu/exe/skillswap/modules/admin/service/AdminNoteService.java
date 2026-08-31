@@ -7,15 +7,13 @@ import com.fptu.exe.skillswap.modules.admin.dto.request.AdminNoteListRequest;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminNoteResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminNoteRepository;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository;
-import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxPort;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.payment.repository.PayoutRequestRepository;
-import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;
+import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
+import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorAdminPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorVerificationAdminPort;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxAdminPort;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentAdminPort;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -38,14 +36,13 @@ public class AdminNoteService {
     private static final List<String> ALLOWED_SORT_FIELDS = List.of("createdAt", "targetType");
 
     private final AdminNoteRepository adminNoteRepository;
-    private final UserRepository userRepository;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final MentorVerificationRequestRepository mentorVerificationRequestRepository;
+    private final UserAdminPort userAdminPort;
+    private final MentorAdminPort mentorAdminPort;
+    private final MentorVerificationAdminPort mentorVerificationAdminPort;
     private final BookingQueryPort bookingQueryPort;
-    private final ForumReportRepository forumReportRepository;
-    private final PayoutRequestRepository payoutRequestRepository;
-    private final PaymentOrderRepository paymentOrderRepository;
-    private final EmailOutboxPort emailOutboxPort;
+    private final ForumAdminPort forumAdminPort;
+    private final PaymentAdminPort paymentAdminPort;
+    private final EmailOutboxAdminPort emailOutboxAdminPort;
 
     @Transactional(readOnly = true)
     public PageResponse<AdminNoteResponse> getNotes(AdminNoteListRequest request) {
@@ -72,8 +69,7 @@ public class AdminNoteService {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
 
-        User adminUser = userRepository.findById(adminUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người quản trị"));
+        AdminUserReference adminUser = userAdminPort.requireAdminReference(adminUserId);
 
         AdminNoteTargetType targetType = parseTargetType(request.getTargetType());
         validateTargetExists(targetType, request.getTargetId());
@@ -81,7 +77,7 @@ public class AdminNoteService {
         AdminNote note = adminNoteRepository.save(AdminNote.builder()
                 .targetType(targetType.name())
                 .targetId(request.getTargetId())
-                .adminUser(adminUser)
+                .adminUserId(adminUser.userId())
                 .note(request.getNote().trim())
                 .build());
 
@@ -94,20 +90,14 @@ public class AdminNoteService {
         }
 
         boolean exists = switch (targetType) {
-            case USER -> userRepository.findAdminVisibleUserById(
-                    targetId,
-                    RoleCode.MENTEE,
-                    RoleCode.MENTOR,
-                    RoleCode.ADMIN,
-                    RoleCode.SYSTEM_ADMIN
-            ).isPresent();
-            case MENTOR -> mentorProfileRepository.existsById(targetId);
-            case MENTOR_VERIFICATION_REQUEST -> mentorVerificationRequestRepository.existsById(targetId);
+            case USER -> userAdminPort.findVisibleUserSummary(targetId).isPresent();
+            case MENTOR -> mentorAdminPort.existsById(targetId);
+            case MENTOR_VERIFICATION_REQUEST -> mentorVerificationAdminPort.existsById(targetId);
             case BOOKING -> bookingQueryPort.existsById(targetId);
-            case FORUM_REPORT -> forumReportRepository.existsById(targetId);
-            case PAYOUT_REQUEST -> payoutRequestRepository.existsById(targetId);
-            case PAYMENT_ORDER -> paymentOrderRepository.existsById(targetId);
-            case EMAIL_OUTBOX -> emailOutboxPort.existsById(targetId);
+            case FORUM_REPORT -> forumAdminPort.existsReportById(targetId);
+            case PAYOUT_REQUEST -> paymentAdminPort.existsPayoutRequestById(targetId);
+            case PAYMENT_ORDER -> paymentAdminPort.existsPaymentOrderById(targetId);
+            case EMAIL_OUTBOX -> emailOutboxAdminPort.existsById(targetId);
         };
 
         if (!exists) {
@@ -121,8 +111,8 @@ public class AdminNoteService {
                 note.getTargetType(),
                 note.getTargetId(),
                 note.getNote(),
-                note.getAdminUser().getId(),
-                note.getAdminUser().getFullName(),
+                note.getAdminUserId(),
+                userAdminPort.findReference(note.getAdminUserId()).map(AdminUserReference::displayName).orElse(null),
                 note.getCreatedAt()
         );
     }

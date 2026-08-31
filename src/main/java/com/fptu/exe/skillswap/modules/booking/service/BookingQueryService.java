@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminBookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
@@ -122,12 +122,12 @@ public class BookingQueryService {
                             startTimeEndUtc,
                             pageable
                     )
-                    : bookingRepository.findByMentorProfileUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
+                    : bookingRepository.findByMentorUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
         };
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsForBookings(page.getContent())
+                ? conversationService.findConversationIdsByBookingIds(bookingIds)
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -147,7 +147,7 @@ public class BookingQueryService {
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream()
                         .map(b -> bookingResponseMapper.toBookingResponse(
-                                b, bookingToConvMap, sessionsByBookingId, paymentOrdersByBookingId, attendancesBySessionId))
+                                b, sessionsByBookingId, attendancesBySessionId, paymentOrdersByBookingId, bookingToConvMap))
                         .toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -184,7 +184,7 @@ public class BookingQueryService {
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
         Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsForBookings(page.getContent())
+                ? conversationService.findConversationIdsByBookingIds(bookingIds)
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -193,7 +193,7 @@ public class BookingQueryService {
 
         return PageResponse.<BookingResponse>builder()
                 .content(page.getContent().stream().map(b -> bookingResponseMapper.toBookingResponse(
-                        b, bookingToConvMap, sessionsByBookingId, null, attendancesBySessionId)).toList())
+                        b, sessionsByBookingId, attendancesBySessionId, null, bookingToConvMap)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -214,7 +214,7 @@ public class BookingQueryService {
 
     private void assertBookingAccess(Booking booking, UUID currentUserId) {
         boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
-        boolean isMentor = booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId());
+        boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem booking này");
         }

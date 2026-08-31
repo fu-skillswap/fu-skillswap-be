@@ -5,12 +5,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingActivityCommandPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,28 +23,35 @@ import java.time.LocalDateTime;
  * Callers must already hold the booking lock before entering this service.
  */
 @Service
-@RequiredArgsConstructor
 public class SessionFinalizationService {
 
     private final SessionRepository sessionRepository;
     private final SessionService sessionService;
-    private final MentorProfileRepository mentorProfileRepository;
+    private final MentorBookingActivityCommandPort mentorBookingActivityCommandPort;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
-    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    @Autowired
+    public SessionFinalizationService(
+            SessionRepository sessionRepository,
+            SessionService sessionService,
+            @Autowired(required = false) MentorBookingActivityCommandPort mentorBookingActivityCommandPort
+    ) {
+        this.sessionRepository = sessionRepository;
+        this.sessionService = sessionService;
+        this.mentorBookingActivityCommandPort = mentorBookingActivityCommandPort;
+    }
+
+    public SessionFinalizationService(SessionRepository sessionRepository, SessionService sessionService) {
+        this(sessionRepository, sessionService, null);
+    }
+
+    @Autowired(required = false)
     public void setTimeProvider(TimeProvider timeProvider) {
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
         }
     }
 
-    /**
-     * Records the mentor's declaration without finalizing delivery.
-     *
-     * <p>The session must remain SCHEDULED or IN_PROGRESS until mentee confirmation,
-     * auto-close, or an admin decision establishes the final outcome. A mentor's declaration
-     * alone cannot become evidence that the session was delivered.</p>
-     */
     @Transactional
     public void recordMentorReportedCompletion(Booking booking, Instant reportedAtUtc) {
         findOrCreateForUpdate(booking);
@@ -57,10 +63,6 @@ public class SessionFinalizationService {
         recordMentorReportedCompletion(booking, reportedAt != null ? BookingTime.toInstant(reportedAt) : timeProvider.instant());
     }
 
-    /**
-     * Records a delivered session exactly once. Auto-close is intentionally considered delivered
-     * by product policy when no issue was raised before the review deadline.
-     */
     @Transactional
     public void finalizeDeliveredSession(Booking booking, Instant finalizedAtUtc) {
         if (booking == null || finalizedAtUtc == null) {
@@ -70,8 +72,6 @@ public class SessionFinalizationService {
         Session session = findOrCreateForUpdate(booking);
         completeDeliveredSession(session, booking, finalizedAtUtc);
 
-        // finalizedAt is the durable idempotency boundary for mentor counters. A repeated API
-        // request or scheduler run may repair the Session but must never increment again.
         if (booking.getFinalizedAtUtc() == null && booking.getFinalizedAt() == null) {
             incrementMentorCompletionCounters(booking, finalizedAtUtc);
             booking.setFinalizedAtUtc(finalizedAtUtc);
@@ -88,11 +88,6 @@ public class SessionFinalizationService {
         finalizeDeliveredSession(booking, finalizedAt != null ? BookingTime.toInstant(finalizedAt) : timeProvider.instant());
     }
 
-    /**
-     * A partial quality/technical settlement acknowledges the session record but must not inflate
-     * the mentor's full-delivery counters. The financial outcome is intentionally handled by the
-     * caller's settlement service.
-     */
     @Transactional
     public void finalizeDisputedSessionWithoutCompletionCounter(Booking booking, Instant finalizedAtUtc) {
         if (booking == null || finalizedAtUtc == null) {
@@ -106,7 +101,6 @@ public class SessionFinalizationService {
         }
     }
 
-    /** A confirmed no-show means the session did not take place and must not count for the mentor. */
     @Transactional
     public void markSessionNotDelivered(Booking booking) {
         if (booking == null || booking.getId() == null) {
@@ -151,11 +145,6 @@ public class SessionFinalizationService {
         sessionRepository.save(session);
     }
 
-    /**
-     * There is no checkout signal yet. When delivery has been confirmed after the scheduled end,
-     * the scheduled end is the only defensible fallback for the end time. We never use the later
-     * confirm/auto-close timestamp, and never overwrite a future explicit checkout implementation.
-     */
     private void setConfirmedEndTimeWhenMissing(Session session, Booking booking, Instant finalizedAtUtc) {
         if (session.getActualEndTimeUtc() != null || session.getActualEndTime() != null) {
             return;
@@ -193,28 +182,16 @@ public class SessionFinalizationService {
     }
 
     private void incrementMentorCompletionCounters(Booking booking, Instant finalizedAtUtc) {
-        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
+        if (booking.getMentorUserId() == null || mentorBookingActivityCommandPort == null) {
             return;
         }
-        MentorProfile mentor = mentorProfileRepository.findByIdForUpdate(booking.getMentorProfile().getUserId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-        mentor.setTotalCompletedSessions(defaultInteger(mentor.getTotalCompletedSessions()) + 1);
-        mentor.setTotalSessions(defaultInteger(mentor.getTotalSessions()) + 1);
-        mentor.setLastActiveAt(BookingTime.fromInstant(finalizedAtUtc));
-        mentorProfileRepository.save(mentor);
+        mentorBookingActivityCommandPort.recordCompletedSession(booking.getMentorUserId(), finalizedAtUtc);
     }
 
     private void touchMentorActivity(Booking booking, Instant activityAtUtc) {
-        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
+        if (booking.getMentorUserId() == null || mentorBookingActivityCommandPort == null) {
             return;
         }
-        MentorProfile mentor = mentorProfileRepository.findByIdForUpdate(booking.getMentorProfile().getUserId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
-        mentor.setLastActiveAt(BookingTime.fromInstant(activityAtUtc));
-        mentorProfileRepository.save(mentor);
-    }
-
-    private int defaultInteger(Integer value) {
-        return value == null ? 0 : value;
+        mentorBookingActivityCommandPort.recordMentorActivity(booking.getMentorUserId(), activityAtUtc);
     }
 }

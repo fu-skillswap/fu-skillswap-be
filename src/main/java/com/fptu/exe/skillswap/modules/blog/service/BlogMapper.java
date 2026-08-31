@@ -13,9 +13,10 @@ import com.fptu.exe.skillswap.modules.blog.dto.BlogEngagementState;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderCardResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogPostReaderDetailResponse;
 import com.fptu.exe.skillswap.modules.blog.dto.BlogTagResponse;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBlogAuthorSummary;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorPublicArticlePreviewResponse;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBlogAuthorSummary;
+import com.fptu.exe.skillswap.modules.blog.port.BlogMentorArticlePreview;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
@@ -29,6 +30,7 @@ import java.util.Set;
 public class BlogMapper {
 
     private final ObjectProvider<StorageGateway> storageGatewayProvider;
+    private final PublicUserQueryPort publicUserQueryPort;
 
     public BlogPostReaderCardResponse toReaderCard(BlogPost post,
                                                    BlogEngagementState engagement,
@@ -76,8 +78,8 @@ public class BlogMapper {
     }
 
     /** Maps only public-safe Blog fields for mentor profile knowledge evidence. */
-    public MentorPublicArticlePreviewResponse toMentorPublicArticlePreview(BlogPost post) {
-        return new MentorPublicArticlePreviewResponse(
+    public BlogMentorArticlePreview toMentorPublicArticlePreview(BlogPost post) {
+        return new BlogMentorArticlePreview(
                 post.getId(),
                 post.getTitle(),
                 post.getSlug(),
@@ -137,9 +139,10 @@ public class BlogMapper {
     }
 
     private BlogAuthorResponse toAuthor(BlogPost post) {
-        User user = post.getAuthorUser();
+        UserSummaryRecord user = publicUserQueryPort.findUserSummaryById(post.getAuthorUserId())
+                .orElse(new UserSummaryRecord(post.getAuthorUserId(), null, "", null, Set.of(), "UNKNOWN", false));
         return new BlogAuthorResponse(
-                user.getId(), user.getFullName(), user.getAvatarUrl(),
+                user.userId(), user.fullName(), user.avatarUrl(),
                 post.getAuthorType()
         );
     }

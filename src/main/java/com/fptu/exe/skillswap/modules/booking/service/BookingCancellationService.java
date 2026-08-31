@@ -1,7 +1,9 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
@@ -11,18 +13,16 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEven
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
-import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCancelBookingRequestedEvent;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplineCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
+import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
-import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,9 +36,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.isScheduledBookingStatus;
-import static com.fptu.exe.skillswap.modules.booking.service.BookingResponseMapper.selectedStartTime;
-
 @Service
 @RequiredArgsConstructor
 public class BookingCancellationService {
@@ -50,14 +47,13 @@ public class BookingCancellationService {
 
     private final BookingRepository bookingRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    private final MentorProfileRepository mentorProfileRepository;
-    private final EntityManager entityManager;
+    private final UserQueryPort userQueryPort;
     private final SessionService sessionService;
     private final PaymentOrderService paymentOrderService;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingResponseMapper bookingResponseMapper;
     private AvailabilityTemplateService availabilityTemplateService;
-    private MentorViolationService mentorViolationService;
+    private MentorDisciplineCommandPort mentorDisciplineCommandPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -74,8 +70,8 @@ public class BookingCancellationService {
     }
 
     @Autowired(required = false)
-    void setMentorViolationService(MentorViolationService mentorViolationService) {
-        this.mentorViolationService = mentorViolationService;
+    void setMentorDisciplineCommandPort(MentorDisciplineCommandPort mentorDisciplineCommandPort) {
+        this.mentorDisciplineCommandPort = mentorDisciplineCommandPort;
     }
 
     @Transactional
@@ -83,7 +79,6 @@ public class BookingCancellationService {
         if (bookingId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
-        // Canonical order: Booking -> MentorProfile -> Slot -> payment locks.
         Booking booking = getBookingForCancellation(bookingId);
         if (!isMentorOfBooking(booking, mentorUserId)) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
@@ -99,8 +94,6 @@ public class BookingCancellationService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
         }
 
-        MentorProfile lockedMentorProfile = mentorProfileRepository.findByIdForUpdate(mentorUserId)
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);
 
@@ -109,32 +102,28 @@ public class BookingCancellationService {
 
         refreshSlotBookedFlag(slot);
 
-        if (entityManager != null) {
-            entityManager.refresh(lockedMentorProfile);
-        }
-        lockedMentorProfile.setTotalMentorCancelledBookings(defaultInteger(lockedMentorProfile.getTotalMentorCancelledBookings()) + 1);
-        touchMentorActivity(lockedMentorProfile, nowBusiness);
-        mentorProfileRepository.save(lockedMentorProfile);
-
         Booking savedBooking = bookingRepository.save(booking);
-        if (mentorViolationService != null && BookingDeadlinePolicy.isLateCancellation(minutesUntilStart)) {
-            mentorViolationService.record(mentorUserId, savedBooking.getId(), MentorViolationType.LATE_CANCELLATION,
+        if (mentorDisciplineCommandPort != null && BookingDeadlinePolicy.isLateCancellation(minutesUntilStart)) {
+            mentorDisciplineCommandPort.recordLateCancellation(mentorUserId, savedBooking.getId(),
                     "Mentor hủy booking khi còn " + minutesUntilStart + " phút trước giờ bắt đầu.");
         }
 
         if (sessionService != null) {
             sessionService.cancelForBooking(bookingId);
         }
-        eventPublisher.publishEvent(new GoogleCalendarCancelBookingRequestedEvent(bookingId, savedBooking.getStatus()));
+        eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(bookingId, savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CANCEL));
         if (paymentOrderService != null) {
             paymentOrderService.handleMentorCancellation(savedBooking);
         }
+
+        UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+        String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
 
         eventPublisher.publishEvent(new NotificationEvent(
                 savedBooking.getMentee().getId(),
                 NotificationType.BOOKING_CANCELLED_BY_MENTOR,
                 "Mentor đã hủy lịch",
-                savedBooking.getMentorProfile().getUser().getFullName() + " đã hủy lịch mentoring.",
+                mentorName + " đã hủy lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
         ));
@@ -144,7 +133,7 @@ public class BookingCancellationService {
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTOR_EMAIL)
                 .recipientEmail(savedBooking.getMentee().getEmail())
                 .recipientName(savedBooking.getMentee().getFullName())
-                .actorName(savedBooking.getMentorProfile().getUser().getFullName())
+                .actorName(mentorName)
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
                 .learningGoalTitle(savedBooking.getLearningGoalTitle())
@@ -162,7 +151,7 @@ public class BookingCancellationService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã hủy lịch học.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
@@ -175,7 +164,6 @@ public class BookingCancellationService {
         if (bookingId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
-        // Canonical order: Booking -> Slot -> payment locks.
         Booking booking = getBookingForCancellation(bookingId);
         if (menteeId == null || booking.getMentee() == null || !menteeId.equals(booking.getMentee().getId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
@@ -193,9 +181,6 @@ public class BookingCancellationService {
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);
 
-        // Classification is based on the time boundary, not the current payment
-        // state. PaymentLifecycleService will apply the split only when money was
-        // actually captured; this also keeps a concurrent late payment correct.
         boolean lateCancellation = BookingDeadlinePolicy.isLateCancellation(minutesUntilStart);
 
         BookingTransitionExecutor.apply(booking, BookingTransitionCommand.CANCEL_BY_MENTEE, nowUtc);
@@ -210,13 +195,17 @@ public class BookingCancellationService {
         if (sessionService != null) {
             sessionService.cancelForBooking(bookingId);
         }
-        eventPublisher.publishEvent(new GoogleCalendarCancelBookingRequestedEvent(bookingId, savedBooking.getStatus()));
+        eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(bookingId, savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CANCEL));
         if (paymentOrderService != null && (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || currentStatus == BookingStatus.PAID)) {
             paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
         }
 
+        UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(savedBooking.getMentorUserId()).orElse(null);
+        String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
+        String mentorEmail = mentorSummary == null ? null : mentorSummary.email();
+
         eventPublisher.publishEvent(new NotificationEvent(
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 NotificationType.BOOKING_CANCELLED_BY_MENTEE,
                 "Mentee đã hủy lịch",
                 savedBooking.getMentee().getFullName() + " đã hủy lịch mentoring.",
@@ -224,30 +213,32 @@ public class BookingCancellationService {
                 savedBooking.getId()
         ));
 
-        eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
-                .bookingId(savedBooking.getId())
-                .eventType(BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTEE_EMAIL)
-                .recipientEmail(savedBooking.getMentorProfile().getUser().getEmail())
-                .recipientName(savedBooking.getMentorProfile().getUser().getFullName())
-                .actorName(savedBooking.getMentee().getFullName())
-                .bookingStartTime(savedBooking.getSelectedStartTime())
-                .bookingEndTime(savedBooking.getSelectedEndTime())
-                .learningGoalTitle(savedBooking.getLearningGoalTitle())
-                .learningGoalDescription(savedBooking.getLearningGoalDescription())
-                .serviceTitle(savedBooking.getServiceTitleSnapshot())
-                .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
-                .serviceFree(savedBooking.getServiceIsFreeSnapshot())
-                .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
-                .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
-                .mentorResponseNote(savedBooking.getMentorResponseNote())
-                .reason(savedBooking.getCancelReason())
-                .createdAt(nowBusiness)
-                .build());
+        if (mentorEmail != null) {
+            eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
+                    .bookingId(savedBooking.getId())
+                    .eventType(BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTEE_EMAIL)
+                    .recipientEmail(mentorEmail)
+                    .recipientName(mentorName)
+                    .actorName(savedBooking.getMentee().getFullName())
+                    .bookingStartTime(savedBooking.getSelectedStartTime())
+                    .bookingEndTime(savedBooking.getSelectedEndTime())
+                    .learningGoalTitle(savedBooking.getLearningGoalTitle())
+                    .learningGoalDescription(savedBooking.getLearningGoalDescription())
+                    .serviceTitle(savedBooking.getServiceTitleSnapshot())
+                    .serviceDurationMinutes(savedBooking.getServiceDurationSnapshot())
+                    .serviceFree(savedBooking.getServiceIsFreeSnapshot())
+                    .servicePriceScoin(savedBooking.getServicePriceScoinSnapshot())
+                    .serviceExpectedOutcome(savedBooking.getServiceExpectedOutcomeSnapshot())
+                    .mentorResponseNote(savedBooking.getMentorResponseNote())
+                    .reason(savedBooking.getCancelReason())
+                    .createdAt(nowBusiness)
+                    .build());
+        }
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentee đã hủy lịch học.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
@@ -261,9 +252,9 @@ public class BookingCancellationService {
     }
 
     private boolean isMentorOfBooking(Booking booking, UUID mentorUserId) {
-        return booking.getMentorProfile() != null
+        return booking.getMentorUserId() != null
                 && mentorUserId != null
-                && mentorUserId.equals(booking.getMentorProfile().getUserId());
+                && mentorUserId.equals(booking.getMentorUserId());
     }
 
     private long minutesUntilStart(Booking booking, Instant nowUtc) {
@@ -296,17 +287,6 @@ public class BookingCancellationService {
         if (availabilityTemplateService != null) {
             availabilityTemplateService.markSlotDue(slot.getId());
         }
-    }
-
-    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityAt) {
-        if (profile == null) {
-            return;
-        }
-        profile.setLastActiveAt(activityAt != null ? activityAt : timeProvider.nowBusiness());
-    }
-
-    private int defaultInteger(Integer value) {
-        return value == null ? 0 : value;
     }
 
     private String requiredCancelReason(CancelBookingRequest request) {

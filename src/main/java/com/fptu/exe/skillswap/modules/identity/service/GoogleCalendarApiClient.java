@@ -13,6 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -32,6 +35,7 @@ public class GoogleCalendarApiClient {
     private final GoogleApiProperties googleApiProperties;
     private final ObjectMapper objectMapper;
     private final GoogleCalendarDateTimeMapper dateTimeMapper;
+    private final UserRepository userRepository;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(3))
@@ -154,9 +158,7 @@ public class GoogleCalendarApiClient {
                 Mô tả: %s
                 """.formatted(
                 booking.getMentee() == null ? "N/A" : defaultText(booking.getMentee().getFullName(), booking.getMentee().getEmail()),
-                booking.getMentorProfile() == null || booking.getMentorProfile().getUser() == null
-                        ? "N/A"
-                        : defaultText(booking.getMentorProfile().getUser().getFullName(), booking.getMentorProfile().getUser().getEmail()),
+                resolveMentorDisplayName(booking.getMentorUserId()),
                 defaultText(booking.getLearningGoalTitle(), "Mentoring session"),
                 defaultText(booking.getLearningGoalDescription(), "Không có mô tả thêm")
         ));
@@ -394,5 +396,14 @@ public class GoogleCalendarApiClient {
         public GoogleCalendarTransientException(String errorCode, String message) {
             super(errorCode, message, 503);
         }
+    }
+
+    private String resolveMentorDisplayName(UUID mentorUserId) {
+        if (mentorUserId == null) {
+            return "N/A";
+        }
+        return userRepository.findById(mentorUserId)
+                .map(u -> defaultText(u.getFullName(), u.getEmail()))
+                .orElse("N/A");
     }
 }

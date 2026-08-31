@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -82,22 +82,22 @@ public class GoogleCalendarSyncJob {
     @PrePersist
     protected void onCreate() {
         if (runAfterUtc == null) {
-            runAfterUtc = runAfter != null ? BookingTime.toInstant(runAfter) : DateTimeUtil.instantNow();
+            runAfterUtc = runAfter != null ? BusinessTime.toInstant(runAfter) : DateTimeUtil.instantNow();
         }
         if (runAfter == null) {
-            runAfter = BookingTime.fromInstant(runAfterUtc);
+            runAfter = BusinessTime.fromInstant(runAfterUtc);
         }
         if (createdAtUtc == null) {
-            createdAtUtc = createdAt != null ? BookingTime.toInstant(createdAt) : DateTimeUtil.instantNow();
+            createdAtUtc = createdAt != null ? BusinessTime.toInstant(createdAt) : DateTimeUtil.instantNow();
         }
         if (createdAt == null) {
-            createdAt = BookingTime.fromInstant(createdAtUtc);
+            createdAt = BusinessTime.fromInstant(createdAtUtc);
         }
         if (updatedAtUtc == null) {
-            updatedAtUtc = updatedAt != null ? BookingTime.toInstant(updatedAt) : createdAtUtc;
+            updatedAtUtc = updatedAt != null ? BusinessTime.toInstant(updatedAt) : createdAtUtc;
         }
         if (updatedAt == null) {
-            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+            updatedAt = BusinessTime.fromInstant(updatedAtUtc);
         }
         syncDualWriteFields();
     }
@@ -105,21 +105,21 @@ public class GoogleCalendarSyncJob {
     @PreUpdate
     protected void onUpdate() {
         updatedAtUtc = DateTimeUtil.instantNow();
-        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = BusinessTime.fromInstant(updatedAtUtc);
         syncDualWriteFields();
     }
 
     private void syncDualWriteFields() {
         if (runAfterUtc != null && runAfter == null) {
-            runAfter = BookingTime.fromInstant(runAfterUtc);
+            runAfter = BusinessTime.fromInstant(runAfterUtc);
         } else if (runAfter != null && runAfterUtc == null) {
-            runAfterUtc = BookingTime.toInstant(runAfter);
+            runAfterUtc = BusinessTime.toInstant(runAfter);
         }
 
         if (completedAtUtc != null && completedAt == null) {
-            completedAt = BookingTime.fromInstant(completedAtUtc);
+            completedAt = BusinessTime.fromInstant(completedAtUtc);
         } else if (completedAt != null && completedAtUtc == null) {
-            completedAtUtc = BookingTime.toInstant(completedAt);
+            completedAtUtc = BusinessTime.toInstant(completedAt);
         }
     }
 }

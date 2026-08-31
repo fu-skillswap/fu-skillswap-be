@@ -15,6 +15,6 @@ public interface BlogPostLikeRepository extends JpaRepository<BlogPostLike, UUID
 
     void deleteByPostIdAndUserId(UUID postId, UUID userId);
 
-    @Query("select l.post.id from BlogPostLike l where l.user.id = :userId and l.post.id in :postIds")
+    @Query("select l.post.id from BlogPostLike l where l.userId = :userId and l.post.id in :postIds")
     Set<UUID> findLikedPostIds(@Param("userId") UUID userId, @Param("postIds") Collection<UUID> postIds);
 }

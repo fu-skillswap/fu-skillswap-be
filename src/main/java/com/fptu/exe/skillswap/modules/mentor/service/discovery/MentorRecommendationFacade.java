@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.infrastructure.config.DiscoveryProperties;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRecommendationResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
@@ -24,7 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MentorRecommendationFacade {
 
-    private final StudentProfileRepository studentProfileRepository;
+    private final UserQueryPort userQueryPort;
 
     private final DiscoveryCandidateProvider discoveryCandidateProvider;
     private final DiscoveryEnrichmentService discoveryEnrichmentService;
@@ -39,7 +39,7 @@ public class MentorRecommendationFacade {
         }
 
         int safeLimit = Math.min(Math.max(limit, 1), 12);
-        StudentProfile menteeProfile = studentProfileRepository.findWithDetailsByUserId(currentUserId).orElse(null);
+        StudentProfile menteeProfile = userQueryPort.findStudentProfileWithDetailsByUserId(currentUserId).orElse(null);
 
         MentorMatchingContext context = new MentorMatchingContext(
                 currentUserId,

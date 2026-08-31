@@ -137,7 +137,7 @@ class BookingOwnershipIntegrationTest {
                 .status(UserStatus.ACTIVE)
                 .build());
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now())
                 .isAvailable(true)
@@ -151,7 +151,7 @@ class BookingOwnershipIntegrationTest {
                 .build());
         mentorService = mentorServiceRepository.saveAndFlush(
                 com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                        .mentorProfile(mentorProfile)
+                        .mentorUserId(mentorProfile.getUserId())
                         .title("Ownership Service")
                         .description("Test ownership access")
                         .durationMinutes(60)
@@ -172,7 +172,7 @@ class BookingOwnershipIntegrationTest {
     void unrelatedUser_shouldNotAccessBookingOrConversation() {
         LocalDate effectiveDate = LocalDate.now().plusDays(1);
         MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.DAILY)
                 .effectiveFrom(effectiveDate)
@@ -184,7 +184,7 @@ class BookingOwnershipIntegrationTest {
                 .build());
 
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .rule(rule)
                 .startTime(LocalDateTime.of(effectiveDate, LocalTime.of(9, 0)))
                 .endTime(LocalDateTime.of(effectiveDate, LocalTime.of(11, 0)))
@@ -196,14 +196,12 @@ class BookingOwnershipIntegrationTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
                 .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
                 .slot(slot)
-                .service(mentorService)
                 .build());
 
         var booking = bookingService.createBooking(menteeUser.getId(), new CreateBookingRequest(
                 slot.getId(),
                 mentorService.getId(),
-                slot.getStartTime(),
-                slot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                slot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
                 "Ownership help",
                 "Please help with access control"
         ));
@@ -215,7 +213,7 @@ class BookingOwnershipIntegrationTest {
         var bookingEntity = bookingRepository.findById(booking.bookingId()).orElseThrow();
         BookingStateTestSupport.setStatus(bookingEntity, BookingStatus.PAID);
         bookingRepository.saveAndFlush(bookingEntity);
-        conversationService.createDirectForAcceptedBooking(bookingEntity);
+        conversationService.createDirectForAcceptedBooking(bookingEntity.getId(), mentorUser.getId(), menteeUser.getId());
 
         BaseException bookingException = assertThrows(BaseException.class,
                 () -> bookingService.getBookingDetail(outsiderUser.getId(), booking.bookingId()));
@@ -225,11 +223,11 @@ class BookingOwnershipIntegrationTest {
                 .orElseThrow();
 
         BaseException messageReadException = assertThrows(BaseException.class,
-                () -> conversationService.getMessages(conversation.getId(), outsiderUser.getId(), PageRequest.of(0, 10), messageRepository));
+                () -> conversationService.getMessages(conversation.getId(), outsiderUser.getId(), null, 10));
         assertEquals(ErrorCode.ACCESS_DENIED, messageReadException.getErrorCode());
 
         BaseException sendMessageException = assertThrows(BaseException.class,
-                () -> conversationService.sendMessage(conversation.getId(), outsiderUser.getId(), new SendMessageRequest("Intrude"), messageRepository, userRepository));
+                () -> conversationService.sendMessage(conversation.getId(), outsiderUser.getId(), new SendMessageRequest("Intrude")));
         assertEquals(ErrorCode.ACCESS_DENIED, sendMessageException.getErrorCode());
     }
 

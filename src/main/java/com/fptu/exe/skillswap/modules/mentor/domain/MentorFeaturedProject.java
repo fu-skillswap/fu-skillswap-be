@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -31,9 +30,9 @@ public class MentorFeaturedProject {
     @Column(nullable = false, length = 200)
     private String title;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "picture_file_id", foreignKey = @ForeignKey(name = "fk_mfp_picture"))
-    private StoredFile pictureFile;
+    /** File-storage aggregate is referenced by ID; metadata is resolved at the application boundary. */
+    @Column(name = "picture_file_id")
+    private UUID pictureFileId;
 
     @Column(columnDefinition = "TEXT")
     private String content;

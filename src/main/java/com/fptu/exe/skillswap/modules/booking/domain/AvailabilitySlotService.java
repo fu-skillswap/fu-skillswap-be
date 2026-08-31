@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
@@ -18,6 +17,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "availability_slot_services")
@@ -36,21 +36,24 @@ public class AvailabilitySlotService {
     @JoinColumn(name = "slot_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_slot_services_slot"))
     private MentorAvailabilitySlot slot;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @MapsId("serviceId")
-    @JoinColumn(name = "service_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_slot_services_service"))
-    private MentorService service;
-
     @Builder.Default
     private LocalDateTime createdAt = DateTimeUtil.now();
+
+    public UUID getServiceId() {
+        return id != null ? id.getServiceId() : null;
+    }
+
+    public static AvailabilitySlotService of(MentorAvailabilitySlot slot, UUID serviceId) {
+        AvailabilitySlotService service = new AvailabilitySlotService();
+        service.setSlot(slot);
+        service.setId(new AvailabilitySlotServiceId(slot.getId(), serviceId));
+        return service;
+    }
 
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
             createdAt = DateTimeUtil.now();
-        }
-        if (id == null && slot != null && service != null) {
-            id = new AvailabilitySlotServiceId(slot.getId(), service.getId());
         }
     }
 }

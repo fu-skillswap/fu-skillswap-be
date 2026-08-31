@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.modules.booking.constant.BookingQueueConstants;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
@@ -15,14 +16,13 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingPolicyQuery;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -48,13 +48,13 @@ public class BookingCreationService {
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final UserQueryPort userQueryPort;
     private final UserLockPort userLockPort;
-    private final MentorQueryPort mentorQueryPort;
+    private final MentorBookingQueryPort mentorBookingQueryPort;
     private final BookingSlotValidator bookingSlotValidator;
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final BookingResponseMapper bookingResponseMapper;
-    private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final MentorBookingPolicyQuery mentorBookingPolicyQuery;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -90,29 +90,37 @@ public class BookingCreationService {
         MentorAvailabilitySlot slot = mentorAvailabilitySlotRepository.findByIdForUpdate(request.slotId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khung giờ mentoring"));
 
-        MentorProfile mentorProfile = slot.getMentorProfile();
-        if (mentorProfile == null || mentorProfile.getUser() == null || mentorProfile.getUserId() == null) {
+        UUID mentorUserId = slot.getMentorUserId();
+        if (mentorUserId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ hiện tại không gắn với mentor hợp lệ");
         }
-        if (mentorProfile.getUserId().equals(menteeUserId)) {
+        if (mentorUserId.equals(menteeUserId)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn không thể tự tạo booking với chính mình");
         }
-        if (mentorProfile.getUser() == null || mentorProfile.getUser().getStatus() != UserStatus.ACTIVE) {
+
+        UserSummaryRecord mentorUser = userQueryPort.findUserSummaryById(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện không còn hoạt động"));
+        if (!mentorUser.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện không còn hoạt động");
         }
-        if (mentorProfile.getStatus() != MentorStatus.ACTIVE || mentorProfile.getVerifiedAt() == null) {
+
+        MentorBookingCapability capability = mentorBookingQueryPort.getBookingCapability(mentorUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện chưa sẵn sàng nhận booking"));
+
+        if (!capability.isActiveMentor()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện chưa sẵn sàng nhận booking");
         }
-        if (!mentorProfile.isAvailable()) {
+        if (!capability.available()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện đang tạm dừng nhận mentee mới");
         }
-        if (!bookingEligibilityPolicy.isDiscoverableMentorForBooking(mentorProfile)) {
+        if (!bookingEligibilityPolicy.isDiscoverableMentorForBooking(capability)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện chưa sẵn sàng hiển thị để nhận booking");
         }
+
         Instant nowUtc = timeProvider.instant();
         LocalDateTime nowBusiness = timeProvider.nowBusiness();
-        if (mentorProfile.getBookingSuspendedUntil() != null && mentorProfile.getBookingSuspendedUntil().isAfter(nowBusiness)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor đang bị tạm khóa nhận lịch mới đến " + mentorProfile.getBookingSuspendedUntil());
+        if (capability.bookingSuspendedUntil() != null && capability.bookingSuspendedUntil().isAfter(nowBusiness)) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor đang bị tạm khóa nhận lịch mới đến " + capability.bookingSuspendedUntil());
         }
         if (!slot.isActive()) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
@@ -126,7 +134,7 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã kết thúc hoặc đã trôi qua");
         }
 
-        MentorService mentorService = resolveMentorService(request.serviceId(), mentorProfile.getUserId());
+        ServiceSlotCandidate serviceCandidate = resolveServiceCandidate(request.serviceId(), mentorUserId);
 
         Instant requestedStartAt = request.startAt();
         if (requestedStartAt == null) {
@@ -138,15 +146,15 @@ public class BookingCreationService {
                 && !vnAsUtc.isBefore(slotStartUtc) && !vnAsUtc.isAfter(slotEndUtc)) {
             requestedStartAt = vnAsUtc;
         }
-        Instant requestedEndAt = requestedStartAt.plus(Duration.ofMinutes(mentorService.getDurationMinutes()));
+        Instant requestedEndAt = requestedStartAt.plus(Duration.ofMinutes(serviceCandidate.durationMinutes()));
         LocalDateTime selectedStartTime = BookingTime.fromInstant(requestedStartAt);
         LocalDateTime selectedEndTime = BookingTime.fromInstant(requestedEndAt);
 
-        bookingSlotValidator.validateSelectedRange(slot, mentorService, requestedStartAt, requestedEndAt, nowUtc);
-        bookingSlotValidator.validateServiceAttachedToSlot(slot.getId(), mentorService.getId());
-        bookingSlotValidator.validateCandidateSelection(slot, mentorService, menteeUserId, requestedStartAt, requestedEndAt);
-        if (mentorBookingPolicyService != null) {
-            mentorBookingPolicyService.validateBookingWindow(mentorProfile.getUserId(), selectedStartTime, nowBusiness);
+        bookingSlotValidator.validateSelectedRange(slot, serviceCandidate, requestedStartAt, requestedEndAt, nowUtc);
+        bookingSlotValidator.validateServiceAttachedToSlot(slot.getId(), serviceCandidate.serviceId());
+        bookingSlotValidator.validateCandidateSelection(slot, serviceCandidate, menteeUserId, requestedStartAt, requestedEndAt);
+        if (mentorBookingPolicyQuery != null) {
+            mentorBookingPolicyQuery.validateBookingWindow(mentorUserId, selectedStartTime, nowBusiness);
         }
 
         if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
@@ -169,8 +177,8 @@ public class BookingCreationService {
 
         Booking savedBooking = bookingRepository.save(Booking.builder()
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
-                .service(mentorService)
+                .mentorUserId(mentorUserId)
+                .serviceId(serviceCandidate.serviceId())
                 .slot(slot)
                 .learningGoalTitle(trim(request.learningGoalTitle()))
                 .learningGoalDescription(trimToNull(request.learningGoalDescription()))
@@ -180,17 +188,17 @@ public class BookingCreationService {
                 .selectedEndTimeUtc(requestedEndAt)
                 .pendingExpireAt(pendingExpireAt)
                 .pendingExpireAtUtc(pendingExpireAtUtc)
-                .serviceTitleSnapshot(mentorService.getTitle())
-                .serviceDescriptionSnapshot(mentorService.getDescription())
-                .serviceDurationSnapshot(mentorService.getDurationMinutes())
-                .serviceExpectedOutcomeSnapshot(mentorService.getExpectedOutcome())
-                .serviceIsFreeSnapshot(mentorService.isFree())
-                .servicePriceScoinSnapshot(normalizedServicePrice(mentorService))
-                .maintainPostSessionChatSnapshot(mentorService.isMaintainPostSessionChat())
+                .serviceTitleSnapshot(serviceCandidate.title())
+                .serviceDescriptionSnapshot(serviceCandidate.description())
+                .serviceDurationSnapshot(serviceCandidate.durationMinutes())
+                .serviceExpectedOutcomeSnapshot(serviceCandidate.expectedOutcome())
+                .serviceIsFreeSnapshot(serviceCandidate.isFree())
+                .servicePriceScoinSnapshot(normalizedServicePrice(serviceCandidate))
+                .maintainPostSessionChatSnapshot(serviceCandidate.maintainPostSessionChat())
                 .build());
 
         eventPublisher.publishEvent(new NotificationEvent(
-                mentorProfile.getUserId(),
+                mentorUserId,
                 NotificationType.BOOKING_REQUEST_CREATED,
                 "Bạn có yêu cầu đặt lịch mới",
                 mentee.getFullName() + " đã gửi yêu cầu đặt lịch mentoring.",
@@ -201,7 +209,7 @@ public class BookingCreationService {
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Yêu cầu đặt lịch mới đã được gửi.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : nowBusiness
@@ -213,8 +221,8 @@ public class BookingCreationService {
                     "BOOKING",
                     savedBooking.getId(),
                     Map.of(
-                            "mentorUserId", String.valueOf(savedBooking.getMentorProfile().getUserId()),
-                            "serviceId", String.valueOf(mentorService.getId()),
+                            "mentorUserId", String.valueOf(savedBooking.getMentorUserId()),
+                            "serviceId", String.valueOf(serviceCandidate.serviceId()),
                             "slotId", String.valueOf(slot.getId())
                     )
             );
@@ -223,26 +231,23 @@ public class BookingCreationService {
         return bookingResponseMapper.toBookingResponse(savedBooking);
     }
 
-    private MentorService resolveMentorService(UUID serviceId, UUID mentorUserId) {
+    private ServiceSlotCandidate resolveServiceCandidate(UUID serviceId, UUID mentorUserId) {
         if (serviceId == null) {
             return null;
         }
-        if (mentorQueryPort == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn không tồn tại hoặc không thuộc mentor này");
-        }
-        MentorService mentorService = mentorQueryPort.findActiveServiceByIdAndMentorUserId(serviceId, mentorUserId)
+        ServiceSlotCandidate candidate = mentorBookingQueryPort.getActiveServiceCandidate(serviceId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn không tồn tại hoặc không thuộc mentor này"));
-        if (mentorService.getDurationMinutes() == null || mentorService.getDurationMinutes() <= 0) {
+        if (candidate.durationMinutes() == null || candidate.durationMinutes() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Gói mentoring đã chọn có thời lượng không hợp lệ");
         }
-        return mentorService;
+        return candidate;
     }
 
-    private Integer normalizedServicePrice(MentorService service) {
-        if (service == null || service.isFree()) {
+    private Integer normalizedServicePrice(ServiceSlotCandidate service) {
+        if (service == null || Boolean.TRUE.equals(service.isFree())) {
             return 0;
         }
-        return service.getPriceScoin() == null ? 0 : service.getPriceScoin();
+        return service.priceScoin() == null ? 0 : service.priceScoin();
     }
 
     private String trim(String value) {

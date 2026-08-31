@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.booking.repository;
 
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.time.LocalDateTime;
 import jakarta.persistence.LockModeType;
@@ -19,22 +19,19 @@ import jakarta.persistence.LockModeType;
 @Repository
 public interface AvailabilitySlotServiceRepository extends JpaRepository<AvailabilitySlotService, AvailabilitySlotServiceId> {
 
-    @EntityGraph(attributePaths = {"service"})
     List<AvailabilitySlotService> findBySlotIdOrderByCreatedAtAsc(UUID slotId);
 
-    @EntityGraph(attributePaths = {"service", "slot", "slot.mentorProfile"})
     @Query("""
             select slotService
             from AvailabilitySlotService slotService
             where slotService.slot.id = :slotId
-              and slotService.service.id = :serviceId
+              and slotService.id.serviceId = :serviceId
             """)
-    java.util.Optional<AvailabilitySlotService> findBySlotIdAndServiceId(
+    Optional<AvailabilitySlotService> findBySlotIdAndServiceId(
             @Param("slotId") UUID slotId,
             @Param("serviceId") UUID serviceId
     );
 
-    @EntityGraph(attributePaths = {"service"})
     @Query("""
             select slotService
             from AvailabilitySlotService slotService
@@ -47,7 +44,7 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
             select count(slotService.id) > 0
             from AvailabilitySlotService slotService
             where slotService.slot.id = :slotId
-              and slotService.service.id = :serviceId
+              and slotService.id.serviceId = :serviceId
             """)
     boolean existsBySlotIdAndServiceId(
             @Param("slotId") UUID slotId,
@@ -59,7 +56,7 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
             select slotService
             from AvailabilitySlotService slotService
             join fetch slotService.slot slot
-            where slotService.service.id = :serviceId
+            where slotService.id.serviceId = :serviceId
               and slot.isActive = true
               and slot.endTime > :now
             order by slot.id asc
@@ -70,17 +67,14 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
     );
 
     @Query("""
-            select distinct slotService.slot.mentorProfile.userId
+            select distinct slotService.slot.mentorUserId
             from AvailabilitySlotService slotService
-            where slotService.slot.mentorProfile.userId in :mentorUserIds
+            where slotService.slot.mentorUserId in :mentorUserIds
               and slotService.slot.isActive = true
               and slotService.slot.startTime >= :now
-              and slotService.service.isActive = true
-              and slotService.service.durationMinutes = :durationMinutes
             """)
-    List<UUID> findMentorUserIdsWithFutureActiveSlotServiceDuration(
+    List<UUID> findMentorUserIdsWithFutureActiveSlots(
             @Param("mentorUserIds") Collection<UUID> mentorUserIds,
-            @Param("durationMinutes") Integer durationMinutes,
             @Param("now") LocalDateTime now
     );
 

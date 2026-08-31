@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
 import com.fptu.exe.skillswap.modules.chat.dto.request.ChatAttachmentUploadIntentRequest;
@@ -13,9 +12,10 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.event.ChatMessageRealtimeDelivery;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
-import com.fptu.exe.skillswap.modules.course.domain.Course;
+import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
+import com.fptu.exe.skillswap.modules.chat.port.CourseConversationPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -38,7 +38,7 @@ import java.util.UUID;
  */
 @Service
 @RequiredArgsConstructor
-public class ChatService {
+public class ChatService implements CourseConversationPort {
 
     private final ChatRoomService chatRoomService;
     private final ChatMessageService chatMessageService;
@@ -48,9 +48,9 @@ public class ChatService {
 
     // Room & Participant Lifecycle
     @Transactional
-    public Conversation createDirectForAcceptedBooking(Booking booking) {
-        Conversation conversation = chatRoomService.createDirectForAcceptedBooking(booking);
-        chatMessageService.createBookingConfirmedSystemMessage(conversation.getId(), booking);
+    public Conversation createDirectForAcceptedBooking(UUID bookingId, UUID mentorUserId, UUID menteeUserId) {
+        Conversation conversation = chatRoomService.createDirectForAcceptedBooking(bookingId, mentorUserId, menteeUserId);
+        chatMessageService.createBookingConfirmedSystemMessage(conversation.getId(), bookingId);
         return conversation;
     }
 
@@ -75,16 +75,18 @@ public class ChatService {
     }
 
     @Transactional
-    public Conversation ensureCourseGroupConversation(Course course) {
+    public Conversation ensureCourseGroupConversation(CourseQueryPort.CourseChatContext course) {
         return chatRoomService.ensureCourseGroupConversation(course);
     }
 
     @Transactional
+    @Override
     public void addCourseStudentParticipant(UUID courseId, UUID studentUserId) {
         chatRoomService.addCourseStudentParticipant(courseId, studentUserId);
     }
 
     @Transactional
+    @Override
     public void revokeCourseStudentParticipant(UUID courseId, UUID studentUserId) {
         chatRoomService.revokeCourseStudentParticipant(courseId, studentUserId);
     }
@@ -111,8 +113,8 @@ public class ChatService {
     }
 
     @Transactional
-    public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request, MessageRepository messageRepoOverride, UserRepository userRepoOverride) {
-        return chatMessageService.sendMessage(conversationId, userId, request, messageRepoOverride, userRepoOverride);
+    public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request, MessageRepository messageRepoOverride, UserQueryPort userPortOverride) {
+        return chatMessageService.sendMessage(conversationId, userId, request, messageRepoOverride, userPortOverride);
     }
 
     @Transactional
@@ -193,8 +195,4 @@ public class ChatService {
         return chatQueryService.findConversationIdsByBookingIds(bookingIds);
     }
 
-    @Transactional(readOnly = true)
-    public Map<UUID, UUID> findConversationIdsForBookings(List<Booking> bookings) {
-        return chatQueryService.findConversationIdsForBookings(bookings);
-    }
 }

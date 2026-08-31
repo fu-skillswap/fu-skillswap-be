@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest;
 import java.sql.SQLException;
+import java.util.Set;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,22 @@ class FlywayPostgresSchemaValidationTest extends AbstractPostgreSQLIntegrationTe
                     "PostgreSQL",
                     connection.getMetaData().getDatabaseProductName(),
                     "Schema validation must run against a PostgreSQL database");
+        }
+    }
+
+    @Test
+    void v124VerificationMetadata_shouldBePresentOnMigratedSchema() throws SQLException {
+        try (var connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var result = statement.executeQuery("select column_name from information_schema.columns "
+                     + "where table_schema = current_schema() and table_name = 'mentor_verification_documents'")) {
+            Set<String> columns = new java.util.HashSet<>();
+            while (result.next()) {
+                columns.add(result.getString(1));
+            }
+            org.junit.jupiter.api.Assertions.assertTrue(columns.containsAll(Set.of(
+                    "original_filename", "content_type", "size_bytes", "file_url")),
+                    "V124 verification metadata columns are missing: " + columns);
         }
     }
 }

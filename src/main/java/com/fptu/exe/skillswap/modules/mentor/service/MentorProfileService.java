@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -17,13 +17,12 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -40,33 +39,54 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class MentorProfileService {
 
     private static final Set<Integer> SUPPORT_LEVELS = Set.of(1, 2, 3, 4);
 
     private final MentorProfileRepository mentorProfileRepository;
-    private final UserRepository userRepository;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final MentorBookingPolicyService mentorBookingPolicyService;
+    private final UserQueryPort userQueryPort;
+    private final PublicAssetUploadPort publicAssetUploadPort;
+
+    @Autowired
+    public MentorProfileService(
+            MentorProfileRepository mentorProfileRepository,
+            MentorSubjectResultRepository mentorSubjectResultRepository,
+            MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
+            MentorAchievementRepository mentorAchievementRepository,
+            ApplicationEventPublisher eventPublisher,
+            MentorBookingPolicyService mentorBookingPolicyService,
+            UserQueryPort userQueryPort,
+            PublicAssetUploadPort publicAssetUploadPort
+    ) {
+        this.mentorProfileRepository = mentorProfileRepository;
+        this.mentorSubjectResultRepository = mentorSubjectResultRepository;
+        this.mentorFeaturedProjectRepository = mentorFeaturedProjectRepository;
+        this.mentorAchievementRepository = mentorAchievementRepository;
+        this.eventPublisher = eventPublisher;
+        this.mentorBookingPolicyService = mentorBookingPolicyService;
+        this.userQueryPort = userQueryPort;
+        this.publicAssetUploadPort = publicAssetUploadPort;
+    }
 
     public MentorProfileService(
             MentorProfileRepository mentorProfileRepository,
-            UserRepository userRepository,
             MentorSubjectResultRepository mentorSubjectResultRepository,
             MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
             MentorAchievementRepository mentorAchievementRepository,
             ApplicationEventPublisher eventPublisher
     ) {
         this(mentorProfileRepository,
-                userRepository,
                 mentorSubjectResultRepository,
                 mentorFeaturedProjectRepository,
                 mentorAchievementRepository,
                 eventPublisher,
+                null,
+                null,
                 null);
     }
 
@@ -108,7 +128,7 @@ public class MentorProfileService {
         profile.setGithubUrl(cleanNullable(request.githubUrl()));
         profile.setPortfolioUrl(cleanNullable(request.portfolioUrl()));
         profile.setSupportingSubjects(buildLegacySubjectSummary(request.subjectResults()));
-        touchMentorActivity(profile, com.fptu.exe.skillswap.shared.util.DateTimeUtil.now());
+        touchMentorActivity(profile, DateTimeUtil.now());
 
         MentorProfile savedProfile = mentorProfileRepository.save(profile);
         if (mentorBookingPolicyService != null) {
@@ -128,17 +148,18 @@ public class MentorProfileService {
         requireUserId(userId);
         return mentorProfileRepository.findWithUserByUserIdForUpdate(userId)
                 .orElseGet(() -> {
-                    User user = userRepository.findById(userId)
-                            .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
+                    if (userQueryPort == null || !userQueryPort.existsById(userId)) {
+                        throw new ResourceNotFoundException("Không tìm thấy người dùng");
+                    }
                     MentorProfile profile = new MentorProfile();
-                    profile.setUser(user);
+                    profile.setUserId(userId);
                     profile.setAvailable(true);
                     return profile;
                 });
     }
 
     private MentorProfileResponse mapToResponse(MentorProfile profile) {
-        User user = profile.getUser();
+        UserSummaryRecord user = userQueryPort == null ? null : userQueryPort.findUserSummaryById(profile.getUserId()).orElse(null);
         List<MentorSubjectResultResponse> subjectResults = loadSubjectResults(profile.getUserId());
         List<MentorFeaturedProjectResponse> featuredProjects = loadFeaturedProjects(profile.getUserId());
         List<MentorAchievementResponse> achievements = loadAchievements(profile.getUserId());
@@ -149,9 +170,9 @@ public class MentorProfileService {
                 .exists(true)
                 .requiredFieldsCompleted(isRequiredFieldsCompleted(profile))
                 .userId(profile.getUserId())
-                .email(user.getEmail())
-                .displayName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
+                .email(user != null ? user.email() : null)
+                .displayName(user != null ? user.fullName() : null)
+                .avatarUrl(user != null ? user.avatarUrl() : null)
                 .mentorStatus(profile.getStatus())
                 .headline(profile.getHeadline())
                 .expertiseDescription(profile.getExpertiseDescription())
@@ -189,42 +210,128 @@ public class MentorProfileService {
     }
 
     private boolean isValidSupportLevel(Integer level) {
-        return level != null && SUPPORT_LEVELS.contains(level);
+        return level != null && SUPPORTED_SUPPORT_LEVELS().contains(level);
     }
 
-    private Integer validateSupportLevel(Integer level, String label) {
-        if (!isValidSupportLevel(level)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Mức hỗ trợ " + label + " chỉ được chọn từ 1 đến 4");
-        }
-        return level;
+    private Set<Integer> SUPPORTED_SUPPORT_LEVELS() {
+        return SUPPORT_LEVELS;
     }
 
     private void replaceSubjectResults(MentorProfile profile, List<MentorSubjectResultRequest> subjectResults) {
-        if (subjectResults == null || subjectResults.isEmpty()) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách môn - điểm không được để trống");
-        }
         mentorSubjectResultRepository.deleteByMentorProfileUserId(profile.getUserId());
-        List<MentorSubjectResult> entities = new java.util.ArrayList<>();
-        int displayOrder = 0;
-        Set<String> seenCodes = new LinkedHashSet<>();
-        for (MentorSubjectResultRequest request : subjectResults) {
-            String subjectCode = clean(request.subjectCode()).toUpperCase(java.util.Locale.ROOT);
-            if (!seenCodes.add(subjectCode)) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Mã môn không được trùng lặp: " + subjectCode);
-            }
-            BigDecimal scoreValue = request.scoreValue();
-            if (scoreValue == null || scoreValue.compareTo(BigDecimal.ZERO) < 0 || scoreValue.compareTo(BigDecimal.TEN) > 0) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Điểm môn phải từ 0 đến 10");
-            }
-            entities.add(MentorSubjectResult.builder()
-                    .mentorProfile(profile)
-                    .subjectCode(subjectCode)
-                    .subjectName(cleanNullable(request.subjectName()))
-                    .scoreValue(scoreValue)
-                    .displayOrder(displayOrder++)
-                    .build());
+        if (subjectResults == null || subjectResults.isEmpty()) {
+            return;
         }
-        mentorSubjectResultRepository.saveAll(entities);
+
+        Set<String> uniqueCodes = new LinkedHashSet<>();
+        int displayOrder = 0;
+        for (MentorSubjectResultRequest item : subjectResults) {
+            if (item == null) {
+                continue;
+            }
+            String code = cleanSubjectCode(item.subjectCode());
+            String name = cleanSubjectName(item.subjectName());
+            if (code == null || name == null) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Mã môn và tên môn học không được để trống");
+            }
+            if (!uniqueCodes.add(code)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Danh sách môn học bị trùng mã: " + code);
+            }
+            BigDecimal score = item.scoreValue();
+            if (score != null && (score.compareTo(BigDecimal.ZERO) < 0 || score.compareTo(BigDecimal.TEN) > 0)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Điểm môn " + code + " phải nằm trong khoảng từ 0.0 đến 10.0");
+            }
+
+            MentorSubjectResult entity = MentorSubjectResult.builder()
+                    .mentorProfile(profile)
+                    .subjectCode(code)
+                    .subjectName(name)
+                    .scoreValue(score)
+                    .displayOrder(displayOrder++)
+                    .build();
+            mentorSubjectResultRepository.save(entity);
+        }
+    }
+
+    private List<MentorSubjectResultResponse> loadSubjectResults(UUID userId) {
+        return mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(userId)
+                .stream()
+                .map(this::mapSubjectResult)
+                .toList();
+    }
+
+    private List<MentorFeaturedProjectResponse> loadFeaturedProjects(UUID userId) {
+        return mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(userId)
+                .stream()
+                .map(item -> mapFeaturedProject(item, userId))
+                .toList();
+    }
+
+    private List<MentorAchievementResponse> loadAchievements(UUID userId) {
+        return mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(userId)
+                .stream()
+                .map(item -> mapAchievement(item, userId))
+                .toList();
+    }
+
+    private MentorSubjectResultResponse mapSubjectResult(MentorSubjectResult item) {
+        return MentorSubjectResultResponse.builder()
+                .id(item.getId())
+                .subjectCode(item.getSubjectCode())
+                .subjectName(item.getSubjectName())
+                .scoreValue(item.getScoreValue())
+                .displayOrder(item.getDisplayOrder())
+                .build();
+    }
+
+    private MentorFeaturedProjectResponse mapFeaturedProject(MentorFeaturedProject item, UUID userId) {
+        return MentorFeaturedProjectResponse.builder()
+                .id(item.getId())
+                .title(item.getTitle())
+                .pictureUrl(item.getPictureFileId() == null || publicAssetUploadPort == null ? null
+                        : publicAssetUploadPort.requireOwnedPortfolioImage(userId, item.getPictureFileId()).publicUrl())
+                .content(item.getContent())
+                .projectDescription(item.getProjectDescription())
+                .liveDemoUrl(item.getLiveDemoUrl())
+                .displayOrder(item.getDisplayOrder())
+                .createdAt(item.getCreatedAt())
+                .updatedAt(item.getUpdatedAt())
+                .build();
+    }
+
+    private MentorAchievementResponse mapAchievement(MentorAchievement item, UUID userId) {
+        return MentorAchievementResponse.builder()
+                .id(item.getId())
+                .title(item.getTitle())
+                .pictureUrl(item.getPictureFileId() == null || publicAssetUploadPort == null ? null
+                        : publicAssetUploadPort.requireOwnedPortfolioImage(userId, item.getPictureFileId()).publicUrl())
+                .awardDescription(item.getAwardDescription())
+                .productHeader(item.getProductHeader())
+                .productDescription(item.getProductDescription())
+                .displayOrder(item.getDisplayOrder())
+                .build();
+    }
+
+    private void touchMentorActivity(MentorProfile profile, LocalDateTime when) {
+        profile.setLastActiveAt(when);
+    }
+
+    private void publishAvailabilityChangedEventIfNeeded(
+            MentorProfile profile,
+            Boolean previousAvailability,
+            Boolean currentAvailability
+    ) {
+        if (previousAvailability == null || currentAvailability == null || previousAvailability.equals(currentAvailability)) {
+            return;
+        }
+        eventPublisher.publishEvent(new MentorAvailabilityChangedEvent(
+                UUID.randomUUID(),
+                profile.getUserId(),
+                profile.getUserId(),
+                Boolean.TRUE.equals(previousAvailability),
+                Boolean.TRUE.equals(currentAvailability),
+                DateTimeUtil.now()
+        ));
     }
 
     private String buildLegacySubjectSummary(List<MentorSubjectResultRequest> subjectResults) {
@@ -232,101 +339,20 @@ public class MentorProfileService {
             return null;
         }
         return subjectResults.stream()
-                .map(subject -> {
-                    String code = subject.subjectCode() == null ? "" : subject.subjectCode().trim().toUpperCase(java.util.Locale.ROOT);
-                    String name = subject.subjectName() == null ? "" : subject.subjectName().trim();
-                    return hasText(name) ? code + " - " + name : code;
-                })
-                .filter(this::hasText)
+                .filter(item -> item != null && hasText(item.subjectCode()))
+                .map(item -> item.subjectCode().trim().toUpperCase())
+                .distinct()
                 .collect(Collectors.joining(", "));
     }
 
-    private List<MentorSubjectResultResponse> loadSubjectResults(UUID mentorUserId) {
-        return mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
-                .stream()
-                .map(this::mapSubjectResultResponse)
-                .toList();
-    }
-
-    private List<MentorFeaturedProjectResponse> loadFeaturedProjects(UUID mentorUserId) {
-        return mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
-                .stream()
-                .map(this::mapFeaturedProjectResponse)
-                .toList();
-    }
-
-    private List<MentorAchievementResponse> loadAchievements(UUID mentorUserId) {
-        return mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
-                .stream()
-                .map(this::mapAchievementResponse)
-                .toList();
-    }
-
-    private MentorSubjectResultResponse mapSubjectResultResponse(MentorSubjectResult subjectResult) {
-        return MentorSubjectResultResponse.builder()
-                .id(subjectResult.getId())
-                .subjectCode(subjectResult.getSubjectCode())
-                .subjectName(subjectResult.getSubjectName())
-                .scoreValue(subjectResult.getScoreValue())
-                .displayOrder(subjectResult.getDisplayOrder())
-                .build();
-    }
-
-    private MentorFeaturedProjectResponse mapFeaturedProjectResponse(MentorFeaturedProject project) {
-        return MentorFeaturedProjectResponse.builder()
-                .id(project.getId())
-                .title(project.getTitle())
-                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
-                .content(project.getContent())
-                .projectDescription(project.getProjectDescription())
-                .liveDemoUrl(project.getLiveDemoUrl())
-                .displayOrder(project.getDisplayOrder())
-                .createdAt(project.getCreatedAt())
-                .updatedAt(project.getUpdatedAt())
-                .build();
-    }
-
-    private MentorAchievementResponse mapAchievementResponse(MentorAchievement achievement) {
-        return MentorAchievementResponse.builder()
-                .id(achievement.getId())
-                .title(achievement.getTitle())
-                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
-                .awardDescription(achievement.getAwardDescription())
-                .achievedAt(achievement.getAchievedAt())
-                .productHeader(achievement.getProductHeader())
-                .productDescription(achievement.getProductDescription())
-                .demoUrl(achievement.getDemoUrl())
-                .displayOrder(achievement.getDisplayOrder())
-                .createdAt(achievement.getCreatedAt())
-                .updatedAt(achievement.getUpdatedAt())
-                .build();
-    }
-
-    private String clean(String value) {
-        if (!hasText(value)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu văn bản bắt buộc không được để trống");
-        }
-        return value.trim();
-    }
-
-    private String cleanNullable(String value) {
-        if (!hasText(value)) {
+    private Integer validateSupportLevel(Integer value, String fieldName) {
+        if (value == null) {
             return null;
         }
-        return value.trim();
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.trim().isEmpty();
-    }
-
-    private void touchMentorActivity(MentorProfile profile, LocalDateTime activityTime) {
-        if (profile == null || activityTime == null) {
-            return;
+        if (!SUPPORT_LEVELS.contains(value)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mức độ hỗ trợ " + fieldName + " phải từ 1 đến 4");
         }
-        if (profile.getLastActiveAt() == null || profile.getLastActiveAt().isBefore(activityTime)) {
-            profile.setLastActiveAt(activityTime);
-        }
+        return value;
     }
 
     private void requireUserId(UUID userId) {
@@ -337,26 +363,30 @@ public class MentorProfileService {
 
     private void requireProfileRequest(MentorProfileUpsertRequest request) {
         if (request == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Dữ liệu hồ sơ mentor không được để trống");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thông tin hồ sơ mentor không được để trống");
         }
     }
 
-    private void publishAvailabilityChangedEventIfNeeded(MentorProfile profile,
-                                                         Boolean previousAvailability,
-                                                         Boolean currentAvailability) {
-        if (profile == null || previousAvailability == null || currentAvailability == null) {
-            return;
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String clean(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String cleanNullable(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
         }
-        if (previousAvailability.booleanValue() == currentAvailability.booleanValue()) {
-            return;
-        }
-        eventPublisher.publishEvent(new MentorAvailabilityChangedEvent(
-                UuidUtil.generateUuidV7(),
-                profile.getUserId(),
-                profile.getUserId(),
-                previousAvailability,
-                currentAvailability,
-                DateTimeUtil.now()
-        ));
+        return value.trim();
+    }
+
+    private String cleanSubjectCode(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim().toUpperCase();
+    }
+
+    private String cleanSubjectName(String value) {
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 }

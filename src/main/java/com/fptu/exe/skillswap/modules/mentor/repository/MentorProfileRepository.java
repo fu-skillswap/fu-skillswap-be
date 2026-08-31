@@ -2,7 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -21,13 +21,16 @@ import java.util.UUID;
 @Repository
 public interface MentorProfileRepository extends JpaRepository<MentorProfile, UUID> {
 
-    @EntityGraph(attributePaths = {"user"})
-    Optional<MentorProfile> findWithUserByUserId(UUID userId);
+    @Query("select mp.userId from MentorProfile mp where mp.isAvailable = true")
+    List<UUID> findPublicMentorUserIds();
+
+    @Query("select mp from MentorProfile mp where mp.userId = :userId")
+    Optional<MentorProfile> findWithUserByUserId(@Param("userId") UUID userId);
 
     @Query(value = """
             select mp.userId
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -54,7 +57,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             countQuery = """
             select count(mp.userId)
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -85,7 +88,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @Query(value = """
             select mp.userId
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -188,7 +191,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             countQuery = """
             select count(mp.userId)
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -422,7 +425,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 null
             )
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -441,7 +444,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 null
             )
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.campus campus
             left join sp.program program
@@ -476,7 +479,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     @Query("""
             select mp.userId
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             where mp.status = :mentorStatus
               and u.status = com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE
             order by mp.verifiedAt desc nulls last, mp.updatedAt desc nulls last
@@ -484,7 +487,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     List<UUID> findActiveMentorUserIds(@Param("mentorStatus") MentorStatus mentorStatus);
 
     @Query(value = """
-            select new com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse(
+            select new com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse(
                 mp.userId,
                 u.fullName,
                 u.email,
@@ -496,7 +499,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
                 mp.createdAt
             )
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             left join com.fptu.exe.skillswap.modules.identity.domain.StudentProfile sp on sp.userId = mp.userId
             left join sp.program program
             where ((:status is not null and mp.status = :status)
@@ -512,7 +515,7 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
             """, countQuery = """
             select count(mp.userId)
             from MentorProfile mp
-            join mp.user u
+            join com.fptu.exe.skillswap.modules.identity.domain.User u on u.id = mp.userId
             where ((:status is not null and mp.status = :status)
                 or (:status is null and mp.status <> com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.DRAFT))
               and (:isAvailable is null or mp.isAvailable = :isAvailable)
@@ -541,7 +544,6 @@ public interface MentorProfileRepository extends JpaRepository<MentorProfile, UU
     Optional<MentorProfile> findByIdForUpdate(@Param("userId") UUID userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = {"user"})
     @Query("select mp from MentorProfile mp where mp.userId = :userId")
     Optional<MentorProfile> findWithUserByUserIdForUpdate(@Param("userId") UUID userId);
 

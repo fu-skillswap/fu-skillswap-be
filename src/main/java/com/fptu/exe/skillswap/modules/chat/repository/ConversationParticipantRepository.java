@@ -14,6 +14,9 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
     List<ConversationParticipant> findByConversationIdIn(List<UUID> conversationIds);
     List<ConversationParticipant> findByConversationId(UUID conversationId);
 
+    @org.springframework.data.jpa.repository.Query("select cp from ConversationParticipant cp join fetch cp.user where cp.conversation.id = :conversationId")
+    List<ConversationParticipant> findByConversationIdWithUser(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId);
+
     @org.springframework.data.jpa.repository.Query("""
         select cp from ConversationParticipant cp
         join fetch cp.user

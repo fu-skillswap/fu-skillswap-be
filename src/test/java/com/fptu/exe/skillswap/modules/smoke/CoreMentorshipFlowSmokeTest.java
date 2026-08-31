@@ -37,8 +37,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserListItemResponse;
+import com.fptu.exe.skillswap.modules.identity.dto.request.AdminUserListRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.response.AdminUserListItemResponse;
 import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminUserModerationService;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
@@ -247,7 +247,7 @@ class CoreMentorshipFlowSmokeTest {
 
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
-        slot.setMentorProfile(mp);
+        slot.setMentorUserId(mp.getUserId());
         slot.setStartTime(LocalDateTime.now().plusDays(2).withHour(10).withMinute(0).withSecond(0).withNano(0));
         slot.setEndTime(LocalDateTime.now().plusDays(2).withHour(12).withMinute(0).withSecond(0).withNano(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
@@ -261,11 +261,7 @@ class CoreMentorshipFlowSmokeTest {
                 .priceScoin(72_000)
                 .isActive(true)
                 .build());
-        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
-                .slot(slot)
-                .service(mentorService)
-                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot, mentorService.getId()));
 
         // 3 Mentees book
         User m1 = createUser("m1@test.com", "M1", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m1.getId(), "M111");
@@ -341,7 +337,7 @@ class CoreMentorshipFlowSmokeTest {
 
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();
-        slot.setMentorProfile(mp);
+        slot.setMentorUserId(mp.getUserId());
         slot.setStartTime(DateTimeUtil.now().plusDays(1).withHour(10).withMinute(0).withSecond(0).withNano(0));
         slot.setEndTime(DateTimeUtil.now().plusDays(1).withHour(12).withMinute(0).withSecond(0).withNano(0));
         slot.setRule(createAvailabilityRule(mp, slot.getStartTime(), slot.getEndTime()));
@@ -356,11 +352,7 @@ class CoreMentorshipFlowSmokeTest {
                 .priceScoin(72_000)
                 .isActive(true)
                 .build());
-        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
-                .id(new AvailabilitySlotServiceId(slot.getId(), mentorService.getId()))
-                .slot(slot)
-                .service(mentorService)
-                .build());
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot, mentorService.getId()));
 
         CreateBookingRequest bReq = new CreateBookingRequest(
                 slot.getId(),
@@ -429,7 +421,7 @@ class CoreMentorshipFlowSmokeTest {
 
     private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {
         return ruleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.NONE)
                 .effectiveFrom(startTime.toLocalDate())

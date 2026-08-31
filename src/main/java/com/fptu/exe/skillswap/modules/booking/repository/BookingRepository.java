@@ -25,8 +25,12 @@ import java.util.UUID;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findByMenteeId(UUID menteeUserId, Pageable pageable);
+
+    long countByMenteeId(UUID menteeUserId);
+
+    long countByMentorUserId(UUID mentorUserId);
 
     @Query(value = """
             select booking
@@ -50,7 +54,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             where booking.mentee.id = :menteeUserId
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMenteeBookingsOrderedByDashboardPriority(
             @Param("menteeUserId") UUID menteeUserId,
             @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
@@ -84,7 +88,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             where booking.mentee.id = :menteeUserId
               and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMenteeBookingsOrderedByDashboardPriorityUtc(
             @Param("menteeUserId") UUID menteeUserId,
             @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
@@ -109,7 +113,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
               and booking.status = :status
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMenteeBookingsByStatusAndDateRange(
             @Param("menteeUserId") UUID menteeUserId,
             @Param("status") BookingStatus status,
@@ -118,16 +122,16 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findByMenteeIdAndStatus(UUID menteeUserId, BookingStatus status, Pageable pageable);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
-    Page<Booking> findByMentorProfileUserId(UUID mentorUserId, Pageable pageable);
+    @EntityGraph(attributePaths = {"mentee", "slot"})
+    Page<Booking> findByMentorUserId(UUID mentorUserId, Pageable pageable);
 
     @Query(value = """
             select booking
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             order by
                 case
@@ -143,10 +147,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             """, countQuery = """
             select count(booking.id)
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMentorBookingsOrderedByDashboardPriority(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
@@ -161,7 +165,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query(value = """
             select booking
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
             order by
                 case
@@ -177,10 +181,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             """, countQuery = """
             select count(booking.id)
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.selectedStartTimeUtc between :startTimeStartUtc and :startTimeEndUtc
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMentorBookingsOrderedByDashboardPriorityUtc(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("primaryActionStatuses") Collection<BookingStatus> primaryActionStatuses,
@@ -195,17 +199,17 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query(value = """
             select booking
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.status = :status
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """, countQuery = """
             select count(booking.id)
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.status = :status
               and booking.selectedStartTime between :startTimeStart and :startTimeEnd
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> findMyMentorBookingsByStatusAndDateRange(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("status") BookingStatus status,
@@ -214,27 +218,27 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
-    Page<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status, Pageable pageable);
+    @EntityGraph(attributePaths = {"mentee", "slot"})
+    Page<Booking> findByMentorUserIdAndStatus(UUID mentorUserId, BookingStatus status, Pageable pageable);
 
     @Override
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Optional<Booking> findById(UUID bookingId);
 
     @Query(value = """
             select booking
             from Booking booking
             where (:status is null or booking.status = :status)
-              and (:mentorUserId is null or booking.mentorProfile.userId = :mentorUserId)
+              and (:mentorUserId is null or booking.mentorUserId = :mentorUserId)
               and (:menteeUserId is null or booking.mentee.id = :menteeUserId)
             """, countQuery = """
             select count(booking.id)
             from Booking booking
             where (:status is null or booking.status = :status)
-              and (:mentorUserId is null or booking.mentorProfile.userId = :mentorUserId)
+              and (:mentorUserId is null or booking.mentorUserId = :mentorUserId)
               and (:menteeUserId is null or booking.mentee.id = :menteeUserId)
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     Page<Booking> searchForAdmin(
             @Param("status") BookingStatus status,
             @Param("mentorUserId") UUID mentorUserId,
@@ -254,9 +258,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.id = :bookingId
             """)
@@ -267,9 +271,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.id = :bookingId
             """)
@@ -279,19 +283,15 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByMenteeIdAndStatus(UUID menteeId, BookingStatus status);
 
-    long countByMenteeId(UUID menteeId);
-
     boolean existsByMenteeIdAndServiceIdAndStatusIn(UUID menteeId, UUID serviceId, Collection<BookingStatus> statuses);
 
-    @Query("select distinct booking.mentee.id from Booking booking where booking.service.id in :serviceIds and booking.status in :statuses")
+    @Query("select distinct booking.mentee.id from Booking booking where booking.serviceId in :serviceIds and booking.status in :statuses")
     List<UUID> findDistinctMenteeIdsByServiceIdsAndStatusIn(
             @Param("serviceIds") Collection<UUID> serviceIds,
             @Param("statuses") Collection<BookingStatus> statuses
     );
 
-    long countByMentorProfileUserId(UUID mentorUserId);
-
-    boolean existsByMentorProfileUserIdAndStatusAndSelectedStartTimeAfter(
+    boolean existsByMentorUserIdAndStatusAndSelectedStartTimeAfter(
             UUID mentorUserId,
             BookingStatus status,
             LocalDateTime selectedStartTimeAfter
@@ -300,11 +300,11 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("""
             select count(booking.id) > 0
             from Booking booking
-            where booking.mentorProfile.userId = :mentorUserId
+            where booking.mentorUserId = :mentorUserId
               and booking.status = :status
               and booking.selectedStartTimeUtc > :selectedStartTimeAfterUtc
             """)
-    boolean existsByMentorProfileUserIdAndStatusAndSelectedStartTimeUtcAfter(
+    boolean existsByMentorUserIdAndStatusAndSelectedStartTimeUtcAfter(
             @Param("mentorUserId") UUID mentorUserId,
             @Param("status") BookingStatus status,
             @Param("selectedStartTimeAfterUtc") Instant selectedStartTimeAfterUtc
@@ -339,12 +339,12 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     List<Booking> findByServiceIdAndStatus(UUID serviceId, BookingStatus status);
     long countBySlotIdAndStatus(UUID slotId, BookingStatus status);
 
-    List<Booking> findByMentorProfileUserIdAndStatus(UUID mentorUserId, BookingStatus status);
+    List<Booking> findByMentorUserIdAndStatus(UUID mentorUserId, BookingStatus status);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findByStatusAndSelectedStartTimeBeforeOrderBySelectedStartTimeAsc(BookingStatus status, LocalDateTime selectedStartTimeBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findByStatusAndPendingExpireAtLessThanEqualOrderByPendingExpireAtAsc(
             BookingStatus status,
             LocalDateTime pendingExpireAt
@@ -354,7 +354,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     @Query("""
             select booking from Booking booking
             join fetch booking.mentee
-            join fetch booking.mentorProfile
+            
             left join fetch booking.slot
             where booking.status = :status
               and booking.pendingExpireAt <= :pendingExpireAt
@@ -369,9 +369,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.status in :statuses
               and booking.selectedStartTime >= :startInclusive
@@ -388,9 +388,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.status in :statuses
               and booking.selectedStartTimeUtc >= :startInclusiveUtc
@@ -404,22 +404,14 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     );
 
     @Query("""
-            select booking.mentorProfile.userId as mentorUserId,
-                   mentorUser.email as mentorEmail,
-                   mentorUser.fullName as mentorName,
-                   coalesce(booking.serviceTitleSnapshot, service.title, 'Dịch vụ mentoring') as serviceTitle,
+            select booking.mentorUserId as mentorUserId,
+                   coalesce(booking.serviceTitleSnapshot, 'Dịch vụ mentoring') as serviceTitle,
                    count(booking.id) as pendingCount
             from Booking booking
-            join booking.mentorProfile mentorProfile
-            join mentorProfile.user mentorUser
-            left join booking.service service
             where booking.status = :status
-            group by booking.mentorProfile.userId,
-                     mentorUser.email,
-                     mentorUser.fullName,
-                     booking.serviceTitleSnapshot,
-                     service.title
-            order by mentorUser.email asc, serviceTitle asc
+            group by booking.mentorUserId,
+                     booking.serviceTitleSnapshot
+            order by serviceTitle asc
             """)
     List<PendingBookingServiceCountProjection> countPendingRequestsGroupedByMentorAndService(
             @Param("status") BookingStatus status
@@ -500,7 +492,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("endTimeUtc") Instant endTimeUtc
     );
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select b
             from Booking b
@@ -518,9 +510,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.slot.id = :slotId
               and booking.status = :status
@@ -540,9 +532,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.slot.id = :slotId
               and booking.status = :status
@@ -562,9 +554,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.mentee.id = :menteeId
               and booking.status in :statuses
@@ -584,9 +576,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             select booking
             from Booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
+            
+            
+            
             left join fetch booking.slot slot
             where booking.mentee.id = :menteeId
               and booking.status in :statuses
@@ -678,10 +670,10 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countBySlotIdAndStatusIn(UUID slotId, Collection<BookingStatus> statuses);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findByStatusAndAcceptedAtBeforeOrderByAcceptedAtAsc(BookingStatus status, LocalDateTime acceptedAtBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking
@@ -721,7 +713,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             where booking.status = :status
               and booking.selectedEndTime between :startInclusive and :endExclusive
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findBookingsAboutToAutoClose(
             @Param("status") BookingStatus status,
             @Param("startInclusive") LocalDateTime startInclusive,
@@ -734,34 +726,34 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             where booking.status = :status
               and booking.selectedEndTimeUtc between :startInclusiveUtc and :endExclusiveUtc
             """)
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findBookingsAboutToAutoCloseUtc(
             @Param("status") BookingStatus status,
             @Param("startInclusiveUtc") Instant startInclusiveUtc,
             @Param("endExclusiveUtc") Instant endExclusiveUtc
     );
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findTop100ByStatusAndSelectedEndTimeBeforeOrderBySelectedEndTimeAsc(
             BookingStatus status, LocalDateTime selectedEndTimeBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findTop100ByStatusAndCompletedAtBeforeOrderByCompletedAtAsc(
             BookingStatus status, LocalDateTime completedAtBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeOrderByIssueSubmittedAtAsc(
             BookingStatus status, LocalDateTime issueSubmittedAtBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findTop100ByStatusAndIssueSubmittedAtBeforeAndAdminSlaWarningSentAtIsNullAndIssueResolvedAtIsNullOrderByIssueSubmittedAtAsc(
             BookingStatus status, LocalDateTime issueSubmittedAtBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     List<Booking> findByStatusAndPendingExpireAtUtcLessThanEqualOrderByPendingExpireAtUtcAsc(
             BookingStatus status, Instant pendingExpireAtUtc);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking
@@ -778,7 +770,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("startTimeCutoff") Instant startTimeCutoff
     );
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking
@@ -790,7 +782,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("status") BookingStatus status,
             @Param("selectedEndTimeUtcBefore") Instant selectedEndTimeUtcBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking
@@ -802,7 +794,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("status") BookingStatus status,
             @Param("completedAtUtcBefore") Instant completedAtUtcBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking
@@ -814,7 +806,7 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("status") BookingStatus status,
             @Param("issueSubmittedAtUtcBefore") Instant issueSubmittedAtUtcBefore);
 
-    @EntityGraph(attributePaths = {"mentee", "mentorProfile", "mentorProfile.user", "service", "slot"})
+    @EntityGraph(attributePaths = {"mentee", "slot"})
     @Query("""
             select booking
             from Booking booking

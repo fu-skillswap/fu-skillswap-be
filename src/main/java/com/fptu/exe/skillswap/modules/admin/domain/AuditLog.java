@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.admin.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -30,9 +29,8 @@ public class AuditLog {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "actor_user_id", foreignKey = @ForeignKey(name = "fk_audit_logs_actor"))
-    private User actor;
+    @Column(name = "actor_user_id")
+    private UUID actorUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

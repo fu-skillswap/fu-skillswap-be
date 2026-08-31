@@ -15,6 +15,6 @@ public interface BlogBookmarkRepository extends JpaRepository<BlogBookmark, UUID
 
     void deleteByPostIdAndUserId(UUID postId, UUID userId);
 
-    @Query("select b.post.id from BlogBookmark b where b.user.id = :userId and b.post.id in :postIds")
+    @Query("select b.post.id from BlogBookmark b where b.userId = :userId and b.post.id in :postIds")
     Set<UUID> findBookmarkedPostIds(@Param("userId") UUID userId, @Param("postIds") Collection<UUID> postIds);
 }

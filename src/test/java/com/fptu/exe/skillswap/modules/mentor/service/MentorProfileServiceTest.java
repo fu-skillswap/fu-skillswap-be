@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
@@ -37,7 +36,6 @@ import static org.mockito.Mockito.when;
 class MentorProfileServiceTest {
 
     @Mock private MentorProfileRepository mentorProfileRepository;
-    @Mock private UserRepository userRepository;
     @Mock private MentorSubjectResultRepository mentorSubjectResultRepository;
     @Mock private MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     @Mock private MentorAchievementRepository mentorAchievementRepository;
@@ -52,7 +50,6 @@ class MentorProfileServiceTest {
     void setUp() {
         mentorProfileService = new MentorProfileService(
                 mentorProfileRepository,
-                userRepository,
                 mentorSubjectResultRepository,
                 mentorFeaturedProjectRepository,
                 mentorAchievementRepository,

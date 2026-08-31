@@ -9,7 +9,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
+import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -38,6 +38,7 @@ public class BookingMeetingService {
     private final ApplicationEventPublisher eventPublisher;
     private final MeetingProviderFactory meetingProviderFactory;
     private final BookingResponseMapper bookingResponseMapper;
+    private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -101,24 +102,25 @@ public class BookingMeetingService {
         Booking savedBooking = bookingRepository.save(booking);
 
         if (meetingChanged) {
+            String mentorName = savedBooking.getMentorUserId() != null && userQueryPort != null
+                    ? userQueryPort.findUserSummaryById(savedBooking.getMentorUserId()).map(com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord::fullName).orElse("Mentor")
+                    : "Mentor";
             eventPublisher.publishEvent(new NotificationEvent(
                     savedBooking.getMentee().getId(),
                     NotificationType.MEETING_LINK_UPDATED,
                     "Thông tin buổi học đã được cập nhật",
-                    savedBooking.getMentorProfile().getUser().getFullName() + " đã cập nhật link hoặc địa điểm học.",
+                    mentorName + " đã cập nhật link hoặc địa điểm học.",
                     "BOOKING",
                     savedBooking.getId()
             ));
-            eventPublisher.publishEvent(new GoogleCalendarUpdateBookingRequestedEvent(
-                    savedBooking.getId(),
-                    savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
-            ));
+            eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(
+                    savedBooking.getId(), savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.UPDATE));
         }
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
                 savedBooking.getMentee().getId(),
-                savedBooking.getMentorProfile().getUserId(),
+                savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Thông tin phòng học đã được cập nhật.",
                 savedBooking.getUpdatedAt() != null ? savedBooking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -136,7 +138,7 @@ public class BookingMeetingService {
         }
         Booking booking = bookingRepository.findByIdForMentorDecision(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        if (booking.getMentorProfile() == null || !mentorUserId.equals(booking.getMentorProfile().getUserId())) {
+        if (booking.getMentorUserId() == null || !mentorUserId.equals(booking.getMentorUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền thao tác trên booking này");
         }
         return booking;

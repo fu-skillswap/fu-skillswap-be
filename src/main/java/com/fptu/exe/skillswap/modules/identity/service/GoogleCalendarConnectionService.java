@@ -12,8 +12,6 @@ import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort
 import com.fptu.exe.skillswap.modules.identity.port.MentorCalendarEligibilityPort;
 import com.fptu.exe.skillswap.modules.identity.repository.GoogleCalendarConnectionRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -47,7 +45,7 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
     private final GoogleOAuthStateService googleOAuthStateService;
     private final GoogleApiProperties googleApiProperties;
     private final MentorCalendarEligibilityPort mentorCalendarEligibilityPort;
-    private BookingRepository bookingRepository;
+    private final com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -55,11 +53,6 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
         }
-    }
-
-    @Autowired(required = false)
-    void setBookingRepository(BookingRepository bookingRepository) {
-        this.bookingRepository = bookingRepository;
     }
 
     public GoogleAuthorizationContextResponse issueAuthorizationContext(
@@ -148,8 +141,8 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
                         "Cần tắt toàn bộ dịch vụ mentoring trước khi ngắt Google Calendar"
                 );
             }
-            if (bookingRepository != null && bookingRepository.existsByMentorProfileUserIdAndStatusAndSelectedStartTimeUtcAfter(
-                    userId, BookingStatus.PAID, timeProvider.instant())) {
+            if (bookingAvailabilityQueryPort != null && bookingAvailabilityQueryPort.hasPaidFutureBookingsForMentor(
+                    userId, timeProvider.instant())) {
                 throw new BaseException(
                         ErrorCode.GOOGLE_CALENDAR_DISCONNECT_BLOCKED,
                         "Không thể ngắt Google Calendar khi còn booking đã thanh toán trong tương lai"
@@ -305,8 +298,8 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         boolean connected = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.ACTIVE;
         boolean needsReconnect = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.REQUIRES_RECONNECT;
         OffsetDateTime lastSyncAtOffset = connection.getLastSyncAtUtc() != null
-                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAtUtc())
-                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
+                ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(connection.getLastSyncAtUtc())
+                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
         return new UserMeGoogleCalendarView(
                 connected,
                 connected,
@@ -321,8 +314,8 @@ public class GoogleCalendarConnectionService implements GoogleCalendarConnection
         boolean connected = connectedOverride && connection.getConnectionStatus() == GoogleCalendarConnectionStatus.ACTIVE;
         boolean needsReconnect = connection.getConnectionStatus() == GoogleCalendarConnectionStatus.REQUIRES_RECONNECT;
         OffsetDateTime lastSyncAtOffset = connection.getLastSyncAtUtc() != null
-                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAtUtc())
-                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
+                ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(connection.getLastSyncAtUtc())
+                : (connection.getLastSyncAt() != null ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(connection.getLastSyncAt()) : null);
         return new GoogleCalendarStatusResponse(
                 connected,
                 connected,

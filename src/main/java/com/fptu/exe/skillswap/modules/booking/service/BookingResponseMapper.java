@@ -1,150 +1,95 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionKind;
-import com.fptu.exe.skillswap.modules.booking.service.BookingCancellationRefundPolicy;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingLifecycleStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStateMapper;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
-import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
-import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
-import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendanceSummary;
-import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
+import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.booking.domain.*;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.SessionAttendanceResponse;
-import com.fptu.exe.skillswap.modules.booking.port.BookingFeedbackPort;
-import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
-import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
-import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
-import com.fptu.exe.skillswap.shared.exception.BaseException;
-import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import com.fptu.exe.skillswap.shared.time.TimeProvider;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import java.time.Clock;
+import java.util.*;
 
 @Component
 public class BookingResponseMapper {
 
-    private final SessionService sessionService;
-    private final ConversationService conversationService;
-    private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
-    private final TimeProvider timeProvider;
-    private final SessionAttendanceRepository sessionAttendanceRepository;
+    private final UserQueryPort userQueryPort;
+    private SessionService sessionService;
+    private SessionAttendanceRepository sessionAttendanceRepository;
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
-    private BookingFeedbackPort bookingFeedbackPort;
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired
-    public BookingResponseMapper(SessionService sessionService,
-                                 ConversationService conversationService,
-                                 PaymentOrderRepository paymentOrderRepository,
-                                 PaymentProperties paymentProperties,
-                                 @Autowired(required = false) TimeProvider timeProvider,
-                                 SessionAttendanceRepository sessionAttendanceRepository) {
-        this.sessionService = sessionService;
-        this.conversationService = conversationService;
-        this.paymentOrderRepository = paymentOrderRepository;
+    public BookingResponseMapper(PaymentProperties paymentProperties, UserQueryPort userQueryPort) {
         this.paymentProperties = paymentProperties;
-        this.timeProvider = timeProvider != null ? timeProvider : TimeProvider.from(Clock.systemUTC());
+        this.userQueryPort = userQueryPort;
+    }
+
+    public BookingResponseMapper(PaymentProperties paymentProperties) {
+        this(paymentProperties, null);
+    }
+
+    @Autowired(required = false)
+    public void setTimeProvider(TimeProvider timeProvider) {
+        if (timeProvider != null) {
+            this.timeProvider = timeProvider;
+        }
+    }
+
+    @Autowired(required = false)
+    void setSessionService(SessionService sessionService) {
+        this.sessionService = sessionService;
+    }
+
+    @Autowired(required = false)
+    void setSessionAttendanceRepository(SessionAttendanceRepository sessionAttendanceRepository) {
         this.sessionAttendanceRepository = sessionAttendanceRepository;
     }
 
     @Autowired(required = false)
-    void setBookingFeedbackPort(BookingFeedbackPort bookingFeedbackPort) {
-        this.bookingFeedbackPort = bookingFeedbackPort;
-    }
-
-    @Autowired
     void setBookingIssueResolutionRepository(BookingIssueResolutionRepository bookingIssueResolutionRepository) {
         this.bookingIssueResolutionRepository = bookingIssueResolutionRepository;
-    }
-
-    public BookingResponseMapper(SessionService sessionService,
-                                 ConversationService conversationService,
-                                 PaymentOrderRepository paymentOrderRepository,
-                                 PaymentProperties paymentProperties,
-                                 TimeProvider timeProvider) {
-        this(sessionService, conversationService, paymentOrderRepository, paymentProperties, timeProvider, null);
-    }
-
-    public BookingResponseMapper(SessionService sessionService,
-                                 ConversationService conversationService,
-                                 PaymentOrderRepository paymentOrderRepository,
-                                 PaymentProperties paymentProperties) {
-        this(sessionService, conversationService, paymentOrderRepository, paymentProperties, null, null);
     }
 
     public BookingResponse toBookingResponse(Booking booking) {
         return toBookingResponse(booking, null, null, null, null);
     }
 
-    public BookingResponse toBookingResponse(Booking booking, Map<UUID, UUID> bookingToConversationMap) {
-        return toBookingResponse(booking, bookingToConversationMap, null, null, null);
-    }
-
-    public BookingResponse toBookingResponse(Booking booking,
-                                            Map<UUID, UUID> bookingToConversationMap,
-                                            Map<UUID, Session> sessionsByBookingId) {
-        return toBookingResponse(booking, bookingToConversationMap, sessionsByBookingId, null, null);
-    }
-
-    public BookingResponse toBookingResponse(Booking booking,
-                                            Map<UUID, UUID> bookingToConversationMap,
-                                            Map<UUID, Session> sessionsByBookingId,
-                                            Map<UUID, PaymentOrder> paymentOrdersByBookingId) {
-        return toBookingResponse(booking, bookingToConversationMap, sessionsByBookingId, paymentOrdersByBookingId, null);
-    }
-
-    public BookingResponse toBookingResponse(Booking booking,
-                                            Map<UUID, UUID> bookingToConversationMap,
-                                            Map<UUID, Session> sessionsByBookingId,
-                                            Map<UUID, PaymentOrder> paymentOrdersByBookingId,
-                                            Map<UUID, List<SessionAttendance>> attendancesBySessionId) {
+    public BookingResponse toBookingResponse(
+            Booking booking,
+            Map<UUID, Session> sessionsByBookingId,
+            Map<UUID, List<SessionAttendance>> attendancesBySessionId,
+            Map<UUID, PaymentOrder> paymentOrdersByBookingId,
+            Map<UUID, UUID> bookingToConversationMap
+    ) {
         if (booking == null) {
             return null;
         }
 
+        UUID mentorUserId = booking.getMentorUserId();
+        UserSummaryRecord mentorUser = mentorUserId != null && userQueryPort != null
+                ? userQueryPort.findUserSummaryById(mentorUserId).orElse(null)
+                : null;
         User mentee = booking.getMentee();
-        MentorProfile mentorProfile = booking.getMentorProfile();
-        User mentorUser = mentorProfile == null ? null : mentorProfile.getUser();
-        MentorService mentorService = booking.getService();
         MentorAvailabilitySlot slot = booking.getSlot();
-        PaymentOrder paymentOrder = resolvePaymentOrder(booking, paymentOrdersByBookingId);
 
         Session session = null;
-        if (sessionsByBookingId != null) {
+        if (sessionsByBookingId != null && sessionsByBookingId.containsKey(booking.getId())) {
             session = sessionsByBookingId.get(booking.getId());
         }
         if (session == null && sessionService != null) {
@@ -164,14 +109,6 @@ public class BookingResponseMapper {
         UUID conversationId = null;
         if (bookingToConversationMap != null && bookingToConversationMap.containsKey(booking.getId())) {
             conversationId = bookingToConversationMap.get(booking.getId());
-        } else if (conversationService != null) {
-            Conversation conv = conversationService.findByBookingId(booking.getId());
-            if (conv == null && mentee != null && mentee.getId() != null && mentorUser != null && mentorUser.getId() != null) {
-                conv = conversationService.findDirectByParticipants(mentorUser.getId(), mentee.getId());
-            }
-            if (conv != null) {
-                conversationId = conv.getId();
-            }
         }
 
         UUID currentUserId = null;
@@ -181,7 +118,7 @@ public class BookingResponseMapper {
         }
 
         boolean isMenteeUser = currentUserId != null && mentee != null && currentUserId.equals(mentee.getId());
-        boolean isMentorUser = currentUserId != null && mentorProfile != null && currentUserId.equals(mentorProfile.getUserId());
+        boolean isMentorUser = currentUserId != null && mentorUserId != null && currentUserId.equals(mentorUserId);
 
         Instant nowUtc = timeProvider.instant();
         Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);
@@ -197,9 +134,18 @@ public class BookingResponseMapper {
         boolean canJoin = false;
         boolean canReportIssue = false;
         boolean canRespondIssue = false;
-        boolean canSubmitFeedback = false;
-        boolean currentUserCheckedIn = false;
         boolean canCheckIn = false;
+        boolean currentUserCheckedIn = false;
+        boolean canSubmitFeedback = false;
+
+        PaymentOrder paymentOrder = resolvePaymentOrder(booking, paymentOrdersByBookingId);
+
+        BookingCompletionOutcome completionOutcome = booking.getCompletionOutcome();
+        if (completionOutcome == null) {
+            completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
+        }
+        BookingLifecycleStatus bookingLifecycleStatus = BookingStateMapper.toLifecycleStatus(booking, paymentOrder);
+        BookingPaymentStatus bookingPaymentStatus = BookingStateMapper.toPaymentStatus(booking, paymentOrder);
 
         if (currentUserId != null) {
             boolean beforeSession = startUtc != null && nowUtc.isBefore(startUtc);
@@ -226,6 +172,7 @@ public class BookingResponseMapper {
                     && BookingActionPolicy.canJoin(booking.getStatus(), nowUtc, startUtc, endUtc, hasMeetingAccess);
             canReportIssue = (isMenteeUser || isMentorUser)
                     && BookingActionPolicy.canReportIssue(booking.getStatus(), nowUtc, endUtc);
+
             Instant issueSubmittedUtc = booking.getIssueSubmittedAtUtc() != null
                     ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
             Instant issueRespondedUtc = booking.getIssueRespondedAtUtc() != null
@@ -237,50 +184,33 @@ public class BookingResponseMapper {
                     && !currentUserId.equals(booking.getIssueSubmittedByUserId())
                     && nowUtc.isBefore(BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(issueSubmittedUtc));
 
-            BookingCompletionOutcome canonicalOutcome = booking.getCompletionOutcome();
-            if (canonicalOutcome == null) {
-                canonicalOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
-            }
-            boolean hasFeedback = bookingFeedbackPort != null && isMenteeUser
-                    && bookingFeedbackPort.hasSubmittedFeedback(booking.getId(), currentUserId);
-
-            canSubmitFeedback = isMenteeUser
-                    && booking.getStatus() == BookingStatus.COMPLETED
-                    && (canonicalOutcome == BookingCompletionOutcome.USER_CONFIRMED || canonicalOutcome == BookingCompletionOutcome.AUTO_CLOSED)
-                    && !hasFeedback;
-
-            SessionParticipantRole currentRole = isMentorUser ? SessionParticipantRole.MENTOR
-                    : isMenteeUser ? SessionParticipantRole.MENTEE : null;
-            currentUserCheckedIn = currentRole != null && attendances.stream()
-                    .anyMatch(item -> item.getParticipantRole() == currentRole);
-            canCheckIn = !currentUserCheckedIn && currentRole != null && session != null
+            canSubmitFeedback = isMenteeUser && booking.getStatus() == BookingStatus.COMPLETED;
+            SessionParticipantRole role = isMentorUser ? SessionParticipantRole.MENTOR : (isMenteeUser ? SessionParticipantRole.MENTEE : null);
+            currentUserCheckedIn = role != null && attendances.stream().anyMatch(item -> item.getParticipantRole() == role);
+            canCheckIn = role != null && !currentUserCheckedIn && session != null
                     && SessionAttendancePolicy.canCheckIn(booking.getStatus(), session.getStatus(), nowUtc, startUtc, endUtc);
         }
 
         SessionAttendanceResponse attendanceResponse = toAttendanceResponse(
                 attendances, currentUserCheckedIn, canCheckIn, startUtc, endUtc
         );
-
-        BookingLifecycleStatus bookingLifecycleStatus = BookingStateMapper.toLifecycleStatus(booking, paymentOrder);
-        BookingPaymentStatus bookingPaymentStatus = BookingStateMapper.toPaymentStatus(booking, paymentOrder);
-        BookingCompletionOutcome completionOutcome = booking.getCompletionOutcome();
-        if (completionOutcome == null) {
-            completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
-        }
         BookingDisplayGuidance displayGuidance = deriveDisplayGuidance(
-                booking, isMenteeUser, isMentorUser, nowUtc, startUtc, endUtc,
-                completionOutcome, canSubmitFeedback, canJoin
+                booking, isMenteeUser, isMentorUser, nowUtc, startUtc, endUtc, completionOutcome,
+                canSubmitFeedback, canJoin
         );
+
         Instant issueSubmittedUtc = booking.getIssueSubmittedAtUtc() != null
                 ? booking.getIssueSubmittedAtUtc() : BookingTime.toInstant(booking.getIssueSubmittedAt());
         Instant issueRespondedUtc = booking.getIssueRespondedAtUtc() != null
                 ? booking.getIssueRespondedAtUtc() : BookingTime.toInstant(booking.getIssueRespondedAt());
+        Instant issueResponseDeadlineUtc = issueSubmittedUtc == null
+                ? null : BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(issueSubmittedUtc);
+        Instant issueAdminEscalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
+        Instant issueAdminResolutionDeadlineUtc = issueAdminEscalatedUtc == null
+                ? null : BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(issueAdminEscalatedUtc);
+        Instant issueAdminSlaOverdueUtc = booking.getAdminSlaOverdueAtUtc();
         Instant issueResolvedUtc = booking.getIssueResolvedAtUtc() != null
                 ? booking.getIssueResolvedAtUtc() : BookingTime.toInstant(booking.getIssueResolvedAt());
-        Instant issueAdminEscalatedUtc = booking.getIssueHumanReviewEscalatedAtUtc();
-        Instant issueResponseDeadlineUtc = BookingDeadlinePolicy.resolveIssueResponseDeadlineUtc(issueSubmittedUtc);
-        Instant issueAdminResolutionDeadlineUtc = BookingDeadlinePolicy.resolveAdminDisputeSlaDeadlineUtc(issueAdminEscalatedUtc);
-        Instant issueAdminSlaOverdueUtc = booking.getAdminSlaOverdueAtUtc();
         Instant issueAutoReleaseUtc = BookingDeadlinePolicy.resolveAdminDisputeAutoReleaseDeadlineUtc(issueAdminSlaOverdueUtc);
         BookingDisputeSlaStatus disputeSlaStatus = BookingDeadlinePolicy.resolveDisputeSlaStatus(
                 issueSubmittedUtc, issueAdminEscalatedUtc, issueAdminSlaOverdueUtc, issueResolvedUtc
@@ -289,22 +219,21 @@ public class BookingResponseMapper {
                 ? null
                 : bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindOrderByCreatedAtUtcDesc(
                         booking.getId(), BookingIssueResolutionKind.RESOLUTION).orElse(null);
-
         return BookingResponse.builder()
                 .bookingId(booking.getId())
                 .sessionId(booking.getId())
                 .sessionStatus(booking.getStatus())
                 .actualSessionId(session == null ? null : session.getId())
                 .actualSessionStatus(session == null ? null : session.getStatus())
-                .mentorUserId(mentorProfile == null ? null : mentorProfile.getUserId())
-                .mentorDisplayName(mentorUser == null ? null : mentorUser.getFullName())
-                .mentorAvatarUrl(mentorUser == null ? null : mentorUser.getAvatarUrl())
+                .mentorUserId(mentorUserId)
+                .mentorDisplayName(mentorUser == null ? null : mentorUser.fullName())
+                .mentorAvatarUrl(mentorUser == null ? null : mentorUser.avatarUrl())
                 .menteeUserId(mentee == null ? null : mentee.getId())
                 .menteeDisplayName(mentee == null ? null : mentee.getFullName())
                 .menteeAvatarUrl(mentee == null ? null : mentee.getAvatarUrl())
                 .availabilitySlotId(slot == null ? null : slot.getId())
-                .serviceId(mentorService == null ? null : mentorService.getId())
-                .serviceTitle(booking.getServiceTitleSnapshot() != null ? booking.getServiceTitleSnapshot() : (mentorService == null ? null : mentorService.getTitle()))
+                .serviceId(booking.getServiceId())
+                .serviceTitle(booking.getServiceTitleSnapshot())
                 .serviceDescriptionSnapshot(booking.getServiceDescriptionSnapshot())
                 .serviceExpectedOutcomeSnapshot(booking.getServiceExpectedOutcomeSnapshot())
                 .serviceDurationSnapshot(booking.getServiceDurationSnapshot())
@@ -315,7 +244,10 @@ public class BookingResponseMapper {
                 .status(booking.getStatus())
                 .bookingStatus(bookingLifecycleStatus)
                 .paymentStatus(bookingPaymentStatus)
-                .settlementStatus(paymentOrder == null ? null : paymentOrder.getSettlementStatus())
+                .settlementStatus(paymentOrder == null || paymentOrder.getSettlementStatus() == null
+                        ? null
+                        : com.fptu.exe.skillswap.modules.booking.domain.BookingSettlementStatus.valueOf(
+                                paymentOrder.getSettlementStatus().name()))
                 .releasedAt(BookingTime.toOffsetDateTime(paymentOrder == null ? null : paymentOrder.getReleasedAt()))
                 .refundedAt(BookingTime.toOffsetDateTime(paymentOrder == null ? null : paymentOrder.getRefundedAt()))
                 .refundedScoin(paymentOrder == null ? null : paymentOrder.getRefundedScoin())
@@ -531,10 +463,7 @@ public class BookingResponseMapper {
         if (paymentOrdersByBookingId != null && paymentOrdersByBookingId.containsKey(booking.getId())) {
             return paymentOrdersByBookingId.get(booking.getId());
         }
-        if (paymentOrderRepository == null) {
-            return null;
-        }
-        return paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        return null;
     }
 
     public static LocalDateTime selectedStartTime(Booking booking) {

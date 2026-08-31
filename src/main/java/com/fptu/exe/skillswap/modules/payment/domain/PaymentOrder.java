@@ -200,14 +200,14 @@ public class PaymentOrder {
     @jakarta.persistence.PrePersist
     protected void onCreate() {
         Instant nowUtc = DateTimeUtil.instantNow();
-        LocalDateTime nowHcm = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(nowUtc);
+        LocalDateTime nowHcm = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(nowUtc);
         if (createdAt == null && createdAtUtc == null) {
             createdAtUtc = nowUtc;
             createdAt = nowHcm;
         } else if (createdAtUtc != null && createdAt == null) {
-            createdAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(createdAtUtc);
+            createdAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(createdAtUtc);
         } else if (createdAt != null && createdAtUtc == null) {
-            createdAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(createdAt);
+            createdAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(createdAt);
         }
         updatedAtUtc = nowUtc;
         updatedAt = nowHcm;
@@ -217,51 +217,51 @@ public class PaymentOrder {
     @jakarta.persistence.PreUpdate
     protected void onUpdate() {
         updatedAtUtc = DateTimeUtil.instantNow();
-        updatedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(updatedAtUtc);
         syncShadowFields();
     }
 
     private void syncShadowFields() {
         if (expiresAtUtc != null) {
-            expiresAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(expiresAtUtc);
+            expiresAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(expiresAtUtc);
         } else if (expiresAt != null) {
-            expiresAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(expiresAt);
+            expiresAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(expiresAt);
         }
 
         if (paidAtUtc != null) {
-            paidAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(paidAtUtc);
+            paidAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(paidAtUtc);
         } else if (paidAt != null) {
-            paidAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(paidAt);
+            paidAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(paidAt);
         }
 
         if (cancelledAtUtc != null) {
-            cancelledAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(cancelledAtUtc);
+            cancelledAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(cancelledAtUtc);
         } else if (cancelledAt != null) {
-            cancelledAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(cancelledAt);
+            cancelledAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(cancelledAt);
         }
 
         if (failedAtUtc != null) {
-            failedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(failedAtUtc);
+            failedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(failedAtUtc);
         } else if (failedAt != null) {
-            failedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(failedAt);
+            failedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(failedAt);
         }
 
         if (creditFinalizedAtUtc != null) {
-            creditFinalizedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(creditFinalizedAtUtc);
+            creditFinalizedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(creditFinalizedAtUtc);
         } else if (creditFinalizedAt != null) {
-            creditFinalizedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(creditFinalizedAt);
+            creditFinalizedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(creditFinalizedAt);
         }
 
         if (releasedAtUtc != null) {
-            releasedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(releasedAtUtc);
+            releasedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(releasedAtUtc);
         } else if (releasedAt != null) {
-            releasedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(releasedAt);
+            releasedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(releasedAt);
         }
 
         if (refundedAtUtc != null) {
-            refundedAt = com.fptu.exe.skillswap.modules.booking.service.BookingTime.fromInstant(refundedAtUtc);
+            refundedAt = com.fptu.exe.skillswap.shared.time.BusinessTime.fromInstant(refundedAtUtc);
         } else if (refundedAt != null) {
-            refundedAtUtc = com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(refundedAt);
+            refundedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(refundedAt);
         }
     }
 }

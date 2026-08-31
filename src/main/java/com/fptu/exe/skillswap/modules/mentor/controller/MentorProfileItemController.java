@@ -1,8 +1,7 @@
 package com.fptu.exe.skillswap.modules.mentor.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorAchievementPictureConfirmRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorAchievementRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFeaturedProjectRequest;
@@ -61,9 +60,9 @@ public class MentorProfileItemController {
     @Tag(name = "Mentor Profile")
     @Operation(summary = "Tạo upload intent cho ảnh dự án nổi bật (dùng trước khi tạo hoặc cập nhật dự án)")
     @PostMapping("/api/me/mentor-projects/picture/upload-intents")
-    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createProjectPictureUploadIntent(
+    public ResponseEntity<ApiResponse<PublicAssetUploadPort.UploadIntent>> createProjectPictureUploadIntent(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody PublicAssetUploadIntentRequest request
+            @Valid @RequestBody PublicAssetUploadPort.UploadRequest request
     ) {
         ensureAuthenticated(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -73,10 +72,10 @@ public class MentorProfileItemController {
     @Tag(name = "Mentor Profile")
     @Operation(summary = "Tạo upload intent cho ảnh của dự án nổi bật cụ thể")
     @PostMapping("/api/me/mentor-projects/{projectId}/picture/upload-intents")
-    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createProjectPictureUploadIntentForProject(
+    public ResponseEntity<ApiResponse<PublicAssetUploadPort.UploadIntent>> createProjectPictureUploadIntentForProject(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID projectId,
-            @Valid @RequestBody PublicAssetUploadIntentRequest request
+            @Valid @RequestBody PublicAssetUploadPort.UploadRequest request
     ) {
         ensureAuthenticated(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -155,9 +154,9 @@ public class MentorProfileItemController {
     @Tag(name = "Mentor Profile")
     @Operation(summary = "Tạo upload intent cho ảnh học vấn/giải thưởng (dùng trước khi tạo hoặc cập nhật)")
     @PostMapping("/api/me/mentor-achievements/picture/upload-intents")
-    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createAchievementPictureUploadIntent(
+    public ResponseEntity<ApiResponse<PublicAssetUploadPort.UploadIntent>> createAchievementPictureUploadIntent(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody PublicAssetUploadIntentRequest request
+            @Valid @RequestBody PublicAssetUploadPort.UploadRequest request
     ) {
         ensureAuthenticated(principal);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -167,10 +166,10 @@ public class MentorProfileItemController {
     @Tag(name = "Mentor Profile")
     @Operation(summary = "Tạo upload intent cho ảnh của học vấn/giải thưởng cụ thể")
     @PostMapping("/api/me/mentor-achievements/{achievementId}/picture/upload-intents")
-    public ResponseEntity<ApiResponse<PublicAssetUploadIntentResponse>> createAchievementPictureUploadIntentForAchievement(
+    public ResponseEntity<ApiResponse<PublicAssetUploadPort.UploadIntent>> createAchievementPictureUploadIntentForAchievement(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID achievementId,
-            @Valid @RequestBody PublicAssetUploadIntentRequest request
+            @Valid @RequestBody PublicAssetUploadPort.UploadRequest request
     ) {
         ensureAuthenticated(principal);
         return ResponseEntity.status(HttpStatus.CREATED)

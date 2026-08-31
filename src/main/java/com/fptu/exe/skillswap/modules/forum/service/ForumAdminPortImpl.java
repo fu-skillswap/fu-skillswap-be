@@ -14,17 +14,22 @@ import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportListQuery;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportView;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ResolveReportCommand;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumReportRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSeverity;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSource;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorViolationCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort.NotificationIntent;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
@@ -70,19 +75,25 @@ public class ForumAdminPortImpl implements ForumAdminPort {
     private final ForumCommentRepository forumCommentRepository;
     private final ForumPostReactionRepository forumPostReactionRepository;
     private final ForumReportRepository forumReportRepository;
-    private final NotificationService notificationService;
+    private final NotificationCommandPort notificationCommandPort;
     private final ForumTextPolicy forumTextPolicy;
     private final CursorCodec cursorCodec;
-    private MentorViolationService mentorViolationService;
+    private MentorViolationCommandPort mentorViolationCommandPort;
 
     @Autowired(required = false)
-    void setMentorViolationService(MentorViolationService mentorViolationService) {
-        this.mentorViolationService = mentorViolationService;
+    void setMentorViolationCommandPort(MentorViolationCommandPort mentorViolationCommandPort) {
+        this.mentorViolationCommandPort = mentorViolationCommandPort;
+    }
+
+    @Override
+    public List<String> reportStatusNames() {
+        return java.util.Arrays.stream(ForumReportStatus.values()).map(Enum::name).toList();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ForumReportResponse> getReports(AdminForumReportListRequest request) {
+    public PageResponse<ReportView> getReports(ReportListQuery query) {
+        AdminForumReportListRequest request = reportListRequest(query);
         Pageable pageable = PageRequest.of(defaultPage(request.page()), defaultSize(request.size()), Sort.by(Sort.Direction.ASC, "createdAt"));
         Page<ForumReport> reports = forumReportRepository.searchReports(
                 request.status(),
@@ -92,21 +103,22 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         );
         Map<UUID, ForumPost> postsById = loadReportedPosts(reports.getContent());
         Map<UUID, ForumComment> commentsById = loadReportedComments(reports.getContent());
-        Page<ForumReportResponse> page = reports.map(report -> toReportResponse(report, postsById, commentsById));
+        Page<ReportView> page = reports.map(report -> reportView(toReportResponse(report, postsById, commentsById)));
         return toReportPageResponse(page);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ForumReportResponse getReportDetail(UUID reportId) {
+    public ReportView getReportDetail(UUID reportId) {
         ForumReport report = forumReportRepository.findById(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy forum report"));
-        return toReportResponse(report, Collections.emptyMap(), Collections.emptyMap());
+        return reportView(toReportResponse(report, Collections.emptyMap(), Collections.emptyMap()));
     }
 
     @Override
     @Transactional
-    public ForumReportResponse resolveReport(UUID adminUserId, UUID reportId, ForumReportResolveRequest request) {
+    public ReportView resolveReport(UUID adminUserId, UUID reportId, ResolveReportCommand command) {
+        ForumReportResolveRequest request = resolveRequest(command);
         ForumReport report = forumReportRepository.findByIdForUpdate(reportId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy forum report"));
         if (report.getStatus() != ForumReportStatus.OPEN) {
@@ -124,12 +136,13 @@ public class ForumAdminPortImpl implements ForumAdminPort {
             default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Action moderation không hợp lệ");
         }
 
-        return toReportResponse(report, Collections.emptyMap(), Collections.emptyMap());
+        return reportView(toReportResponse(report, Collections.emptyMap(), Collections.emptyMap()));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<ForumPostResponse> getAdminPosts(AdminForumPostListRequest request) {
+    public CursorPageResponse<PostView> getAdminPosts(PostListQuery query) {
+        AdminForumPostListRequest request = postListRequest(query);
         int resolvedLimit = defaultLimit(request.limit());
         String filterHash = buildAdminPostFilterHash(request);
         DecodedPostCursor decodedCursor = decodePostCursor(request.cursor(), filterHash);
@@ -137,13 +150,13 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         List<ForumPost> postWindow = forumPostRepository.findWindow(specification, resolvedLimit + 1);
         boolean hasNext = postWindow.size() > resolvedLimit;
         List<ForumPost> visiblePosts = hasNext ? new ArrayList<>(postWindow.subList(0, resolvedLimit)) : postWindow;
-        List<ForumPostResponse> items = visiblePosts.stream()
-                .map(post -> toPostResponse(post, null))
+        List<PostView> items = visiblePosts.stream()
+                .map(post -> postView(toPostResponse(post, null)))
                 .toList();
         String nextCursor = hasNext && !visiblePosts.isEmpty()
                 ? encodeNextCursor(visiblePosts.get(visiblePosts.size() - 1), filterHash)
                 : null;
-        return CursorPageResponse.<ForumPostResponse>builder()
+        return CursorPageResponse.<PostView>builder()
                 .items(items)
                 .nextCursor(nextCursor)
                 .prevCursor(null)
@@ -155,7 +168,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<ForumCommentResponse> getAdminComments(AdminForumCommentListRequest request) {
+    public CursorPageResponse<CommentView> getAdminComments(CommentListQuery query) {
+        AdminForumCommentListRequest request = commentListRequest(query);
         int resolvedLimit = defaultLimit(request.limit());
         String filterHash = buildAdminCommentFilterHash(request);
         DecodedCommentCursor decodedCursor = decodeCommentCursor(request.cursor(), filterHash);
@@ -171,13 +185,13 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         boolean hasNext = commentWindow.size() > resolvedLimit;
         List<ForumComment> visibleComments = hasNext ? new ArrayList<>(commentWindow.subList(0, resolvedLimit)) : commentWindow;
         Map<UUID, ForumComment> replyParentsById = loadReplyParentsById(visibleComments);
-        List<ForumCommentResponse> items = visibleComments.stream()
-                .map(comment -> toCommentResponse(comment, replyParentsById))
+        List<CommentView> items = visibleComments.stream()
+                .map(comment -> commentView(toCommentResponse(comment, replyParentsById)))
                 .toList();
         String nextCursor = hasNext && !visibleComments.isEmpty()
                 ? encodeNextCommentCursor(visibleComments.get(visibleComments.size() - 1), filterHash)
                 : null;
-        return CursorPageResponse.<ForumCommentResponse>builder()
+        return CursorPageResponse.<CommentView>builder()
                 .items(items)
                 .nextCursor(nextCursor)
                 .prevCursor(null)
@@ -189,27 +203,27 @@ public class ForumAdminPortImpl implements ForumAdminPort {
 
     @Override
     @Transactional
-    public ForumPostResponse restorePost(UUID adminUserId, UUID postId) {
+    public PostView restorePost(UUID adminUserId, UUID postId) {
         ForumPost post = forumPostRepository.findByIdForUpdate(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         if (post.getStatus() == ForumPostStatus.PUBLISHED) {
-            return toPostResponse(post, null);
+            return postView(toPostResponse(post, null));
         }
         post.setStatus(ForumPostStatus.PUBLISHED);
         post.setHiddenAt(null);
         post.setHiddenByUserId(null);
         post.setHiddenReason(null);
         ForumPost saved = forumPostRepository.save(post);
-        return toPostResponse(saved, null);
+        return postView(toPostResponse(saved, null));
     }
 
     @Override
     @Transactional
-    public ForumCommentResponse restoreComment(UUID adminUserId, UUID commentId) {
+    public CommentView restoreComment(UUID adminUserId, UUID commentId) {
         ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
         if (comment.getStatus() == ForumCommentStatus.VISIBLE) {
-            return toCommentResponse(comment);
+            return commentView(toCommentResponse(comment));
         }
         comment.setStatus(ForumCommentStatus.VISIBLE);
         comment.setHiddenAt(null);
@@ -222,7 +236,7 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1 + restoredReplies.size());
         forumPostRepository.save(post);
-        return toCommentResponse(saved);
+        return commentView(toCommentResponse(saved));
     }
 
     @Override
@@ -326,12 +340,12 @@ public class ForumAdminPortImpl implements ForumAdminPort {
     }
 
     private void recordForumViolationIfMentor(UUID authorUserId, UUID sourceReferenceId, UUID adminUserId, String reviewNote) {
-        if (mentorViolationService == null || authorUserId == null) {
+        if (mentorViolationCommandPort == null || authorUserId == null) {
             return;
         }
-        mentorViolationService.recordAdminConfirmed(authorUserId, MentorViolationSource.FORUM, sourceReferenceId,
-                MentorViolationType.FORUM_POLICY_BREACH, MentorViolationSeverity.MEDIUM, adminUserId,
-                "Admin ẩn nội dung forum của mentor do vi phạm quy định.", reviewNote);
+        mentorViolationCommandPort.recordConfirmedViolation(new MentorViolationCommandPort.MentorViolationCommand(
+                authorUserId, "FORUM", sourceReferenceId, "FORUM_POLICY_BREACH", "MEDIUM", adminUserId,
+                "Admin ẩn nội dung forum của mentor do vi phạm quy định.", reviewNote));
     }
 
     private void dismissReport(UUID adminUserId, ForumReport report, String reviewNote) {
@@ -518,8 +532,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 .collect(Collectors.toMap(ForumComment::getId, Function.identity()));
     }
 
-    private PageResponse<ForumReportResponse> toReportPageResponse(Page<ForumReportResponse> page) {
-        return PageResponse.<ForumReportResponse>builder()
+    private PageResponse<ReportView> toReportPageResponse(Page<ReportView> page) {
+        return PageResponse.<ReportView>builder()
                 .content(page.getContent())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -527,6 +541,77 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 .totalPages(page.getTotalPages())
                 .last(page.isLast())
                 .build();
+    }
+
+    private AdminForumReportListRequest reportListRequest(ReportListQuery query) {
+        if (query == null) {
+            return new AdminForumReportListRequest(null, null, null, null, null);
+        }
+        return new AdminForumReportListRequest(query.page(), query.size(), query.keyword(),
+                enumValue(ForumReportStatus.class, query.status()),
+                enumValue(com.fptu.exe.skillswap.modules.forum.domain.ForumReportTargetType.class, query.targetType()));
+    }
+
+    private AdminForumPostListRequest postListRequest(PostListQuery query) {
+        if (query == null) {
+            return new AdminForumPostListRequest(null, null, null, null, null, null);
+        }
+        return new AdminForumPostListRequest(query.cursor(), query.limit(), query.keyword(), query.forumTopicId(),
+                query.authorId(), enumValue(ForumPostStatus.class, query.status()));
+    }
+
+    private AdminForumCommentListRequest commentListRequest(CommentListQuery query) {
+        if (query == null) {
+            return new AdminForumCommentListRequest(null, null, null, null, null, null);
+        }
+        return new AdminForumCommentListRequest(query.cursor(), query.limit(), query.keyword(), query.postId(),
+                query.authorId(), enumValue(ForumCommentStatus.class, query.status()));
+    }
+
+    private ForumReportResolveRequest resolveRequest(ResolveReportCommand command) {
+        if (command == null) {
+            return new ForumReportResolveRequest(null, null);
+        }
+        return new ForumReportResolveRequest(
+                enumValue(com.fptu.exe.skillswap.modules.forum.domain.ForumModerationAction.class, command.action()),
+                command.reviewNote());
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị moderation forum không hợp lệ");
+        }
+    }
+
+    private ReportView reportView(ForumReportResponse value) {
+        return new ReportView(value.reportId(), value.targetType(), value.targetId(), value.targetStatus(), value.targetTitle(),
+                value.targetContentPreview(), value.targetAuthorUserId(), value.targetAuthorFullName(), value.reporterUserId(),
+                value.reporterFullName(), value.reasonType(), value.description(), value.status(), value.reviewedByUserId(),
+                value.reviewNote(), value.resolvedAt(), value.createdAt());
+    }
+
+    private PostView postView(ForumPostResponse value) {
+        var program = value.authorProgram();
+        var topic = value.forumTopic();
+        return new PostView(value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
+                program == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ProgramView(
+                        program.id(), program.code(), program.nameVi(), program.nameEn()),
+                topic == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.TopicView(
+                        topic.id(), topic.code() == null ? null : topic.code().name(), topic.nameVi(), topic.nameEn(), topic.displayOrder()),
+                value.title(), value.content(), value.status(), value.commentCount(), value.reactionCount(), value.reportCount(),
+                value.lastActivityAt(), value.reactedByCurrentUser(), value.myReactionType(), value.createdAt(), value.updatedAt(), value.imageUrls());
+    }
+
+    private CommentView commentView(ForumCommentResponse value) {
+        return new CommentView(value.commentId(), value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
+                value.authorRole(), value.content(), value.status(), value.reportCount(), value.reactionCount(),
+                value.reactedByCurrentUser(), value.replyToCommentId(), value.replyToUserId(), value.replyToUserName(),
+                value.createdAt(), value.updatedAt(), value.imageUrls());
     }
 
     private String trimPreview(String raw) {
@@ -583,7 +668,15 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                                   String relatedEntityType,
                                   UUID relatedEntityId) {
         try {
-            notificationService.createNotification(recipientUserId, type, title, message, relatedEntityType, relatedEntityId);
+            notificationCommandPort.publish(new NotificationIntent(
+                    recipientUserId,
+                    type.name(),
+                    title,
+                    message,
+                    relatedEntityType,
+                    relatedEntityId,
+                    null
+            ));
         } catch (RuntimeException ex) {
             log.warn("Không thể tạo notification forum moderation recipientUserId={} type={} relatedEntityId={}: {}",
                     recipientUserId,
@@ -734,5 +827,14 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         private static DecodedCommentCursor empty() {
             return new DecodedCommentCursor(null, null);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsReportById(UUID reportId) {
+        if (reportId == null) {
+            return false;
+        }
+        return forumReportRepository.existsById(reportId);
     }
 }

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
@@ -12,15 +12,12 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
-import com.fptu.exe.skillswap.modules.course.domain.Course;
-import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
+import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -45,7 +42,7 @@ public class ChatQueryService {
     private final ChatAccessResolutionService chatAccessResolutionService;
     private final ChatResponseMapper chatResponseMapper;
     private final InternalTelemetryService internalTelemetryService;
-    private final ObjectProvider<CourseRepository> courseRepositoryProvider;
+    private final CourseQueryPort courseQueryPort;
 
     @Transactional(readOnly = true)
     public Page<ConversationResponse> getMyConversations(UUID userId, Pageable pageable) {
@@ -107,91 +104,87 @@ public class ChatQueryService {
                     return chatResponseMapper.mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap, access, courseTitle);
                 })
                 .toList();
-        String nextCursor = hasNext && !visibleConversations.isEmpty()
-                ? chatResponseMapper.encodeNextConversationCursor(visibleConversations.get(visibleConversations.size() - 1), filterHash)
-                : null;
-        return CursorPageResponse.<ConversationResponse>builder()
-                .items(items)
-                .nextCursor(nextCursor)
-                .prevCursor(null)
-                .hasNext(hasNext)
-                .hasPrev(false)
-                .limit(resolvedLimit)
-                .build();
+
+        String nextCursor = null;
+        if (hasNext && !items.isEmpty()) {
+            Conversation lastConv = visibleConversations.get(visibleConversations.size() - 1);
+            nextCursor = chatResponseMapper.encodeNextConversationCursor(lastConv, filterHash);
+        }
+
+        return new CursorPageResponse<>(items, nextCursor, null, hasNext, false, resolvedLimit);
     }
 
     @Transactional(readOnly = true)
     public Page<MessageResponse> getMessages(UUID conversationId, UUID userId, Pageable pageable, MessageRepository messageRepoOverride) {
-        MessageRepository activeRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
+        MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
-        }
-        if (internalTelemetryService != null) {
-            internalTelemetryService.record("CHAT_OPENED", userId, "CONVERSATION", conversationId, Map.of());
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
         }
 
-        long otherLastReadSequence = chatResponseMapper.resolveOtherLastReadSequence(conversationId, userId);
-        return activeRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable)
-                .map(msg -> MessageResponse.builder()
-                        .id(msg.getId())
-                        .conversationId(msg.getConversation().getId())
-                        .senderId(msg.getSender() != null ? msg.getSender().getId() : null)
-                        .senderName(msg.getSender() != null ? msg.getSender().getFullName() : "Hệ thống")
-                        .messageType(msg.getMessageType())
-                        .content(msg.getContent())
-                        .version(msg.getVersion())
-                        .isReadByOther(msg.getSender() != null && msg.getSender().getId().equals(userId)
-                                ? otherLastReadSequence >= msg.getSequence()
-                                : null)
-                        .createdAt(msg.getCreatedAt())
-                        .isMine(msg.getSender() != null && msg.getSender().getId().equals(userId))
-                        .build());
+        Page<Message> messagePage = activeMessageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
+        List<MessageResponse> dtos = messagePage.getContent().stream()
+                .map(message -> chatResponseMapper.toMessageResponse(message, userId))
+                .toList();
+        return new org.springframework.data.domain.PageImpl<>(dtos, pageable, messagePage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
     public CursorPageResponse<MessageResponse> getMessages(UUID conversationId, UUID userId, String cursor, Integer limit) {
-        chatRoomService.ensureParticipant(conversationId, userId);
-        if (internalTelemetryService != null) {
-            internalTelemetryService.record("CHAT_OPENED", userId, "CONVERSATION", conversationId, Map.of());
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
         }
+
         int resolvedLimit = chatResponseMapper.defaultLimit(limit, 30);
-        String filterHash = "messages|conversationId=" + conversationId + "|viewer=" + userId;
+        String filterHash = "messages|convId=" + conversationId;
         ChatResponseMapper.DecodedCursor decodedCursor = chatResponseMapper.decodeCursor(cursor, filterHash, "message");
-        List<Message> messageWindow = messageRepository.findMessageWindow(
-                conversationId,
-                decodedCursor.sortAt(),
-                decodedCursor.entityId(),
-                resolvedLimit + 1
-        );
+
+        List<Message> messageWindow;
+        if (decodedCursor.sortAt() == null) {
+            messageWindow = messageRepository.findLatestMessages(conversationId, PageRequest.of(0, resolvedLimit + 1));
+        } else {
+            messageWindow = messageRepository.findMessagesBefore(
+                    conversationId,
+                    decodedCursor.sortAt(),
+                    decodedCursor.entityId(),
+                    PageRequest.of(0, resolvedLimit + 1)
+            );
+        }
+
         boolean hasNext = messageWindow.size() > resolvedLimit;
         List<Message> visibleMessages = hasNext
                 ? messageWindow.subList(0, resolvedLimit)
                 : messageWindow;
+
         List<MessageResponse> items = visibleMessages.stream()
                 .map(message -> chatResponseMapper.toMessageResponse(message, userId))
                 .toList();
-        String nextCursor = hasNext && !visibleMessages.isEmpty()
-                ? chatResponseMapper.encodeNextMessageCursor(visibleMessages.get(visibleMessages.size() - 1), filterHash)
-                : null;
-        return CursorPageResponse.<MessageResponse>builder()
-                .items(items)
-                .nextCursor(nextCursor)
-                .prevCursor(null)
-                .hasNext(hasNext)
-                .hasPrev(false)
-                .limit(resolvedLimit)
-                .build();
+
+        String nextCursor = null;
+        if (hasNext && !items.isEmpty()) {
+            Message lastMessage = visibleMessages.get(visibleMessages.size() - 1);
+            nextCursor = chatResponseMapper.encodeNextMessageCursor(lastMessage, filterHash);
+        }
+
+        return new CursorPageResponse<>(items, nextCursor, null, hasNext, false, resolvedLimit);
     }
 
     @Transactional(readOnly = true)
     public List<MessageResponse> getMessagesBySequence(UUID conversationId, UUID userId, Long beforeSequence, Long afterSequence, Integer limit) {
-        chatRoomService.ensureParticipant(conversationId, userId);
-        if (beforeSequence != null && afterSequence != null) throw new BaseException(ErrorCode.CHAT_MESSAGE_CURSOR_INVALID);
-        int resolved = chatResponseMapper.defaultLimit(limit, 30);
-        long otherLastReadSequence = chatResponseMapper.resolveOtherLastReadSequence(conversationId, userId);
-        return messageRepository.findByConversationSequenceWindow(conversationId, beforeSequence, afterSequence, PageRequest.of(0, resolved)).stream()
-                .map(message -> chatResponseMapper.toMessageResponse(message, userId, otherLastReadSequence))
-                .toList();
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
+        }
+
+        int resolvedLimit = chatResponseMapper.defaultLimit(limit, 50);
+        List<Message> messages;
+        if (beforeSequence != null) {
+            messages = messageRepository.findMessagesBeforeSequence(conversationId, beforeSequence, PageRequest.of(0, resolvedLimit));
+        } else if (afterSequence != null) {
+            messages = messageRepository.findMessagesAfterSequence(conversationId, afterSequence, PageRequest.of(0, resolvedLimit));
+        } else {
+            messages = messageRepository.findLatestMessages(conversationId, PageRequest.of(0, resolvedLimit));
+        }
+
+        return messages.stream().map(message -> chatResponseMapper.toMessageResponse(message, userId)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -199,33 +192,24 @@ public class ChatQueryService {
         Conversation conv = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
 
-        List<ConversationParticipant> participants = participantRepository.findByConversationId(conversationId);
-        boolean isParticipant = participants.stream().anyMatch(p -> p.getUser().getId().equals(userId)
-                && p.getAccessState() != ConversationParticipantAccess.REVOKED);
-        if (!isParticipant) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
-        }
+        List<ConversationParticipant> participants = participantRepository.findByConversationIdWithUser(conversationId);
+        ConversationParticipant me = participants.stream()
+                .filter(cp -> cp.getUser().getId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này"));
 
         ConversationParticipant other = participants.stream()
-                .filter(p -> !p.getUser().getId().equals(userId))
-                .findFirst()
-                .orElse(null);
-        ConversationParticipant me = participants.stream()
-                .filter(p -> p.getUser().getId().equals(userId))
+                .filter(cp -> !cp.getUser().getId().equals(userId))
                 .findFirst()
                 .orElse(null);
 
-        long unread = 0;
-        if (me != null) {
-            unread = messageRepository.countUnreadMessages(conv.getId(), userId, me.getLastReadSequence());
-        }
+        long unread = messageRepository.countUnreadMessages(conversationId, userId, me.getLastReadSequence());
 
         String otherUserName;
         String otherUserAvatarUrl;
         UUID otherUserId;
         if (conv.getType() == ConversationType.GROUP) {
-            String courseTitle = resolveCourseTitle(conv.getSourceId());
-            otherUserName = courseTitle != null ? courseTitle : "Nhóm học tập";
+            otherUserName = resolveCourseTitle(conv.getSourceId());
             otherUserAvatarUrl = null;
             otherUserId = conv.getMentorUserId();
         } else {
@@ -278,36 +262,8 @@ public class ChatQueryService {
         ));
     }
 
-    @Transactional(readOnly = true)
-    public Map<UUID, UUID> findConversationIdsForBookings(List<Booking> bookings) {
-        if (bookings == null || bookings.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<UUID> bookingIds = bookings.stream()
-                .filter(booking -> booking != null && booking.getId() != null)
-                .map(Booking::getId)
-                .toList();
-        Map<UUID, UUID> result = new HashMap<>(findConversationIdsByBookingIds(bookingIds));
-        for (Booking booking : bookings) {
-            if (booking == null || booking.getId() == null || result.containsKey(booking.getId())) {
-                continue;
-            }
-            User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
-            User menteeUser = booking.getMentee();
-            if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
-                continue;
-            }
-            Conversation directConversation = chatRoomService.findDirectByParticipants(mentorUser.getId(), menteeUser.getId());
-            if (directConversation != null) {
-                result.put(booking.getId(), directConversation.getId());
-            }
-        }
-        return result;
-    }
-
     private String resolveCourseTitle(UUID courseId) {
         if (courseId == null) return null;
-        var courseRepo = courseRepositoryProvider.getIfAvailable();
-        return courseRepo != null ? courseRepo.findById(courseId).map(Course::getTitle).orElse(null) : null;
+        return courseQueryPort.findCourseTitleById(courseId).orElse(null);
     }
 }

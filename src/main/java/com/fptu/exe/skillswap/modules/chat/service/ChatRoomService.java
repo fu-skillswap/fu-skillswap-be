@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationBookingLink;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
@@ -14,11 +13,11 @@ import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRep
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,23 +32,22 @@ public class ChatRoomService {
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
     private final ConversationBookingLinkRepository conversationBookingLinkRepository;
-    private final ObjectProvider<com.fptu.exe.skillswap.modules.course.repository.CourseRepository> courseRepositoryProvider;
-    private final ObjectProvider<UserQueryPort> userQueryPortProvider;
-    private final ObjectProvider<com.fptu.exe.skillswap.modules.identity.repository.UserRepository> userRepositoryProvider;
+    private final CourseQueryPort courseQueryPort;
+    private final UserQueryPort userQueryPort;
 
     @Transactional
-    public Conversation createDirectForAcceptedBooking(Booking booking) {
-        if (booking == null || booking.getId() == null) {
+    public Conversation createDirectForAcceptedBooking(UUID bookingId, UUID mentorUserId, UUID menteeUserId) {
+        if (bookingId == null) {
             throw new IllegalArgumentException("Booking must not be null");
         }
 
-        User mentorUser = booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
-        User menteeUser = booking.getMentee();
-        if (mentorUser == null || mentorUser.getId() == null || menteeUser == null || menteeUser.getId() == null) {
+        if (mentorUserId == null || menteeUserId == null) {
             throw new IllegalArgumentException("Booking must have mentor and mentee users");
         }
+        User mentorUser = userQueryPort.findUserById(mentorUserId).orElseThrow();
+        User menteeUser = userQueryPort.findUserById(menteeUserId).orElseThrow();
 
-        Conversation conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
+        Conversation conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)
                 .orElseGet(() -> conversationRepository.findDirectActiveByParticipantPair(
                         mentorUser.getId(), menteeUser.getId(), ConversationType.DIRECT, ConversationStatus.ACTIVE)
                         .stream().findFirst().orElse(null));
@@ -57,7 +55,7 @@ public class ChatRoomService {
             try {
                 conversation = conversationRepository.save(Conversation.builder()
                         .sourceType(ConversationSourceType.BOOKING)
-                        .sourceId(booking.getId())
+                        .sourceId(bookingId)
                         .mentorUserId(mentorUser.getId())
                         .menteeUserId(menteeUser.getId())
                         .type(ConversationType.DIRECT)
@@ -68,7 +66,7 @@ public class ChatRoomService {
             }
         }
         if (conversation == null) {
-            conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
+            conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)
                     .orElseGet(() -> conversationRepository.findDirectActiveByParticipantPair(
                             mentorUser.getId(), menteeUser.getId(), ConversationType.DIRECT, ConversationStatus.ACTIVE)
                             .stream().findFirst()
@@ -78,10 +76,10 @@ public class ChatRoomService {
 
         addParticipantIfAbsent(conversation, mentorUser);
         addParticipantIfAbsent(conversation, menteeUser);
-        if (conversationBookingLinkRepository != null && !conversationBookingLinkRepository.existsByBookingId(booking.getId())) {
+        if (conversationBookingLinkRepository != null && !conversationBookingLinkRepository.existsByBookingId(bookingId)) {
             conversationBookingLinkRepository.save(ConversationBookingLink.builder()
                     .conversation(conversation)
-                    .booking(booking)
+                    .bookingId(bookingId)
                     .build());
         }
         return conversation;
@@ -128,23 +126,24 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public Conversation ensureCourseGroupConversation(com.fptu.exe.skillswap.modules.course.domain.Course course) {
-        if (course == null || course.getId() == null) {
+    public Conversation ensureCourseGroupConversation(CourseQueryPort.CourseChatContext course) {
+        if (course == null || course.courseId() == null) {
             throw new IllegalArgumentException("Course must not be null");
         }
-        User mentorUser = course.getMentorProfile() == null ? null : course.getMentorProfile().getUser();
-        if (mentorUser == null || mentorUser.getId() == null) {
+        UUID mentorUserId = course.mentorUserId();
+        if (mentorUserId == null) {
             throw new IllegalArgumentException("Course must have mentor user");
         }
+        User mentorUser = userQueryPort.findUserById(mentorUserId).orElseThrow();
 
         Conversation conversation = conversationRepository
-                .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.getId())
+                .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.courseId())
                 .orElse(null);
         if (conversation == null) {
             try {
                 conversation = conversationRepository.save(Conversation.builder()
                         .sourceType(ConversationSourceType.COURSE)
-                        .sourceId(course.getId())
+                        .sourceId(course.courseId())
                         .mentorUserId(mentorUser.getId())
                         .menteeUserId(null)
                         .type(ConversationType.GROUP)
@@ -152,7 +151,7 @@ public class ChatRoomService {
                         .build());
             } catch (DataIntegrityViolationException ex) {
                 conversation = conversationRepository
-                        .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.getId())
+                        .findBySourceTypeAndSourceId(ConversationSourceType.COURSE, course.courseId())
                         .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể tạo nhóm chat khóa học"));
             }
         }
@@ -168,10 +167,7 @@ public class ChatRoomService {
         if (courseId == null || studentUserId == null) {
             return;
         }
-        var courseRepo = courseRepositoryProvider.getIfAvailable();
-        com.fptu.exe.skillswap.modules.course.domain.Course course = courseRepo != null
-                ? courseRepo.findById(courseId).orElse(null)
-                : null;
+        var course = courseQueryPort.findCourseChatContext(courseId).orElse(null);
         if (course == null) {
             return;
         }
@@ -258,11 +254,6 @@ public class ChatRoomService {
 
     private User resolveUser(UUID userId) {
         if (userId == null) return null;
-        var userPort = userQueryPortProvider.getIfAvailable();
-        if (userPort != null) {
-            return userPort.findUserById(userId).orElse(null);
-        }
-        var userRepo = userRepositoryProvider.getIfAvailable();
-        return userRepo != null ? userRepo.findById(userId).orElse(null) : null;
+        return userQueryPort.findUserById(userId).orElse(null);
     }
 }

@@ -1,11 +1,10 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -29,9 +28,8 @@ public class MentorVerificationRequest {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_verification_mentor"))
-    private User mentor;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -62,9 +60,8 @@ public class MentorVerificationRequest {
     @Column(name = "terms_version", length = 80)
     private String termsVersion;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewed_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_reviewer"))
-    private User reviewedBy;
+    @Column(name = "reviewed_by_user_id")
+    private UUID reviewedByUserId;
 
     @Column(name = "reviewed_at")
     private LocalDateTime reviewedAt;
@@ -78,9 +75,8 @@ public class MentorVerificationRequest {
     @Column(name = "rejection_reason", columnDefinition = "TEXT")
     private String rejectionReason;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "locked_by", foreignKey = @ForeignKey(name = "fk_mentor_verification_locked_by"))
-    private User lockedBy;
+    @Column(name = "locked_by_user_id")
+    private UUID lockedByUserId;
 
     @Column(name = "locked_at")
     private LocalDateTime lockedAt;
@@ -109,7 +105,3 @@ public class MentorVerificationRequest {
         updatedAt = DateTimeUtil.now();
     }
 }
-
-
-
-

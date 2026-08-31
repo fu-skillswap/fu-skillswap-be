@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -23,8 +22,7 @@ class DiscoveryEnrichmentServiceTest {
     @Mock private MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     @Mock private MentorAchievementRepository mentorAchievementRepository;
     @Mock private MentorServiceRepository mentorServiceRepository;
-    @Mock private MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    @Mock private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
+    @Mock private BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
 
     @Test
     void loadMentorEnrichedData_emptyInput_doesNotQueryRepositories() {
@@ -33,8 +31,7 @@ class DiscoveryEnrichmentServiceTest {
                 mentorFeaturedProjectRepository,
                 mentorAchievementRepository,
                 mentorServiceRepository,
-                mentorAvailabilitySlotRepository,
-                availabilitySlotServiceRepository);
+                bookingAvailabilityQueryPort);
 
         assertTrue(service.loadMentorEnrichedData(List.of(), LocalDateTime.now()).isEmpty());
     }

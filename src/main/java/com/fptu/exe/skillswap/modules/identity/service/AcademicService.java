@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.SpecializationReposito
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.AcademicEligibilityQuery;
 import com.fptu.exe.skillswap.shared.event.ProfileStatusQuery;
 import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -37,7 +38,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class AcademicService {
+public class AcademicService implements AcademicEligibilityQuery {
 
     private final CampusRepository campusRepository;
     private final AcademicProgramRepository academicProgramRepository;
@@ -132,6 +133,7 @@ public class AcademicService {
     }
 
     @Transactional(readOnly = true)
+    @Override
     public boolean hasCompletedStudentProfile(UUID userId) {
         requireId(userId, "Người dùng");
         return studentProfileRepository.findWithDetailsByUserId(userId)

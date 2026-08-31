@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -29,11 +27,6 @@ public class MentorProfile {
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
-
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_profiles_user"))
-    private User user;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -122,9 +115,8 @@ public class MentorProfile {
     @Column(name = "last_active_at")
     private LocalDateTime lastActiveAt;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "verified_by", foreignKey = @ForeignKey(name = "fk_mentor_profiles_verifier"))
-    private User verifiedBy;
+    @Column(name = "verified_by_user_id")
+    private UUID verifiedByUserId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -143,7 +135,3 @@ public class MentorProfile {
         updatedAt = DateTimeUtil.now();
     }
 }
-
-
-
-

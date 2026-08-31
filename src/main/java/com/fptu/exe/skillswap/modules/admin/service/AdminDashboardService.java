@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
 import com.fptu.exe.skillswap.modules.admin.dto.request.AdminQueueCaseListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardCampaignOverviewResponse;
+import com.fptu.exe.skillswap.modules.payment.port.AdminDashboardCampaignOverview;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardFinancialOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardMentorVerificationOverviewResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardOverviewResponse;
@@ -14,13 +14,12 @@ import com.fptu.exe.skillswap.modules.admin.dto.response.AdminDashboardUsersOver
 import com.fptu.exe.skillswap.modules.admin.dto.response.AdminQueueCaseItemResponse;
 import com.fptu.exe.skillswap.modules.admin.dto.response.FinancialPeriodMetricsResponse;
 import com.fptu.exe.skillswap.modules.admin.repository.AdminDashboardQueryRepository;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.forum.domain.ForumReportStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
-import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
-import com.fptu.exe.skillswap.modules.payment.domain.PayoutRequestStatus;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAdminPort;
+import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorVerificationAdminPort;
+import com.fptu.exe.skillswap.modules.notification.port.EmailOutboxAdminPort;
 import com.fptu.exe.skillswap.modules.payment.port.CampaignAdminPort;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentAdminPort;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
@@ -51,32 +50,37 @@ public class AdminDashboardService {
     private final AdminDashboardQueryRepository adminDashboardQueryRepository;
     private final AdminQueueWorkbenchService adminQueueWorkbenchService;
     private final CampaignAdminPort campaignAdminPort;
+    private final BookingAdminPort bookingAdminPort;
+    private final EmailOutboxAdminPort emailOutboxAdminPort;
+    private final ForumAdminPort forumAdminPort;
+    private final MentorVerificationAdminPort mentorVerificationAdminPort;
+    private final PaymentAdminPort paymentAdminPort;
 
     public AdminDashboardOverviewResponse getOverview() {
         LocalDateTime snapshotAt = DateTimeUtil.now();
         var userCounts = adminDashboardQueryRepository.fetchUserOverviewCounts();
         Map<String, Long> mentorVerificationCounts = toStatusCountMap(
-                VerificationStatus.class,
+                mentorVerificationAdminPort.verificationStatusNames(),
                 adminDashboardQueryRepository.countMentorVerificationByStatus()
         );
         Map<String, Long> bookingCounts = toStatusCountMap(
-                BookingStatus.class,
+                bookingAdminPort.bookingStatusNames(),
                 adminDashboardQueryRepository.countBookingsByStatus()
         );
         Map<String, Long> forumReportCounts = toStatusCountMap(
-                ForumReportStatus.class,
+                forumAdminPort.reportStatusNames(),
                 adminDashboardQueryRepository.countForumReportsByStatus()
         );
         Map<String, Long> payoutRequestCounts = toStatusCountMap(
-                PayoutRequestStatus.class,
+                paymentAdminPort.payoutRequestStatusNames(),
                 adminDashboardQueryRepository.countPayoutRequestsByStatus()
         );
         Map<String, Long> paymentOrderCounts = toStatusCountMap(
-                PaymentOrderStatus.class,
+                paymentAdminPort.paymentOrderStatusNames(),
                 adminDashboardQueryRepository.countPaymentOrdersByStatus()
         );
         Map<String, Long> emailOutboxCounts = toStatusCountMap(
-                NotificationStatus.class,
+                emailOutboxAdminPort.statusNames(),
                 adminDashboardQueryRepository.countEmailOutboxByStatus()
         );
 
@@ -100,7 +104,7 @@ public class AdminDashboardService {
         LocalDateTime lastMonth = snapshotAt.minusDays(30);
         var retentionStats = adminDashboardQueryRepository.fetchRetentionOverview(yesterday, lastMonth);
 
-        AdminDashboardCampaignOverviewResponse campaignOverview = campaignAdminPort.getDashboardCampaignOverview();
+        AdminDashboardCampaignOverview campaignOverview = campaignAdminPort.getDashboardCampaignOverview();
 
         return new AdminDashboardOverviewResponse(
                 snapshotAt,
@@ -113,12 +117,12 @@ public class AdminDashboardService {
                         userCounts.mentor()
                 ),
                 new AdminDashboardMentorVerificationOverviewResponse(
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.DRAFT.name(), 0L),
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.PENDING_REVIEW.name(), 0L),
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.NEEDS_REVISION.name(), 0L),
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.APPROVED.name(), 0L),
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.REJECTED.name(), 0L),
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.WITHDRAWN.name(), 0L)
+                        mentorVerificationCounts.getOrDefault("DRAFT", 0L),
+                        mentorVerificationCounts.getOrDefault("PENDING_REVIEW", 0L),
+                        mentorVerificationCounts.getOrDefault("NEEDS_REVISION", 0L),
+                        mentorVerificationCounts.getOrDefault("APPROVED", 0L),
+                        mentorVerificationCounts.getOrDefault("REJECTED", 0L),
+                        mentorVerificationCounts.getOrDefault("WITHDRAWN", 0L)
                 ),
                 bookingCounts,
                 forumReportCounts,
@@ -154,7 +158,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "mentor_verification_pending_review",
                         "Mentor verification chờ duyệt",
-                        mentorVerificationCounts.getOrDefault(VerificationStatus.PENDING_REVIEW.name(), 0L),
+                        mentorVerificationCounts.getOrDefault("PENDING_REVIEW", 0L),
                         "high",
                         "/api/admin/mentor-verification/requests?status=PENDING_REVIEW",
                         1
@@ -162,7 +166,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "booking_under_review",
                         "Booking cần admin review",
-                        bookingCounts.getOrDefault(BookingStatus.UNDER_REVIEW.name(), 0L),
+                        bookingCounts.getOrDefault("UNDER_REVIEW", 0L),
                         "high",
                         "/api/admin/bookings?status=UNDER_REVIEW",
                         2
@@ -170,7 +174,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "forum_reports_open",
                         "Forum report đang mở",
-                        forumReportCounts.getOrDefault(ForumReportStatus.OPEN.name(), 0L),
+                        forumReportCounts.getOrDefault("OPEN", 0L),
                         "high",
                         "/api/admin/forum/reports?status=OPEN",
                         3
@@ -178,7 +182,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "payout_requests_requested",
                         "Payout đang chờ duyệt",
-                        payoutRequestCounts.getOrDefault(PayoutRequestStatus.REQUESTED.name(), 0L),
+                        payoutRequestCounts.getOrDefault("REQUESTED", 0L),
                         "medium",
                         "/api/admin/payout-requests?status=REQUESTED",
                         4
@@ -186,7 +190,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "payment_orders_failed",
                         "Payment thất bại",
-                        paymentOrderCounts.getOrDefault(PaymentOrderStatus.FAILED.name(), 0L),
+                        paymentOrderCounts.getOrDefault("FAILED", 0L),
                         "medium",
                         "/api/admin/dashboard/overview",
                         5
@@ -194,7 +198,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "email_outbox_failed",
                         "Email gửi lỗi",
-                        emailOutboxCounts.getOrDefault(NotificationStatus.FAILED.name(), 0L),
+                        emailOutboxCounts.getOrDefault("FAILED", 0L),
                         "medium",
                         "/api/admin/email-outbox?status=FAILED",
                         6
@@ -202,7 +206,7 @@ public class AdminDashboardService {
                 new AdminDashboardQueueItemResponse(
                         "bookings_accepted_awaiting_payment",
                         "Booking chờ thanh toán",
-                        bookingCounts.getOrDefault(BookingStatus.ACCEPTED_AWAITING_PAYMENT.name(), 0L),
+                        bookingCounts.getOrDefault("ACCEPTED_AWAITING_PAYMENT", 0L),
                         "low",
                         "/api/admin/bookings?status=ACCEPTED_AWAITING_PAYMENT",
                         7
@@ -266,11 +270,15 @@ public class AdminDashboardService {
     }
 
     private <E extends Enum<E>> Map<String, Long> toStatusCountMap(Class<E> enumClass, Map<String, Long> rawCounts) {
+        return toStatusCountMap(Arrays.stream(enumClass.getEnumConstants()).map(Enum::name).toList(), rawCounts);
+    }
+
+    private Map<String, Long> toStatusCountMap(List<String> statusNames, Map<String, Long> rawCounts) {
         Map<String, Long> counts = new LinkedHashMap<>();
         Set<String> normalizedKeys = new HashSet<>();
-        Arrays.stream(enumClass.getEnumConstants()).forEach(status -> {
-            counts.put(status.name(), rawCounts.getOrDefault(status.name(), 0L));
-            normalizedKeys.add(status.name());
+        statusNames.forEach(status -> {
+            counts.put(status, rawCounts.getOrDefault(status, 0L));
+            normalizedKeys.add(status);
         });
         rawCounts.entrySet().stream()
                 .filter(entry -> !normalizedKeys.contains(entry.getKey()))

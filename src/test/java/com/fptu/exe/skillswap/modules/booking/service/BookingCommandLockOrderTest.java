@@ -8,11 +8,11 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.EntityManager;
@@ -40,10 +40,10 @@ class BookingCommandLockOrderTest {
     @Mock BookingRepository bookingRepository;
     @Mock MentorAvailabilitySlotRepository slotRepository;
     @Mock UserLockPort userLockPort;
-    @Mock MentorProfileRepository mentorProfileRepository;
+    @Mock MentorQueryPort mentorQueryPort;
+    @Mock UserQueryPort userQueryPort;
     @Mock EntityManager entityManager;
     @Mock SessionService sessionService;
-    @Mock ConversationService conversationService;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock BookingResponseMapper responseMapper;
     @Mock PaymentOrderService paymentOrderService;
@@ -64,13 +64,13 @@ class BookingCommandLockOrderTest {
         bookingId = UUID.randomUUID();
         User mentor = User.builder().id(mentorId).email("mentor-lock@test.com").fullName("Mentor").build();
         User mentee = User.builder().id(menteeId).email("mentee-lock@test.com").fullName("Mentee").build();
-        mentorProfile = MentorProfile.builder().user(mentor).userId(mentorId).build();
+        mentorProfile = MentorProfile.builder().userId(mentorId).build();
         slot = MentorAvailabilitySlot.builder()
-                .id(UUID.randomUUID()).mentorProfile(mentorProfile).isActive(true).isBooked(true)
+                .id(UUID.randomUUID()).mentorUserId(mentorId).isActive(true).isBooked(true)
                 .startTime(DateTimeUtil.now().plusDays(1)).endTime(DateTimeUtil.now().plusDays(1).plusHours(1))
                 .build();
         booking = Booking.builder()
-                .id(bookingId).mentee(mentee).mentorProfile(mentorProfile).slot(slot)
+                .id(bookingId).mentee(mentee).mentorUserId(mentorId).slot(slot)
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .selectedStartTime(slot.getStartTime()).selectedEndTime(slot.getEndTime())
                 .serviceIsFreeSnapshot(false).servicePriceScoinSnapshot(30_000)
@@ -82,38 +82,36 @@ class BookingCommandLockOrderTest {
         booking.setAcceptedAt(DateTimeUtil.now()); // idempotent return after lock acquisition
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(booking));
         when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(booking.getMentee(), mentorProfile.getUser()));
-        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(slotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
 
         BookingDecisionService service = new BookingDecisionService(
-                bookingRepository, slotRepository, userLockPort, mentorProfileRepository,
-                entityManager, sessionService, conversationService, eventPublisher, responseMapper,
+                bookingRepository, slotRepository, userLockPort, userQueryPort,
+                sessionService, eventPublisher, responseMapper,
                 googleCalendarConnectionPort, meetingProviderFactory);
         service.acceptBooking(mentorId, bookingId,
                 new AcceptBookingRequest("retry", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
-        InOrder order = inOrder(bookingRepository, userLockPort, mentorProfileRepository, slotRepository);
+        InOrder order = inOrder(bookingRepository, userLockPort, mentorQueryPort, slotRepository);
         order.verify(bookingRepository).findByIdForMentorDecision(bookingId);
         order.verify(userLockPort).lockUsersForUpdate(any());
-        order.verify(mentorProfileRepository).findByIdForUpdate(mentorId);
+        order.verify(mentorQueryPort).findMentorProfileByIdForUpdate(mentorId);
         order.verify(slotRepository).findByIdForUpdate(slot.getId());
     }
 
     @Test
     void mentorCancel_locksBookingBeforeMentorAndSlot() {
         when(bookingRepository.findByIdForCancellation(bookingId)).thenReturn(Optional.of(booking));
-        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(slotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         BookingCancellationService service = new BookingCancellationService(
-                bookingRepository, slotRepository, mentorProfileRepository, entityManager,
+                bookingRepository, slotRepository, userQueryPort,
                 sessionService, paymentOrderService, eventPublisher, responseMapper);
         service.cancelBookingByMentor(mentorId, bookingId, new CancelBookingRequest("Emergency"));
 
-        InOrder order = inOrder(bookingRepository, mentorProfileRepository, slotRepository);
+        InOrder order = inOrder(bookingRepository, slotRepository);
         order.verify(bookingRepository).findByIdForCancellation(bookingId);
-        order.verify(mentorProfileRepository).findByIdForUpdate(mentorId);
         order.verify(slotRepository).findByIdForUpdate(slot.getId());
     }
 

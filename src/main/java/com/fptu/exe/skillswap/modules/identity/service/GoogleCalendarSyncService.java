@@ -54,14 +54,14 @@ public class GoogleCalendarSyncService {
     }
 
     @Transactional
-    public void enqueueUpdate(UUID bookingId, LocalDateTime bookingUpdatedAt) {
+    public void enqueueUpdate(UUID bookingId, Instant bookingUpdatedAt) {
         enqueueJob(bookingId, GoogleCalendarSyncJobType.UPDATE_BOOKING_EVENT,
                 "BOOKING_UPDATE:" + bookingId + ":" + (bookingUpdatedAt == null ? "unknown" : bookingUpdatedAt));
     }
 
     @Transactional
-    public void enqueueCancel(UUID bookingId, BookingStatus status) {
-        enqueueJob(bookingId, GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT, "BOOKING_CANCEL:" + bookingId + ":" + status);
+    public void enqueueCancel(UUID bookingId) {
+        enqueueJob(bookingId, GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT, "BOOKING_CANCEL:" + bookingId);
     }
 
     public void processDueJobs() {
@@ -349,7 +349,7 @@ public class GoogleCalendarSyncService {
         }
         eventPublisher.publishEvent(new CalendarSyncFailedEvent(
                 booking.getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getMentee().getId(),
                 errorCode,
                 errorMessage
@@ -367,7 +367,7 @@ public class GoogleCalendarSyncService {
         GoogleCalendarSyncJob job = GoogleCalendarSyncJob.builder()
                 .bookingId(bookingId)
                 .sessionId(session == null ? null : session.getId())
-                .mentorUserId(booking.getMentorProfile().getUserId())
+                .mentorUserId(booking.getMentorUserId())
                 .jobType(jobType)
                 .status(GoogleCalendarSyncJobStatus.PENDING)
                 .attemptCount(0)
@@ -410,7 +410,7 @@ public class GoogleCalendarSyncService {
         }
         eventPublisher.publishEvent(new CalendarSyncAbortedNearStartTimeEvent(
                 booking.getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getMentee().getId()
         ));
     }
@@ -484,7 +484,7 @@ public class GoogleCalendarSyncService {
         connectionRepository.save(connection);
         eventPublisher.publishEvent(new CalendarSyncConnectionRevokedEvent(
                 booking.getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getMentee().getId()
         ));
     }

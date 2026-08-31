@@ -2,7 +2,6 @@ package com.fptu.exe.skillswap.modules.mentor.repository;
 
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -52,7 +51,6 @@ public interface MentorServiceRepository extends JpaRepository<MentorService, UU
             select distinct service
             from MentorService service
             join fetch service.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
             where service.id = :serviceId
             """)
     Optional<MentorService> findByIdForPricingPreview(@Param("serviceId") UUID serviceId);

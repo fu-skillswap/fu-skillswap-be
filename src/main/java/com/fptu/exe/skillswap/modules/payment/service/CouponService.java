@@ -17,11 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.fptu.exe.skillswap.modules.payment.strategy.DiscountStrategyRegistry;
 
+import java.time.Clock;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
-import java.time.Clock;
 
 @Service
 @RequiredArgsConstructor
@@ -85,16 +85,14 @@ public class CouponService {
         }
         validateQuotaAvailability(coupon, userId);
         if (!coupon.getApplicableServiceIds().isEmpty()
-                && (booking == null || booking.getService() == null
-                || booking.getService().getId() == null
-                || !coupon.getApplicableServiceIds().contains(booking.getService().getId()))) {
+                && (booking == null || booking.getServiceId() == null
+                || !coupon.getApplicableServiceIds().contains(booking.getServiceId()))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon không áp dụng cho service đã chọn");
         }
         if (!coupon.getApplicableMentorIds().isEmpty()
                 && (booking == null
-                || booking.getMentorProfile() == null
-                || booking.getMentorProfile().getUserId() == null
-                || !coupon.getApplicableMentorIds().contains(booking.getMentorProfile().getUserId()))) {
+                || booking.getMentorUserId() == null
+                || !coupon.getApplicableMentorIds().contains(booking.getMentorUserId()))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon không áp dụng cho mentor đã chọn");
         }
     }

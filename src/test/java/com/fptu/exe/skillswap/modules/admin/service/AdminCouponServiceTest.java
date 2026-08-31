@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponCreateRequest;
 import com.fptu.exe.skillswap.modules.payment.port.CouponAdminPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,10 +23,10 @@ class AdminCouponServiceTest {
     @Test
     void create_delegatesToCouponAdminPort() {
         UUID adminId = UUID.randomUUID();
-        when(couponAdminPort.create(eq(adminId), isNull(AdminCouponCreateRequest.class))).thenReturn(null);
+        when(couponAdminPort.create(eq(adminId), isNull(CouponAdminPort.CreateCouponCommand.class))).thenReturn(null);
 
         assertThat(service.create(adminId, null)).isNull();
 
-        verify(couponAdminPort).create(eq(adminId), isNull(AdminCouponCreateRequest.class));
+        verify(couponAdminPort).create(eq(adminId), isNull(CouponAdminPort.CreateCouponCommand.class));
     }
 }

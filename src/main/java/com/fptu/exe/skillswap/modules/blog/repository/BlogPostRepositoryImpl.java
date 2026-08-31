@@ -33,7 +33,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         StringBuilder jpql = new StringBuilder("""
                 select distinct p
                 from BlogPost p
-                join fetch p.authorUser author
                 where p.status = :status
                   and p.publishedAt is not null
                   and p.visibility in :allowedVisibilities
@@ -49,7 +48,7 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
             filters.add("""
                     (lower(p.title) like :keywordPattern
                      or lower(coalesce(p.excerpt, '')) like :keywordPattern
-                     or lower(coalesce(author.fullName, '')) like :keywordPattern)
+                     )
                     """);
         }
         if (cursorPublishedAt != null && cursorPostId != null) {
@@ -82,7 +81,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         StringBuilder jpql = new StringBuilder("""
                 select distinct p
                 from BlogPost p
-                join fetch p.authorUser author
                 where 1 = 1
                 """);
         List<String> filters = new ArrayList<>();
@@ -90,7 +88,7 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
             filters.add("p.status = :status");
         }
         if (authorUserId != null) {
-            filters.add("author.id = :authorUserId");
+            filters.add("p.authorUserId = :authorUserId");
         }
         if (categoryId != null) {
             filters.add("exists (select 1 from p.categories c where c.id = :categoryId)");
@@ -103,7 +101,7 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
                     (lower(p.title) like :keywordPattern
                      or lower(coalesce(p.excerpt, '')) like :keywordPattern
                      or lower(coalesce(p.slug, '')) like :keywordPattern
-                     or lower(coalesce(author.fullName, '')) like :keywordPattern)
+                     )
                     """);
         }
         if (cursorUpdatedAt != null && cursorPostId != null) {
@@ -140,7 +138,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         StringBuilder jpql = new StringBuilder("""
                 select p
                 from BlogPost p
-                join fetch p.authorUser author
                 where p.status = :status
                   and p.publishedAt is not null
                   and p.visibility in :allowedVisibilities
@@ -151,8 +148,8 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
         }
         if (hasCategories || hasMentors) {
             filters.add("""
-                    ((:hasCategories = true and exists (select 1 from p.categories fc where fc.id in :followedCategoryIds))
-                     or (:hasMentors = true and author.id in :followedMentorIds))
+                     ((:hasCategories = true and exists (select 1 from p.categories fc where fc.id in :followedCategoryIds))
+                     or (:hasMentors = true and p.authorUserId in :followedMentorIds))
                     """);
         }
         appendFilters(jpql, filters);

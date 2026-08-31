@@ -15,8 +15,8 @@ public interface AvailabilityTemplateRepository extends JpaRepository<Availabili
 
     @Query("""
             select distinct template from AvailabilityTemplate template
-            left join fetch template.services
-            where template.mentorProfile.userId = :mentorUserId
+            left join fetch template.serviceIds
+            where template.mentorUserId = :mentorUserId
             order by template.effectiveFrom desc, template.id desc
             """)
     List<AvailabilityTemplate> findOwnedWithServices(@Param("mentorUserId") UUID mentorUserId);
@@ -24,24 +24,22 @@ public interface AvailabilityTemplateRepository extends JpaRepository<Availabili
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select distinct template from AvailabilityTemplate template
-            left join fetch template.services
-            join fetch template.mentorProfile
-            where template.id = :templateId and template.mentorProfile.userId = :mentorUserId
+            left join fetch template.serviceIds
+            where template.id = :templateId and template.mentorUserId = :mentorUserId
             """)
     Optional<AvailabilityTemplate> findOwnedForUpdate(@Param("templateId") UUID templateId,
                                                        @Param("mentorUserId") UUID mentorUserId);
 
     @Query("""
             select distinct template from AvailabilityTemplate template
-            left join fetch template.services
-            join fetch template.mentorProfile
+            left join fetch template.serviceIds
             where template.id = :templateId
             """)
     Optional<AvailabilityTemplate> findWithServicesById(@Param("templateId") UUID templateId);
 
     @Query("""
             select template from AvailabilityTemplate template
-            where template.mentorProfile.userId = :mentorUserId
+            where template.mentorUserId = :mentorUserId
             order by template.id asc
             """)
     List<AvailabilityTemplate> findAllByMentorForOverlap(@Param("mentorUserId") UUID mentorUserId);

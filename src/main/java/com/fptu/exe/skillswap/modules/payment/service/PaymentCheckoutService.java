@@ -22,7 +22,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
@@ -287,7 +287,7 @@ public class PaymentCheckoutService {
         if (booking.getMentee() == null || !currentUserId.equals(booking.getMentee().getId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentee của booking mới có thể thanh toán");
         }
-        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
+        if (booking.getMentorUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không gắn với mentor hợp lệ");
         }
         if (booking.getStatus() == BookingStatus.PAID) {
@@ -316,7 +316,7 @@ public class PaymentCheckoutService {
     private OffsetDateTime paymentDeadline(Booking booking) {
         Instant deadlineUtc = paymentDeadlineUtc(booking);
         return deadlineUtc != null
-                ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toOffsetDateTime(deadlineUtc)
+                ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(deadlineUtc)
                 : null;
     }
 
@@ -324,15 +324,11 @@ public class PaymentCheckoutService {
         boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot());
         int basePriceScoin = booking.getServicePriceScoinSnapshot() != null
                 ? booking.getServicePriceScoinSnapshot()
-                : (booking.getService() != null && booking.getService().getPriceScoin() != null
-                ? booking.getService().getPriceScoin()
-                : 0);
+                : 0;
         if (isFree) {
             return 0;
         }
-        Integer durationMinutes = booking.getServiceDurationSnapshot() != null
-                ? booking.getServiceDurationSnapshot()
-                : (booking.getService() == null ? null : booking.getService().getDurationMinutes());
+        Integer durationMinutes = booking.getServiceDurationSnapshot();
         if (durationMinutes == null || durationMinutes <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ mentoring đang có thời lượng không hợp lệ");
         }
@@ -358,8 +354,8 @@ public class PaymentCheckoutService {
         draftOrder.setTargetType(PaymentTargetType.BOOKING);
         draftOrder.setTargetId(booking.getId());
         draftOrder.setPayerUserId(currentUserId);
-        draftOrder.setMentorUserId(booking.getMentorProfile().getUserId());
-        draftOrder.setServiceId(booking.getService() == null ? null : booking.getService().getId());
+        draftOrder.setMentorUserId(booking.getMentorUserId());
+        draftOrder.setServiceId(booking.getServiceId());
 
         int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
         int mentorCommissionBps = paymentProperties.getMentorCommissionBps();
@@ -452,9 +448,6 @@ public class PaymentCheckoutService {
     private String buildPaymentItemName(Booking booking) {
         if (StringUtils.hasText(booking.getServiceTitleSnapshot())) {
             return booking.getServiceTitleSnapshot();
-        }
-        if (booking.getService() != null && StringUtils.hasText(booking.getService().getTitle())) {
-            return booking.getService().getTitle();
         }
         return "SkillSwap mentoring session";
     }

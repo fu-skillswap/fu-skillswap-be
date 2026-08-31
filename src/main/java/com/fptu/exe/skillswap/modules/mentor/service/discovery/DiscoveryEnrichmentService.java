@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
-import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
@@ -10,8 +9,9 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -26,15 +26,43 @@ import java.util.Set;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class DiscoveryEnrichmentService {
 
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
     private final MentorServiceRepository mentorServiceRepository;
-    private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
-    private final AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
+    private final BookingAvailabilityQueryPort bookingAvailabilityQueryPort;
+    private final PublicAssetUploadPort publicAssetUploadPort;
+
+    @Autowired
+    public DiscoveryEnrichmentService(
+            MentorSubjectResultRepository mentorSubjectResultRepository,
+            MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
+            MentorAchievementRepository mentorAchievementRepository,
+            MentorServiceRepository mentorServiceRepository,
+            BookingAvailabilityQueryPort bookingAvailabilityQueryPort,
+            PublicAssetUploadPort publicAssetUploadPort
+    ) {
+        this.mentorSubjectResultRepository = mentorSubjectResultRepository;
+        this.mentorFeaturedProjectRepository = mentorFeaturedProjectRepository;
+        this.mentorAchievementRepository = mentorAchievementRepository;
+        this.mentorServiceRepository = mentorServiceRepository;
+        this.bookingAvailabilityQueryPort = bookingAvailabilityQueryPort;
+        this.publicAssetUploadPort = publicAssetUploadPort;
+    }
+
+    /** Compatibility constructor for focused discovery tests; production wiring uses the port-aware constructor. */
+    public DiscoveryEnrichmentService(
+            MentorSubjectResultRepository mentorSubjectResultRepository,
+            MentorFeaturedProjectRepository mentorFeaturedProjectRepository,
+            MentorAchievementRepository mentorAchievementRepository,
+            MentorServiceRepository mentorServiceRepository,
+            BookingAvailabilityQueryPort bookingAvailabilityQueryPort
+    ) {
+        this(mentorSubjectResultRepository, mentorFeaturedProjectRepository, mentorAchievementRepository,
+                mentorServiceRepository, bookingAvailabilityQueryPort, null);
+    }
 
     public Map<UUID, MentorEnrichedData> loadMentorEnrichedData(
             Collection<UUID> mentorUserIds,
@@ -67,7 +95,7 @@ public class DiscoveryEnrichmentService {
 
     private Set<UUID> loadMentorsWithAvailability(Collection<UUID> mentorUserIds, LocalDateTime now) {
         return new java.util.HashSet<>(Optional.ofNullable(
-                mentorAvailabilitySlotRepository.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(now))
+                bookingAvailabilityQueryPort.findMentorUserIdsWithActiveSlotsInFuture(mentorUserIds, com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(now))
         ).orElse(List.of()));
     }
 
@@ -109,7 +137,7 @@ public class DiscoveryEnrichmentService {
                         .add(MentorFeaturedProjectResponse.builder()
                                 .id(project.getId())
                                 .title(project.getTitle())
-                                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
+                                .pictureUrl(assetUrl(project.getMentorProfile().getUserId(), project.getPictureFileId()))
                                 .content(project.getContent())
                                 .projectDescription(project.getProjectDescription())
                                 .liveDemoUrl(project.getLiveDemoUrl())
@@ -127,7 +155,7 @@ public class DiscoveryEnrichmentService {
                         .add(MentorAchievementResponse.builder()
                                 .id(achievement.getId())
                                 .title(achievement.getTitle())
-                                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
+                                .pictureUrl(assetUrl(achievement.getMentorProfile().getUserId(), achievement.getPictureFileId()))
                                 .awardDescription(achievement.getAwardDescription())
                                 .achievedAt(achievement.getAchievedAt())
                                 .productHeader(achievement.getProductHeader())
@@ -138,5 +166,10 @@ public class DiscoveryEnrichmentService {
                                 .updatedAt(achievement.getUpdatedAt())
                                 .build()));
         return result;
+    }
+
+    private String assetUrl(UUID ownerId, UUID assetId) {
+        if (assetId == null || publicAssetUploadPort == null) return null;
+        return publicAssetUploadPort.requireOwnedPortfolioImage(ownerId, assetId).publicUrl();
     }
 }

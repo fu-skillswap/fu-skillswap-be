@@ -107,7 +107,7 @@ public class SessionAttendanceService {
     }
 
     private SessionParticipantRole resolveParticipantRole(Booking booking, UUID currentUserId) {
-        if (booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId())) {
+        if (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId())) {
             return SessionParticipantRole.MENTOR;
         }
         if (booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId())) {

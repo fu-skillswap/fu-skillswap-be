@@ -28,7 +28,8 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort.NotificationIntent;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -69,7 +70,7 @@ public class ForumPostService {
     private final ForumCommentReactionRepository forumCommentReactionRepository;
     private final UserQueryPort userQueryPort;
     private final ForumTopicRepository forumTopicRepository;
-    private final NotificationService notificationService;
+    private final NotificationCommandPort notificationCommandPort;
     private final ForumTextPolicy forumTextPolicy;
     private final ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
@@ -322,14 +323,15 @@ public class ForumPostService {
         if (parentComment != null) {
             if (!isSelfReply) {
                 try {
-                    notificationService.createNotification(
+                    notificationCommandPort.publish(new NotificationIntent(
                             parentComment.getAuthorUser().getId(),
-                            NotificationType.FORUM_COMMENT_REPLY,
+                            NotificationType.FORUM_COMMENT_REPLY.name(),
                             "Bình luận của bạn có người trả lời",
                             currentUser.getFullName() + " vừa trả lời bình luận của bạn trong bài viết forum.",
                             "FORUM_POST",
-                            post.getId()
-                    );
+                            post.getId(),
+                            null
+                    ));
                 } catch (RuntimeException ex) {
                     log.warn("Không thể tạo notification cho forum reply commentId={}: {}", saved.getId(), ex.getMessage());
                 }
@@ -337,14 +339,15 @@ public class ForumPostService {
         } else {
             if (!isSelfComment) {
                 try {
-                    notificationService.createNotification(
+                    notificationCommandPort.publish(new NotificationIntent(
                             post.getAuthorUser().getId(),
-                            NotificationType.FORUM_POST_COMMENTED,
+                            NotificationType.FORUM_POST_COMMENTED.name(),
                             "Bài viết của bạn có bình luận mới",
                             currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
                             "FORUM_POST",
-                            post.getId()
-                    );
+                            post.getId(),
+                            null
+                    ));
                 } catch (RuntimeException ex) {
                     log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
                 }

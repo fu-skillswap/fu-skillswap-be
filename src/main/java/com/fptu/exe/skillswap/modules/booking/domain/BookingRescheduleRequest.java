@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -142,19 +142,19 @@ public class BookingRescheduleRequest {
         syncShadowFields();
         if (createdAtUtc == null && createdAt == null) {
             createdAtUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-            createdAt = BookingTime.fromInstant(createdAtUtc);
+            createdAt = BusinessTime.fromInstant(createdAtUtc);
         } else if (createdAtUtc == null) {
-            createdAtUtc = BookingTime.toInstant(createdAt);
+            createdAtUtc = BusinessTime.toInstant(createdAt);
         } else if (createdAt == null) {
-            createdAt = BookingTime.fromInstant(createdAtUtc);
+            createdAt = BusinessTime.fromInstant(createdAtUtc);
         }
         if (updatedAtUtc == null && updatedAt == null) {
             updatedAtUtc = createdAtUtc;
             updatedAt = createdAt;
         } else if (updatedAtUtc == null) {
-            updatedAtUtc = BookingTime.toInstant(updatedAt);
+            updatedAtUtc = BusinessTime.toInstant(updatedAt);
         } else if (updatedAt == null) {
-            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+            updatedAt = BusinessTime.fromInstant(updatedAtUtc);
         }
     }
 
@@ -162,50 +162,50 @@ public class BookingRescheduleRequest {
     public void onUpdate() {
         syncShadowFields();
         updatedAtUtc = com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow();
-        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 
     private void syncShadowFields() {
         if (previousSelectedStartTimeUtc != null && previousSelectedStartTime == null) {
-            previousSelectedStartTime = BookingTime.fromInstant(previousSelectedStartTimeUtc);
+            previousSelectedStartTime = BusinessTime.fromInstant(previousSelectedStartTimeUtc);
         } else if (previousSelectedStartTime != null && previousSelectedStartTimeUtc == null) {
-            previousSelectedStartTimeUtc = BookingTime.toInstant(previousSelectedStartTime);
+            previousSelectedStartTimeUtc = BusinessTime.toInstant(previousSelectedStartTime);
         }
 
         if (previousSelectedEndTimeUtc != null && previousSelectedEndTime == null) {
-            previousSelectedEndTime = BookingTime.fromInstant(previousSelectedEndTimeUtc);
+            previousSelectedEndTime = BusinessTime.fromInstant(previousSelectedEndTimeUtc);
         } else if (previousSelectedEndTime != null && previousSelectedEndTimeUtc == null) {
-            previousSelectedEndTimeUtc = BookingTime.toInstant(previousSelectedEndTime);
+            previousSelectedEndTimeUtc = BusinessTime.toInstant(previousSelectedEndTime);
         }
 
         if (proposedSelectedStartTimeUtc != null && proposedSelectedStartTime == null) {
-            proposedSelectedStartTime = BookingTime.fromInstant(proposedSelectedStartTimeUtc);
+            proposedSelectedStartTime = BusinessTime.fromInstant(proposedSelectedStartTimeUtc);
         } else if (proposedSelectedStartTime != null && proposedSelectedStartTimeUtc == null) {
-            proposedSelectedStartTimeUtc = BookingTime.toInstant(proposedSelectedStartTime);
+            proposedSelectedStartTimeUtc = BusinessTime.toInstant(proposedSelectedStartTime);
         }
 
         if (proposedSelectedEndTimeUtc != null && proposedSelectedEndTime == null) {
-            proposedSelectedEndTime = BookingTime.fromInstant(proposedSelectedEndTimeUtc);
+            proposedSelectedEndTime = BusinessTime.fromInstant(proposedSelectedEndTimeUtc);
         } else if (proposedSelectedEndTime != null && proposedSelectedEndTimeUtc == null) {
-            proposedSelectedEndTimeUtc = BookingTime.toInstant(proposedSelectedEndTime);
+            proposedSelectedEndTimeUtc = BusinessTime.toInstant(proposedSelectedEndTime);
         }
 
         if (requestedAtUtc != null && requestedAt == null) {
-            requestedAt = BookingTime.fromInstant(requestedAtUtc);
+            requestedAt = BusinessTime.fromInstant(requestedAtUtc);
         } else if (requestedAt != null && requestedAtUtc == null) {
-            requestedAtUtc = BookingTime.toInstant(requestedAt);
+            requestedAtUtc = BusinessTime.toInstant(requestedAt);
         }
 
         if (respondedAtUtc != null && respondedAt == null) {
-            respondedAt = BookingTime.fromInstant(respondedAtUtc);
+            respondedAt = BusinessTime.fromInstant(respondedAtUtc);
         } else if (respondedAt != null && respondedAtUtc == null) {
-            respondedAtUtc = BookingTime.toInstant(respondedAt);
+            respondedAtUtc = BusinessTime.toInstant(respondedAt);
         }
 
         if (expiredAtUtc != null && expiredAt == null) {
-            expiredAt = BookingTime.fromInstant(expiredAtUtc);
+            expiredAt = BusinessTime.fromInstant(expiredAtUtc);
         } else if (expiredAt != null && expiredAtUtc == null) {
-            expiredAtUtc = BookingTime.toInstant(expiredAt);
+            expiredAtUtc = BusinessTime.toInstant(expiredAt);
         }
     }
 }

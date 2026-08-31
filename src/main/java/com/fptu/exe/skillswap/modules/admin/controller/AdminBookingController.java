@@ -1,11 +1,8 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminBookingListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminReverseResolutionRequest;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAdminPort;
 import com.fptu.exe.skillswap.modules.admin.service.AdminBookingModerationService;
-import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.idempotency.Idempotent;
@@ -27,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/bookings")
@@ -48,8 +46,8 @@ public class AdminBookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người gọi không có quyền ADMIN")
     })
     @GetMapping
-    public ApiResponse<PageResponse<BookingResponse>> getBookings(
-            @ParameterObject @ModelAttribute AdminBookingListRequest request
+    public ApiResponse<PageResponse<Map<String, Object>>> getBookings(
+            @ParameterObject @ModelAttribute BookingAdminPort.AdminBookingQuery request
     ) {
         return ApiResponse.success(adminBookingModerationService.getBookings(request));
     }
@@ -65,7 +63,7 @@ public class AdminBookingController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy booking")
     })
     @GetMapping("/{bookingId}")
-    public ApiResponse<BookingResponse> getBookingDetail(@PathVariable UUID bookingId) {
+    public ApiResponse<Map<String, Object>> getBookingDetail(@PathVariable UUID bookingId) {
         return ApiResponse.success(adminBookingModerationService.getBookingDetail(bookingId));
     }
 
@@ -75,10 +73,10 @@ public class AdminBookingController {
     )
     @PostMapping("/{bookingId}/resolve-issue")
     @Idempotent
-    public ApiResponse<BookingResponse> resolveIssue(
+    public ApiResponse<Map<String, Object>> resolveIssue(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
-            @Valid @RequestBody AdminResolveBookingIssueRequest request
+            @Valid @RequestBody BookingAdminPort.ResolveBookingIssueCommand request
     ) {
         return ApiResponse.success(adminBookingModerationService.resolveBookingIssue(principal.getPublicId(), bookingId, request));
     }
@@ -89,10 +87,10 @@ public class AdminBookingController {
     )
     @PostMapping("/{bookingId}/reverse-resolution")
     @Idempotent
-    public ApiResponse<BookingResponse> reverseResolution(
+    public ApiResponse<Map<String, Object>> reverseResolution(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
-            @Valid @RequestBody AdminReverseResolutionRequest request
+            @Valid @RequestBody BookingAdminPort.ReverseBookingIssueResolutionCommand request
     ) {
         return ApiResponse.success(adminBookingModerationService.reverseBookingIssueResolution(principal.getPublicId(), bookingId, request));
     }

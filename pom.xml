@@ -294,8 +294,10 @@
                         <exclude>**/*IT.java</exclude>
                         <exclude>**/*IntegrationTest.java</exclude>
                         <!-- Run these expensive class-graph tests in isolated forks below. -->
-                        <exclude>**/ModulithTest.java</exclude>
+                        <exclude>**/ModuleTaxonomyTest.java</exclude>
                         <exclude>**/ArchitectureGuardrailTest.java</exclude>
+                        <!-- The dedicated required CI audit profile runs this class explicitly. -->
+                        <exclude>**/ModulithArchitectureAuditTest.java</exclude>
                     </excludes>
                 </configuration>
                 <executions>
@@ -307,7 +309,7 @@
                         </goals>
                         <configuration>
                             <includes combine.self="override">
-                                <include>**/ModulithTest.java</include>
+                                <include>**/ModuleTaxonomyTest.java</include>
                                 <include>**/ArchitectureGuardrailTest.java</include>
                             </includes>
                             <excludes combine.self="override"/>
@@ -358,4 +360,39 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>modulith-architecture-audit</id>
+            <properties>
+                <!-- Do not rerun the normal unit suite when collecting the required audit report. -->
+                <skipUnitTests>true</skipUnitTests>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>modulith-architecture-audit</id>
+                                <phase>test</phase>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                                <configuration>
+                                    <skip>false</skip>
+                                    <includes combine.self="override">
+                                        <include>**/ModulithArchitectureAuditTest.java</include>
+                                        <include>**/ModulithAuditEdgeParserTest.java</include>
+                                    </includes>
+                                    <excludes combine.self="override"/>
+                                    <reuseForks>false</reuseForks>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

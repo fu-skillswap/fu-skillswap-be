@@ -16,13 +16,13 @@ import com.fptu.exe.skillswap.modules.notification.NotificationType;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID>, NotificationRepositoryCustom {
 
-    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
+    @Query("SELECT n FROM Notification n WHERE n.recipientUserId = :recipientUserId AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     Page<Notification> findByRecipientUserId(@Param("recipientUserId") UUID recipientUserId, Pageable pageable);
 
-    @Query("SELECT n FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
+    @Query("SELECT n FROM Notification n WHERE n.recipientUserId = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     Page<Notification> findByRecipientUserIdAndReadAtIsNull(@Param("recipientUserId") UUID recipientUserId, Pageable pageable);
 
-    @Query("SELECT COUNT(n) FROM Notification n WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
+    @Query("SELECT COUNT(n) FROM Notification n WHERE n.recipientUserId = :recipientUserId AND n.readAt IS NULL AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     long countByRecipientUserIdAndReadAtIsNull(@Param("recipientUserId") UUID recipientUserId);
 
     Optional<Notification> findByIdAndRecipientUserId(UUID id, UUID recipientUserId);
@@ -30,10 +30,10 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Optional<Notification> findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(UUID recipientUserId, NotificationType type, String relatedEntityType, UUID relatedEntityId);
 
     @Modifying
-    @Query("UPDATE Notification n SET n.readAt = :now WHERE n.recipientUser.id = :recipientUserId AND n.readAt IS NULL")
+    @Query("UPDATE Notification n SET n.readAt = :now WHERE n.recipientUserId = :recipientUserId AND n.readAt IS NULL")
     int markAllAsRead(@Param("recipientUserId") UUID recipientUserId, @Param("now") LocalDateTime now);
 
-    @Query("select distinct n.recipientUser.id from Notification n where n.readAt is not null and n.readAt < :cutoff order by n.recipientUser.id")
+    @Query("select distinct n.recipientUserId from Notification n where n.readAt is not null and n.readAt < :cutoff order by n.recipientUserId")
     List<UUID> findUsersWithArchivableNotifications(@Param("cutoff") LocalDateTime cutoff, org.springframework.data.domain.Pageable pageable);
 
     List<Notification> findTop500ByRecipientUserIdAndReadAtNotNullAndReadAtBeforeOrderByReadAtAscIdAsc(

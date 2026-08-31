@@ -383,7 +383,7 @@ class AdminDataCenterControllerIntegrationTest {
 
     private void seedAuditLogs() {
         AuditLog userLog = auditLogRepository.save(AuditLog.builder()
-                .actor(adminUser)
+                .actorUserId(adminUser.getId())
                 .action(AuditAction.UPDATE)
                 .entityType("USER")
                 .entityId(targetUser.getId())
@@ -393,7 +393,7 @@ class AdminDataCenterControllerIntegrationTest {
                 .userAgent("JUnit")
                 .build());
         AuditLog bookingLog = auditLogRepository.save(AuditLog.builder()
-                .actor(adminUser)
+                .actorUserId(adminUser.getId())
                 .action(AuditAction.DELETE)
                 .entityType("BOOKING")
                 .entityId(UUID.randomUUID())

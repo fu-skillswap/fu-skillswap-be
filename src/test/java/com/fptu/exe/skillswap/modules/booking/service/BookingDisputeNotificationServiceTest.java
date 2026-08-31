@@ -51,7 +51,7 @@ class BookingDisputeNotificationServiceTest {
         booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(MentorProfile.builder().userId(mentor.getId()).user(mentor).build())
+                .mentorUserId(mentor.getId())
                 .serviceTitleSnapshot("Mock interview")
                 .issueSubmittedByUserId(mentee.getId())
                 .completionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR)
@@ -106,10 +106,10 @@ class BookingDisputeNotificationServiceTest {
         User activeAdmin = user("admin@skillswap.vn", "Admin");
         User inactiveAdmin = user("inactive@skillswap.vn", "Inactive");
         inactiveAdmin.setStatus(com.fptu.exe.skillswap.modules.identity.domain.UserStatus.INACTIVE);
-        when(userQueryPort.findUsersByRole(eq(RoleCode.ADMIN), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(activeAdmin, inactiveAdmin)));
-        when(userQueryPort.findUsersByRole(eq(RoleCode.SYSTEM_ADMIN), eq(Pageable.unpaged())))
-                .thenReturn(new PageImpl<>(List.of(activeAdmin)));
+        when(userQueryPort.findUsersByRole(eq(RoleCode.ADMIN)))
+                .thenReturn(List.of(activeAdmin, inactiveAdmin));
+        when(userQueryPort.findUsersByRole(eq(RoleCode.SYSTEM_ADMIN)))
+                .thenReturn(List.of(activeAdmin));
 
         service.notifyHumanReviewRequired(booking);
 

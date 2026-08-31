@@ -14,8 +14,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequ
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleRequestRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarUpdateBookingRequestedEvent;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -48,8 +49,8 @@ public class BookingRescheduleService {
     private final BookingRescheduleRequestRepository bookingRescheduleRequestRepository;
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final BookingSlotValidator bookingSlotValidator;
+    private final MentorBookingQueryPort mentorBookingQueryPort;
     private final NotificationService notificationService;
-    private final UserRepository userRepository;
     private final SessionService sessionService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
@@ -177,14 +178,16 @@ public class BookingRescheduleService {
         validateProposedSlotForBooking(booking, proposedSlot);
         Instant proposedStartUtc = request.proposedSelectedStartTime().toInstant();
         Instant proposedEndUtc = request.proposedSelectedEndTime().toInstant();
+        ServiceSlotCandidate serviceCandidate = mentorBookingQueryPort.getActiveServiceCandidate(booking.getServiceId(), booking.getMentorUserId())
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Gói mentoring hiện không còn khả dụng"));
         bookingSlotValidator.validateSelectedRange(
                 proposedSlot,
-                booking.getService(),
+                serviceCandidate,
                 proposedStartUtc,
                 proposedEndUtc,
                 timeProvider.instant()
         );
-        bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getService().getId());
+        bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getServiceId());
 
         if (sameSegment(booking, proposedSlot, BookingTime.fromInstant(proposedStartUtc), BookingTime.fromInstant(proposedEndUtc))) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Lịch mới phải khác lịch hiện tại của booking");
@@ -239,17 +242,19 @@ public class BookingRescheduleService {
         MentorAvailabilitySlot currentSlot = lockedSlots.get(currentSlotId);
 
         validateProposedSlotForBooking(booking, proposedSlot);
+        ServiceSlotCandidate serviceCandidate = mentorBookingQueryPort.getActiveServiceCandidate(booking.getServiceId(), booking.getMentorUserId())
+                .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Gói mentoring hiện không còn khả dụng"));
         bookingSlotValidator.validateSelectedRange(
                 proposedSlot,
-                booking.getService(),
+                serviceCandidate,
                 rescheduleRequest.getProposedSelectedStartTime(),
                 rescheduleRequest.getProposedSelectedEndTime(),
                 timeProvider.nowBusiness()
         );
-        bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getService().getId());
+        bookingSlotValidator.validateServiceAttachedToSlot(proposedSlot.getId(), booking.getServiceId());
         bookingSlotValidator.validateCandidateSelection(
                 proposedSlot,
-                booking.getService(),
+                serviceCandidate,
                 booking.getMentee().getId(),
                 rescheduleRequest.getProposedSelectedStartTime(),
                 rescheduleRequest.getProposedSelectedEndTime()
@@ -302,7 +307,7 @@ public class BookingRescheduleService {
 
         refreshSlotBookedFlag(currentSlot);
         refreshSlotBookedFlag(proposedSlot);
-        eventPublisher.publishEvent(new GoogleCalendarUpdateBookingRequestedEvent(booking.getId(), booking.getUpdatedAt()));
+        eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(booking.getId(), booking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.UPDATE));
         notifyAccept(rescheduleRequest);
         notifyAutoRejectedPendingBookings(overlappingPendingBookings);
         return toResponse(rescheduleRequest);
@@ -360,7 +365,7 @@ public class BookingRescheduleService {
                 }
             }
             case MENTOR -> {
-                if (booking.getMentorProfile() == null || !currentUserId.equals(booking.getMentorProfile().getUserId())) {
+                if (booking.getMentorUserId() == null || !currentUserId.equals(booking.getMentorUserId())) {
                     throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền tạo reschedule request cho booking này");
                 }
             }
@@ -371,7 +376,7 @@ public class BookingRescheduleService {
         if (booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId())) {
             return BookingRescheduleActorRole.MENTEE;
         }
-        if (booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId())) {
+        if (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId())) {
             return BookingRescheduleActorRole.MENTOR;
         }
         throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền phản hồi reschedule request của booking này");
@@ -379,7 +384,7 @@ public class BookingRescheduleService {
 
     private void assertParticipantAccess(Booking booking, UUID currentUserId) {
         if ((booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId()))
-                || (booking.getMentorProfile() != null && currentUserId.equals(booking.getMentorProfile().getUserId()))) {
+                || (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId()))) {
             return;
         }
         throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem reschedule history của booking này");
@@ -389,7 +394,7 @@ public class BookingRescheduleService {
         if (booking.getStatus() != BookingStatus.PAID) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ booking đã thanh toán và chưa bắt đầu mới được reschedule");
         }
-        if (booking.getService() == null || booking.getService().getId() == null) {
+        if (booking.getServiceId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking hiện không gắn với service hợp lệ để reschedule");
         }
         if ((booking.getRescheduleCount() == null ? 0 : booking.getRescheduleCount()) >= MAX_RESCHEDULE_COUNT) {
@@ -427,10 +432,10 @@ public class BookingRescheduleService {
     }
 
     private void validateProposedSlotForBooking(Booking booking, MentorAvailabilitySlot proposedSlot) {
-        if (proposedSlot.getMentorProfile() == null || booking.getMentorProfile() == null) {
+        if (proposedSlot.getMentorUserId() == null || booking.getMentorUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Slot mới hoặc booking hiện không gắn với mentor hợp lệ");
         }
-        if (!booking.getMentorProfile().getUserId().equals(proposedSlot.getMentorProfile().getUserId())) {
+        if (!booking.getMentorUserId().equals(proposedSlot.getMentorUserId())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Reschedule không được đổi sang mentor khác");
         }
         if (!proposedSlot.isActive()) {
@@ -472,7 +477,7 @@ public class BookingRescheduleService {
     private void notifyCreate(BookingRescheduleRequest request) {
         Booking booking = request.getBooking();
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
-                ? booking.getMentorProfile().getUserId()
+                ? booking.getMentorUserId()
                 : booking.getMentee().getId();
         if (request.getRequesterRole() == BookingRescheduleActorRole.ADMIN) {
             eventPublisher.publishEvent(new NotificationEvent(
@@ -484,7 +489,7 @@ public class BookingRescheduleService {
                     booking.getId()
             ));
             eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentorProfile().getUserId(),
+                    booking.getMentorUserId(),
                     NotificationType.BOOKING_RESCHEDULE_REQUESTED,
                     "Admin đã tạo đề xuất dời lịch",
                     "Admin đã tạo một reschedule request cho booking của bạn.",
@@ -516,7 +521,7 @@ public class BookingRescheduleService {
         }
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
                 ? booking.getMentee().getId()
-                : booking.getMentorProfile().getUserId();
+                : booking.getMentorUserId();
         eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
                 NotificationType.BOOKING_RESCHEDULE_ACCEPTED,
@@ -529,7 +534,7 @@ public class BookingRescheduleService {
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
                 booking.getMentee().getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã được chấp nhận.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -549,7 +554,7 @@ public class BookingRescheduleService {
         }
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
                 ? booking.getMentee().getId()
-                : booking.getMentorProfile().getUserId();
+                : booking.getMentorUserId();
         eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
                 NotificationType.BOOKING_RESCHEDULE_REJECTED,
@@ -562,7 +567,7 @@ public class BookingRescheduleService {
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
                 booking.getMentee().getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã bị từ chối.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -580,7 +585,7 @@ public class BookingRescheduleService {
                 booking.getId()
         ));
         eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 NotificationType.BOOKING_RESCHEDULE_EXPIRED,
                 "Đề xuất dời lịch đã hết hạn",
                 "Reschedule request của booking đã hết hạn vì chưa được phản hồi trước giờ học cũ.",
@@ -591,7 +596,7 @@ public class BookingRescheduleService {
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
                 booking.getMentee().getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã hết hạn.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
@@ -608,7 +613,7 @@ public class BookingRescheduleService {
                 booking.getId()
         ));
         eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 type,
                 title,
                 message,

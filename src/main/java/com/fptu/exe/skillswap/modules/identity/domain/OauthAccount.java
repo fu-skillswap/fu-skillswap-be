@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.domain;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -55,22 +55,22 @@ public class OauthAccount {
     @PrePersist
     protected void onCreate() {
         if (createdAtUtc == null) {
-            createdAtUtc = createdAt != null ? BookingTime.toInstant(createdAt) : DateTimeUtil.instantNow();
+            createdAtUtc = createdAt != null ? BusinessTime.toInstant(createdAt) : DateTimeUtil.instantNow();
         }
         if (createdAt == null) {
-            createdAt = BookingTime.fromInstant(createdAtUtc);
+            createdAt = BusinessTime.fromInstant(createdAtUtc);
         }
         if (updatedAtUtc == null) {
-            updatedAtUtc = updatedAt != null ? BookingTime.toInstant(updatedAt) : createdAtUtc;
+            updatedAtUtc = updatedAt != null ? BusinessTime.toInstant(updatedAt) : createdAtUtc;
         }
         if (updatedAt == null) {
-            updatedAt = BookingTime.fromInstant(updatedAtUtc);
+            updatedAt = BusinessTime.fromInstant(updatedAtUtc);
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAtUtc = DateTimeUtil.instantNow();
-        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 }

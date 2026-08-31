@@ -1,12 +1,7 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponCreateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponStatusRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminCouponUpdateRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponRedemptionResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminCouponResponse;
+import com.fptu.exe.skillswap.modules.payment.port.CouponAdminPort;
 import com.fptu.exe.skillswap.modules.admin.service.AdminCouponService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -19,7 +14,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -48,24 +42,24 @@ public class AdminCouponController {
 
     @GetMapping
     @Operation(summary = "Lấy danh sách coupon (paginated & filtered)", description = "Hỗ trợ lọc theo status, discountType, keyword (code hoặc title).")
-    public ApiResponse<PageResponse<AdminCouponResponse>> list(
-            @ParameterObject @ModelAttribute AdminCouponListRequest request
+    public ApiResponse<PageResponse<CouponAdminPort.CouponView>> list(
+            @ParameterObject @ModelAttribute CouponAdminPort.CouponListQuery request
     ) {
         return ApiResponse.success(adminCouponService.list(request));
     }
 
     @GetMapping("/{couponId}")
     @Operation(summary = "Lấy chi tiết một coupon theo ID")
-    public ApiResponse<AdminCouponResponse> getDetail(@PathVariable UUID couponId) {
+    public ApiResponse<CouponAdminPort.CouponView> getDetail(@PathVariable UUID couponId) {
         return ApiResponse.success(adminCouponService.getDetail(couponId));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Tạo coupon mới cho hệ thống")
-    public ApiResponse<AdminCouponResponse> create(
+    public ApiResponse<CouponAdminPort.CouponView> create(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody AdminCouponCreateRequest request
+            @Valid @RequestBody CouponAdminPort.CreateCouponCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.created(adminCouponService.create(principal.getPublicId(), request));
@@ -73,10 +67,10 @@ public class AdminCouponController {
 
     @PutMapping("/{couponId}")
     @Operation(summary = "Cập nhật thông tin coupon")
-    public ApiResponse<AdminCouponResponse> update(
+    public ApiResponse<CouponAdminPort.CouponView> update(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID couponId,
-            @Valid @RequestBody AdminCouponUpdateRequest request
+            @Valid @RequestBody CouponAdminPort.UpdateCouponCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminCouponService.update(principal.getPublicId(), couponId, request));
@@ -84,10 +78,10 @@ public class AdminCouponController {
 
     @PatchMapping("/{couponId}/status")
     @Operation(summary = "Chuyển trạng thái coupon (ACTIVE, INACTIVE, SUSPENDED)")
-    public ApiResponse<AdminCouponResponse> changeStatus(
+    public ApiResponse<CouponAdminPort.CouponView> changeStatus(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID couponId,
-            @Valid @RequestBody AdminCouponStatusRequest request
+            @Valid @RequestBody CouponAdminPort.ChangeCouponStatusCommand request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(adminCouponService.changeStatus(principal.getPublicId(), couponId, request));
@@ -95,11 +89,11 @@ public class AdminCouponController {
 
     @GetMapping("/{couponId}/redemptions")
     @Operation(summary = "Lấy danh sách các lượt đổi mã (Redemption history) của coupon")
-    public ApiResponse<PageResponse<AdminCouponRedemptionResponse>> getRedemptions(
+    public ApiResponse<PageResponse<CouponAdminPort.CouponRedemptionView>> getRedemptions(
             @PathVariable UUID couponId,
-            @ParameterObject Pageable pageable
+            @ParameterObject @ModelAttribute CouponAdminPort.CouponPageQuery query
     ) {
-        return ApiResponse.success(adminCouponService.getRedemptions(couponId, pageable));
+        return ApiResponse.success(adminCouponService.getRedemptions(couponId, query));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

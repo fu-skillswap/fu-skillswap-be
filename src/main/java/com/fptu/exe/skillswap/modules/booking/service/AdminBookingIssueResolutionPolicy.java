@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminResolveBookingIssueRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIssueRequest;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
 import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionReasonCode;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;

@@ -12,14 +12,10 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingRescheduleRequ
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRescheduleRequestRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingRescheduleService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingSlotValidator;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -28,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -56,11 +53,9 @@ class BookingRescheduleServiceTest {
     @Mock
     private NotificationService notificationService;
     @Mock
-    private UserRepository userRepository;
-    @Mock
     private SessionService sessionService;
     @Mock
-    private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private ApplicationEventPublisher eventPublisher;
 
     private BookingRescheduleService bookingRescheduleService;
     private UUID menteeId;
@@ -78,7 +73,6 @@ class BookingRescheduleServiceTest {
                 mentorAvailabilitySlotRepository,
                 bookingSlotValidator,
                 notificationService,
-                userRepository,
                 sessionService,
                 eventPublisher
         );
@@ -101,14 +95,14 @@ class BookingRescheduleServiceTest {
 
         currentSlot = new MentorAvailabilitySlot();
         currentSlot.setId(UUID.randomUUID());
-        currentSlot.setMentorProfile(mentorProfile);
+        currentSlot.setMentorUserId(mentorProfile.getUserId());
         currentSlot.setStartTime(now.plusHours(12));
         currentSlot.setEndTime(now.plusHours(13));
         currentSlot.setActive(true);
 
         proposedSlot = new MentorAvailabilitySlot();
         proposedSlot.setId(UUID.randomUUID());
-        proposedSlot.setMentorProfile(mentorProfile);
+        proposedSlot.setMentorUserId(mentorProfile.getUserId());
         proposedSlot.setStartTime(now.plusHours(15));
         proposedSlot.setEndTime(now.plusHours(16));
         proposedSlot.setActive(true);
@@ -116,8 +110,8 @@ class BookingRescheduleServiceTest {
         booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
-                .service(service)
+                .mentorUserId(mentorProfile.getUserId())
+                .serviceId(service.getId())
                 .slot(currentSlot)
                 .status(BookingStatus.PAID)
                 .selectedStartTime(currentSlot.getStartTime())
@@ -180,7 +174,7 @@ class BookingRescheduleServiceTest {
         assertEquals("ACCEPTED", response.status());
         assertEquals(proposedSlot.getId(), booking.getSlot().getId());
         assertEquals(1, booking.getRescheduleCount());
-        verify(bookingSlotValidator).validateServiceAttachedToSlot(eq(proposedSlot.getId()), eq(booking.getService().getId()));
+        verify(bookingSlotValidator).validateServiceAttachedToSlot(eq(proposedSlot.getId()), eq(booking.getServiceId()));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent.class));
     }
@@ -213,7 +207,6 @@ class BookingRescheduleServiceTest {
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(currentSlot.getId())).thenReturn(Optional.of(currentSlot));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(bookingRescheduleRequestRepository.save(any(BookingRescheduleRequest.class))).thenAnswer(inv -> inv.getArgument(0));
-
 
         BookingRescheduleRequestResponse response = bookingRescheduleService.acceptByAdmin(
                 adminId,

@@ -12,6 +12,6 @@ import java.util.UUID;
 
 public interface MentorVerificationUploadIntentRepository extends JpaRepository<MentorVerificationUploadIntent, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select i from MentorVerificationUploadIntent i join fetch i.owner where i.id = :id")
+    @Query("select i from MentorVerificationUploadIntent i where i.id = :id")
     Optional<MentorVerificationUploadIntent> findByIdForUpdate(@Param("id") UUID id);
 }

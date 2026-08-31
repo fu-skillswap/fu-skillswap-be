@@ -16,8 +16,9 @@ import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -55,7 +56,9 @@ class BookingDecisionServiceTest {
     @Mock
     private UserLockPort userLockPort;
     @Mock
-    private MentorProfileRepository mentorProfileRepository;
+    private MentorQueryPort mentorQueryPort;
+    @Mock
+    private UserQueryPort userQueryPort;
     @Mock
     private EntityManager entityManager;
     @Mock
@@ -89,42 +92,33 @@ class BookingDecisionServiceTest {
         User mentorUser = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor Dev").build();
         User menteeUser = User.builder().id(menteeId).email("mentee@test.com").fullName("Mentee Student").build();
 
-        mentorProfile = MentorProfile.builder().userId(mentorId).user(mentorUser).totalAcceptedBookings(0).build();
-
-        Instant startUtc = Instant.parse("2026-09-01T10:00:00Z");
-        Instant endUtc = Instant.parse("2026-09-01T11:00:00Z");
-
-        slot = MentorAvailabilitySlot.builder()
-                .id(UUID.randomUUID())
-                .mentorProfile(mentorProfile)
-                .startTimeUtc(startUtc)
-                .endTimeUtc(endUtc)
-                .startTime(BookingTime.fromInstant(startUtc))
-                .endTime(BookingTime.fromInstant(endUtc))
-                .isActive(true)
-                .isBooked(false)
+        mentorProfile = MentorProfile.builder()
+                .userId(mentorId)
+                .userId(mentorUser.getId())
+                .status(com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE)
                 .build();
+
+        slot = new MentorAvailabilitySlot();
+        slot.setId(UUID.randomUUID());
+        slot.setMentorProfile(mentorProfile);
+
+        Instant startUtc = Instant.parse("2026-08-05T08:00:00Z");
+        Instant endUtc = Instant.parse("2026-08-05T09:00:00Z");
 
         pendingBooking = Booking.builder()
                 .id(bookingId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .mentee(menteeUser)
                 .slot(slot)
                 .status(BookingStatus.PENDING)
                 .selectedStartTimeUtc(startUtc)
                 .selectedEndTimeUtc(endUtc)
-                .selectedStartTime(BookingTime.fromInstant(startUtc))
-                .selectedEndTime(BookingTime.fromInstant(endUtc))
                 .serviceIsFreeSnapshot(false)
-                .servicePriceScoinSnapshot(50_000)
-                .learningGoalTitle("Java Spring Boot")
-                .pendingExpireAtUtc(startUtc.minusSeconds(3600))
-                .pendingExpireAt(BookingTime.fromInstant(startUtc.minusSeconds(3600)))
                 .build();
 
         session = Session.builder()
                 .id(UUID.randomUUID())
-                .mentor(mentorUser)
+                .mentorUserId(mentorUser.getId())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(bookingId)
                 .scheduledStartTimeUtc(startUtc)
@@ -138,10 +132,8 @@ class BookingDecisionServiceTest {
                 bookingRepository,
                 mentorAvailabilitySlotRepository,
                 userLockPort,
-                mentorProfileRepository,
-                entityManager,
+                userQueryPort,
                 sessionService,
-                conversationService,
                 eventPublisher,
                 bookingResponseMapper,
                 googleCalendarConnectionPort,
@@ -150,7 +142,7 @@ class BookingDecisionServiceTest {
         bookingDecisionService.setTimeProvider(TimeProvider.from(Clock.fixed(Instant.parse("2026-08-01T10:00:00Z"), ZoneOffset.UTC)));
 
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(pendingBooking));
-        when(mentorProfileRepository.findByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
         when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(menteeUser, mentorUser));
         when(bookingRepository.findOverlappingBySlotIdAndStatusForUpdateUtc(any(), any(), any(), any()))

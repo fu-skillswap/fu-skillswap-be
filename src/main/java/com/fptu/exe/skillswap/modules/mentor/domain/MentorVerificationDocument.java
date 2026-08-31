@@ -1,9 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.domain;
 
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import jakarta.persistence.*;
 import lombok.*;
@@ -45,9 +42,20 @@ public class MentorVerificationDocument {
     @Column(name = "storage_kind", nullable = false, length = 20)
     private VerificationStorageKind storageKind;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "stored_file_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_verification_documents_file"))
-    private StoredFile storedFile;
+    @Column(name = "stored_file_id", nullable = false)
+    private UUID storedFileId;
+
+    @Column(name = "original_filename", length = 255)
+    private String originalFilename;
+
+    @Column(name = "content_type", length = 100)
+    private String contentType;
+
+    @Column(name = "size_bytes")
+    private Long sizeBytes;
+
+    @Column(name = "file_url", columnDefinition = "TEXT")
+    private String fileUrl;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
@@ -63,9 +71,8 @@ public class MentorVerificationDocument {
     @Column(name = "rejected_reason", columnDefinition = "TEXT")
     private String rejectedReason;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "uploaded_by_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_mentor_verification_documents_uploaded_by"))
-    private User uploadedBy;
+    @Column(name = "uploaded_by_user_id", nullable = false)
+    private UUID uploadedByUserId;
 
     @Column(name = "uploaded_at", nullable = false, updatable = false)
     private LocalDateTime uploadedAt;
@@ -84,7 +91,3 @@ public class MentorVerificationDocument {
         updatedAt = DateTimeUtil.now();
     }
 }
-
-
-
-

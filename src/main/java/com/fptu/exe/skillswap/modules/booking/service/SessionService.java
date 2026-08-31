@@ -44,9 +44,13 @@ public class SessionService {
         Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
 
         boolean hasManualMeeting = booking.getMeetingPlatform() != null;
+        if (booking.getMentorUserId() == null) {
+            throw new IllegalArgumentException("Booking must have mentor user");
+        }
+
         Session session = Session.builder()
-                .service(booking.getService())
-                .mentor(booking.getMentorProfile().getUser())
+                .serviceId(booking.getServiceId())
+                .mentorUserId(booking.getMentorUserId())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(booking.getId())
                 .scheduledStartTimeUtc(startUtc)

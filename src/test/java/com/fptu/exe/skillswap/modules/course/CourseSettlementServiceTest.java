@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.course;
 
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.course.domain.Course;
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollmentSettlement;
@@ -9,21 +8,19 @@ import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentSettlementRepository;
 import com.fptu.exe.skillswap.modules.course.service.CourseSettlementService;
-import com.fptu.exe.skillswap.modules.payment.service.CreditLedgerService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.payment.port.CoursePaymentPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,16 +34,10 @@ class CourseSettlementServiceTest {
     private CourseEnrollmentRepository enrollmentRepository;
 
     @Mock
-    private CreditLedgerService creditLedgerService;
+    private CoursePaymentPort coursePaymentPort;
 
     @Mock
-    private SettlementService settlementService;
-
-    @Mock
-    private ObjectProvider<ConversationService> conversationServiceProvider;
-
-    @Mock
-    private ConversationService conversationService;
+    private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private CourseSettlementService courseSettlementService;
@@ -87,13 +78,11 @@ class CourseSettlementServiceTest {
     void testRefundUnreleasedAllocationsRevokesGroupChatAccess() {
         when(enrollmentRepository.findByIdForUpdate(enrollmentId)).thenReturn(Optional.of(enrollment));
         when(settlementRepository.findByEnrollmentIdForUpdate(enrollmentId)).thenReturn(Optional.of(allocation));
-        when(conversationServiceProvider.getIfAvailable()).thenReturn(conversationService);
-
         int refunded = courseSettlementService.refundUnreleasedAllocations(enrollmentId, "STUDENT_REQUEST");
 
         assertEquals(100, refunded);
         assertEquals(EnrollmentStatus.REFUNDED, enrollment.getStatus());
         assertEquals(CourseSettlementStatus.REFUNDED, allocation.getStatus());
-        verify(conversationService).revokeCourseStudentParticipant(eq(courseId), eq(studentUserId));
+        verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.course.event.CourseEnrollmentEndedEvent.class));
     }
 }

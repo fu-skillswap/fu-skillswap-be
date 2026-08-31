@@ -1,11 +1,13 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminMentorListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorDetailResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorListItemResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryMentorProfileResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorListRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorDetailResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorListItemResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminUserSummaryMentorProfileResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -15,6 +17,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementRespo
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorFeaturedProjectResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultResponse;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorAdminPort;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
@@ -43,10 +46,11 @@ public class MentorAdminPortImpl implements MentorAdminPort {
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
 
     private final MentorProfileRepository mentorProfileRepository;
-    private final StudentProfileRepository studentProfileRepository;
+    private final UserQueryPort userQueryPort;
     private final MentorSubjectResultRepository mentorSubjectResultRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
+    private final PublicAssetUploadPort publicAssetUploadPort;
 
     @Override
     @Transactional(readOnly = true)
@@ -78,8 +82,8 @@ public class MentorAdminPortImpl implements MentorAdminPort {
         MentorProfile profile = mentorProfileRepository.findWithUserByUserId(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thông tin mentor"));
 
-        User user = profile.getUser();
-        String primaryLabel = studentProfileRepository.findWithDetailsByUserId(mentorUserId)
+        UserSummaryRecord user = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+        String primaryLabel = userQueryPort.findStudentProfileWithDetailsByUserId(mentorUserId)
                 .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
                 .orElse(null);
         List<MentorSubjectResultResponse> subjectResults = mentorSubjectResultRepository == null
@@ -92,22 +96,22 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 ? List.of()
                 : mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
                 .stream()
-                .map(this::toFeaturedProjectResponse)
+                .map(project -> toFeaturedProjectResponse(project, mentorUserId))
                 .toList();
         List<MentorAchievementResponse> achievements = mentorAchievementRepository == null
                 ? List.of()
                 : mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
                 .stream()
-                .map(this::toAchievementResponse)
+                .map(achievement -> toAchievementResponse(achievement, mentorUserId))
                 .toList();
 
         return AdminMentorDetailResponse.builder()
                 .mentorUserId(profile.getUserId())
-                .email(user == null ? null : user.getEmail())
-                .displayName(user == null ? null : user.getFullName())
-                .avatarUrl(user == null ? null : user.getAvatarUrl())
+                .email(user == null ? null : user.email())
+                .displayName(user == null ? null : user.fullName())
+                .avatarUrl(user == null ? null : user.avatarUrl())
                 .phoneNumber(profile.getPhoneNumber())
-                .userStatus(user == null ? null : user.getStatus())
+                .userStatus(user == null || user.status() == null ? null : UserStatus.valueOf(user.status()))
                 .mentorStatus(profile.getStatus())
                 .isAvailable(profile.isAvailable())
                 .bookingSuspendedUntil(profile.getBookingSuspendedUntil())
@@ -221,11 +225,11 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .build();
     }
 
-    private MentorFeaturedProjectResponse toFeaturedProjectResponse(MentorFeaturedProject project) {
+    private MentorFeaturedProjectResponse toFeaturedProjectResponse(MentorFeaturedProject project, UUID mentorUserId) {
         return MentorFeaturedProjectResponse.builder()
                 .id(project.getId())
                 .title(project.getTitle())
-                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
+                .pictureUrl(project.getPictureFileId() == null ? null : publicAssetUploadPort.requireOwnedPortfolioImage(mentorUserId, project.getPictureFileId()).publicUrl())
                 .content(project.getContent())
                 .projectDescription(project.getProjectDescription())
                 .liveDemoUrl(project.getLiveDemoUrl())
@@ -235,11 +239,11 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .build();
     }
 
-    private MentorAchievementResponse toAchievementResponse(MentorAchievement achievement) {
+    private MentorAchievementResponse toAchievementResponse(MentorAchievement achievement, UUID mentorUserId) {
         return MentorAchievementResponse.builder()
                 .id(achievement.getId())
                 .title(achievement.getTitle())
-                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
+                .pictureUrl(achievement.getPictureFileId() == null ? null : publicAssetUploadPort.requireOwnedPortfolioImage(mentorUserId, achievement.getPictureFileId()).publicUrl())
                 .awardDescription(achievement.getAwardDescription())
                 .achievedAt(achievement.getAchievedAt())
                 .productHeader(achievement.getProductHeader())
@@ -249,5 +253,14 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .createdAt(achievement.getCreatedAt())
                 .updatedAt(achievement.getUpdatedAt())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsById(UUID mentorId) {
+        if (mentorId == null) {
+            return false;
+        }
+        return mentorProfileRepository.existsById(mentorId);
     }
 }

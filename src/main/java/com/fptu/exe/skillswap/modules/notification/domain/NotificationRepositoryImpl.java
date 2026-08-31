@@ -24,7 +24,7 @@ public class NotificationRepositoryImpl implements NotificationRepositoryCustom 
         StringBuilder jpql = new StringBuilder("""
                 select n
                 from Notification n
-                where n.recipientUser.id = :recipientUserId
+                where n.recipientUserId = :recipientUserId
                   and n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD
                 """);
         if (unreadOnly) {

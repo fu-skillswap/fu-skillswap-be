@@ -10,7 +10,6 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
-import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,8 +48,6 @@ class AdminBlogServiceTest {
     private EntityManager entityManager;
     @Mock
     private ApplicationEventPublisher eventPublisher;
-    @Mock
-    private AdminAuditWriterService adminAuditWriterService;
 
     private AdminBlogService service;
 
@@ -64,8 +61,7 @@ class AdminBlogServiceTest {
                 new BlogContentPolicy(),
                 cursorCodec,
                 entityManager,
-                eventPublisher,
-                adminAuditWriterService
+                eventPublisher
         );
     }
 

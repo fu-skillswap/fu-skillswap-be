@@ -15,6 +15,27 @@ public interface MessageRepository extends JpaRepository<Message, UUID>, Message
     @EntityGraph(attributePaths = {"sender"})
     Page<Message> findByConversationIdOrderByCreatedAtDesc(UUID conversationId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"sender"})
+    @org.springframework.data.jpa.repository.Query("select m from Message m where m.conversation.id = :conversationId order by m.createdAt desc, m.id desc")
+    List<Message> findLatestMessages(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender"})
+    @org.springframework.data.jpa.repository.Query("select m from Message m where m.conversation.id = :conversationId and (m.createdAt < :createdAt or (m.createdAt = :createdAt and m.id < :messageId)) order by m.createdAt desc, m.id desc")
+    List<Message> findMessagesBefore(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
+                                     @org.springframework.data.repository.query.Param("createdAt") LocalDateTime createdAt,
+                                     @org.springframework.data.repository.query.Param("messageId") UUID messageId,
+                                     Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender"})
+    @org.springframework.data.jpa.repository.Query("select m from Message m where m.conversation.id = :conversationId and m.sequence < :sequence order by m.sequence desc")
+    List<Message> findMessagesBeforeSequence(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
+                                             @org.springframework.data.repository.query.Param("sequence") Long sequence, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"sender"})
+    @org.springframework.data.jpa.repository.Query("select m from Message m where m.conversation.id = :conversationId and m.sequence > :sequence order by m.sequence asc")
+    List<Message> findMessagesAfterSequence(@org.springframework.data.repository.query.Param("conversationId") UUID conversationId,
+                                            @org.springframework.data.repository.query.Param("sequence") Long sequence, Pageable pageable);
+
     @org.springframework.data.jpa.repository.Query("""
         select count(m) from Message m
         where m.conversation.id = :conversationId

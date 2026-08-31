@@ -1,17 +1,19 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListRequest;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserAcademicResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserListItemResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminUserSummaryAcademicProfileResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.SystemUserResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.event.UserStatusChangedEvent;
 import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
+import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AcademicProfileSummary;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AdminUserListQuery;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AdminUserView;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.SystemUserView;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserAcademicProfile;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserListItem;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.VisibleUserSummary;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
@@ -58,12 +60,25 @@ public class UserAdminPortImpl implements UserAdminPort {
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
+    public AdminUserReference requireAdminReference(UUID userId) {
+        return findReference(userId).orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người quản trị"));
+    }
+
+    @Override
+    public java.util.Optional<AdminUserReference> findReference(UUID userId) {
+        return userId == null ? java.util.Optional.empty() : userRepository.findById(userId)
+                .map(user -> new AdminUserReference(user.getId(), user.getFullName()));
+    }
+
+    @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminUserListItemResponse> getVisibleUsers(AdminUserListRequest request) {
-        AdminUserListRequest safeRequest = request == null ? new AdminUserListRequest() : request;
-        RoleCode targetRole = parseRoleFilter(safeRequest.getRole());
-        UserStatus targetStatus = parseStatusFilter(safeRequest.getStatus());
-        String keywordPattern = normalizeKeywordPattern(safeRequest.getKeyword());
+    public PageResponse<UserListItem> getVisibleUsers(AdminUserListQuery request) {
+        AdminUserListQuery safeRequest = request == null
+                ? new AdminUserListQuery(null, null, null, 0, 10, "createdAt", "DESC")
+                : request;
+        RoleCode targetRole = parseRoleFilter(safeRequest.role());
+        UserStatus targetStatus = parseStatusFilter(safeRequest.status());
+        String keywordPattern = normalizeKeywordPattern(safeRequest.keyword());
 
         Page<User> page = userRepository.searchAdminVisibleUsers(
                 keywordPattern,
@@ -82,7 +97,7 @@ public class UserAdminPortImpl implements UserAdminPort {
         Map<UUID, StudentProfile> profileMap = profiles.stream()
                 .collect(Collectors.toMap(StudentProfile::getUserId, p -> p));
 
-        return PageResponse.<AdminUserListItemResponse>builder()
+        return PageResponse.<UserListItem>builder()
                 .content(users.stream().map(user -> toAdminUserListItem(user, profileMap.get(user.getId()))).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
@@ -94,7 +109,7 @@ public class UserAdminPortImpl implements UserAdminPort {
 
     @Override
     @Transactional
-    public SystemUserResponse changeUserStatus(UUID adminId, UUID userId, boolean ban, String reason) {
+    public SystemUserView changeUserStatus(UUID adminId, UUID userId, boolean ban, String reason) {
         if (userId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã người dùng không hợp lệ");
         }
@@ -137,22 +152,14 @@ public class UserAdminPortImpl implements UserAdminPort {
         }
 
         StudentProfile profile = studentProfileRepository.findById(userId).orElse(null);
-        return SystemUserResponse.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .status(user.getStatus())
-                .roles(roles)
-                .lastLoginAt(user.getLastLoginAt())
-                .createdAt(user.getCreatedAt())
-                .academicProfile(buildAcademicResponse(profile))
-                .build();
+        return new SystemUserView(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
+                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt(),
+                buildAcademicResponse(profile));
     }
 
     @Override
     @Transactional
-    public AdminUserResponse grantAdminRole(UUID systemAdminId, String email) {
+    public AdminUserView grantAdminRole(UUID systemAdminId, String email) {
         User targetUser = findTargetUser(email);
         if (targetUser.getRoles().contains(RoleCode.ADMIN)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Người dùng này đã có quyền admin");
@@ -164,20 +171,13 @@ public class UserAdminPortImpl implements UserAdminPort {
         targetUser.getRoles().add(RoleCode.ADMIN);
         userRepository.save(targetUser);
 
-        return AdminUserResponse.builder()
-                .userId(targetUser.getId())
-                .email(targetUser.getEmail())
-                .fullName(targetUser.getFullName())
-                .avatarUrl(targetUser.getAvatarUrl())
-                .status(targetUser.getStatus())
-                .assignedBy(systemAdmin.getId())
-                .assignedAt(DateTimeUtil.now())
-                .build();
+        return new AdminUserView(targetUser.getId(), targetUser.getEmail(), targetUser.getFullName(),
+                targetUser.getAvatarUrl(), targetUser.getStatus().name(), systemAdmin.getId(), DateTimeUtil.now());
     }
 
     @Override
     @Transactional
-    public AdminUserResponse revokeAdminRole(String email) {
+    public AdminUserView revokeAdminRole(String email) {
         User targetUser = findTargetUser(email);
         if (!targetUser.getRoles().contains(RoleCode.ADMIN)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Người dùng này hiện không có quyền admin");
@@ -188,31 +188,17 @@ public class UserAdminPortImpl implements UserAdminPort {
         targetUser.getRoles().add(RoleCode.MENTEE);
         userRepository.save(targetUser);
 
-        return AdminUserResponse.builder()
-                .userId(targetUser.getId())
-                .email(targetUser.getEmail())
-                .fullName(targetUser.getFullName())
-                .avatarUrl(targetUser.getAvatarUrl())
-                .status(targetUser.getStatus())
-                .assignedBy(null)
-                .assignedAt(null)
-                .build();
+        return new AdminUserView(targetUser.getId(), targetUser.getEmail(), targetUser.getFullName(),
+                targetUser.getAvatarUrl(), targetUser.getStatus().name(), null, null);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminUserResponse> getAdminUsers(BasePageRequest pageRequest) {
+    public PageResponse<AdminUserView> getAdminUsers(BasePageRequest pageRequest) {
         Page<User> page = userRepository.findUsersByRole(RoleCode.ADMIN, adminRolePageable(pageRequest));
-        return PageResponse.<AdminUserResponse>builder()
-                .content(page.getContent().stream().map(user -> AdminUserResponse.builder()
-                        .userId(user.getId())
-                        .email(user.getEmail())
-                        .fullName(user.getFullName())
-                        .avatarUrl(user.getAvatarUrl())
-                        .status(user.getStatus())
-                        .assignedBy(null)
-                        .assignedAt(null)
-                        .build()).toList())
+        return PageResponse.<AdminUserView>builder()
+                .content(page.getContent().stream().map(user -> new AdminUserView(user.getId(), user.getEmail(),
+                        user.getFullName(), user.getAvatarUrl(), user.getStatus().name(), null, null)).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -223,11 +209,11 @@ public class UserAdminPortImpl implements UserAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<SystemUserResponse> getAllUsers(BasePageRequest pageRequest) {
+    public PageResponse<SystemUserView> getAllUsers(BasePageRequest pageRequest) {
         Page<User> page = userRepository.findAll(systemUserPageable(pageRequest));
         Map<UUID, List<RoleCode>> rolesByUserId = loadRolesByUserId(page.getContent());
 
-        return PageResponse.<SystemUserResponse>builder()
+        return PageResponse.<SystemUserView>builder()
                 .content(page.getContent().stream()
                         .map(user -> toSystemUserResponse(user, rolesByUserId.getOrDefault(user.getId(), List.of())))
                         .toList())
@@ -241,12 +227,25 @@ public class UserAdminPortImpl implements UserAdminPort {
 
     @Override
     @Transactional(readOnly = true)
-    public AdminUserSummaryAcademicProfileResponse getAcademicProfileSummary(UUID userId) {
+    public java.util.Optional<VisibleUserSummary> findVisibleUserSummary(UUID userId) {
+        if (userId == null) {
+            return java.util.Optional.empty();
+        }
+        return userRepository.findAdminVisibleUserById(userId, RoleCode.MENTEE, RoleCode.MENTOR,
+                        RoleCode.ADMIN, RoleCode.SYSTEM_ADMIN)
+                .map(user -> new VisibleUserSummary(user.getId(), user.getEmail(), user.getFullName(),
+                        user.getAvatarUrl(), user.getStatus().name(), roleNames(user.getRoles()),
+                        user.getLastLoginAt(), user.getCreatedAt()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AcademicProfileSummary getAcademicProfileSummary(UUID userId) {
         StudentProfile profile = studentProfileRepository.findWithDetailsByUserId(userId).orElse(null);
         if (profile == null) {
             return null;
         }
-        return new AdminUserSummaryAcademicProfileResponse(
+        return new AcademicProfileSummary(
                 profile.getClaimedStudentCode(),
                 profile.getCampus() == null || profile.getCampus().getCode() == null ? null : profile.getCampus().getCode().name(),
                 profile.getCampus() == null ? null : profile.getCampus().getName(),
@@ -288,11 +287,11 @@ public class UserAdminPortImpl implements UserAdminPort {
         notificationTask.run();
     }
 
-    private Pageable buildPageable(AdminUserListRequest request) {
-        int page = Math.max(request.getPage(), 0);
-        int size = Math.min(Math.max(request.getSize(), 1), 100);
-        Sort.Direction direction = request.resolveDirection();
-        String sortBy = resolveSortBy(request.getSortBy());
+    private Pageable buildPageable(AdminUserListQuery request) {
+        int page = Math.max(request.page(), 0);
+        int size = Math.min(Math.max(request.size(), 1), 100);
+        Sort.Direction direction = resolveDirection(request.direction());
+        String sortBy = resolveSortBy(request.sortBy());
         return PageRequest.of(page, size, Sort.by(direction, sortBy));
     }
 
@@ -330,6 +329,17 @@ public class UserAdminPortImpl implements UserAdminPort {
         return sortBy;
     }
 
+    private Sort.Direction resolveDirection(String direction) {
+        if (direction == null || direction.isBlank()) {
+            return Sort.Direction.DESC;
+        }
+        try {
+            return Sort.Direction.valueOf(direction.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return Sort.Direction.DESC;
+        }
+    }
+
     private String normalizeKeywordPattern(String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return null;
@@ -363,7 +373,7 @@ public class UserAdminPortImpl implements UserAdminPort {
         }
     }
 
-    private AdminUserListItemResponse toAdminUserListItem(User user, StudentProfile profile) {
+    private UserListItem toAdminUserListItem(User user, StudentProfile profile) {
         List<RoleCode> visibleRoles = new ArrayList<>();
         if (user.getRoles() != null) {
             if (user.getRoles().contains(RoleCode.MENTEE)) {
@@ -374,26 +384,16 @@ public class UserAdminPortImpl implements UserAdminPort {
             }
         }
 
-        return AdminUserListItemResponse.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .status(user.getStatus())
-                .roles(visibleRoles)
-                .lastLoginAt(user.getLastLoginAt())
-                .createdAt(user.getCreatedAt())
-                .academicProfile(buildAcademicResponse(profile))
-                .build();
+        return new UserListItem(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
+                user.getStatus().name(), roleNames(visibleRoles), user.getLastLoginAt(), user.getCreatedAt(),
+                buildAcademicResponse(profile));
     }
 
-    private AdminUserAcademicResponse buildAcademicResponse(StudentProfile profile) {
+    private UserAcademicProfile buildAcademicResponse(StudentProfile profile) {
         if (profile == null) {
             return null;
         }
-        return AdminUserAcademicResponse.builder()
-                .claimedStudentCode(profile.getClaimedStudentCode())
-                .build();
+        return new UserAcademicProfile(profile.getClaimedStudentCode());
     }
 
     private User findTargetUser(String email) {
@@ -425,17 +425,13 @@ public class UserAdminPortImpl implements UserAdminPort {
         return rolesByUserId;
     }
 
-    private SystemUserResponse toSystemUserResponse(User user, List<RoleCode> roles) {
-        return SystemUserResponse.builder()
-                .userId(user.getId())
-                .email(user.getEmail())
-                .fullName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .status(user.getStatus())
-                .roles(roles)
-                .lastLoginAt(user.getLastLoginAt())
-                .createdAt(user.getCreatedAt())
-                .build();
+    private SystemUserView toSystemUserResponse(User user, List<RoleCode> roles) {
+        return new SystemUserView(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
+                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt(), null);
+    }
+
+    private List<String> roleNames(java.util.Collection<RoleCode> roles) {
+        return roles == null ? List.of() : roles.stream().map(RoleCode::name).toList();
     }
 
     private String normalizeEmail(String email) {

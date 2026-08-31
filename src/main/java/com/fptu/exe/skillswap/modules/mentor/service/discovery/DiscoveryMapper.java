@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
+import com.fptu.exe.skillswap.modules.feedback.port.MentorReviewProjection;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAchievementResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
@@ -132,7 +132,7 @@ public class DiscoveryMapper {
                 .build();
     }
 
-    public MentorReviewResponse toMentorReviewResponse(MentorReviewQueryRow row) {
+    public MentorReviewResponse toMentorReviewResponse(MentorReviewProjection row) {
         return MentorReviewResponse.builder()
                 .reviewId(row.reviewId())
                 .reviewerUserId(row.reviewerUserId())

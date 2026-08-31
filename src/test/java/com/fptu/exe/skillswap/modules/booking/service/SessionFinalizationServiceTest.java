@@ -18,6 +18,8 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,7 +32,7 @@ class SessionFinalizationServiceTest {
 
     @Mock private SessionRepository sessionRepository;
     @Mock private SessionService sessionService;
-    @Mock private MentorProfileRepository mentorProfileRepository;
+    @Mock private MentorQueryPort mentorQueryPort;
 
     private SessionFinalizationService service;
     private Booking booking;
@@ -40,7 +42,7 @@ class SessionFinalizationServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SessionFinalizationService(sessionRepository, sessionService, mentorProfileRepository);
+        service = new SessionFinalizationService(sessionRepository, sessionService, mentorQueryPort);
         now = LocalDateTime.of(2026, 8, 24, 10, 0);
 
         UUID mentorId = UUID.randomUUID();
@@ -66,7 +68,7 @@ class SessionFinalizationServiceTest {
     void finalizeDeliveredSession_shouldCompleteSessionAndCountMentorExactlyOnce() {
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
 
         service.finalizeDeliveredSession(booking, now);
 
@@ -79,7 +81,7 @@ class SessionFinalizationServiceTest {
         assertEquals(5, mentor.getTotalSessions());
         assertEquals(4, mentor.getTotalCompletedSessions());
         verify(sessionRepository).save(session);
-        verify(mentorProfileRepository).save(mentor);
+        verify(mentorQueryPort).saveMentorProfile(mentor);
     }
 
     @Test
@@ -93,14 +95,14 @@ class SessionFinalizationServiceTest {
         assertEquals(SessionStatus.COMPLETED, session.getStatus());
         assertEquals(4, mentor.getTotalSessions());
         assertEquals(3, mentor.getTotalCompletedSessions());
-        verify(mentorProfileRepository, never()).findByIdForUpdate(any());
+        verify(mentorQueryPort, never()).findMentorProfileByIdForUpdate(any());
     }
 
     @Test
     void recordMentorReportedCompletion_shouldNotFinalizeSessionOrIncreaseCounters() {
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
 
         service.recordMentorReportedCompletion(booking, now);
 
@@ -117,7 +119,7 @@ class SessionFinalizationServiceTest {
         session.setScheduledEndTime(now.plusMinutes(15));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
 
         service.finalizeDeliveredSession(booking, now);
 
@@ -131,7 +133,7 @@ class SessionFinalizationServiceTest {
         session.setActualStartTime(booking.getSelectedStartTime().plusMinutes(2));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, booking.getId()))
                 .thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
+        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentor.getUserId())).thenReturn(Optional.of(mentor));
 
         service.finalizeDeliveredSession(booking, now);
 

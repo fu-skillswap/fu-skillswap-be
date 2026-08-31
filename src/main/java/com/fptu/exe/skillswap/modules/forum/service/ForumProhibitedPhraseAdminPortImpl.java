@@ -1,15 +1,15 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
 import com.fptu.exe.skillswap.modules.forum.domain.ForumProhibitedPhrase;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseActiveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseCreateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseUpdateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProhibitedPhraseResponse;
 import com.fptu.exe.skillswap.modules.forum.event.ForumProhibitedPhraseChangedEvent;
 import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseAdminPort;
+import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseView;
+import com.fptu.exe.skillswap.modules.forum.port.CreateForumProhibitedPhraseCommand;
+import com.fptu.exe.skillswap.modules.forum.port.UpdateForumProhibitedPhraseCommand;
+import com.fptu.exe.skillswap.modules.forum.port.SetForumProhibitedPhraseActiveCommand;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumProhibitedPhraseRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -42,14 +42,14 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
 
     private final ForumProhibitedPhraseRepository forumProhibitedPhraseRepository;
     private final ForumProhibitedPhrasePolicy prohibitedPhrasePolicy;
-    private final UserRepository userRepository;
     private final CursorCodec cursorCodec;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserQueryPort userQueryPort;
 
     @Override
     @Transactional(readOnly = true)
-    public CursorPageResponse<ForumProhibitedPhraseResponse> list(Boolean isActive, String cursor, Integer limit) {
+    public CursorPageResponse<ForumProhibitedPhraseView> list(Boolean isActive, String cursor, Integer limit) {
         int resolvedLimit = resolveLimit(limit);
         String filterHash = "forum-prohibited-phrases|isActive=" + (isActive == null ? "all" : isActive);
         DecodedCursor decodedCursor = decodeCursor(cursor, filterHash);
@@ -64,7 +64,7 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
         String nextCursor = hasNext && !items.isEmpty()
                 ? encodeCursor(items.get(items.size() - 1), filterHash)
                 : null;
-        return CursorPageResponse.<ForumProhibitedPhraseResponse>builder()
+        return CursorPageResponse.<ForumProhibitedPhraseView>builder()
                 .items(items.stream().map(this::toResponse).toList())
                 .nextCursor(nextCursor)
                 .prevCursor(null)
@@ -76,19 +76,19 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
 
     @Override
     @Transactional(readOnly = true)
-    public ForumProhibitedPhraseResponse get(UUID ruleId) {
+    public ForumProhibitedPhraseView get(UUID ruleId) {
         return toResponse(requireRule(ruleId));
     }
 
     @Override
     @Transactional
-    public ForumProhibitedPhraseResponse create(UUID adminUserId, ForumProhibitedPhraseCreateRequest request) {
-        String phrase = requirePhrase(request.phrase());
+    public ForumProhibitedPhraseView create(UUID adminUserId, CreateForumProhibitedPhraseCommand command) {
+        String phrase = requirePhrase(command.phrase());
         String normalizedPhrase = prohibitedPhrasePolicy.normalizePhrase(phrase);
         if (forumProhibitedPhraseRepository.existsByNormalizedPhrase(normalizedPhrase)) {
             throw new BaseException(ErrorCode.FORUM_PROHIBITED_PHRASE_DUPLICATE);
         }
-        User admin = userRepository.findById(adminUserId)
+        User admin = userQueryPort.findUserById(adminUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người quản trị"));
         ForumProhibitedPhrase saved = saveAndFlush(ForumProhibitedPhrase.builder()
                 .phrase(phrase)
@@ -102,10 +102,10 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
 
     @Override
     @Transactional
-    public ForumProhibitedPhraseResponse update(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseUpdateRequest request) {
+    public ForumProhibitedPhraseView update(UUID adminUserId, UUID ruleId, UpdateForumProhibitedPhraseCommand command) {
         ForumProhibitedPhrase rule = requireRule(ruleId);
-        requireExpectedVersion(rule, request.expectedVersion());
-        String phrase = requirePhrase(request.phrase());
+        requireExpectedVersion(rule, command.expectedVersion());
+        String phrase = requirePhrase(command.phrase());
         String normalizedPhrase = prohibitedPhrasePolicy.normalizePhrase(phrase);
         if (!normalizedPhrase.equals(rule.getNormalizedPhrase())
                 && forumProhibitedPhraseRepository.existsByNormalizedPhrase(normalizedPhrase)) {
@@ -120,12 +120,12 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
 
     @Override
     @Transactional
-    public ForumProhibitedPhraseResponse setActive(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseActiveRequest request) {
+    public ForumProhibitedPhraseView setActive(UUID adminUserId, UUID ruleId, SetForumProhibitedPhraseActiveCommand command) {
         ForumProhibitedPhrase rule = requireRule(ruleId);
-        requireExpectedVersion(rule, request.expectedVersion());
-        rule.setActive(request.isActive());
+        requireExpectedVersion(rule, command.expectedVersion());
+        rule.setActive(command.isActive());
         ForumProhibitedPhrase saved = saveAndFlush(rule);
-        eventPublisher.publishEvent(new ForumProhibitedPhraseChangedEvent(saved.getId(), request.isActive() ? "ACTIVATE" : "DEACTIVATE"));
+        eventPublisher.publishEvent(new ForumProhibitedPhraseChangedEvent(saved.getId(), command.isActive() ? "ACTIVATE" : "DEACTIVATE"));
         return toResponse(saved);
     }
 
@@ -164,8 +164,8 @@ public class ForumProhibitedPhraseAdminPortImpl implements ForumProhibitedPhrase
         }
     }
 
-    private ForumProhibitedPhraseResponse toResponse(ForumProhibitedPhrase rule) {
-        return new ForumProhibitedPhraseResponse(
+    private ForumProhibitedPhraseView toResponse(ForumProhibitedPhrase rule) {
+        return new ForumProhibitedPhraseView(
                 rule.getId(),
                 rule.getPhrase(),
                 rule.isActive(),

@@ -1,10 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetResponse;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
-import com.fptu.exe.skillswap.modules.filestorage.service.PublicAssetUploadService;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -32,14 +28,14 @@ public class MentorProfileItemService {
     private final MentorProfileRepository mentorProfileRepository;
     private final MentorFeaturedProjectRepository mentorFeaturedProjectRepository;
     private final MentorAchievementRepository mentorAchievementRepository;
-    private final PublicAssetUploadService publicAssetUploadService;
+    private final PublicAssetUploadPort publicAssetUploadPort;
 
     @Transactional(readOnly = true)
     public List<MentorFeaturedProjectResponse> listProjects(UUID mentorUserId) {
         requireUserId(mentorUserId);
         return mentorFeaturedProjectRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
                 .stream()
-                .map(this::mapProject)
+                .map(project -> mapProject(project, mentorUserId))
                 .toList();
     }
 
@@ -50,7 +46,7 @@ public class MentorProfileItemService {
         project.setMentorProfile(profile);
         applyProjectRequest(project, mentorUserId, request);
         project.setDisplayOrder(nextProjectOrder(mentorUserId));
-        return mapProject(mentorFeaturedProjectRepository.save(project));
+        return mapProject(mentorFeaturedProjectRepository.save(project), mentorUserId);
     }
 
     @Transactional
@@ -58,7 +54,7 @@ public class MentorProfileItemService {
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
         applyProjectRequest(project, mentorUserId, request);
-        return mapProject(mentorFeaturedProjectRepository.save(project));
+        return mapProject(mentorFeaturedProjectRepository.save(project), mentorUserId);
     }
 
     @Transactional
@@ -69,18 +65,18 @@ public class MentorProfileItemService {
     }
 
     @Transactional
-    public PublicAssetUploadIntentResponse createProjectPictureUploadIntent(UUID mentorUserId, PublicAssetUploadIntentRequest request) {
+    public PublicAssetUploadPort.UploadIntent createProjectPictureUploadIntent(UUID mentorUserId, PublicAssetUploadPort.UploadRequest request) {
         requireUserId(mentorUserId);
         requireProfile(mentorUserId);
-        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+        return publicAssetUploadPort.createPortfolioImageIntent(mentorUserId, request);
     }
 
     @Transactional
-    public PublicAssetUploadIntentResponse createProjectPictureUploadIntentForProject(UUID mentorUserId, UUID projectId, PublicAssetUploadIntentRequest request) {
+    public PublicAssetUploadPort.UploadIntent createProjectPictureUploadIntentForProject(UUID mentorUserId, UUID projectId, PublicAssetUploadPort.UploadRequest request) {
         requireUserId(mentorUserId);
         mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
-        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+        return publicAssetUploadPort.createPortfolioImageIntent(mentorUserId, request);
     }
 
     @Transactional
@@ -91,10 +87,9 @@ public class MentorProfileItemService {
         }
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
-        PublicAssetResponse assetResponse = publicAssetUploadService.confirmPortfolioImage(mentorUserId, uploadIntentId);
-        StoredFile storedFile = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetResponse.assetId());
-        project.setPictureFile(storedFile);
-        return mapProject(mentorFeaturedProjectRepository.save(project));
+        PublicAssetUploadPort.FileAssetMetadata asset = publicAssetUploadPort.confirmPortfolioImage(mentorUserId, uploadIntentId);
+        project.setPictureFileId(asset.assetId());
+        return mapProject(mentorFeaturedProjectRepository.save(project), mentorUserId);
     }
 
     @Transactional
@@ -102,8 +97,8 @@ public class MentorProfileItemService {
         requireUserId(mentorUserId);
         MentorFeaturedProject project = mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dự án tiêu biểu"));
-        project.setPictureFile(null);
-        return mapProject(mentorFeaturedProjectRepository.save(project));
+        project.setPictureFileId(null);
+        return mapProject(mentorFeaturedProjectRepository.save(project), mentorUserId);
     }
 
     @Transactional(readOnly = true)
@@ -111,7 +106,7 @@ public class MentorProfileItemService {
         requireUserId(mentorUserId);
         return mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
                 .stream()
-                .map(this::mapAchievement)
+                .map(achievement -> mapAchievement(achievement, mentorUserId))
                 .toList();
     }
 
@@ -122,7 +117,7 @@ public class MentorProfileItemService {
         achievement.setMentorProfile(profile);
         applyAchievementRequest(achievement, mentorUserId, request);
         achievement.setDisplayOrder(nextAchievementOrder(mentorUserId));
-        return mapAchievement(mentorAchievementRepository.save(achievement));
+        return mapAchievement(mentorAchievementRepository.save(achievement), mentorUserId);
     }
 
     @Transactional
@@ -130,7 +125,7 @@ public class MentorProfileItemService {
         MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
         applyAchievementRequest(achievement, mentorUserId, request);
-        return mapAchievement(mentorAchievementRepository.save(achievement));
+        return mapAchievement(mentorAchievementRepository.save(achievement), mentorUserId);
     }
 
     @Transactional
@@ -141,17 +136,17 @@ public class MentorProfileItemService {
     }
 
     @Transactional(readOnly = true)
-    public PublicAssetUploadIntentResponse createAchievementPictureUploadIntent(UUID mentorUserId, PublicAssetUploadIntentRequest request) {
+    public PublicAssetUploadPort.UploadIntent createAchievementPictureUploadIntent(UUID mentorUserId, PublicAssetUploadPort.UploadRequest request) {
         requireProfile(mentorUserId);
-        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+        return publicAssetUploadPort.createPortfolioImageIntent(mentorUserId, request);
     }
 
     @Transactional(readOnly = true)
-    public PublicAssetUploadIntentResponse createAchievementPictureUploadIntentForAchievement(UUID mentorUserId, UUID achievementId, PublicAssetUploadIntentRequest request) {
+    public PublicAssetUploadPort.UploadIntent createAchievementPictureUploadIntentForAchievement(UUID mentorUserId, UUID achievementId, PublicAssetUploadPort.UploadRequest request) {
         requireUserId(mentorUserId);
         mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
-        return publicAssetUploadService.createPortfolioImageIntent(mentorUserId, request);
+        return publicAssetUploadPort.createPortfolioImageIntent(mentorUserId, request);
     }
 
     @Transactional
@@ -159,10 +154,9 @@ public class MentorProfileItemService {
         requireUserId(mentorUserId);
         MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
-        PublicAssetResponse assetResponse = publicAssetUploadService.confirmPortfolioImage(mentorUserId, uploadIntentId);
-        StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetResponse.assetId());
-        achievement.setPictureFile(picture);
-        return mapAchievement(mentorAchievementRepository.save(achievement));
+        PublicAssetUploadPort.FileAssetMetadata asset = publicAssetUploadPort.confirmPortfolioImage(mentorUserId, uploadIntentId);
+        achievement.setPictureFileId(asset.assetId());
+        return mapAchievement(mentorAchievementRepository.save(achievement), mentorUserId);
     }
 
     @Transactional
@@ -170,8 +164,8 @@ public class MentorProfileItemService {
         requireUserId(mentorUserId);
         MentorAchievement achievement = mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy học vấn/giải thưởng"));
-        achievement.setPictureFile(null);
-        return mapAchievement(mentorAchievementRepository.save(achievement));
+        achievement.setPictureFileId(null);
+        return mapAchievement(mentorAchievementRepository.save(achievement), mentorUserId);
     }
 
     private void applyProjectRequest(MentorFeaturedProject project, UUID mentorUserId, MentorFeaturedProjectRequest request) {
@@ -183,8 +177,8 @@ public class MentorProfileItemService {
         project.setProjectDescription(cleanNullable(request.projectDescription()));
         project.setLiveDemoUrl(cleanNullable(request.liveDemoUrl()));
         if (request.pictureAssetId() != null) {
-            StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
-            project.setPictureFile(picture);
+            PublicAssetUploadPort.FileAssetMetadata picture = publicAssetUploadPort.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
+            project.setPictureFileId(picture.assetId());
         }
     }
 
@@ -199,8 +193,8 @@ public class MentorProfileItemService {
         achievement.setProductDescription(cleanNullable(request.productDescription()));
         achievement.setDemoUrl(cleanNullable(request.demoUrl()));
         if (request.pictureAssetId() != null) {
-            StoredFile picture = publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
-            achievement.setPictureFile(picture);
+            PublicAssetUploadPort.FileAssetMetadata picture = publicAssetUploadPort.requireOwnedPortfolioImage(mentorUserId, request.pictureAssetId());
+            achievement.setPictureFileId(picture.assetId());
         }
     }
 
@@ -218,11 +212,11 @@ public class MentorProfileItemService {
         return mentorAchievementRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId).size();
     }
 
-    private MentorFeaturedProjectResponse mapProject(MentorFeaturedProject project) {
+    private MentorFeaturedProjectResponse mapProject(MentorFeaturedProject project, UUID mentorUserId) {
         return MentorFeaturedProjectResponse.builder()
                 .id(project.getId())
                 .title(project.getTitle())
-                .pictureUrl(project.getPictureFile() == null ? null : project.getPictureFile().getPublicUrl())
+                .pictureUrl(assetUrl(mentorUserId, project.getPictureFileId()))
                 .content(project.getContent())
                 .projectDescription(project.getProjectDescription())
                 .liveDemoUrl(project.getLiveDemoUrl())
@@ -232,11 +226,11 @@ public class MentorProfileItemService {
                 .build();
     }
 
-    private MentorAchievementResponse mapAchievement(MentorAchievement achievement) {
+    private MentorAchievementResponse mapAchievement(MentorAchievement achievement, UUID mentorUserId) {
         return MentorAchievementResponse.builder()
                 .id(achievement.getId())
                 .title(achievement.getTitle())
-                .pictureUrl(achievement.getPictureFile() == null ? null : achievement.getPictureFile().getPublicUrl())
+                .pictureUrl(assetUrl(mentorUserId, achievement.getPictureFileId()))
                 .awardDescription(achievement.getAwardDescription())
                 .achievedAt(achievement.getAchievedAt())
                 .productHeader(achievement.getProductHeader())
@@ -257,6 +251,12 @@ public class MentorProfileItemService {
 
     private String cleanNullable(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private String assetUrl(UUID ownerId, UUID assetId) {
+        if (assetId == null) return null;
+        PublicAssetUploadPort.FileAssetMetadata metadata = publicAssetUploadPort.requireOwnedPortfolioImage(ownerId, assetId);
+        return metadata.publicUrl();
     }
 
     private void requireUserId(UUID userId) {

@@ -24,9 +24,10 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +79,8 @@ class SessionCompletionUtcTest {
     @Mock
     private PaymentOrderService paymentOrderService;
     @Mock
+    private UserQueryPort userQueryPort;
+    @Mock
     private BookingResponseMapper bookingResponseMapper;
 
     private SessionService sessionService;
@@ -103,19 +106,19 @@ class SessionCompletionUtcTest {
 
         mentee = User.builder().id(menteeUserId).email("mentee@example.com").build();
         mentorUser = User.builder().id(mentorUserId).email("mentor@example.com").build();
-        mentorProfile = MentorProfile.builder().userId(mentorUserId).user(mentorUser).totalCompletedSessions(0).totalSessions(0).build();
+        mentorProfile = MentorProfile.builder().userId(mentorUserId).totalCompletedSessions(0).totalSessions(0).build();
 
         Instant startUtc = Instant.parse("2026-09-01T08:00:00Z");
         Instant endUtc = Instant.parse("2026-09-01T09:00:00Z");
 
         MentorService service = MentorService.builder().id(UUID.randomUUID()).title("Mock Interview").durationMinutes(60).build();
-        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder().id(UUID.randomUUID()).mentorProfile(mentorProfile).startTimeUtc(startUtc).endTimeUtc(endUtc).build();
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder().id(UUID.randomUUID()).mentorUserId(mentorUserId).startTimeUtc(startUtc).endTimeUtc(endUtc).build();
 
         booking = Booking.builder()
                 .id(bookingId)
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
-                .service(service)
+                .mentorUserId(mentorUserId)
+                .serviceId(service.getId())
                 .slot(slot)
                 .status(BookingStatus.PAID)
                 .selectedStartTimeUtc(startUtc)
@@ -126,8 +129,8 @@ class SessionCompletionUtcTest {
 
         session = Session.builder()
                 .id(UUID.randomUUID())
-                .mentor(mentorUser)
-                .service(service)
+                .mentorUserId(mentorUserId)
+                .serviceId(service.getId())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(bookingId)
                 .scheduledStartTimeUtc(startUtc)
@@ -138,7 +141,7 @@ class SessionCompletionUtcTest {
                 .build();
 
         sessionService = new SessionService(sessionRepository);
-        sessionFinalizationService = new SessionFinalizationService(sessionRepository, sessionService, mentorProfileRepository);
+        sessionFinalizationService = new SessionFinalizationService(sessionRepository, sessionService);
     }
 
     @AfterEach
@@ -277,11 +280,10 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService
+                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
-        maintenanceService.setMentorViolationService(mentorViolationService);
 
         BookingStateTestSupport.setStatus(booking, BookingStatus.AWAITING_MENTOR_COMPLETION);
         when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(eq(BookingStatus.PAID), any()))
@@ -314,11 +316,10 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService
+                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
-        maintenanceService.setMentorViolationService(mentorViolationService);
         maintenanceService.setSessionAttendanceRepository(sessionAttendanceRepository);
 
         BookingStateTestSupport.setStatus(booking, BookingStatus.UNDER_REVIEW);
@@ -357,7 +358,7 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService
+                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);

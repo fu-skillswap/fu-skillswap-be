@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
-import com.fptu.exe.skillswap.modules.identity.event.GoogleCalendarCreateBookingRequestedEvent;
+import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
@@ -29,7 +29,7 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +62,7 @@ public class PaymentWebhookService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final BookingQueryPort bookingQueryPort;
+    private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
     private final CreditLedgerService creditLedgerService;
     private final CouponService couponService;
     private final SettlementService settlementService;
@@ -370,7 +371,7 @@ public class PaymentWebhookService {
                 sessionService.createForAcceptedBooking(booking);
             }
             if (conversationService != null) {
-                conversationService.createDirectForAcceptedBooking(booking);
+                conversationService.createDirectForAcceptedBooking(booking.getId(), booking.getMentorUserId(), booking.getMentee() == null ? null : booking.getMentee().getId());
             }
             return;
         }
@@ -400,7 +401,7 @@ public class PaymentWebhookService {
                     "BOOKING",
                     booking.getId(),
                     Map.of(
-                            "mentorUserId", String.valueOf(booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUserId()),
+                            "mentorUserId", String.valueOf(booking.getMentorUserId()),
                             "grossScoin", String.valueOf(order.getGrossScoin()),
                             "remainingPayableScoin", String.valueOf(order.getRemainingPayableScoin())
                     )
@@ -411,33 +412,41 @@ public class PaymentWebhookService {
             sessionService.createForAcceptedBooking(booking);
         }
         if (conversationService != null) {
-            conversationService.createDirectForAcceptedBooking(booking);
+            conversationService.createDirectForAcceptedBooking(booking.getId(), booking.getMentorUserId(), booking.getMentee() == null ? null : booking.getMentee().getId());
         }
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 booking.getId(),
                 booking.getMentee().getId(),
-                booking.getMentorProfile().getUserId(),
+                booking.getMentorUserId(),
                 booking.getStatus(),
                 "Thanh toán thành công. Lịch học đã được xác nhận.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
         ));
-        eventPublisher.publishEvent(new GoogleCalendarCreateBookingRequestedEvent(booking.getId()));
+        eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(booking.getId(), booking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CREATE));
 
-        eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentorProfile().getUserId(),
-                NotificationType.BOOKING_PAYMENT_CONFIRMED,
-                "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
-                booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
-                "BOOKING",
-                booking.getId()
-        ));
+        if (booking.getMentorUserId() != null) {
+            eventPublisher.publishEvent(new NotificationEvent(
+                    booking.getMentorUserId(),
+                    NotificationType.BOOKING_PAYMENT_CONFIRMED,
+                    "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
+                    booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
+                    "BOOKING",
+                    booking.getId()
+            ));
+        }
+
+        var mentorUser = booking.getMentorUserId() != null && userQueryPort != null
+                ? userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null)
+                : null;
+        String mentorEmail = mentorUser != null ? mentorUser.email() : null;
+        String mentorName = mentorUser != null ? mentorUser.fullName() : null;
 
         eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                 .bookingId(booking.getId())
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
-                .recipientEmail(booking.getMentorProfile().getUser().getEmail())
-                .recipientName(booking.getMentorProfile().getUser().getFullName())
+                .recipientEmail(mentorEmail)
+                .recipientName(mentorName)
                 .actorName(booking.getMentee().getFullName())
                 .bookingStartTime(booking.getSelectedStartTime())
                 .bookingEndTime(booking.getSelectedEndTime())

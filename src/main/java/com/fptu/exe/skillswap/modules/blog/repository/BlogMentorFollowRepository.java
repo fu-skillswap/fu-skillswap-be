@@ -19,9 +19,9 @@ public interface BlogMentorFollowRepository extends JpaRepository<BlogMentorFoll
     @EntityGraph(attributePaths = {"mentor", "mentor.user"})
     List<BlogMentorFollow> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    @Query("select f.mentor.userId from BlogMentorFollow f where f.user.id = :userId")
+    @Query("select f.mentorUserId from BlogMentorFollow f where f.userId = :userId")
     Set<UUID> findMentorIdsByUserId(@Param("userId") UUID userId);
 
-    @Query("select distinct f.user.id from BlogMentorFollow f where f.mentor.userId in :mentorIds")
+    @Query("select distinct f.userId from BlogMentorFollow f where f.mentorUserId in :mentorIds")
     Set<UUID> findFollowerUserIdsByMentorIds(@Param("mentorIds") Collection<UUID> mentorIds);
 }

@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.admin.service;
 
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseActiveRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseCreateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.request.ForumProhibitedPhraseUpdateRequest;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProhibitedPhraseResponse;
+import com.fptu.exe.skillswap.modules.forum.port.CreateForumProhibitedPhraseCommand;
+import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseView;
 import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseAdminPort;
+import com.fptu.exe.skillswap.modules.forum.port.SetForumProhibitedPhraseActiveCommand;
+import com.fptu.exe.skillswap.modules.forum.port.UpdateForumProhibitedPhraseCommand;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,18 +21,18 @@ public class AdminForumProhibitedPhraseService {
     private final AdminAuditWriterService adminAuditWriterService;
 
     @Transactional(readOnly = true)
-    public CursorPageResponse<ForumProhibitedPhraseResponse> list(Boolean isActive, String cursor, Integer limit) {
+    public CursorPageResponse<ForumProhibitedPhraseView> list(Boolean isActive, String cursor, Integer limit) {
         return forumProhibitedPhraseAdminPort.list(isActive, cursor, limit);
     }
 
     @Transactional(readOnly = true)
-    public ForumProhibitedPhraseResponse get(UUID ruleId) {
+    public ForumProhibitedPhraseView get(UUID ruleId) {
         return forumProhibitedPhraseAdminPort.get(ruleId);
     }
 
     @Transactional
-    public ForumProhibitedPhraseResponse create(UUID adminUserId, ForumProhibitedPhraseCreateRequest request) {
-        ForumProhibitedPhraseResponse response = forumProhibitedPhraseAdminPort.create(adminUserId, request);
+    public ForumProhibitedPhraseView create(UUID adminUserId, CreateForumProhibitedPhraseCommand command) {
+        ForumProhibitedPhraseView response = forumProhibitedPhraseAdminPort.create(adminUserId, command);
         adminAuditWriterService.writeOperatorEvent(
                 adminUserId,
                 "FORUM_PROHIBITED_PHRASE",
@@ -45,9 +45,9 @@ public class AdminForumProhibitedPhraseService {
     }
 
     @Transactional
-    public ForumProhibitedPhraseResponse update(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseUpdateRequest request) {
-        ForumProhibitedPhraseResponse previous = forumProhibitedPhraseAdminPort.get(ruleId);
-        ForumProhibitedPhraseResponse response = forumProhibitedPhraseAdminPort.update(adminUserId, ruleId, request);
+    public ForumProhibitedPhraseView update(UUID adminUserId, UUID ruleId, UpdateForumProhibitedPhraseCommand command) {
+        ForumProhibitedPhraseView previous = forumProhibitedPhraseAdminPort.get(ruleId);
+        ForumProhibitedPhraseView response = forumProhibitedPhraseAdminPort.update(adminUserId, ruleId, command);
         adminAuditWriterService.writeOperatorEvent(
                 adminUserId,
                 "FORUM_PROHIBITED_PHRASE",
@@ -60,21 +60,21 @@ public class AdminForumProhibitedPhraseService {
     }
 
     @Transactional
-    public ForumProhibitedPhraseResponse changeActive(UUID adminUserId, UUID ruleId, ForumProhibitedPhraseActiveRequest request) {
-        ForumProhibitedPhraseResponse previous = forumProhibitedPhraseAdminPort.get(ruleId);
-        ForumProhibitedPhraseResponse response = forumProhibitedPhraseAdminPort.setActive(adminUserId, ruleId, request);
+    public ForumProhibitedPhraseView changeActive(UUID adminUserId, UUID ruleId, SetForumProhibitedPhraseActiveCommand command) {
+        ForumProhibitedPhraseView previous = forumProhibitedPhraseAdminPort.get(ruleId);
+        ForumProhibitedPhraseView response = forumProhibitedPhraseAdminPort.setActive(adminUserId, ruleId, command);
         adminAuditWriterService.writeOperatorEvent(
                 adminUserId,
                 "FORUM_PROHIBITED_PHRASE",
                 ruleId,
-                request.isActive() ? "ACTIVATE_FORUM_PROHIBITED_PHRASE" : "DEACTIVATE_FORUM_PROHIBITED_PHRASE",
+                command.isActive() ? "ACTIVATE_FORUM_PROHIBITED_PHRASE" : "DEACTIVATE_FORUM_PROHIBITED_PHRASE",
                 auditValue(previous),
                 auditValue(response)
         );
         return response;
     }
 
-    private Map<String, Object> auditValue(ForumProhibitedPhraseResponse rule) {
+    private Map<String, Object> auditValue(ForumProhibitedPhraseView rule) {
         return Map.of(
                 "phrase", rule.phrase() == null ? "" : rule.phrase(),
                 "isActive", rule.isActive(),

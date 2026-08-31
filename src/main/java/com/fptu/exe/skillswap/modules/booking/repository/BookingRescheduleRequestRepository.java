@@ -18,10 +18,10 @@ import java.util.UUID;
 @Repository
 public interface BookingRescheduleRequestRepository extends JpaRepository<BookingRescheduleRequest, UUID> {
 
-    @EntityGraph(attributePaths = {"booking", "booking.mentee", "booking.mentorProfile", "booking.mentorProfile.user", "booking.service", "currentSlot", "proposedSlot"})
+    @EntityGraph(attributePaths = {"booking", "booking.mentee", "currentSlot", "proposedSlot"})
     List<BookingRescheduleRequest> findByBookingIdOrderByCreatedAtDesc(UUID bookingId);
 
-    @EntityGraph(attributePaths = {"booking", "booking.mentee", "booking.mentorProfile", "booking.mentorProfile.user", "booking.service", "currentSlot", "proposedSlot"})
+    @EntityGraph(attributePaths = {"booking", "booking.mentee", "currentSlot", "proposedSlot"})
     Optional<BookingRescheduleRequest> findFirstByBookingIdAndStatusOrderByCreatedAtDesc(UUID bookingId, BookingRescheduleStatus status);
 
     boolean existsByBookingIdAndStatus(UUID bookingId, BookingRescheduleStatus status);
@@ -32,16 +32,13 @@ public interface BookingRescheduleRequestRepository extends JpaRepository<Bookin
             from BookingRescheduleRequest request
             join fetch request.booking booking
             join fetch booking.mentee mentee
-            join fetch booking.mentorProfile mentorProfile
-            join fetch mentorProfile.user mentorUser
-            left join fetch booking.service service
             join fetch request.currentSlot currentSlot
             join fetch request.proposedSlot proposedSlot
             where request.id = :requestId
             """)
     Optional<BookingRescheduleRequest> findByIdForUpdate(@Param("requestId") UUID requestId);
 
-    @EntityGraph(attributePaths = {"booking", "booking.mentee", "booking.mentorProfile", "booking.mentorProfile.user", "booking.service", "currentSlot", "proposedSlot"})
+    @EntityGraph(attributePaths = {"booking", "booking.mentee", "currentSlot", "proposedSlot"})
     @Query("""
             select request
             from BookingRescheduleRequest request

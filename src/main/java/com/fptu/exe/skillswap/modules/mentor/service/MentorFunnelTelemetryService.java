@@ -1,19 +1,19 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
+import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFunnelEventRequest;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.cache.CaffeineCacheMetrics;
-import com.fptu.exe.skillswap.infrastructure.config.CacheProperties;
-import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorFunnelEventRequest;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.system.service.InternalTelemetryService;
-import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -26,7 +26,7 @@ import java.util.UUID;
 public class MentorFunnelTelemetryService {
     private final MentorServiceRepository mentorServiceRepository;
     private final MentorProfileRepository mentorProfileRepository;
-    private final MentorAvailabilitySlotRepository slotRepository;
+    private final BookingAvailabilityQueryPort availabilityQueryPort;
     private final InternalTelemetryService internalTelemetryService;
     private final InMemoryRateLimitService rateLimitService;
     private final Cache<String, Boolean> dedupe;
@@ -34,28 +34,28 @@ public class MentorFunnelTelemetryService {
     @Autowired
     public MentorFunnelTelemetryService(MentorServiceRepository mentorServiceRepository,
                                         MentorProfileRepository mentorProfileRepository,
-                                        MentorAvailabilitySlotRepository slotRepository,
+                                        BookingAvailabilityQueryPort availabilityQueryPort,
                                         InternalTelemetryService internalTelemetryService,
                                         InMemoryRateLimitService rateLimitService,
                                         CacheProperties cacheProperties,
                                         MeterRegistry meterRegistry) {
-        this(mentorServiceRepository, mentorProfileRepository, slotRepository, internalTelemetryService,
+        this(mentorServiceRepository, mentorProfileRepository, availabilityQueryPort, internalTelemetryService,
                 rateLimitService, cacheProperties, meterRegistry, true);
     }
 
-    MentorFunnelTelemetryService(MentorServiceRepository mentorServiceRepository,
-                                 MentorProfileRepository mentorProfileRepository,
-                                 MentorAvailabilitySlotRepository slotRepository,
-                                 InternalTelemetryService internalTelemetryService,
-                                 InMemoryRateLimitService rateLimitService,
-                                 CacheProperties cacheProperties) {
-        this(mentorServiceRepository, mentorProfileRepository, slotRepository, internalTelemetryService,
+    public MentorFunnelTelemetryService(MentorServiceRepository mentorServiceRepository,
+                                        MentorProfileRepository mentorProfileRepository,
+                                        BookingAvailabilityQueryPort availabilityQueryPort,
+                                        InternalTelemetryService internalTelemetryService,
+                                        InMemoryRateLimitService rateLimitService,
+                                        CacheProperties cacheProperties) {
+        this(mentorServiceRepository, mentorProfileRepository, availabilityQueryPort, internalTelemetryService,
                 rateLimitService, cacheProperties, null, false);
     }
 
     private MentorFunnelTelemetryService(MentorServiceRepository mentorServiceRepository,
                                          MentorProfileRepository mentorProfileRepository,
-                                         MentorAvailabilitySlotRepository slotRepository,
+                                         BookingAvailabilityQueryPort availabilityQueryPort,
                                          InternalTelemetryService internalTelemetryService,
                                          InMemoryRateLimitService rateLimitService,
                                          CacheProperties cacheProperties,
@@ -63,7 +63,7 @@ public class MentorFunnelTelemetryService {
                                          boolean monitorMetrics) {
         this.mentorServiceRepository = mentorServiceRepository;
         this.mentorProfileRepository = mentorProfileRepository;
-        this.slotRepository = slotRepository;
+        this.availabilityQueryPort = availabilityQueryPort;
         this.internalTelemetryService = internalTelemetryService;
         this.rateLimitService = rateLimitService;
         CacheProperties.TimedCache settings = cacheProperties.getMentorFunnelDedupe();
@@ -97,8 +97,6 @@ public class MentorFunnelTelemetryService {
     private boolean isValidRelationship(MentorFunnelEventRequest request) {
         if (mentorProfileRepository.findWithUserByUserId(request.mentorUserId()).isEmpty()) return false;
         if (request.serviceId() != null && mentorServiceRepository.findByIdAndMentorProfileUserId(request.serviceId(), request.mentorUserId()).isEmpty()) return false;
-        return request.slotId() == null || slotRepository.findById(request.slotId())
-                .map(slot -> slot.getMentorProfile().getUserId().equals(request.mentorUserId()))
-                .orElse(false);
+        return request.slotId() == null || availabilityQueryPort.isSlotOwnedByMentor(request.slotId(), request.mentorUserId());
     }
 }

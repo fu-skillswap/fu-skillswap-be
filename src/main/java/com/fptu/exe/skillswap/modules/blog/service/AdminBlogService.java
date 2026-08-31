@@ -23,10 +23,11 @@ import com.fptu.exe.skillswap.modules.blog.event.BlogPostPublishedEvent;
 import com.fptu.exe.skillswap.modules.blog.event.BlogTaxonomyChangedEvent;
 import com.fptu.exe.skillswap.modules.blog.event.BlogTrendingRankingChangedEvent;
 import com.fptu.exe.skillswap.shared.exception.VersionConflictException;
+import com.fptu.exe.skillswap.shared.event.OperatorAuditIntent;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -34,7 +35,6 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
-import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
@@ -71,7 +71,7 @@ public class AdminBlogService {
     private final CursorCodec cursorCodec;
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
-    private final AdminAuditWriterService adminAuditWriterService;
+    private final PublicUserQueryPort publicUserQueryPort;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<AdminBlogPostCardResponse> listPosts(String cursor,
@@ -142,7 +142,7 @@ public class AdminBlogService {
         String title = contentPolicy.cleanRequired(request.title(), "Tiêu đề bài blog");
         String slug = uniqueSlug(contentPolicy.cleanNullable(request.slug()) == null ? title : request.slug(), null);
         BlogPost post = BlogPost.builder()
-                .authorUser(entityManager.getReference(User.class, authorUserId))
+                .authorUserId(authorUserId)
                 .authorType(BlogAuthorType.PLATFORM)
                 .title(title)
                 .slug(slug)
@@ -211,8 +211,8 @@ public class AdminBlogService {
             post.setStatus(BlogPostStatus.ARCHIVED); post.setFeatured(false); post.setFeaturedOrder(null); post.setFeaturedUntil(null);
         }
         BlogPost saved = blogPostRepository.save(post);
-        adminAuditWriterService.writeOperatorEvent(adminId, "BLOG_POST", postId, "BLOG_MENTOR_MODERATED",
-                java.util.Map.of("visibility", oldVisibility.name()), java.util.Map.of("visibility", saved.getVisibility().name(), "status", saved.getStatus().name()));
+        eventPublisher.publishEvent(new OperatorAuditIntent(adminId, "BLOG_POST", postId, "BLOG_MENTOR_MODERATED",
+                java.util.Map.of("visibility", oldVisibility.name()), java.util.Map.of("visibility", saved.getVisibility().name(), "status", saved.getStatus().name())));
         signalTrendingChange(postId);
         return blogMapper.toAdminDetail(saved, null);
     }
@@ -239,8 +239,8 @@ public class AdminBlogService {
                     saved.getId(),
                     saved.getSlug(),
                     saved.getTitle(),
-                    saved.getAuthorUser().getId(),
-                    saved.getAuthorUser().getFullName(),
+                    saved.getAuthorUserId(),
+                    publicUserQueryPort.findUserSummaryById(saved.getAuthorUserId()).map(summary -> summary.fullName()).orElse(""),
                     saved.getVisibility(),
                     saved.getCategories().stream().map(BlogCategory::getId).collect(Collectors.toSet()),
                     saved.getEntitledServices().stream().map(service -> service.getId()).collect(Collectors.toSet()),
@@ -300,7 +300,7 @@ public class AdminBlogService {
         }
         post.setDeletedAt(DateTimeUtil.now());
         post.setVersion(post.getVersion() + 1);
-        adminAuditWriterService.writeOperatorEvent(adminId, "BLOG_POST", postId, "BLOG_POST_DELETED", java.util.Map.of("status", post.getStatus().name()), java.util.Map.of());
+        eventPublisher.publishEvent(new OperatorAuditIntent(adminId, "BLOG_POST", postId, "BLOG_POST_DELETED", java.util.Map.of("status", post.getStatus().name()), java.util.Map.of()));
         signalTrendingChange(postId);
         return blogMapper.toAdminDetail(post, null);
     }
@@ -314,7 +314,7 @@ public class AdminBlogService {
             throw new VersionConflictException(ErrorCode.BLOG_POST_VERSION_CONFLICT, ErrorCode.BLOG_POST_VERSION_CONFLICT.getMessage(), postId, request.expectedVersion(), null);
         }
         BlogPost restored = blogPostRepository.findById(postId).orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy bài blog"));
-        adminAuditWriterService.writeOperatorEvent(adminId, "BLOG_POST", postId, "BLOG_POST_RESTORED", java.util.Map.of(), java.util.Map.of("status", restored.getStatus().name()));
+        eventPublisher.publishEvent(new OperatorAuditIntent(adminId, "BLOG_POST", postId, "BLOG_POST_RESTORED", java.util.Map.of(), java.util.Map.of("status", restored.getStatus().name())));
         signalTrendingChange(postId);
         return blogMapper.toAdminDetail(restored, null);
     }

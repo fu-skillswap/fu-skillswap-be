@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.admin.service.AdminAuditWriterService;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReport;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReportStatus;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
@@ -15,12 +14,10 @@ import com.fptu.exe.skillswap.modules.chat.repository.ChatReportRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationUserBlockRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSeverity;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationSource;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorViolationCommandPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.event.OperatorAuditIntent;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +26,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Map;
@@ -42,12 +40,12 @@ public class ConversationSafetyService {
     private final ConversationParticipantRepository participantRepository;
     private final ConversationUserBlockRepository conversationUserBlockRepository;
     private final ChatReportRepository chatReportRepository;
-    private final AdminAuditWriterService adminAuditWriterService;
-    private MentorViolationService mentorViolationService;
+    private final ApplicationEventPublisher eventPublisher;
+    private MentorViolationCommandPort mentorViolationCommandPort;
 
     @Autowired(required = false)
-    void setMentorViolationService(MentorViolationService mentorViolationService) {
-        this.mentorViolationService = mentorViolationService;
+    void setMentorViolationCommandPort(MentorViolationCommandPort mentorViolationCommandPort) {
+        this.mentorViolationCommandPort = mentorViolationCommandPort;
     }
 
     @Transactional
@@ -122,18 +120,18 @@ public class ConversationSafetyService {
         report.setReviewNote(normalizeDescription(request.reviewNote()));
         report.setResolvedAt(DateTimeUtil.now());
         ChatReport saved = chatReportRepository.save(report);
-        adminAuditWriterService.writeOperatorEvent(
+        eventPublisher.publishEvent(new OperatorAuditIntent(
                 adminUserId,
                 "CHAT_REPORT",
                 saved.getId(),
                 request.status().name(),
                 Map.of("previousStatus", ChatReportStatus.OPEN.name(), "conversationId", conversation.getId()),
                 Map.of("status", saved.getStatus().name(), "conversationLocked", conversation.getStatus() == ConversationStatus.LOCKED)
-        );
-        if (request.status() == ChatReportStatus.RESOLVED_LOCKED && mentorViolationService != null) {
-            mentorViolationService.recordAdminConfirmed(report.getReportedUserId(), MentorViolationSource.CHAT, saved.getId(),
-                    MentorViolationType.CHAT_POLICY_BREACH, MentorViolationSeverity.MEDIUM, adminUserId,
-                    "Admin khóa cuộc hội thoại sau khi xác nhận chat report.", request.reviewNote());
+        ));
+        if (request.status() == ChatReportStatus.RESOLVED_LOCKED && mentorViolationCommandPort != null) {
+            mentorViolationCommandPort.recordConfirmedViolation(new MentorViolationCommandPort.MentorViolationCommand(
+                    report.getReportedUserId(), "CHAT", saved.getId(), "CHAT_POLICY_BREACH", "MEDIUM", adminUserId,
+                    "Admin khóa cuộc hội thoại sau khi xác nhận chat report.", request.reviewNote()));
         }
         return toResponse(saved);
     }
@@ -151,14 +149,14 @@ public class ConversationSafetyService {
         if (note != null) {
             newValue.put("note", note);
         }
-        adminAuditWriterService.writeOperatorEvent(
+        eventPublisher.publishEvent(new OperatorAuditIntent(
                 adminUserId,
                 "CONVERSATION",
                 conversationId,
                 Boolean.TRUE.equals(request.locked()) ? "CHAT_CONVERSATION_LOCKED" : "CHAT_CONVERSATION_UNLOCKED",
                 Map.of("status", previousStatus.name()),
                 newValue
-        );
+        ));
     }
 
     private Conversation requireParticipantConversation(UUID conversationId, UUID userId, boolean lock) {

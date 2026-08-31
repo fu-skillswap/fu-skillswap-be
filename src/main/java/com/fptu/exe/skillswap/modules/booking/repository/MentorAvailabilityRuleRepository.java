@@ -15,15 +15,14 @@ import java.util.UUID;
 @Deprecated(forRemoval = false)
 public interface MentorAvailabilityRuleRepository extends JpaRepository<MentorAvailabilityRule, UUID> {
 
-    List<MentorAvailabilityRule> findByMentorProfileUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(UUID mentorUserId);
+    List<MentorAvailabilityRule> findByMentorUserIdAndActiveTrueOrderByEffectiveFromAscStartTimeAsc(UUID mentorUserId);
 
-    Optional<MentorAvailabilityRule> findByIdAndMentorProfileUserId(UUID ruleId, UUID mentorUserId);
+    Optional<MentorAvailabilityRule> findByIdAndMentorUserId(UUID ruleId, UUID mentorUserId);
 
     @Query("""
             select rule
             from MentorAvailabilityRule rule
-            join fetch rule.mentorProfile mp
-            where mp.userId = :mentorUserId
+            where rule.mentorUserId = :mentorUserId
               and rule.active = true
               and rule.effectiveFrom <= :rangeEnd
               and (rule.effectiveTo is null or rule.effectiveTo >= :rangeStart)

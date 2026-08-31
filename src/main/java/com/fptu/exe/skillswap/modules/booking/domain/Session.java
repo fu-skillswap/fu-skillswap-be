@@ -1,9 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -30,13 +28,12 @@ public class Session {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "service_id", nullable = true, foreignKey = @ForeignKey(name = "fk_sessions_service"))
-    private MentorService service;
+    /** Immutable reference to the service selected when this booking was accepted. */
+    @Column(name = "service_id")
+    private UUID serviceId;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_sessions_mentor"))
-    private User mentor;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "source_type", nullable = false, length = 50)
@@ -129,23 +126,23 @@ public class Session {
         syncTimestampPairs();
         Instant nowUtc = DateTimeUtil.instantNow();
         if (createdAtUtc == null) createdAtUtc = nowUtc;
-        if (createdAt == null) createdAt = BookingTime.fromInstant(createdAtUtc);
+        if (createdAt == null) createdAt = BusinessTime.fromInstant(createdAtUtc);
         if (updatedAtUtc == null) updatedAtUtc = nowUtc;
-        if (updatedAt == null) updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        if (updatedAt == null) updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 
     @PreUpdate
     public void onUpdate() {
         syncTimestampPairs();
         updatedAtUtc = DateTimeUtil.instantNow();
-        updatedAt = BookingTime.fromInstant(updatedAtUtc);
+        updatedAt = BusinessTime.fromInstant(updatedAtUtc);
     }
 
     private void syncTimestampPairs() {
-        if (scheduledStartTimeUtc == null) scheduledStartTimeUtc = BookingTime.toInstant(scheduledStartTime); else if (scheduledStartTime == null) scheduledStartTime = BookingTime.fromInstant(scheduledStartTimeUtc);
-        if (scheduledEndTimeUtc == null) scheduledEndTimeUtc = BookingTime.toInstant(scheduledEndTime); else if (scheduledEndTime == null) scheduledEndTime = BookingTime.fromInstant(scheduledEndTimeUtc);
-        if (actualStartTimeUtc == null) actualStartTimeUtc = BookingTime.toInstant(actualStartTime); else if (actualStartTime == null) actualStartTime = BookingTime.fromInstant(actualStartTimeUtc);
-        if (actualEndTimeUtc == null) actualEndTimeUtc = BookingTime.toInstant(actualEndTime); else if (actualEndTime == null) actualEndTime = BookingTime.fromInstant(actualEndTimeUtc);
-        if (calendarLastSyncedAtUtc == null) calendarLastSyncedAtUtc = BookingTime.toInstant(calendarLastSyncedAt); else if (calendarLastSyncedAt == null) calendarLastSyncedAt = BookingTime.fromInstant(calendarLastSyncedAtUtc);
+        if (scheduledStartTimeUtc == null) scheduledStartTimeUtc = BusinessTime.toInstant(scheduledStartTime); else if (scheduledStartTime == null) scheduledStartTime = BusinessTime.fromInstant(scheduledStartTimeUtc);
+        if (scheduledEndTimeUtc == null) scheduledEndTimeUtc = BusinessTime.toInstant(scheduledEndTime); else if (scheduledEndTime == null) scheduledEndTime = BusinessTime.fromInstant(scheduledEndTimeUtc);
+        if (actualStartTimeUtc == null) actualStartTimeUtc = BusinessTime.toInstant(actualStartTime); else if (actualStartTime == null) actualStartTime = BusinessTime.fromInstant(actualStartTimeUtc);
+        if (actualEndTimeUtc == null) actualEndTimeUtc = BusinessTime.toInstant(actualEndTime); else if (actualEndTime == null) actualEndTime = BusinessTime.fromInstant(actualEndTimeUtc);
+        if (calendarLastSyncedAtUtc == null) calendarLastSyncedAtUtc = BusinessTime.toInstant(calendarLastSyncedAt); else if (calendarLastSyncedAt == null) calendarLastSyncedAt = BusinessTime.fromInstant(calendarLastSyncedAtUtc);
     }
 }

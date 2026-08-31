@@ -81,7 +81,7 @@ public class SettlementService {
         if (booking == null || booking.getId() == null) {
             return;
         }
-        if (booking.getMentorProfile() == null || booking.getMentorProfile().getUserId() == null) {
+        if (booking.getMentorUserId() == null) {
             return;
         }
         if (booking.getStatus() != BookingStatus.COMPLETED) {
@@ -103,7 +103,7 @@ public class SettlementService {
         if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.REFUNDED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Payment đã được hoàn tiền, không thể release settlement");
         }
-        SettlementAccount mentorAccount = lockMentorAccount(booking.getMentorProfile().getUserId());
+        SettlementAccount mentorAccount = lockMentorAccount(booking.getMentorUserId());
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 mentorAccount.getId(),
                 LedgerSourceType.BOOKING,

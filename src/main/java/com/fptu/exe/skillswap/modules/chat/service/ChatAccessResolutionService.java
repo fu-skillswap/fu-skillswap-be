@@ -1,11 +1,9 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.booking.service.BookingChatAccessPolicy;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatMessagingAccess;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
-import com.fptu.exe.skillswap.modules.course.service.CourseChatAccessPolicy;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;

@@ -16,6 +16,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceD
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueEvidenceUploadIntentResponse;
 import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidencePort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueDetailView;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidenceDownloadView;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueEvidenceView;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
@@ -156,25 +159,26 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
 
     @Transactional(readOnly = true)
     @Override
-    public BookingIssueDetailResponse getForAdmin(UUID bookingId) {
+    public BookingIssueDetailView getForAdmin(UUID bookingId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        return detail(booking, evidenceRepository.findByBookingIdAndStateInOrderByAttachedAtUtcAsc(bookingId,
-                List.of(BookingIssueEvidenceState.ACTIVE, BookingIssueEvidenceState.HIDDEN, BookingIssueEvidenceState.DELETED)), true);
+        return toAdminView(detail(booking, evidenceRepository.findByBookingIdAndStateInOrderByAttachedAtUtcAsc(bookingId,
+                List.of(BookingIssueEvidenceState.ACTIVE, BookingIssueEvidenceState.HIDDEN, BookingIssueEvidenceState.DELETED)), true));
     }
 
     @Transactional(readOnly = true)
     @Override
-    public BookingIssueEvidenceDownloadResponse downloadForAdmin(UUID bookingId, UUID evidenceId) {
+    public BookingIssueEvidenceDownloadView downloadForAdmin(UUID bookingId, UUID evidenceId) {
         BookingIssueEvidence evidence = evidenceRepository.findWithBookingById(evidenceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy file minh chứng"));
         if (!evidence.getBooking().getId().equals(bookingId)) throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy file minh chứng");
-        return download(evidence, true);
+        BookingIssueEvidenceDownloadResponse response = download(evidence, true);
+        return new BookingIssueEvidenceDownloadView(response.downloadUrl(), response.expiresAt());
     }
 
     @Transactional
     @Override
-    public BookingIssueEvidenceResponse setAdminVisibility(UUID bookingId, UUID evidenceId, UUID adminUserId,
+    public BookingIssueEvidenceView setAdminVisibility(UUID bookingId, UUID evidenceId, UUID adminUserId,
                                                             boolean hidden, String reason) {
         BookingIssueEvidence evidence = evidenceRepository.findWithBookingById(evidenceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy file minh chứng"));
@@ -190,7 +194,7 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
             evidence.setState(BookingIssueEvidenceState.ACTIVE);
             evidence.setHiddenAtUtc(null); evidence.setHiddenByUserId(null); evidence.setHiddenReason(null);
         }
-        return toResponse(evidence, true);
+        return toAdminView(toResponse(evidence, true));
     }
 
     @Transactional
@@ -289,6 +293,24 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
                 evidence.getSubmissionSide(), evidence.getState(), BookingTime.toOffsetDateTime(evidence.getAttachedAtUtc()), canDownload);
     }
 
+    private BookingIssueDetailView toAdminView(BookingIssueDetailResponse response) {
+        return new BookingIssueDetailView(response.bookingId(), enumName(response.status()), enumName(response.issueType()),
+                response.issueDescription(), response.issueSubmittedAt(), response.issueResponseDeadlineAt(), response.issueRespondedAt(),
+                response.issueResponseNote(), response.issueResolvedAt(), response.issueAdminEscalatedAt(),
+                response.issueAdminResolutionDeadlineAt(), response.issueAdminSlaOverdueAt(), response.issueAdminSlaReminderCount(),
+                response.issueAutoReleaseAt(), enumName(response.disputeSlaStatus()), response.issueResolutionNote(),
+                enumName(response.issueResolutionAction()), enumName(response.issueResolutionReasonCode()),
+                response.issueResolutionMenteeRefundScoin(), response.issueResolutionMentorSettlementScoin(),
+                response.issueResolutionPlatformSettlementScoin(), response.evidences().stream().map(this::toAdminView).toList());
+    }
+
+    private BookingIssueEvidenceView toAdminView(BookingIssueEvidenceResponse response) {
+        return new BookingIssueEvidenceView(response.evidenceId(), response.originalFilename(), response.contentType(), response.sizeBytes(),
+                enumName(response.submissionSide()), enumName(response.state()), response.attachedAt(), response.canDownload());
+    }
+
+    private String enumName(Enum<?> value) { return value == null ? null : value.name(); }
+
     private Booking requireParticipantBooking(UUID actorUserId, UUID bookingId) {
         Booking booking = bookingRepository.findById(bookingId).orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertParticipant(booking, actorUserId);
@@ -297,7 +319,7 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
 
     private void assertParticipant(Booking booking, UUID actorUserId) {
         boolean mentee = booking.getMentee() != null && actorUserId.equals(booking.getMentee().getId());
-        boolean mentor = booking.getMentorProfile() != null && actorUserId.equals(booking.getMentorProfile().getUserId());
+        boolean mentor = booking.getMentorUserId() != null && actorUserId.equals(booking.getMentorUserId());
         if (!mentee && !mentor) throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền truy cập minh chứng của booking này");
     }
 

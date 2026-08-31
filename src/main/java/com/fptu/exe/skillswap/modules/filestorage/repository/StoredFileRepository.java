@@ -10,5 +10,5 @@ import java.util.UUID;
 @Repository
 public interface StoredFileRepository extends JpaRepository<StoredFile, UUID> {
 
-    boolean existsByOwnerIdAndPurposeAndPublicUrl(UUID ownerId, FilePurpose purpose, String publicUrl);
+    boolean existsByOwnerUserIdAndPurposeAndPublicUrl(UUID ownerUserId, FilePurpose purpose, String publicUrl);
 }

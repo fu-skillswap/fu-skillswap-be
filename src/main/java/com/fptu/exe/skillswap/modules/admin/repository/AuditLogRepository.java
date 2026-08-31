@@ -17,12 +17,10 @@ import java.util.UUID;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
-    @EntityGraph(attributePaths = {"actor"})
     @Query(value = """
             select auditLog
             from AuditLog auditLog
-            left join auditLog.actor actor
-            where (:actorUserId is null or actor.id = :actorUserId)
+            where (:actorUserId is null or auditLog.actorUserId = :actorUserId)
               and (:entityType is null or lower(auditLog.entityType) = lower(:entityType))
               and (:entityId is null or auditLog.entityId = :entityId)
               and (:action is null or auditLog.action = :action)
@@ -31,8 +29,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             """, countQuery = """
             select count(auditLog.id)
             from AuditLog auditLog
-            left join auditLog.actor actor
-            where (:actorUserId is null or actor.id = :actorUserId)
+            where (:actorUserId is null or auditLog.actorUserId = :actorUserId)
               and (:entityType is null or lower(auditLog.entityType) = lower(:entityType))
               and (:entityId is null or auditLog.entityId = :entityId)
               and (:action is null or auditLog.action = :action)
@@ -49,6 +46,5 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
             Pageable pageable
     );
 
-    @EntityGraph(attributePaths = {"actor"})
     List<AuditLog> findByEntityTypeIgnoreCaseAndEntityIdOrderByCreatedAtDesc(String entityType, UUID entityId);
 }

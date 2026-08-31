@@ -1,12 +1,12 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
-import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.identity.port.AcademicEligibilityQuery;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -14,35 +14,41 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.UUID;
 
 @Component
-public class BookingEligibilityPolicy {
+public class BookingEligibilityPolicy implements ContentEntitlementQuery {
 
-    private final AcademicService academicService;
+    private final AcademicEligibilityQuery academicEligibilityQuery;
     private final BookingRepository bookingRepository;
 
     @Autowired
-    public BookingEligibilityPolicy(AcademicService academicService, BookingRepository bookingRepository) {
-        this.academicService = academicService;
+    public BookingEligibilityPolicy(AcademicEligibilityQuery academicEligibilityQuery, BookingRepository bookingRepository) {
+        this.academicEligibilityQuery = academicEligibilityQuery;
         this.bookingRepository = bookingRepository;
     }
 
     /** Compatibility constructor for existing pure unit tests. */
     @Deprecated(forRemoval = true)
-    public BookingEligibilityPolicy(AcademicService academicService) {
-        this(academicService, null);
+    public BookingEligibilityPolicy(AcademicEligibilityQuery academicEligibilityQuery) {
+        this(academicEligibilityQuery, null);
     }
 
     /** Shared paid-service entitlement policy for premium content and notifications. */
-    public boolean hasServiceContentEntitlement(java.util.UUID viewerId, java.util.UUID serviceId) {
+    @Override
+    public boolean hasServiceContentEntitlement(UUID viewerId, UUID serviceId) {
         if (viewerId == null || serviceId == null || bookingRepository == null) return false;
         return bookingRepository.existsByMenteeIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceContentEntitlementStatuses());
     }
 
     /** Notification and content modules ask the policy for recipients rather than duplicating lifecycle status rules. */
-    public java.util.Set<java.util.UUID> findUsersWithServiceContentEntitlement(java.util.Collection<java.util.UUID> serviceIds) {
-        if (serviceIds == null || serviceIds.isEmpty() || bookingRepository == null) return java.util.Set.of();
-        return new java.util.LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceContentEntitlementStatuses()));
+    @Override
+    public Set<UUID> findUsersWithServiceContentEntitlement(Collection<UUID> serviceIds) {
+        if (serviceIds == null || serviceIds.isEmpty() || bookingRepository == null) return Set.of();
+        return new LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceContentEntitlementStatuses()));
     }
 
     public void validateBookerEligibility(User mentee) {
@@ -52,37 +58,27 @@ public class BookingEligibilityPolicy {
         if (hasAnyRole(mentee, RoleCode.ADMIN, RoleCode.SYSTEM_ADMIN)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản quản trị không được phép tạo booking");
         }
-        if (!academicService.hasCompletedStudentProfile(mentee.getId())) {
+        if (!academicEligibilityQuery.hasCompletedStudentProfile(mentee.getId())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn cần hoàn thành hồ sơ học thuật trước khi tạo booking");
         }
     }
 
-    public boolean isDiscoverableMentorForBooking(MentorProfile mentorProfile) {
-        return mentorProfile != null
-                && mentorProfile.getStatus() == MentorStatus.ACTIVE
-                && mentorProfile.getVerifiedAt() != null
-                && mentorProfile.isAvailable()
-                && trimToNull(mentorProfile.getHeadline()) != null
-                && trimToNull(mentorProfile.getExpertiseDescription()) != null
-                && mentorProfile.getFoundationSupportLevel() != null
-                && mentorProfile.getOutputReviewSupportLevel() != null
-                && mentorProfile.getDirectionSupportLevel() != null;
+    public boolean isDiscoverableMentorForBooking(MentorBookingCapability capability) {
+        return capability != null
+                && capability.isActiveMentor()
+                && capability.available()
+                && capability.hasCompletedProfile();
     }
 
-    /**
-     * Public profile capability only. Requester-specific eligibility remains enforced by booking
-     * quote/create flows because a public mentor detail may have no authenticated viewer.
-     */
     public boolean isPublicBookingOfferAvailable(
-            MentorProfile mentorProfile,
+            MentorBookingCapability capability,
             boolean hasActiveBookableService,
             LocalDateTime now
     ) {
-        if (!hasActiveBookableService || !isDiscoverableMentorForBooking(mentorProfile)) {
+        if (!hasActiveBookableService || !isDiscoverableMentorForBooking(capability)) {
             return false;
         }
-        LocalDateTime suspendedUntil = mentorProfile.getBookingSuspendedUntil();
-        return suspendedUntil == null || now == null || !suspendedUntil.isAfter(now);
+        return capability.canAcceptBookings(now);
     }
 
     private boolean hasAnyRole(User user, RoleCode... roles) {
@@ -97,16 +93,8 @@ public class BookingEligibilityPolicy {
         return false;
     }
 
-    private String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isBlank() ? null : trimmed;
-    }
-
-    private java.util.Set<BookingStatus> serviceContentEntitlementStatuses() {
-        return java.util.Set.of(BookingStatus.PAID,
+    private Set<BookingStatus> serviceContentEntitlementStatuses() {
+        return Set.of(BookingStatus.PAID,
                 BookingStatus.AWAITING_MENTOR_COMPLETION, BookingStatus.AWAITING_MENTEE_CONFIRMATION,
                 BookingStatus.COMPLETED);
     }

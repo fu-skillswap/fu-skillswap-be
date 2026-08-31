@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -43,5 +44,25 @@ public class PaymentAdminPortImpl implements PaymentAdminPort {
     @Override
     public long countTotalPayoutRequestsByUserId(UUID userId) {
         return userId == null ? 0 : payoutRequestRepository.countByMentorUserId(userId);
+    }
+
+    @Override
+    public boolean existsPaymentOrderById(UUID orderId) {
+        return orderId != null && paymentOrderRepository.existsById(orderId);
+    }
+
+    @Override
+    public boolean existsPayoutRequestById(UUID payoutRequestId) {
+        return payoutRequestId != null && payoutRequestRepository.existsById(payoutRequestId);
+    }
+
+    @Override
+    public List<String> paymentOrderStatusNames() {
+        return java.util.Arrays.stream(PaymentOrderStatus.values()).map(Enum::name).toList();
+    }
+
+    @Override
+    public List<String> payoutRequestStatusNames() {
+        return java.util.Arrays.stream(PayoutRequestStatus.values()).map(Enum::name).toList();
     }
 }

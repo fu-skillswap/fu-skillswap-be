@@ -6,12 +6,16 @@ import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -38,8 +42,15 @@ public class BookingReminderEmailService {
 
     private final BookingRepository bookingRepository;
     private final EmailDispatchService emailDispatchService;
+    private final UserQueryPort userQueryPort;
     private SessionService sessionService;
-    private com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider = com.fptu.exe.skillswap.shared.time.TimeProvider.from(java.time.Clock.systemUTC());
+    private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    public BookingReminderEmailService(BookingRepository bookingRepository, EmailDispatchService emailDispatchService) {
+        this.bookingRepository = bookingRepository;
+        this.emailDispatchService = emailDispatchService;
+        this.userQueryPort = null;
+    }
 
     @Autowired(required = false)
     void setSessionService(SessionService sessionService) {
@@ -47,7 +58,7 @@ public class BookingReminderEmailService {
     }
 
     @Autowired(required = false)
-    public void setTimeProvider(com.fptu.exe.skillswap.shared.time.TimeProvider timeProvider) {
+    public void setTimeProvider(TimeProvider timeProvider) {
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
         }
@@ -75,18 +86,16 @@ public class BookingReminderEmailService {
         return sent;
     }
 
-    /** Calendar is optional. This warns participants when a confirmed booking has no usable meeting access. */
-    public int sendMeetingAccessFallbackWarnings() {
+    public int sendMissingAccessWarnings(boolean notifyMentee) {
         Instant now = timeProvider.instant();
-        int sent = sendMeetingAccessFallbackWarnings(now.plus(Duration.ofMinutes(119)), now.plus(Duration.ofMinutes(121)), false);
-        return sent + sendMeetingAccessFallbackWarnings(now.plus(Duration.ofMinutes(29)), now.plus(Duration.ofMinutes(31)), true);
-    }
-
-    private int sendMeetingAccessFallbackWarnings(Instant startInclusive,
-                                                   Instant endExclusive,
-                                                   boolean notifyMentee) {
+        Instant startInclusive = now.plus(Duration.ofMinutes(notifyMentee ? 25 : 115));
+        Instant endExclusive = now.plus(Duration.ofMinutes(notifyMentee ? 35 : 125));
         List<Booking> bookings = bookingRepository.findConfirmedBookingsStartingBetweenUtc(
-                CONFIRMED_STATUSES, startInclusive, endExclusive);
+                CONFIRMED_STATUSES,
+                startInclusive,
+                endExclusive
+        );
+
         int sent = 0;
         for (Booking booking : bookings) {
             if (hasMeetingAccess(booking)) continue;
@@ -101,11 +110,17 @@ public class BookingReminderEmailService {
                 bookingRepository.countPendingRequestsGroupedByMentorAndService(BookingStatus.PENDING);
         Map<UUID, PendingDigest> digests = new LinkedHashMap<>();
         for (PendingBookingServiceCountProjection row : rows) {
-            if (row.getMentorUserId() == null || !hasText(row.getMentorEmail()) || row.getPendingCount() <= 0) {
+            if (row.getMentorUserId() == null || row.getPendingCount() <= 0) {
+                continue;
+            }
+            UserSummaryRecord mentorUser = userQueryPort != null ? userQueryPort.findUserSummaryById(row.getMentorUserId()).orElse(null) : null;
+            String mentorEmail = mentorUser != null ? mentorUser.email() : null;
+            String mentorName = mentorUser != null ? mentorUser.fullName() : "mentor";
+            if (!hasText(mentorEmail)) {
                 continue;
             }
             PendingDigest digest = digests.computeIfAbsent(row.getMentorUserId(), ignored ->
-                    new PendingDigest(row.getMentorUserId(), row.getMentorEmail(), defaultText(row.getMentorName(), "mentor")));
+                    new PendingDigest(row.getMentorUserId(), mentorEmail, defaultText(mentorName, "mentor")));
             digest.add(defaultText(row.getServiceTitle(), DEFAULT_SERVICE_TITLE), row.getPendingCount());
         }
 
@@ -124,7 +139,6 @@ public class BookingReminderEmailService {
 
     public int sendDailyMentorScheduleDigests() {
         LocalDateTime now = timeProvider.nowBusiness();
-        // Check for today's confirmed bookings starting from 02:00 to 23:59:59
         LocalDateTime startInclusive = now.toLocalDate().atTime(2, 0);
         LocalDateTime endExclusive = now.toLocalDate().plusDays(1).atStartOfDay();
 
@@ -138,13 +152,10 @@ public class BookingReminderEmailService {
             return 0;
         }
 
-        // Group by mentor (only for mentors with active email)
         Map<UUID, List<Booking>> bookingsByMentor = bookings.stream()
-                .filter(b -> b.getMentorProfile() != null
-                        && b.getMentorProfile().getUser() != null
-                        && hasText(b.getMentorProfile().getUser().getEmail()))
+                .filter(b -> b.getMentorUserId() != null)
                 .collect(Collectors.groupingBy(
-                        b -> b.getMentorProfile().getUserId(),
+                        Booking::getMentorUserId,
                         LinkedHashMap::new,
                         Collectors.toList()
                 ));
@@ -160,15 +171,18 @@ public class BookingReminderEmailService {
                 continue;
             }
 
-            Booking firstBooking = mentorBookings.get(0);
-            String mentorEmail = firstBooking.getMentorProfile().getUser().getEmail();
-            String mentorName = mentorName(firstBooking);
+            UserSummaryRecord mentorUser = userQueryPort != null ? userQueryPort.findUserSummaryById(mentorUserId).orElse(null) : null;
+            String mentorEmail = mentorUser != null ? mentorUser.email() : null;
+            String mentorName = mentorUser != null ? mentorUser.fullName() : "mentor";
+
+            if (!hasText(mentorEmail)) {
+                continue;
+            }
 
             if (sendSingleMentorDailyDigest(mentorUserId, mentorEmail, mentorName, mentorBookings, dateKey, dateDisplay)) {
                 sent++;
             }
 
-            // Pacing delay (50ms) to throttle and avoid bursting SMTP/API limits
             try {
                 Thread.sleep(50);
             } catch (InterruptedException ignored) {
@@ -181,7 +195,6 @@ public class BookingReminderEmailService {
 
     public int sendAutoCloseWarningEmails() {
         LocalDateTime now = timeProvider.nowBusiness();
-        // Auto-close is anchored to selectedEndTime + 24 hours; this query targets the one-hour warning.
         LocalDateTime endExclusive = now.plusHours(1);
         LocalDateTime startInclusive = endExclusive.minusMinutes(1);
 
@@ -206,15 +219,17 @@ public class BookingReminderEmailService {
     }
 
     private boolean sendMissingAccessWarningToMentor(Booking booking, String remainingTime) {
-        if (booking == null || booking.getId() == null || booking.getMentorProfile() == null
-                || booking.getMentorProfile().getUser() == null || !hasText(booking.getMentorProfile().getUser().getEmail())) return false;
+        if (booking == null || booking.getId() == null || booking.getMentorUserId() == null) return false;
+        UserSummaryRecord mentorUser = userQueryPort != null ? userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null) : null;
+        if (mentorUser == null || !hasText(mentorUser.email())) return false;
+
         String subject = "[SkillSwap] Booking chưa có thông tin tham gia buổi học";
         EmailPayload payload = buildSessionReminderPayload(booking, subject, "Cần bổ sung thông tin buổi học",
                 "Cần thao tác", mentorName(booking), menteeName(booking),
                 "Buổi mentoring sẽ bắt đầu sau " + remainingTime + " nhưng chưa có link họp hoặc địa điểm hợp lệ.",
                 "Hãy vào SkillSwap để bổ sung link họp hoặc địa điểm ngay.", "Cập nhật thông tin buổi học");
         return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTOR:" + remainingTime + ":" + booking.getId(),
-                booking.getMentorProfile().getUser().getEmail(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTOR");
+                mentorUser.email(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTOR");
     }
 
     private boolean sendMissingAccessWarningToMentee(Booking booking) {
@@ -254,8 +269,11 @@ public class BookingReminderEmailService {
     }
 
     private boolean sendMentorAutoCloseWarning(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentorProfile() == null
-                || booking.getMentorProfile().getUser() == null || !hasText(booking.getMentorProfile().getUser().getEmail())) {
+        if (booking == null || booking.getId() == null || booking.getMentorUserId() == null) {
+            return false;
+        }
+        UserSummaryRecord mentorUser = userQueryPort != null ? userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null) : null;
+        if (mentorUser == null || !hasText(mentorUser.email())) {
             return false;
         }
         EmailPayload payload = buildSessionReminderPayload(
@@ -271,7 +289,7 @@ public class BookingReminderEmailService {
         );
         return emailDispatchService.sendHtmlOnce(
                 "BOOKING_AUTO_CLOSE_WARNING_MENTOR:" + booking.getId(),
-                booking.getMentorProfile().getUser().getEmail(),
+                mentorUser.email(),
                 payload.subject(),
                 payload.html(),
                 payload.plainText(),
@@ -305,8 +323,11 @@ public class BookingReminderEmailService {
     }
 
     private boolean sendMentorReminder(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentorProfile() == null
-                || booking.getMentorProfile().getUser() == null || !hasText(booking.getMentorProfile().getUser().getEmail())) {
+        if (booking == null || booking.getId() == null || booking.getMentorUserId() == null) {
+            return false;
+        }
+        UserSummaryRecord mentorUser = userQueryPort != null ? userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null) : null;
+        if (mentorUser == null || !hasText(mentorUser.email())) {
             return false;
         }
         EmailPayload payload = buildSessionReminderPayload(
@@ -322,7 +343,7 @@ public class BookingReminderEmailService {
         );
         return emailDispatchService.sendHtmlOnce(
                 "BOOKING_SESSION_REMINDER_MENTOR:" + booking.getId(),
-                booking.getMentorProfile().getUser().getEmail(),
+                mentorUser.email(),
                 payload.subject(),
                 payload.html(),
                 payload.plainText(),
@@ -531,15 +552,15 @@ public class BookingReminderEmailService {
         if (hasText(booking.getServiceTitleSnapshot())) {
             return booking.getServiceTitleSnapshot().trim();
         }
-        if (booking.getService() != null && hasText(booking.getService().getTitle())) {
-            return booking.getService().getTitle().trim();
-        }
         return DEFAULT_SERVICE_TITLE;
     }
 
     private String mentorName(Booking booking) {
-        if (booking.getMentorProfile() != null && booking.getMentorProfile().getUser() != null) {
-            return defaultText(booking.getMentorProfile().getUser().getFullName(), "mentor");
+        if (booking.getMentorUserId() != null && userQueryPort != null) {
+            return userQueryPort.findUserSummaryById(booking.getMentorUserId())
+                    .map(UserSummaryRecord::fullName)
+                    .filter(this::hasText)
+                    .orElse("mentor");
         }
         return "mentor";
     }

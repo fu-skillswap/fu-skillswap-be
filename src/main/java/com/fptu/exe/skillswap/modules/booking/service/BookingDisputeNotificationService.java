@@ -124,7 +124,7 @@ public class BookingDisputeNotificationService {
     }
 
     private void addActiveAdmins(Map<UUID, User> target, RoleCode roleCode) {
-        userQueryPort.findUsersByRole(roleCode, Pageable.unpaged()).getContent().stream()
+        userQueryPort.findUsersByRole(roleCode).stream()
                 .filter(user -> user.getStatus() == UserStatus.ACTIVE)
                 .forEach(user -> target.putIfAbsent(user.getId(), user));
     }
@@ -164,7 +164,17 @@ public class BookingDisputeNotificationService {
     }
 
     private User mentor(Booking booking) {
-        return booking == null || booking.getMentorProfile() == null ? null : booking.getMentorProfile().getUser();
+        if (booking == null || booking.getMentorUserId() == null || userQueryPort == null) {
+            return null;
+        }
+        return userQueryPort.findUserSummaryById(booking.getMentorUserId())
+                .map(summary -> User.builder()
+                        .id(summary.userId())
+                        .email(summary.email())
+                        .fullName(summary.fullName())
+                        .avatarUrl(summary.avatarUrl())
+                        .build())
+                .orElse(null);
     }
 
     private String resolveMessage(Booking booking, boolean autoResolved, BookingIssueResolution resolution) {

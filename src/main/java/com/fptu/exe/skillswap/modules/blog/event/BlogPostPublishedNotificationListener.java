@@ -3,9 +3,8 @@ package com.fptu.exe.skillswap.modules.blog.event;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,8 +23,8 @@ public class BlogPostPublishedNotificationListener {
 
     private final BlogCategoryFollowRepository blogCategoryFollowRepository;
     private final BlogMentorFollowRepository blogMentorFollowRepository;
-    private final NotificationService notificationService;
-    private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final NotificationCommandPort notificationCommandPort;
+    private final ContentEntitlementQuery contentEntitlementQuery;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onBlogPostPublished(BlogPostPublishedEvent event) {
@@ -37,15 +36,15 @@ public class BlogPostPublishedNotificationListener {
                     continue;
                 }
                 try {
-                    notificationService.createNotification(
+                    notificationCommandPort.publish(new NotificationCommandPort.NotificationIntent(
                             recipientId,
-                            NotificationType.BLOG_POST_PUBLISHED,
+                            "BLOG_POST_PUBLISHED",
                             "Bài blog mới từ SkillSwap",
                             event.authorName() + " vừa đăng bài: " + event.title(),
                             "BLOG_POST",
                             event.postId(),
                             "/blog/posts/" + event.slug()
-                    );
+                    ));
                 } catch (RuntimeException ex) {
                     log.error(notificationErrorJson(event, recipientId, ex));
                 }
@@ -57,7 +56,7 @@ public class BlogPostPublishedNotificationListener {
 
     private Set<UUID> followerIds(BlogPostPublishedEvent event) {
         if (event.visibility() == BlogVisibility.BOOKED_MEMBERS) {
-            return bookingEligibilityPolicy.findUsersWithServiceContentEntitlement(event.entitledServiceIds());
+            return contentEntitlementQuery.findUsersWithServiceContentEntitlement(event.entitledServiceIds());
         }
         Set<UUID> recipientIds = new LinkedHashSet<>();
         if (event.categoryIds() != null && !event.categoryIds().isEmpty()) {

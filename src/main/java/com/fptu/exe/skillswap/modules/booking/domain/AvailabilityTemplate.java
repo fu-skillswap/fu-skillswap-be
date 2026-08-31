@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -30,9 +28,8 @@ public class AvailabilityTemplate {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentor_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_availability_templates_mentor"))
-    private MentorProfile mentorProfile;
+    @Column(name = "mentor_user_id", nullable = false)
+    private UUID mentorUserId;
 
     @Column(name = "start_time", nullable = false)
     private LocalTime startTime;
@@ -66,12 +63,12 @@ public class AvailabilityTemplate {
     @Builder.Default
     private Integer configVersion = 1;
 
-    @ManyToMany(fetch = FetchType.LAZY)
-    @JoinTable(name = "availability_template_services",
-            joinColumns = @JoinColumn(name = "template_id"),
-            inverseJoinColumns = @JoinColumn(name = "service_id"))
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "availability_template_services",
+            joinColumns = @JoinColumn(name = "template_id"))
+    @Column(name = "service_id")
     @Builder.Default
-    private Set<MentorService> services = new LinkedHashSet<>();
+    private Set<UUID> serviceIds = new LinkedHashSet<>();
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

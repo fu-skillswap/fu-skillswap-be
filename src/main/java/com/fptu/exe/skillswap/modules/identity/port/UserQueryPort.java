@@ -20,7 +20,8 @@ public interface UserQueryPort {
 
     boolean isUserActive(UUID userId);
 
-    org.springframework.data.domain.Page<User> findUsersByRole(com.fptu.exe.skillswap.shared.constant.RoleCode role, org.springframework.data.domain.Pageable pageable);
+    List<User> findUsersByRole(com.fptu.exe.skillswap.shared.constant.RoleCode role);
+
 
     Optional<StudentProfile> findStudentProfileWithDetailsByUserId(UUID userId);
 
@@ -31,4 +32,14 @@ public interface UserQueryPort {
     List<User> findUsersByIdIn(java.util.Collection<UUID> userIds);
 
     Optional<User> findAdminVisibleUserById(UUID userId);
+
+    Optional<UserSummaryRecord> findUserSummaryById(UUID userId);
+
+    Optional<StudentProfileRecord> findStudentProfileRecordByUserId(UUID userId);
+
+    java.util.Map<UUID, UserSummaryRecord> findUserSummariesByIdIn(java.util.Collection<UUID> userIds);
+
+    java.util.Map<UUID, StudentProfileRecord> findStudentProfileRecordsByIdIn(java.util.Collection<UUID> userIds);
+
+    void grantMentorRole(UUID userId);
 }

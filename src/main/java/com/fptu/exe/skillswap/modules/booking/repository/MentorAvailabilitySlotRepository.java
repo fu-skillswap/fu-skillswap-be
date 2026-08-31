@@ -17,7 +17,7 @@ import java.util.UUID;
 @Repository
 public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAvailabilitySlot, UUID> {
 
-    List<MentorAvailabilitySlot> findByMentorProfileUserIdAndStartTimeUtcGreaterThanEqualAndStartTimeUtcLessThanAndIsActiveTrueOrderByStartTimeUtcAsc(
+    List<MentorAvailabilitySlot> findByMentorUserIdAndStartTimeUtcGreaterThanEqualAndStartTimeUtcLessThanAndIsActiveTrueOrderByStartTimeUtcAsc(
             UUID mentorUserId,
             Instant startTime,
             Instant endTime
@@ -26,9 +26,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select slot
             from MentorAvailabilitySlot slot
-            join fetch slot.mentorProfile mp
-            join fetch mp.user u
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.isActive = true
               and slot.startTimeUtc < :endTime
               and slot.endTimeUtc > :startTime
@@ -40,7 +38,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             @Param("endTime") Instant endTime
     );
 
-    boolean existsByMentorProfileUserIdAndStartTimeUtcAndEndTimeUtcAndIsActiveTrue(
+    boolean existsByMentorUserIdAndStartTimeUtcAndEndTimeUtcAndIsActiveTrue(
             UUID mentorUserId,
             Instant startTime,
             Instant endTime
@@ -54,7 +52,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select (count(slot) > 0)
             from MentorAvailabilitySlot slot
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.isActive = true
               and slot.startTimeUtc < :endTime
               and slot.endTimeUtc > :startTime
@@ -69,7 +67,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             update MentorAvailabilitySlot slot
             set slot.isActive = false
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.startTimeUtc >= :fromTime
               and slot.isActive = true
             """)
@@ -81,8 +79,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select distinct slot from MentorAvailabilitySlot slot
             left join fetch slot.slotServices ss
-            left join fetch ss.service
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.startTimeUtc < :endTime
               and slot.endTimeUtc > :startTime
             order by slot.startTimeUtc asc
@@ -96,7 +93,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select (count(slot) > 0)
             from MentorAvailabilitySlot slot
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.id <> :slotId
               and slot.isActive = true
               and slot.startTimeUtc < :endTime
@@ -120,7 +117,6 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select distinct slot from MentorAvailabilitySlot slot
             left join fetch slot.slotServices binding
-            left join fetch binding.service
             where slot.template.id = :templateId
               and slot.templateOccurrenceDate >= :fromDate
               and slot.templateOccurrenceDate <= :toDate
@@ -141,7 +137,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
 
     @Query("""
             select slot from MentorAvailabilitySlot slot
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.template is not null
               and slot.isActive = true
               and slot.startTimeUtc < :endTime and slot.endTimeUtc > :startTime
@@ -154,7 +150,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
 
     @Query("""
             select slot from MentorAvailabilitySlot slot
-            where slot.mentorProfile.userId = :mentorUserId
+            where slot.mentorUserId = :mentorUserId
               and slot.template is null
               and slot.isActive = true
               and slot.startTimeUtc < :endTime and slot.endTimeUtc > :startTime
@@ -166,9 +162,9 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
             @Param("endTime") Instant endTime);
 
     @Query("""
-            select distinct slot.mentorProfile.userId
+            select distinct slot.mentorUserId
             from MentorAvailabilitySlot slot
-            where slot.mentorProfile.userId in :mentorUserIds
+            where slot.mentorUserId in :mentorUserIds
               and slot.isActive = true
               and slot.startTimeUtc >= :now
             """)

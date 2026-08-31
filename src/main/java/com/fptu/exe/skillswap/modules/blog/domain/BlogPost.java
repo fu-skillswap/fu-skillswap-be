@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.blog.domain;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -9,12 +8,10 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -47,9 +44,9 @@ public class BlogPost {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_blog_posts_author"))
-    private User authorUser;
+    /** Identity aggregate is referenced by id only; details are resolved through the identity port. */
+    @Column(name = "author_user_id", nullable = false)
+    private UUID authorUserId;
 
     @Column(nullable = false, length = 220)
     private String title;

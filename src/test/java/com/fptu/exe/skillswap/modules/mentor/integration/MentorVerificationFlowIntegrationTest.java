@@ -27,10 +27,9 @@ import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationRequestResponse;
-import com.fptu.exe.skillswap.modules.admin.dto.response.AdminMentorVerificationRequestResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorProfileUpsertRequest;
@@ -63,7 +62,7 @@ class MentorVerificationFlowIntegrationTest {
     private MentorVerificationService mentorVerificationService;
 
     @Autowired
-    private AdminMentorVerificationModerationService adminMentorVerificationService;
+    private com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService adminMentorVerificationService;
 
     @Autowired
     private MentorProfileRepository mentorProfileRepository;
