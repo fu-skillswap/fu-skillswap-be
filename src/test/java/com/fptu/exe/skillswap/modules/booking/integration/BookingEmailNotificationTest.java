@@ -95,7 +95,7 @@ class BookingEmailNotificationTest {
                 .build());
 
         MentorProfile profile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now())
                 .isAvailable(true)
@@ -109,7 +109,7 @@ class BookingEmailNotificationTest {
                 .build());
 
         MentorAvailabilityRule availabilityRule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(profile)
+                .mentorUserId(profile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.DAILY)
                 .effectiveFrom(LocalDateTime.now().toLocalDate())
@@ -125,7 +125,7 @@ class BookingEmailNotificationTest {
                 .withSecond(0)
                 .withNano(0);
         testSlot = mentorAvailabilitySlotRepository.save(MentorAvailabilitySlot.builder()
-                .mentorProfile(profile)
+                .mentorUserId(profile.getUserId())
                 .rule(availabilityRule)
                 .startTime(slotStart)
                 .endTime(slotStart.plusHours(1))
@@ -145,7 +145,6 @@ class BookingEmailNotificationTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
                 .id(new AvailabilitySlotServiceId(testSlot.getId(), mentorService.getId()))
                 .slot(testSlot)
-                .service(mentorService)
                 .build());
 
         when(emailDispatchService.queueHtmlOnce(anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
@@ -273,8 +272,7 @@ class BookingEmailNotificationTest {
         return new CreateBookingRequest(
                 testSlot.getId(),
                 mentorService.getId(),
-                testSlot.getStartTime(),
-                testSlot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                testSlot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
                 title,
                 description
         );
