@@ -7,7 +7,6 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceRep
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueEvidenceUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -43,9 +42,11 @@ class BookingIssueEvidenceServiceTest {
         service = new BookingIssueEvidenceService(bookingRepository, intentRepository, evidenceRepository, storageGateway,
                 properties, TimeProvider.fixed(Instant.parse("2026-08-25T08:00:00Z"), ZoneOffset.UTC));
         menteeId = UUID.randomUUID();
+        User mentee = org.mockito.Mockito.mock(User.class);
+        org.mockito.Mockito.when(mentee.getId()).thenReturn(menteeId);
         booking = Booking.builder().id(UUID.randomUUID())
-                .mentee(User.builder().id(menteeId).email("mentee@example.com").fullName("Mentee").build())
-                .mentorProfile(MentorProfile.builder().user(User.builder().id(UUID.randomUUID()).email("mentor@example.com").fullName("Mentor").build()).build())
+                .mentee(mentee)
+                .mentorUserId(UUID.randomUUID())
                 .selectedEndTimeUtc(Instant.parse("2026-08-25T07:30:00Z")).build();
     }
 

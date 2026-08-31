@@ -6,9 +6,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingEngagementDeliveryRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -24,12 +23,12 @@ class BookingEngagementServiceTest {
 
     private final BookingRepository bookingRepository = mock(BookingRepository.class);
     private final BookingEngagementDeliveryRepository deliveryRepository = mock(BookingEngagementDeliveryRepository.class);
-    private final NotificationService notificationService = mock(NotificationService.class);
+    private final NotificationCommandPort notificationCommandPort = mock(NotificationCommandPort.class);
 
     private final BookingEngagementService service = new BookingEngagementService(
             bookingRepository,
             deliveryRepository,
-            notificationService
+            notificationCommandPort
     );
 
     @Test
@@ -37,15 +36,14 @@ class BookingEngagementServiceTest {
         UUID menteeId = UUID.randomUUID();
         UUID mentorUserId = UUID.randomUUID();
 
-        User mentee = User.builder().id(menteeId).fullName("Mentee A").build();
-        User mentorUser = User.builder().id(mentorUserId).fullName("Mentor A").build();
-        MentorProfile mentorProfile = MentorProfile.builder().userId(mentorUserId).user(mentorUser).build();
+        User mentee = mock(User.class);
+        when(mentee.getId()).thenReturn(menteeId);
 
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .selectedStartTime(LocalDateTime.now().plusHours(1))
                 .selectedEndTime(LocalDateTime.now().plusHours(2))
                 .build();
@@ -66,25 +64,13 @@ class BookingEngagementServiceTest {
         verify(deliveryRepository, times(2)).save(any());
 
         // Verify in-app notifications created
-        verify(notificationService).createNotification(
-                eq(menteeId),
-                eq(NotificationType.BOOKING_REMINDER),
-                eq("Buổi học bắt đầu sau 1 giờ"),
-                eq("Kiểm tra lịch học và chuẩn bị trước giờ bắt đầu."),
-                eq("BOOKING"),
-                eq(booking.getId()),
-                eq("/bookings/" + booking.getId())
-        );
-
-        verify(notificationService).createNotification(
-                eq(mentorUserId),
-                eq(NotificationType.BOOKING_REMINDER),
-                eq("Buổi học bắt đầu sau 1 giờ"),
-                eq("Kiểm tra lịch mentoring và chuẩn bị trước giờ bắt đầu."),
-                eq("BOOKING"),
-                eq(booking.getId()),
-                eq("/bookings/" + booking.getId())
-        );
+        org.mockito.ArgumentCaptor<NotificationCommandPort.NotificationIntent> notifications =
+                org.mockito.ArgumentCaptor.forClass(NotificationCommandPort.NotificationIntent.class);
+        verify(notificationCommandPort, times(2)).publish(notifications.capture());
+        assertEquals(List.of(menteeId, mentorUserId), notifications.getAllValues().stream()
+                .map(NotificationCommandPort.NotificationIntent::recipientUserId).toList());
+        assertEquals(List.of(NotificationType.BOOKING_REMINDER.name(), NotificationType.BOOKING_REMINDER.name()),
+                notifications.getAllValues().stream().map(NotificationCommandPort.NotificationIntent::type).toList());
     }
 
     @Test
@@ -92,15 +78,14 @@ class BookingEngagementServiceTest {
         UUID menteeId = UUID.randomUUID();
         UUID mentorUserId = UUID.randomUUID();
 
-        User mentee = User.builder().id(menteeId).fullName("Mentee A").build();
-        User mentorUser = User.builder().id(mentorUserId).fullName("Mentor A").build();
-        MentorProfile mentorProfile = MentorProfile.builder().userId(mentorUserId).user(mentorUser).build();
+        User mentee = mock(User.class);
+        when(mentee.getId()).thenReturn(menteeId);
 
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .selectedStartTime(LocalDateTime.now().plusHours(1))
                 .selectedEndTime(LocalDateTime.now().plusHours(2))
                 .build();
@@ -113,6 +98,6 @@ class BookingEngagementServiceTest {
         int sent = service.sendScheduledReminders();
 
         assertEquals(0, sent);
-        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any(), any());
+        verify(notificationCommandPort, never()).publish(any());
     }
 }

@@ -6,8 +6,8 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import com.fptu.exe.skillswap.modules.booking.service.BookingReminderEmailService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -24,12 +24,18 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class BookingReminderEmailServiceTest {
 
     private final BookingRepository bookingRepository = mock(BookingRepository.class);
     private final EmailDispatchService emailDispatchService = mock(EmailDispatchService.class);
+    private final UserQueryPort userQueryPort = mock(UserQueryPort.class);
     private final BookingReminderEmailService service = new BookingReminderEmailService(bookingRepository, emailDispatchService);
+
+    {
+        ReflectionTestUtils.setField(service, "userQueryPort", userQueryPort);
+    }
 
     @Test
     void sendUpcomingSessionReminders_shouldSendMenteeAndMentorEmailsForConfirmedBookings() {
@@ -105,19 +111,22 @@ class BookingReminderEmailServiceTest {
         UUID mentor1Id = UUID.randomUUID();
         UUID mentor2Id = UUID.randomUUID();
 
-        User mentor1 = User.builder().id(mentor1Id).email("mentor1@test.com").fullName("Mentor One").build();
-        User mentor2 = User.builder().id(mentor2Id).email("mentor2@test.com").fullName("Mentor Two").build();
+        when(userQueryPort.findUserSummaryById(mentor1Id)).thenReturn(java.util.Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(mentor1Id, "mentor1@test.com", "Mentor One", null, java.util.Set.of(), "MENTOR", true)));
+        when(userQueryPort.findUserSummaryById(mentor2Id)).thenReturn(java.util.Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(mentor2Id, "mentor2@test.com", "Mentor Two", null, java.util.Set.of(), "MENTOR", true)));
 
-        MentorProfile profile1 = MentorProfile.builder().userId(mentor1Id).user(mentor1).build();
-        MentorProfile profile2 = MentorProfile.builder().userId(mentor2Id).user(mentor2).build();
-
-        User mentee = User.builder().id(UUID.randomUUID()).email("mentee@test.com").fullName("Mentee X").build();
+        UUID menteeId = UUID.randomUUID();
+        User mentee = mock(User.class);
+        when(mentee.getId()).thenReturn(menteeId);
+        when(mentee.getEmail()).thenReturn("mentee@test.com");
+        when(mentee.getFullName()).thenReturn("Mentee X");
 
         Booking booking1 = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
                 .mentee(mentee)
-                .mentorProfile(profile1)
+                .mentorUserId(mentor1Id)
                 .serviceTitleSnapshot("Coding 1:1")
                 .selectedStartTime(LocalDateTime.now().withHour(9).withMinute(0))
                 .selectedEndTime(LocalDateTime.now().withHour(10).withMinute(0))
@@ -128,7 +137,7 @@ class BookingReminderEmailServiceTest {
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
                 .mentee(mentee)
-                .mentorProfile(profile1)
+                .mentorUserId(mentor1Id)
                 .serviceTitleSnapshot("CV Review")
                 .selectedStartTime(LocalDateTime.now().withHour(14).withMinute(0))
                 .selectedEndTime(LocalDateTime.now().withHour(15).withMinute(0))
@@ -138,7 +147,7 @@ class BookingReminderEmailServiceTest {
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
                 .mentee(mentee)
-                .mentorProfile(profile2)
+                .mentorUserId(mentor2Id)
                 .serviceTitleSnapshot("System Design")
                 .selectedStartTime(LocalDateTime.now().withHour(16).withMinute(0))
                 .selectedEndTime(LocalDateTime.now().withHour(17).withMinute(0))
@@ -193,24 +202,19 @@ class BookingReminderEmailServiceTest {
     }
 
     private Booking confirmedBooking(BookingStatus status) {
-        User mentee = User.builder()
-                .id(UUID.randomUUID())
-                .email("mentee@test.com")
-                .fullName("Mentee A")
-                .build();
-        User mentorUser = User.builder()
-                .id(UUID.randomUUID())
-                .email("mentor@test.com")
-                .fullName("Mentor A")
-                .build();
-        MentorProfile mentorProfile = MentorProfile.builder()
-                .user(mentorUser)
-                .build();
+        UUID menteeId = UUID.randomUUID();
+        UUID mentorId = UUID.randomUUID();
+        User mentee = mock(User.class);
+        when(mentee.getId()).thenReturn(menteeId);
+        when(mentee.getEmail()).thenReturn("mentee@test.com");
+        when(mentee.getFullName()).thenReturn("Mentee A");
+        when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(java.util.Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(mentorId, "mentor@test.com", "Mentor A", null, java.util.Set.of(), "MENTOR", true)));
         return Booking.builder()
                 .id(UUID.randomUUID())
                 .status(status)
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorId)
                 .serviceTitleSnapshot("Review Project")
                 .serviceDurationSnapshot(60)
                 .learningGoalTitle("Gỡ project")

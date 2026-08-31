@@ -11,7 +11,6 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,12 +59,13 @@ class SessionAttendanceServiceTest {
         bookingId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
         menteeId = UUID.randomUUID();
-        User mentor = User.builder().id(mentorId).email("mentor@test.com").build();
+        User mentee = org.mockito.Mockito.mock(User.class);
+        org.mockito.Mockito.when(mentee.getId()).thenReturn(menteeId);
         booking = Booking.builder()
                 .id(bookingId)
                 .status(BookingStatus.PAID)
-                .mentorProfile(MentorProfile.builder().userId(mentorId).user(mentor).build())
-                .mentee(User.builder().id(menteeId).email("mentee@test.com").build())
+                .mentorUserId(mentorId)
+                .mentee(mentee)
                 .selectedStartTimeUtc(START)
                 .selectedStartTime(BookingTime.fromInstant(START))
                 .selectedEndTimeUtc(END)

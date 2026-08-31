@@ -12,7 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -51,6 +51,8 @@ class BookingMeetingServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private BookingResponseMapper bookingResponseMapper;
+    @Mock
+    private UserQueryPort userQueryPort;
 
     private MeetingProviderFactory meetingProviderFactory;
     private BookingMeetingService bookingMeetingService;
@@ -67,16 +69,15 @@ class BookingMeetingServiceTest {
         menteeId = UUID.randomUUID();
         bookingId = UUID.randomUUID();
 
-        User mentorUser = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor Dev").build();
-        User menteeUser = User.builder().id(menteeId).email("mentee@test.com").fullName("Mentee Student").build();
-        MentorProfile mentorProfile = MentorProfile.builder().userId(mentorId).user(mentorUser).build();
+        User menteeUser = mock(User.class);
+        when(menteeUser.getId()).thenReturn(menteeId);
 
         Instant startUtc = Instant.parse("2026-09-01T10:00:00Z");
         Instant endUtc = Instant.parse("2026-09-01T11:00:00Z");
 
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .id(UUID.randomUUID())
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorId)
                 .startTimeUtc(startUtc)
                 .endTimeUtc(endUtc)
                 .isActive(true)
@@ -85,7 +86,7 @@ class BookingMeetingServiceTest {
 
         booking = Booking.builder()
                 .id(bookingId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorId)
                 .mentee(menteeUser)
                 .slot(slot)
                 .status(BookingStatus.PAID)
@@ -98,7 +99,7 @@ class BookingMeetingServiceTest {
 
         session = Session.builder()
                 .id(UUID.randomUUID())
-                .mentor(mentorUser)
+                .mentorUserId(mentorId)
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(bookingId)
                 .scheduledStartTimeUtc(startUtc)
@@ -116,11 +117,13 @@ class BookingMeetingServiceTest {
                 sessionService,
                 eventPublisher,
                 meetingProviderFactory,
-                bookingResponseMapper
+                bookingResponseMapper,
+                userQueryPort
         );
         bookingMeetingService.setTimeProvider(TimeProvider.from(Clock.fixed(Instant.parse("2026-08-01T10:00:00Z"), ZoneOffset.UTC)));
 
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(booking));
+        when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(Optional.empty());
         when(sessionService.findByBookingId(bookingId)).thenReturn(session);
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         BookingResponse mockBookingResponse = mock(BookingResponse.class);
