@@ -145,7 +145,7 @@ class BookingFlowIntegrationTest {
                 .build());
 
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(LocalDateTime.now())
                 .isAvailable(true)
@@ -204,15 +204,13 @@ class BookingFlowIntegrationTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
                 .id(new AvailabilitySlotServiceId(slotToBook.getId(), mentorService.getId()))
                 .slot(slotToBook)
-                .service(mentorService)
                 .build());
 
         // 3. Mentee creates booking
         CreateBookingRequest createRequest = new CreateBookingRequest(
                 slotToBook.getId(),
                 mentorService.getId(),
-                slotToBook.getStartTime(),
-                slotToBook.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                slotToBook.getStartTime().toInstant(java.time.ZoneOffset.UTC),
                 "Need help with Java generics",
                 "Wildcard boundaries explain"
         );
@@ -303,8 +301,8 @@ class BookingFlowIntegrationTest {
         Instant nowUtc = Instant.now();
         var booking = bookingRepository.saveAndFlush(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                 .mentee(menteeUser)
-                .mentorProfile(mentorProfile)
-                .service(mentorService)
+                .mentorUserId(mentorProfile.getUserId())
+                .serviceId(mentorService.getId())
                 .status(BookingStatus.PAID)
                 .learningGoalTitle("Attendance evidence")
                 .selectedStartTimeUtc(nowUtc.minusSeconds(30))
@@ -313,8 +311,8 @@ class BookingFlowIntegrationTest {
                 .selectedEndTime(BookingTime.fromInstant(nowUtc.plusSeconds(600)))
                 .build());
         Session session = sessionRepository.saveAndFlush(Session.builder()
-                .mentor(mentorUser)
-                .service(mentorService)
+                .mentorUserId(mentorUser.getId())
+                .serviceId(mentorService.getId())
                 .sourceType(SessionSourceType.BOOKING)
                 .sourceId(booking.getId())
                 .scheduledStartTimeUtc(nowUtc.minusSeconds(30))
