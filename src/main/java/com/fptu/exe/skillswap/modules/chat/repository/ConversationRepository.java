@@ -40,12 +40,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
                     from ConversationParticipant cp1
                     where cp1.conversation.id = c.id
                       and cp1.user.id = :firstUserId
+                      and cp1.accessState <> com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.REVOKED
               )
               and exists (
                     select 1
                     from ConversationParticipant cp2
                     where cp2.conversation.id = c.id
                       and cp2.user.id = :secondUserId
+                      and cp2.accessState <> com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess.REVOKED
               )
             order by c.lastMessageAt desc nulls last, c.createdAt desc
             """)

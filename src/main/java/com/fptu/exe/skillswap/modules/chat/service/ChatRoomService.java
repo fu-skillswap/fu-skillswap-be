@@ -50,8 +50,9 @@ public class ChatRoomService {
         }
 
         Conversation conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
-                .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
-                .orElse(null);
+                .orElseGet(() -> conversationRepository.findDirectActiveByParticipantPair(
+                        mentorUser.getId(), menteeUser.getId(), ConversationType.DIRECT, ConversationStatus.ACTIVE)
+                        .stream().findFirst().orElse(null));
         if (conversation == null) {
             try {
                 conversation = conversationRepository.save(Conversation.builder()
@@ -68,8 +69,11 @@ public class ChatRoomService {
         }
         if (conversation == null) {
             conversation = conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, booking.getId())
-                    .or(() -> conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
-                    .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Không thể tạo cuộc hội thoại trực tiếp"));
+                    .orElseGet(() -> conversationRepository.findDirectActiveByParticipantPair(
+                            mentorUser.getId(), menteeUser.getId(), ConversationType.DIRECT, ConversationStatus.ACTIVE)
+                            .stream().findFirst()
+                            .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT,
+                                    "Không thể tạo cuộc hội thoại trực tiếp")));
         }
 
         addParticipantIfAbsent(conversation, mentorUser);

@@ -282,5 +282,6 @@ class BookingDecisionServiceTest {
 
         assertEquals(BookingStatus.PAID, pendingBooking.getStatus());
         verify(sessionService).createForAcceptedBooking(pendingBooking);
+        verify(conversationService).createDirectForAcceptedBooking(pendingBooking);
     }
 }
