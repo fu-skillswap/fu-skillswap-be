@@ -122,6 +122,15 @@ class BookingServiceTest {
 
     @Mock
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
+    @Mock private BookingCreationService bookingCreationService;
+    @Mock private BookingDecisionService bookingDecisionService;
+    @Mock private BookingCancellationService bookingCancellationService;
+    @Mock private BookingCompletionService bookingCompletionService;
+    @Mock private BookingMeetingService bookingMeetingService;
+    @Mock private SessionAttendanceService sessionAttendanceService;
+    @Mock private BookingQueryService bookingQueryService;
+    @Mock private BookingLifecycleMaintenanceService bookingLifecycleMaintenanceService;
+    @Mock private BookingResponseMapper bookingResponseMapper;
 
     private BookingSlotValidator bookingSlotValidator;
     private BookingEligibilityPolicy bookingEligibilityPolicy;
@@ -143,24 +152,10 @@ class BookingServiceTest {
                 new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, entityManager);
         com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort mentorPort =
                 new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, mentorServiceRepository);
-        bookingService = new BookingService(
-                bookingRepository,
-                mentorAvailabilitySlotRepository,
-                mentorPort,
-                userPort,
-                userPort,
-                notificationService,
-                eventPublisher,
-                entityManager,
-                sessionService,
-                settlementService,
-                paymentOrderService,
-                bookingSlotValidator,
-                bookingEligibilityPolicy,
-                new PaymentProperties(),
-                internalTelemetryService,
-                sessionRepository
-        );
+        bookingService = new BookingService(bookingCreationService, bookingDecisionService,
+                bookingCancellationService, bookingCompletionService, bookingMeetingService,
+                sessionAttendanceService, bookingQueryService, bookingLifecycleMaintenanceService,
+                bookingResponseMapper);
         BookingCompletionService completionService = (BookingCompletionService) ReflectionTestUtils.getField(
                 bookingService, "bookingCompletionService");
         completionService.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
@@ -174,7 +169,7 @@ class BookingServiceTest {
 
         mentorProfile = MentorProfile.builder()
                 .userId(mentorId)
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .verifiedAt(testNow().minusDays(3))
                 .isAvailable(true)
@@ -193,7 +188,7 @@ class BookingServiceTest {
 
         slot = new MentorAvailabilitySlot();
         slot.setId(UUID.randomUUID());
-        slot.setMentorProfile(mentorProfile);
+        slot.setMentorUserId(mentorProfile.getUserId());
         slot.setStartTime(testNow().plusDays(2));
         slot.setEndTime(testNow().plusDays(2).plusHours(1));
         slot.setActive(true);
@@ -270,13 +265,13 @@ class BookingServiceTest {
         Booking savedBooking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.PENDING)
                 .learningGoalTitle(request.learningGoalTitle())
                 .learningGoalDescription(request.learningGoalDescription())
-                .selectedStartTime(request.selectedStartTime())
-                .selectedEndTime(request.selectedEndTime())
+                .selectedStartTime(slot.getStartTime())
+                .selectedEndTime(slot.getEndTime())
                 .requestedStartTime(slot.getStartTime())
                 .requestedEndTime(slot.getEndTime())
                 .build();
@@ -355,13 +350,13 @@ class BookingServiceTest {
         Booking savedBooking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentorBooker)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.PENDING)
                 .learningGoalTitle(request.learningGoalTitle())
                 .learningGoalDescription(request.learningGoalDescription())
-                .selectedStartTime(request.selectedStartTime())
-                .selectedEndTime(request.selectedEndTime())
+                .selectedStartTime(slot.getStartTime())
+                .selectedEndTime(slot.getEndTime())
                 .requestedStartTime(slot.getStartTime())
                 .requestedEndTime(slot.getEndTime())
                 .build();
@@ -804,7 +799,7 @@ class BookingServiceTest {
         request.setRole(BookingViewRole.MENTOR);
         request.setStatus(BookingStatus.PAID);
 
-        when(bookingRepository.findByMentorProfileUserIdAndStatus(eq(mentorId), eq(BookingStatus.PAID), any(Pageable.class)))
+        when(bookingRepository.findByMentorUserIdAndStatus(eq(mentorId), eq(BookingStatus.PAID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(booking)));
 
         PageResponse<BookingResponse> response = bookingService.getMyBookings(mentorId, request);
@@ -949,12 +944,12 @@ class BookingServiceTest {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .status(BookingStatus.PENDING)
                 .slot(slot)
                 .build();
 
-        when(bookingRepository.findByMentorProfileUserIdAndStatus(mentorId, BookingStatus.PENDING))
+        when(bookingRepository.findByMentorUserIdAndStatus(mentorId, BookingStatus.PENDING))
                 .thenReturn(Collections.singletonList(booking));
 
         bookingService.rejectAllPendingBookingsForMentor(mentorId, "Banned reason");
@@ -1245,8 +1240,8 @@ class BookingServiceTest {
         return Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
-                .service(MentorService.builder().id(UUID.randomUUID()).title("Mock service").build())
+                .mentorUserId(mentorProfile.getUserId())
+                .serviceId(UUID.randomUUID())
                 .slot(slot)
                 .status(status)
                 .learningGoalTitle("Need help")
@@ -1274,8 +1269,7 @@ class BookingServiceTest {
         return new CreateBookingRequest(
                 slot.getId(),
                 serviceId,
-                slot.getStartTime(),
-                slot.getEndTime(),
+                slot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
                 title,
                 description
         );
