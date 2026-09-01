@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import okhttp3.mockwebserver.MockResponse;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 class GoogleCalendarApiClientTest {
 
@@ -43,7 +45,7 @@ class GoogleCalendarApiClientTest {
         properties.setCalendarBaseUrl(baseUrl + "calendars");
 
         objectMapper = new ObjectMapper();
-        client = new GoogleCalendarApiClient(properties, objectMapper, new GoogleCalendarDateTimeMapper());
+        client = new GoogleCalendarApiClient(properties, objectMapper, new GoogleCalendarDateTimeMapper(), mock(UserRepository.class));
     }
 
     @AfterEach
@@ -105,7 +107,7 @@ class GoogleCalendarApiClientTest {
                 .learningGoalTitle("Learn Java")
                 .learningGoalDescription("PRJ301 preparation")
                 .mentee(mentee)
-                .mentorProfile(MentorProfile.builder().user(mentor).build())
+                .mentorUserId(mentor.getId())
                 .build();
         Session session = Session.builder()
                 .scheduledStartTime(LocalDateTime.of(2026, 7, 10, 10, 0))

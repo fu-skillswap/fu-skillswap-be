@@ -187,7 +187,7 @@ class BookingNotificationIntegrationTest {
                 .build());
 
         mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                .mentorUserId(mentorProfile.getUserId())
+                .mentorProfile(mentorProfile)
                 .title("Java Mentoring")
                 .description("Support Java backend and REST API")
                 .durationMinutes(60)
@@ -387,8 +387,7 @@ class BookingNotificationIntegrationTest {
         return new CreateBookingRequest(
                 testSlot.getId(),
                 mentorService.getId(),
-                testSlot.getStartTime(),
-                testSlot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                testSlot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
                 title,
                 description
         );

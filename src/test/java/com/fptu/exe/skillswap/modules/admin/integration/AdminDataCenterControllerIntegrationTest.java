@@ -129,7 +129,7 @@ class AdminDataCenterControllerIntegrationTest {
         var specialization = specializationRepository.findByCode("CNTT_TTNT").orElseThrow();
 
         studentProfileRepository.save(StudentProfile.builder()
-                .user(targetUser)
+                .userId(targetUser.getId())
                 .claimedStudentCode("HE173001")
                 .campus(campus)
                 .program(program)
@@ -139,7 +139,7 @@ class AdminDataCenterControllerIntegrationTest {
                 .build());
 
         targetMentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(targetUser)
+                .userId(targetUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .isAvailable(true)
                 .verifiedAt(LocalDateTime.of(2026, 7, 1, 9, 0))
@@ -152,7 +152,7 @@ class AdminDataCenterControllerIntegrationTest {
                 .build());
 
         anotherMentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(anotherMentorUser)
+                .userId(anotherMentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .isAvailable(true)
                 .headline("Architecture Mentor")
@@ -305,7 +305,7 @@ class AdminDataCenterControllerIntegrationTest {
     private void seedBookings() {
         Booking asMentee = bookingRepository.save(Booking.builder()
                 .mentee(targetUser)
-                .mentorProfile(anotherMentorProfile)
+                .mentorUserId(anotherMentorProfile.getUserId())
                 .status(BookingStatus.PENDING)
                 .learningGoalTitle("Need architecture guidance")
                 .selectedStartTime(LocalDateTime.of(2026, 7, 10, 9, 0))
@@ -314,7 +314,7 @@ class AdminDataCenterControllerIntegrationTest {
 
         Booking asMentor = bookingRepository.save(Booking.builder()
                 .mentee(anotherMentee)
-                .mentorProfile(targetMentorProfile)
+                .mentorUserId(targetMentorProfile.getUserId())
                 .status(BookingStatus.PAID)
                 .learningGoalTitle("Need backend guidance")
                 .selectedStartTime(LocalDateTime.of(2026, 7, 11, 9, 0))

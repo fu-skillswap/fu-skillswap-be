@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +24,7 @@ public class PaymentLifecycleService {
     private final CreditLedgerService creditLedgerService;
     private final CouponService couponService;
     private final SettlementService settlementService;
+    private final BookingPaymentSettlementPort bookingPaymentSettlementPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -34,11 +36,11 @@ public class PaymentLifecycleService {
     }
 
     @Transactional
-    public void handleMenteeCancellation(Booking booking, boolean lateCancellation) {
-        if (booking == null || booking.getId() == null) {
+    public void handleMenteeCancellation(UUID bookingId, boolean lateCancellation) {
+        if (bookingId == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId).orElse(null);
         if (order == null) {
             return;
         }
@@ -56,16 +58,17 @@ public class PaymentLifecycleService {
             paymentOrderRepository.save(order);
         }
         if (settlementService != null) {
-            settlementService.handlePaidBookingCancelledByMentee(booking, order, lateCancellation);
+            bookingPaymentSettlementPort.findCancellationContext(bookingId)
+                    .ifPresent(context -> settlementService.handlePaidBookingCancelledByMentee(context, order, lateCancellation));
         }
     }
 
     @Transactional
-    public void handleMentorCancellation(Booking booking) {
-        if (booking == null || booking.getId() == null) {
+    public void handleMentorCancellation(UUID bookingId) {
+        if (bookingId == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId).orElse(null);
         if (order == null) {
             return;
         }
@@ -83,16 +86,17 @@ public class PaymentLifecycleService {
             paymentOrderRepository.save(order);
         }
         if (settlementService != null) {
-            settlementService.handlePaidBookingCancelledByMentor(booking, order);
+            bookingPaymentSettlementPort.findCancellationContext(bookingId)
+                    .ifPresent(context -> settlementService.handlePaidBookingCancelledByMentor(context, order));
         }
     }
 
     @Transactional
-    public void expireAwaitingPayment(Booking booking) {
-        if (booking == null || booking.getId() == null) {
+    public void expireAwaitingPayment(UUID bookingId) {
+        if (bookingId == null) {
             return;
         }
-        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        PaymentOrder order = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId).orElse(null);
         if (order == null) {
             return;
         }

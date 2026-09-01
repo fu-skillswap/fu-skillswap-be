@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import jakarta.persistence.EntityManager;
@@ -48,6 +49,8 @@ class AdminBlogServiceTest {
     private EntityManager entityManager;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private PublicUserQueryPort publicUserQueryPort;
 
     private AdminBlogService service;
 
@@ -61,7 +64,8 @@ class AdminBlogServiceTest {
                 new BlogContentPolicy(),
                 cursorCodec,
                 entityManager,
-                eventPublisher
+                eventPublisher,
+                publicUserQueryPort
         );
     }
 
@@ -90,7 +94,7 @@ class AdminBlogServiceTest {
         author.setFullName("Author");
         BlogPost post = BlogPost.builder()
                 .id(postId)
-                .authorUser(author)
+                .authorUserId(author.getId())
                 .title("Title")
                 .slug("title")
                 .contentMarkdown("Content")

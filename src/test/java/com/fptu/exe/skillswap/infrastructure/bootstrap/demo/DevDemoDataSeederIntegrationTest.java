@@ -137,7 +137,10 @@ class DevDemoDataSeederIntegrationTest {
                 .collect(Collectors.toMap(profile -> profile.getUser().getId(), Function.identity(), (left, right) -> left));
 
         return mentorProfileRepository.findByStatus(MentorStatus.ACTIVE).stream()
-                .filter(profile -> profile.getUser() != null && profile.getUser().getStatus() == UserStatus.ACTIVE)
+                .filter(profile -> profile.getUserId() != null
+                        && userRepository.findById(profile.getUserId())
+                        .map(user -> user.getStatus() == UserStatus.ACTIVE)
+                        .orElse(false))
                 .filter(profile -> profile.getVerifiedAt() != null)
                 .filter(MentorProfile::isAvailable)
                 .filter(profile -> profile.getTeachingMode() != null && profile.getSessionDuration() != null)

@@ -6,6 +6,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueType;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -14,7 +16,6 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +59,10 @@ class BookingLifecycleMaintenanceServiceTest {
     private PaymentOrderService paymentOrderService;
 
     @Mock
-    private SettlementService settlementService;
+    private BookingSettlementCommandPort settlementCommandPort;
+
+    @Mock
+    private BookingPaymentSettlementPort bookingPaymentSettlementPort;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -84,7 +88,8 @@ class BookingLifecycleMaintenanceServiceTest {
         maintenanceService = new BookingLifecycleMaintenanceService(
                 bookingRepository,
                 paymentOrderService,
-                settlementService,
+                settlementCommandPort,
+                bookingPaymentSettlementPort,
                 eventPublisher,
                 bookingEventService
         );
@@ -186,7 +191,7 @@ class BookingLifecycleMaintenanceServiceTest {
         assertNotNull(booking.getAutoCloseWarningSentAt());
         assertNull(booking.getCompletedAt());
         assertEquals(BookingStatus.AWAITING_MENTEE_CONFIRMATION, booking.getStatus());
-        verify(settlementService, never()).releaseForBooking(any());
+        verify(settlementCommandPort, never()).requestBookingRelease(any());
     }
 
     @Test
@@ -216,7 +221,7 @@ class BookingLifecycleMaintenanceServiceTest {
         assertNotNull(booking.getAutoClosedAt());
         assertNotNull(booking.getFinalizedAt());
         verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), any(Instant.class));
-        verify(settlementService).releaseForBooking(eq(booking));
+        verify(settlementCommandPort).requestBookingRelease(eq(booking.getId()));
     }
 
     @Test
@@ -296,6 +301,6 @@ class BookingLifecycleMaintenanceServiceTest {
         assertEquals(BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED, booking.getCompletionOutcome());
         assertNotNull(booking.getAdminSlaAutoReleasedAtUtc());
         verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), eq(nowUtc));
-        verify(settlementService).releaseForBooking(eq(booking));
+        verify(settlementCommandPort).requestBookingRelease(eq(booking.getId()));
     }
 }

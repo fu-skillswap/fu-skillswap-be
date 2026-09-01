@@ -1,11 +1,9 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
@@ -15,9 +13,9 @@ import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.Test;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -28,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
@@ -36,29 +35,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PaymentWebhookServiceTest {
 
     @Test
     void terminalWebhook_writesItsUtcAndLegacyTimestampFromTheSameInstant() {
         Instant receivedAtUtc = Instant.parse("2026-09-01T03:00:00Z");
-        PaymentWebhookService service = new PaymentWebhookService(
-                mock(PaymentOrderRepository.class),
-                mock(PaymentAttemptRepository.class),
-                mock(BookingQueryPort.class),
-                mock(CreditLedgerService.class),
-                mock(CouponService.class),
-                mock(SettlementService.class),
-                mock(SessionService.class),
-                mock(ConversationService.class),
-                mock(PaymentGatewayProviderFactory.class),
-                mock(PaymentLifecycleService.class),
-                mock(PaymentResponseMapper.class),
-                mock(ApplicationEventPublisher.class),
-                mock(InternalTelemetryService.class),
-                mock(TransactionTemplate.class),
-                new PaymentProperties()
-        );
+        PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class));
         service.setTimeProvider(TimeProvider.fixedUtc(receivedAtUtc));
 
         PaymentOrder order = PaymentOrder.builder().build();
@@ -78,45 +62,62 @@ class PaymentWebhookServiceTest {
     void paidAfterBookingDeadline_expiresBookingAndCompensatesInsteadOfConfirmingSession() {
         Instant deadline = Instant.parse("2026-09-01T03:00:00Z");
         PaymentProperties properties = new PaymentProperties();
-        BookingQueryPort bookingQueryPort = mock(BookingQueryPort.class);
+        BookingPaymentSettlementPort bookingPaymentSettlementPort = mock(BookingPaymentSettlementPort.class);
         SettlementService settlementService = mock(SettlementService.class);
-        SessionService sessionService = mock(SessionService.class);
-        PaymentWebhookService service = new PaymentWebhookService(
-                mock(PaymentOrderRepository.class),
-                mock(PaymentAttemptRepository.class),
-                bookingQueryPort,
-                mock(CreditLedgerService.class),
-                mock(CouponService.class),
-                settlementService,
-                sessionService,
-                mock(ConversationService.class),
-                mock(PaymentGatewayProviderFactory.class),
-                mock(PaymentLifecycleService.class),
-                mock(PaymentResponseMapper.class),
-                mock(ApplicationEventPublisher.class),
-                mock(InternalTelemetryService.class),
-                mock(TransactionTemplate.class),
-                properties
-        );
+        PaymentWebhookService service = newService(bookingPaymentSettlementPort, settlementService);
         service.setTimeProvider(TimeProvider.fixed(deadline.plusSeconds(1), TimeProvider.BUSINESS_ZONE));
 
-        Booking booking = Booking.builder()
-                .id(UUID.randomUUID())
-                .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
-                .acceptedAtUtc(deadline.minus(Duration.ofMinutes(240)))
-                .selectedStartTimeUtc(deadline.plus(Duration.ofHours(2)))
-                .build();
+        UUID bookingId = UUID.randomUUID();
+        BookingPaymentSnapshot booking = new BookingPaymentSnapshot(
+                bookingId, UUID.randomUUID(), UUID.randomUUID(), null, 100, false,
+                "ACCEPTED_AWAITING_PAYMENT", deadline.minus(Duration.ofMinutes(240)),
+                deadline.plus(Duration.ofHours(2)), deadline);
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
                 .paidAtUtc(deadline)
                 .build();
+        when(bookingPaymentSettlementPort.findCancellationContext(bookingId))
+                .thenReturn(java.util.Optional.of(new BookingCancellationContext(
+                        bookingId, booking.payerUserId(), booking.mentorUserId(), "EXPIRED", null,
+                        null, booking.selectedStartAtUtc(), deadline, false, true)));
 
         service.finalizePaidBooking(order, booking);
 
-        org.junit.jupiter.api.Assertions.assertEquals(BookingStatus.EXPIRED, booking.getStatus());
-        verify(bookingQueryPort).save(booking);
-        verify(settlementService).handlePaidBookingCancelledByMentor(booking, order);
-        verify(sessionService, never()).createForAcceptedBooking(booking);
+        verify(bookingPaymentSettlementPort).expirePayment(
+                bookingId, deadline, "Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
+        verify(settlementService).handlePaidBookingCancelledByMentor(any(), order);
+    }
+
+    @Test
+    void successfulPayment_usesBookingLifecycleContractToConfirmAndCreateSideEffects() {
+        BookingPaymentSettlementPort bookingPaymentSettlementPort = mock(BookingPaymentSettlementPort.class);
+        PaymentWebhookService service = newService(bookingPaymentSettlementPort, mock(SettlementService.class));
+        UUID bookingId = UUID.randomUUID();
+        BookingPaymentSnapshot booking = new BookingPaymentSnapshot(
+                bookingId, UUID.randomUUID(), UUID.randomUUID(), null, 100, false,
+                "ACCEPTED_AWAITING_PAYMENT", Instant.parse("2026-09-01T00:00:00Z"),
+                Instant.parse("2026-09-01T06:00:00Z"), Instant.parse("2026-09-01T03:00:00Z"));
+        PaymentOrder order = PaymentOrder.builder().id(UUID.randomUUID()).paidAtUtc(Instant.parse("2026-09-01T02:00:00Z")).build();
+
+        service.finalizePaidBooking(order, booking);
+
+        verify(bookingPaymentSettlementPort).confirmPayment(eq(bookingId), any(Instant.class));
+        verify(bookingPaymentSettlementPort, never()).ensurePaidSideEffects(any(UUID.class));
+    }
+
+    @Test
+    void missingBookingContract_shouldFailExplicitly() {
+        PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class));
+
+        assertThrows(BaseException.class, () -> service.finalizePaidBooking(
+                PaymentOrder.builder().build(), null));
+    }
+
+    @Test
+    void invalidWebhookRequest_shouldBeRejectedBeforeProviderProcessing() {
+        PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class));
+
+        assertThrows(BaseException.class, () -> service.handleWebhook(null));
     }
 
     @Test
@@ -142,16 +143,13 @@ class PaymentWebhookServiceTest {
         PaymentWebhookService service = spy(new PaymentWebhookService(
                 orderRepository,
                 mock(PaymentAttemptRepository.class),
-                mock(BookingQueryPort.class),
                 mock(CreditLedgerService.class),
                 mock(CouponService.class),
                 mock(SettlementService.class),
-                mock(SessionService.class),
-                mock(ConversationService.class),
+                mock(BookingPaymentSettlementPort.class),
                 mock(PaymentGatewayProviderFactory.class),
                 mock(PaymentLifecycleService.class),
                 mock(PaymentResponseMapper.class),
-                mock(ApplicationEventPublisher.class),
                 mock(InternalTelemetryService.class),
                 mock(TransactionTemplate.class),
                 properties
@@ -166,5 +164,22 @@ class PaymentWebhookServiceTest {
         verify(service, times(1)).synchronizeProviderStatusForBooking(any(UUID.class));
         verify(orderRepository).findTop50ByStatusInAndUpdatedAtUtcBeforeOrderByUpdatedAtUtcAsc(
                 any(), any(Instant.class), any(LocalDateTime.class), any(Pageable.class));
+    }
+
+    private PaymentWebhookService newService(BookingPaymentSettlementPort bookingPaymentSettlementPort,
+                                             SettlementService settlementService) {
+        return new PaymentWebhookService(
+                mock(PaymentOrderRepository.class),
+                mock(PaymentAttemptRepository.class),
+                mock(CreditLedgerService.class),
+                mock(CouponService.class),
+                settlementService,
+                bookingPaymentSettlementPort,
+                mock(PaymentGatewayProviderFactory.class),
+                mock(PaymentLifecycleService.class),
+                mock(PaymentResponseMapper.class),
+                mock(InternalTelemetryService.class),
+                mock(TransactionTemplate.class),
+                new PaymentProperties());
     }
 }

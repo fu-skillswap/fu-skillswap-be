@@ -16,9 +16,9 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.AdminResolveBookingIss
 import com.fptu.exe.skillswap.modules.booking.dto.request.AdminReverseResolutionRequest;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -53,7 +53,7 @@ class BookingCompletionServiceTest {
 
     @Mock private BookingRepository bookingRepository;
     @Mock private SessionFinalizationService sessionFinalizationService;
-    @Mock private SettlementService settlementService;
+    @Mock private BookingSettlementCommandPort settlementCommandPort;
     @Mock private BookingEventService bookingEventService;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private InternalTelemetryService internalTelemetryService;
@@ -73,7 +73,7 @@ class BookingCompletionServiceTest {
         service = new BookingCompletionService(
                 bookingRepository,
                 sessionFinalizationService,
-                settlementService,
+                settlementCommandPort,
                 bookingEventService,
                 eventPublisher,
                 internalTelemetryService,
@@ -219,7 +219,7 @@ class BookingCompletionServiceTest {
 
         verify(sessionFinalizationService).finalizeDeliveredSession(
                 org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
-        verify(settlementService).releaseForBooking(booking);
+        verify(settlementCommandPort).requestBookingRelease(booking.getId());
     }
 
     @Test
@@ -248,8 +248,8 @@ class BookingCompletionServiceTest {
                 booking.getCompletionOutcome());
         verify(sessionFinalizationService).finalizeDisputedSessionWithoutCompletionCounter(
                 org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
-        verify(settlementService).applyAdminIssueResolution(
-                org.mockito.ArgumentMatchers.eq(booking), any(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class));
+        verify(settlementCommandPort).requestAdminIssueResolution(
+                booking.getId(), org.mockito.ArgumentMatchers.any(UUID.class));
     }
 
     @Test
@@ -297,11 +297,8 @@ class BookingCompletionServiceTest {
         assertEquals(BookingStatus.UNDER_REVIEW, booking.getStatus());
         assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.UNDER_REVIEW, booking.getCompletionOutcome());
         assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.REVERSED, originalResolution.getStatus());
-        verify(settlementService).applyReversal(
-                org.mockito.ArgumentMatchers.eq(booking),
-                org.mockito.ArgumentMatchers.eq(originalResolution),
-                any(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution.class)
-        );
+        verify(settlementCommandPort).requestResolutionReversal(
+                booking.getId(), originalResolution.getId(), org.mockito.ArgumentMatchers.any(UUID.class));
     }
 
     @Test

@@ -1,18 +1,7 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionCommand;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTransitionExecutor;
-import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
-import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
-import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
-import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
@@ -32,14 +21,13 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSnapshot;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -56,27 +44,50 @@ import static com.fptu.exe.skillswap.modules.payment.service.PaymentLifecycleSer
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PaymentWebhookService {
 
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
-    private final BookingQueryPort bookingQueryPort;
-    private final com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
     private final CreditLedgerService creditLedgerService;
     private final CouponService couponService;
     private final SettlementService settlementService;
-    private final SessionService sessionService;
-    private final ConversationService conversationService;
+    private final BookingPaymentSettlementPort bookingPaymentSettlementPort;
     private final PaymentGatewayProviderFactory paymentGatewayProviderFactory;
     private final PaymentLifecycleService paymentLifecycleService;
     private final PaymentResponseMapper paymentResponseMapper;
-    private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
     private final TransactionTemplate transactionTemplate;
     private final PaymentProperties paymentProperties;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired
+    public PaymentWebhookService(
+            PaymentOrderRepository paymentOrderRepository,
+            PaymentAttemptRepository paymentAttemptRepository,
+            CreditLedgerService creditLedgerService,
+            CouponService couponService,
+            SettlementService settlementService,
+            BookingPaymentSettlementPort bookingPaymentSettlementPort,
+            PaymentGatewayProviderFactory paymentGatewayProviderFactory,
+            PaymentLifecycleService paymentLifecycleService,
+            PaymentResponseMapper paymentResponseMapper,
+            InternalTelemetryService internalTelemetryService,
+            TransactionTemplate transactionTemplate,
+            PaymentProperties paymentProperties) {
+        this.paymentOrderRepository = paymentOrderRepository;
+        this.paymentAttemptRepository = paymentAttemptRepository;
+        this.creditLedgerService = creditLedgerService;
+        this.couponService = couponService;
+        this.settlementService = settlementService;
+        this.bookingPaymentSettlementPort = bookingPaymentSettlementPort;
+        this.paymentGatewayProviderFactory = paymentGatewayProviderFactory;
+        this.paymentLifecycleService = paymentLifecycleService;
+        this.paymentResponseMapper = paymentResponseMapper;
+        this.internalTelemetryService = internalTelemetryService;
+        this.transactionTemplate = transactionTemplate;
+        this.paymentProperties = paymentProperties;
+    }
 
     @Autowired(required = false)
     public void setTimeProvider(TimeProvider timeProvider) {
@@ -110,7 +121,7 @@ public class PaymentWebhookService {
             // Không lock attempt theo providerOrderCode trước, nếu không webhook và luồng hủy có thể chờ chéo nhau.
             UUID targetId = paymentOrderRepository.findTargetIdById(optimisticAttempt.getPaymentOrderId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
-            Booking lockedBooking = bookingQueryPort.findByIdForSessionUpdate(targetId)
+            BookingPaymentSnapshot lockedBooking = bookingPaymentSettlementPort.findPaymentSnapshotForUpdate(targetId)
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
             PaymentOrder order = paymentOrderRepository.findByIdForUpdate(optimisticAttempt.getPaymentOrderId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy payment order"));
@@ -154,7 +165,7 @@ public class PaymentWebhookService {
                 order.setPaidAt(verified.paidAt());
             } else if (verified.paidAt() != null) {
                 order.setPaidAt(verified.paidAt());
-                order.setPaidAtUtc(BookingTime.toInstant(verified.paidAt()));
+                order.setPaidAtUtc(BusinessTime.toInstant(verified.paidAt()));
             } else {
                 order.setPaidAtUtc(timeProvider.instant());
                 order.setPaidAt(timeProvider.nowBusiness());
@@ -247,7 +258,8 @@ public class PaymentWebhookService {
                                                         String providerStatus) {
         // Canonical lock order for every booking payment mutation:
         // booking -> payment order -> payment attempt.
-        Booking booking = bookingQueryPort.findByIdForSessionUpdate(bookingId).orElseThrow();
+        BookingPaymentSnapshot booking = bookingPaymentSettlementPort.findPaymentSnapshotForUpdate(bookingId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để đồng bộ thanh toán"));
         PaymentOrder order = paymentOrderRepository.findByIdForUpdate(paymentOrderId).orElseThrow();
         PaymentAttempt attempt = paymentAttemptRepository.findByIdForUpdate(paymentAttemptId).orElseThrow();
         if (!paymentOrderId.equals(attempt.getPaymentOrderId())) {
@@ -272,7 +284,7 @@ public class PaymentWebhookService {
                         ? paymentLink.cancelledAtUtc()
                         : timeProvider.instant();
                 order.setCancelledAtUtc(cancelledAtUtc);
-                order.setCancelledAt(BookingTime.fromInstant(cancelledAtUtc));
+                order.setCancelledAt(BusinessTime.fromInstant(cancelledAtUtc));
                 paymentLifecycleService.rollbackReservedCredit(order);
                 if (couponService != null) {
                     couponService.voidRedemption(order.getId());
@@ -312,7 +324,7 @@ public class PaymentWebhookService {
                                         String providerTransactionId,
                                         String providerEventId,
                                         String providerStatus,
-                                        Booking lockedBooking) {
+                                        BookingPaymentSnapshot lockedBooking) {
         // UTC is the authoritative value. Check both columns while the legacy
         // business-zone shadow column still exists so a partially migrated row
         // can never consume the same reserved credit twice.
@@ -360,115 +372,77 @@ public class PaymentWebhookService {
         finalizePaidBooking(order, lockedBooking);
     }
 
-    void finalizePaidBooking(PaymentOrder order, Booking lockedBooking) {
+    public void finalizeInternalPayment(PaymentOrder order,
+                                        PaymentAttempt attempt,
+                                        String providerTransactionId,
+                                        String providerEventId,
+                                        String providerStatus) {
+        BookingPaymentSnapshot booking = bookingPaymentSettlementPort
+                .findPaymentSnapshotForUpdate(order.getTargetId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking để hoàn tất thanh toán"));
+        finalizeInternalPayment(order, attempt, providerTransactionId, providerEventId, providerStatus, booking);
+    }
+
+    void finalizePaidBooking(PaymentOrder order, BookingPaymentSnapshot lockedBooking) {
         if (lockedBooking == null) {
             throw new IllegalArgumentException(
                     "Booking phải được khóa trước PaymentOrder và PaymentAttempt khi hoàn tất thanh toán");
         }
-        Booking booking = lockedBooking;
-        if (booking.getStatus() == BookingStatus.PAID) {
-            if (sessionService != null) {
-                sessionService.createForAcceptedBooking(booking);
-            }
-            if (conversationService != null) {
-                conversationService.createDirectForAcceptedBooking(booking.getId(), booking.getMentorUserId(), booking.getMentee() == null ? null : booking.getMentee().getId());
-            }
+        BookingPaymentSnapshot booking = lockedBooking;
+        if ("PAID".equals(booking.paymentStatus())) {
+            bookingPaymentSettlementPort.ensurePaidSideEffects(booking.bookingId());
             return;
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
+        if (!"ACCEPTED_AWAITING_PAYMENT".equals(booking.paymentStatus())) {
             compensateCapturedPaymentForTerminalBooking(booking, order);
             log.warn("finalizePaidBooking: booking {} ở trạng thái {} không thể chuyển sang PAID. " +
                             "Payment order vẫn được ghi nhận PAID và hệ thống đã chạy bù trừ nội bộ nếu cần.",
-                    booking.getId(), booking.getStatus());
+                    booking.bookingId(), booking.paymentStatus());
             return;
         }
         Instant paidAtUtc = order.getPaidAtUtc() != null ? order.getPaidAtUtc() : timeProvider.instant();
-        if (BookingDeadlinePolicy.isPaymentDeadlineReachedUtc(booking, paidAtUtc)) {
-            BookingTransitionExecutor.apply(booking, BookingTransitionCommand.EXPIRE_PAYMENT, paidAtUtc);
-            booking.setRejectReason("Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
-            bookingQueryPort.save(booking);
+        if (booking.paymentExpiresAtUtc() != null && !booking.paymentExpiresAtUtc().isAfter(paidAtUtc)) {
+            bookingPaymentSettlementPort.expirePayment(booking.bookingId(), paidAtUtc,
+                    "Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
             compensateCapturedPaymentForTerminalBooking(booking, order);
             log.warn("finalizePaidBooking: payment order {} was paid after booking {} payment deadline; refunding capture",
-                    order.getId(), booking.getId());
+                    order.getId(), booking.bookingId());
             return;
         }
-        BookingTransitionExecutor.apply(booking, BookingTransitionCommand.PAYMENT_CONFIRMED, timeProvider.instant());
-        bookingQueryPort.save(booking);
+        bookingPaymentSettlementPort.confirmPayment(booking.bookingId(), timeProvider.instant());
         if (internalTelemetryService != null) {
             internalTelemetryService.record(
                     "BOOKING_PAYMENT_CONFIRMED",
-                    booking.getMentee() == null ? null : booking.getMentee().getId(),
+                    booking.payerUserId(),
                     "BOOKING",
-                    booking.getId(),
+                    booking.bookingId(),
                     Map.of(
-                            "mentorUserId", String.valueOf(booking.getMentorUserId()),
+                            "mentorUserId", String.valueOf(booking.mentorUserId()),
                             "grossScoin", String.valueOf(order.getGrossScoin()),
                             "remainingPayableScoin", String.valueOf(order.getRemainingPayableScoin())
                     )
             );
         }
 
-        if (sessionService != null) {
-            sessionService.createForAcceptedBooking(booking);
-        }
-        if (conversationService != null) {
-            conversationService.createDirectForAcceptedBooking(booking.getId(), booking.getMentorUserId(), booking.getMentee() == null ? null : booking.getMentee().getId());
-        }
-
-        eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
-                booking.getId(),
-                booking.getMentee().getId(),
-                booking.getMentorUserId(),
-                booking.getStatus(),
-                "Thanh toán thành công. Lịch học đã được xác nhận.",
-                booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()
-        ));
-        eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(booking.getId(), booking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CREATE));
-
-        if (booking.getMentorUserId() != null) {
-            eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentorUserId(),
-                    NotificationType.BOOKING_PAYMENT_CONFIRMED,
-                    "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
-                    booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
-                    "BOOKING",
-                    booking.getId()
-            ));
-        }
-
-        var mentorUser = booking.getMentorUserId() != null && userQueryPort != null
-                ? userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null)
-                : null;
-        String mentorEmail = mentorUser != null ? mentorUser.email() : null;
-        String mentorName = mentorUser != null ? mentorUser.fullName() : null;
-
-        eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
-                .bookingId(booking.getId())
-                .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
-                .recipientEmail(mentorEmail)
-                .recipientName(mentorName)
-                .actorName(booking.getMentee().getFullName())
-                .bookingStartTime(booking.getSelectedStartTime())
-                .bookingEndTime(booking.getSelectedEndTime())
-                .learningGoalTitle(booking.getLearningGoalTitle())
-                .learningGoalDescription(booking.getLearningGoalDescription())
-                .serviceTitle(booking.getServiceTitleSnapshot())
-                .serviceDurationMinutes(booking.getServiceDurationSnapshot())
-                .serviceFree(booking.getServiceIsFreeSnapshot())
-                .servicePriceScoin(booking.getServicePriceScoinSnapshot())
-                .serviceExpectedOutcome(booking.getServiceExpectedOutcomeSnapshot())
-                .mentorResponseNote(booking.getMentorResponseNote())
-                .createdAt(timeProvider.nowBusiness())
-                .build());
     }
 
-    private void compensateCapturedPaymentForTerminalBooking(Booking booking, PaymentOrder order) {
+    private void compensateCapturedPaymentForTerminalBooking(BookingPaymentSnapshot booking, PaymentOrder order) {
         if (booking == null || order == null || settlementService == null) {
             return;
         }
-        switch (booking.getStatus()) {
-            case CANCELLED_BY_MENTEE -> settlementService.handlePaidBookingCancelledByMentee(booking, order, false);
-            case CANCELLED_BY_MENTOR, REJECTED, EXPIRED -> settlementService.handlePaidBookingCancelledByMentor(booking, order);
+        switch (booking.paymentStatus()) {
+            case "CANCELLED_BY_MENTEE" -> {
+                BookingCancellationContext context = bookingPaymentSettlementPort.findCancellationContext(booking.bookingId())
+                        .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                                "Không tìm thấy trạng thái hủy booking để bù trừ thanh toán"));
+                settlementService.handlePaidBookingCancelledByMentee(context, order, false);
+            }
+            case "CANCELLED_BY_MENTOR", "REJECTED", "EXPIRED" -> {
+                BookingCancellationContext context = bookingPaymentSettlementPort.findCancellationContext(booking.bookingId())
+                        .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,
+                                "Không tìm thấy trạng thái hủy booking để bù trừ thanh toán"));
+                settlementService.handlePaidBookingCancelledByMentor(context, order);
+            }
             default -> {
             }
         }
@@ -576,21 +550,21 @@ public class PaymentWebhookService {
             case "CANCELLED" -> {
                 order.setStatus(PaymentOrderStatus.CANCELLED);
                 order.setCancelledAtUtc(receivedAtUtc);
-                order.setCancelledAt(BookingTime.fromInstant(receivedAtUtc));
+                order.setCancelledAt(BusinessTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.CANCELLED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link bị hủy");
             }
             case "EXPIRED" -> {
                 order.setStatus(PaymentOrderStatus.EXPIRED);
                 order.setFailedAtUtc(receivedAtUtc);
-                order.setFailedAt(BookingTime.fromInstant(receivedAtUtc));
+                order.setFailedAt(BusinessTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.EXPIRED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link đã hết hạn");
             }
             case "FAILED" -> {
                 order.setStatus(PaymentOrderStatus.FAILED);
                 order.setFailedAtUtc(receivedAtUtc);
-                order.setFailedAt(BookingTime.fromInstant(receivedAtUtc));
+                order.setFailedAt(BusinessTime.fromInstant(receivedAtUtc));
                 markAttemptFinalState(attempt, PaymentAttemptStatus.FAILED,
                         verified.providerTransactionId(), providerEventId, status, "PayOS payment link thất bại");
             }

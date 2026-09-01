@@ -77,7 +77,7 @@ class MentorAchievementPictureFlowIntegrationTest {
                 .build());
 
         MentorProfile profile = MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .headline("Tech Lead & Mentor")
                 .status(MentorStatus.ACTIVE)
                 .teachingMode(TeachingMode.HYBRID)

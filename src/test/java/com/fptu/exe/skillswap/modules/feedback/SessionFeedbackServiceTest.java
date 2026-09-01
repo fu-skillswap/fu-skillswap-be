@@ -11,10 +11,10 @@ import com.fptu.exe.skillswap.modules.feedback.dto.response.SessionFeedbackRespo
 import com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository;
 import com.fptu.exe.skillswap.modules.feedback.service.SessionFeedbackService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,7 +52,10 @@ class SessionFeedbackServiceTest {
     private MentorQueryPort mentorQueryPort;
 
     @Mock
-    private NotificationService notificationService;
+    private NotificationCommandPort notificationCommandPort;
+
+    @Mock
+    private UserQueryPort userQueryPort;
 
     @Mock
     private jakarta.persistence.EntityManager entityManager;
@@ -64,6 +67,7 @@ class SessionFeedbackServiceTest {
     private UUID mentorId;
     private Booking booking;
     private MentorProfile mentorProfile;
+    private User mentor;
 
     @BeforeEach
     void setUp() {
@@ -74,13 +78,12 @@ class SessionFeedbackServiceTest {
         mentee.setId(menteeId);
         mentee.setFullName("Mentee");
 
-        User mentor = new User();
+        mentor = new User();
         mentor.setId(mentorId);
         mentor.setFullName("Mentor");
 
         mentorProfile = new MentorProfile();
         mentorProfile.setUserId(mentorId);
-        mentorProfile.setUser(mentor);
         mentorProfile.setTotalReviews(2);
         mentorProfile.setAverageRating(new java.math.BigDecimal("4.50"));
 
@@ -89,7 +92,9 @@ class SessionFeedbackServiceTest {
         BookingStateTestSupport.setStatus(booking, BookingStatus.COMPLETED);
         booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
         booking.setMentee(mentee);
-        booking.setMentorProfile(mentorProfile);
+        booking.setMentorUserId(mentorId);
+        when(userQueryPort.existsById(mentorId)).thenReturn(true);
+        when(entityManager.getReference(User.class, mentorId)).thenReturn(mentor);
     }
 
     @Test
@@ -159,15 +164,15 @@ class SessionFeedbackServiceTest {
         assertEquals("4.67", mentorProfile.getAverageRating().toString());
         assertEquals(true, response.isPublic());
         verify(mentorQueryPort).saveMentorProfile(mentorProfile);
-        verify(notificationService).createNotification(
-                eq(mentorId),
-                eq(NotificationType.FEEDBACK_RECEIVED),
-                eq("Bạn vừa nhận được đánh giá mới"),
-                eq("Mentee đã gửi đánh giá sau buổi mentoring."),
-                eq("BOOKING"),
-                eq(booking.getId()),
-                eq("/bookings/" + booking.getId())
-        );
+        verify(notificationCommandPort).publish(new NotificationCommandPort.NotificationIntent(
+                mentorId,
+                "FEEDBACK_RECEIVED",
+                "Bạn vừa nhận được đánh giá mới",
+                "Mentee đã gửi đánh giá sau buổi mentoring.",
+                "BOOKING",
+                booking.getId(),
+                "/bookings/" + booking.getId()
+        ));
     }
 
     @Test
@@ -209,7 +214,7 @@ class SessionFeedbackServiceTest {
                 sessionFeedbackService.submitFeedback(menteeId, booking.getId(), request())
         );
 
-        verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any(), any());
+        verify(notificationCommandPort, never()).publish(any());
     }
 
     @Test
@@ -219,7 +224,7 @@ class SessionFeedbackServiceTest {
                 .id(UUID.randomUUID())
                 .booking(booking)
                 .reviewer(booking.getMentee())
-                .reviewee(booking.getMentorProfile().getUser())
+                .reviewee(mentor)
                 .rating(5)
                 .comment("Excellent mentor")
                 .isPublic(true)
@@ -240,7 +245,7 @@ class SessionFeedbackServiceTest {
                 .id(UUID.randomUUID())
                 .booking(booking)
                 .reviewer(booking.getMentee())
-                .reviewee(booking.getMentorProfile().getUser())
+                .reviewee(mentor)
                 .rating(4)
                 .comment("Good session")
                 .isPublic(true)

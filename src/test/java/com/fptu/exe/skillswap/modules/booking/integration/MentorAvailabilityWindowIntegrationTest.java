@@ -19,6 +19,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -119,7 +120,7 @@ class MentorAvailabilityWindowIntegrationTest {
                 .build());
 
         MentorService mentorService = mentorServiceRepository.saveAndFlush(MentorService.builder()
-                .mentorUserId(mentorProfile.getUserId())
+                .mentorProfile(mentorProfile)
                 .title("Overnight Support")
                 .description("Service bound to overnight slot")
                 .durationMinutes(60)
@@ -150,7 +151,7 @@ class MentorAvailabilityWindowIntegrationTest {
 
     @Test
     void getAvailableSlots_shouldIncludeSlotThatStartsBeforeWindowButOverlapsWindow() {
-        List<MentorAvailabilitySlotResponse> responses = mentorAvailabilityService.getAvailableSlots(
+        List<MentorPublicAvailability> responses = mentorAvailabilityService.getAvailableSlots(
                 mentorProfile.getUserId(),
                 queryStartDate,
                 queryStartDate.plusDays(4)

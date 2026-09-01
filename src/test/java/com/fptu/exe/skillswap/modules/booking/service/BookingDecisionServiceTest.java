@@ -100,7 +100,7 @@ class BookingDecisionServiceTest {
 
         slot = new MentorAvailabilitySlot();
         slot.setId(UUID.randomUUID());
-        slot.setMentorProfile(mentorProfile);
+        slot.setMentorUserId(mentorProfile.getUserId());
 
         Instant startUtc = Instant.parse("2026-08-05T08:00:00Z");
         Instant endUtc = Instant.parse("2026-08-05T09:00:00Z");

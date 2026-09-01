@@ -43,7 +43,7 @@ public class MentorProfileRepositorySearchForAdminTest {
 
     private MentorProfile createProfile(User user, MentorStatus status) {
         MentorProfile profile = MentorProfile.builder()
-                .user(user)
+                .userId(user.getId())
                 .status(status)
                 .headline("Headline of " + user.getEmail())
                 .expertiseDescription("Test expertise")

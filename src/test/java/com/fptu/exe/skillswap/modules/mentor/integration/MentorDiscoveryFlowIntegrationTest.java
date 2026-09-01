@@ -133,7 +133,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .intakeYear(2021)
                 .build());
         MentorProfile profile1 = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentor1User)
+                .userId(mentor1User.getId())
                 .status(MentorStatus.ACTIVE)
                 .headline("Java, Spring Boot developer")
                 .expertiseDescription("Teaching Spring Framework and Java programming")
@@ -165,7 +165,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .intakeYear(2021)
                 .build());
         MentorProfile profile2 = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentor2User)
+                .userId(mentor2User.getId())
                 .status(MentorStatus.ACTIVE)
                 .headline("Software Engineer Generalist")
                 .expertiseDescription("Algorithm design and web systems")

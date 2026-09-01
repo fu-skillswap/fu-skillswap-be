@@ -35,7 +35,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -112,7 +112,7 @@ class BookingServiceTest {
     private com.fptu.exe.skillswap.modules.booking.repository.SessionRepository sessionRepository;
 
     @Mock
-    private SettlementService settlementService;
+    private BookingSettlementCommandPort settlementCommandPort;
 
     @Mock
     private PaymentOrderService paymentOrderService;
@@ -233,7 +233,7 @@ class BookingServiceTest {
                         .toList());
         org.mockito.Mockito.lenient().when(availabilitySlotServiceRepository.existsBySlotIdAndServiceId(org.mockito.ArgumentMatchers.any(UUID.class), org.mockito.ArgumentMatchers.any(UUID.class)))
                 .thenReturn(true);
-        org.mockito.Mockito.lenient().doNothing().when(settlementService).releaseForBooking(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.lenient().doNothing().when(settlementCommandPort).requestBookingRelease(org.mockito.ArgumentMatchers.any());
         org.mockito.Mockito.lenient().when(bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
                 org.mockito.ArgumentMatchers.any(UUID.class),
                 org.mockito.ArgumentMatchers.any(),
@@ -669,7 +669,7 @@ class BookingServiceTest {
         assertEquals("Done", booking.getMenteeNote());
         assertEquals(3, mentorProfile.getTotalCompletedSessions());
         assertEquals(3, mentorProfile.getTotalSessions());
-        verify(settlementService).releaseForBooking(booking);
+        verify(settlementCommandPort).requestBookingRelease(booking.getId());
     }
 
     @Test
@@ -710,7 +710,7 @@ class BookingServiceTest {
         assertEquals(BookingStatus.CANCELLED_BY_MENTOR, response.status());
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
-        verify(paymentOrderService).handleMentorCancellation(eq(booking));
+        verify(paymentOrderService).handleMentorCancellation(eq(booking.getId()));
     }
 
     @Test
@@ -725,7 +725,7 @@ class BookingServiceTest {
 
         bookingService.cancelBookingByMentor(mentorId, booking.getId(), new CancelBookingRequest("Emergency"));
 
-        verify(paymentOrderService).handleMentorCancellation(eq(booking));
+        verify(paymentOrderService).handleMentorCancellation(eq(booking.getId()));
     }
 
     @Test
@@ -766,7 +766,7 @@ class BookingServiceTest {
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
         assertNotNull(response.cancelledAt());
-        verify(paymentOrderService).handleMenteeCancellation(eq(booking), eq(false));
+        verify(paymentOrderService).handleMenteeCancellation(eq(booking.getId()), eq(false));
     }
 
     @Test
@@ -789,7 +789,7 @@ class BookingServiceTest {
         assertFalse(slot.isBooked());
         assertTrue(slot.isActive());
         assertNotNull(response.cancelledAt());
-        verify(paymentOrderService).handleMenteeCancellation(eq(booking), eq(true));
+        verify(paymentOrderService).handleMenteeCancellation(eq(booking.getId()), eq(true));
     }
 
     @Test
@@ -1176,7 +1176,7 @@ class BookingServiceTest {
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
         assertTrue(staleBooking.getRejectReason().contains("240 phút hoặc ít nhất 2 giờ trước giờ bắt đầu"));
-        verify(paymentOrderService).expireAwaitingPayment(staleBooking);
+        verify(paymentOrderService).expireAwaitingPayment(staleBooking.getId());
         verify(eventPublisher, org.mockito.Mockito.times(2))
                 .publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));
     }

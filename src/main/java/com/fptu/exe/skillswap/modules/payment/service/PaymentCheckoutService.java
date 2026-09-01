@@ -189,7 +189,7 @@ public class PaymentCheckoutService {
                 if (persistedAttempt != null) {
                     attempt = persistedAttempt;
                 }
-                paymentWebhookService.finalizeInternalPayment(savedOrder, attempt, null, null, "PAID", booking);
+                paymentWebhookService.finalizeInternalPayment(savedOrder, attempt, null, null, "PAID");
                 return CheckoutPreparation.internalPaid(savedOrder, attempt);
             }
 

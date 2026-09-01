@@ -26,7 +26,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -67,7 +68,9 @@ class SessionCompletionUtcTest {
     @Mock
     private MentorProfileRepository mentorProfileRepository;
     @Mock
-    private SettlementService settlementService;
+    private BookingSettlementCommandPort settlementCommandPort;
+    @Mock
+    private BookingPaymentSettlementPort bookingPaymentSettlementPort;
     @Mock
     private BookingEventService bookingEventService;
     @Mock
@@ -250,7 +253,7 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         bookingCompletionService = new BookingCompletionService(
-                bookingRepository, sessionFinalizationService, settlementService, bookingEventService,
+                bookingRepository, sessionFinalizationService, settlementCommandPort, bookingEventService,
                 eventPublisher, internalTelemetryService, bookingResponseMapper, fixedTime
         );
 
@@ -270,7 +273,7 @@ class SessionCompletionUtcTest {
         assertThat(booking.getCompletionOutcome()).isEqualTo(BookingCompletionOutcome.USER_CONFIRMED);
         assertThat(booking.getMenteeNote()).isEqualTo("Great session!");
 
-        verify(settlementService, times(1)).releaseForBooking(booking);
+        verify(settlementCommandPort, times(1)).requestBookingRelease(booking.getId());
     }
 
     @Test
@@ -280,7 +283,7 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
+                bookingRepository, paymentOrderService, settlementCommandPort, bookingPaymentSettlementPort, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
@@ -305,7 +308,7 @@ class SessionCompletionUtcTest {
         assertThat(booking.getMentorCompletionOverdueAtUtc()).isNotNull();
 
         verify(mentorViolationService, times(1)).record(eq(mentorUserId), eq(bookingId), eq(MentorViolationType.COMPLETION_OVERDUE), any());
-        verify(settlementService, times(1)).releaseForBooking(booking);
+        verify(settlementCommandPort, times(1)).requestBookingRelease(booking.getId());
     }
 
     @Test
@@ -316,7 +319,7 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
+                bookingRepository, paymentOrderService, settlementCommandPort, bookingPaymentSettlementPort, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
@@ -346,7 +349,7 @@ class SessionCompletionUtcTest {
         assertThat(booking.getCompletionOutcome()).isEqualTo(BookingCompletionOutcome.NO_SHOW_MENTOR);
         assertThat(session.getStatus()).isEqualTo(SessionStatus.CANCELLED);
 
-        verify(settlementService, times(1)).refundForMentorNoShow(booking);
+        verify(settlementCommandPort, times(1)).requestMentorNoShowRefund(booking.getId());
         verify(mentorViolationService, times(1)).record(eq(mentorUserId), eq(bookingId), eq(MentorViolationType.MENTOR_NO_SHOW), any());
     }
 
@@ -358,7 +361,7 @@ class SessionCompletionUtcTest {
         TimeProvider fixedTime = TimeProvider.from(Clock.fixed(nowUtc, ZoneId.of("UTC")));
 
         maintenanceService = new BookingLifecycleMaintenanceService(
-                bookingRepository, paymentOrderService, settlementService, eventPublisher, bookingEventService, userQueryPort
+                bookingRepository, paymentOrderService, settlementCommandPort, bookingPaymentSettlementPort, eventPublisher, bookingEventService, userQueryPort
         );
         maintenanceService.setTimeProvider(fixedTime);
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
@@ -381,7 +384,7 @@ class SessionCompletionUtcTest {
         assertThat(changed).isEqualTo(1);
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.UNDER_REVIEW);
         assertThat(booking.getIssueResolutionNote()).isEqualTo("SYSTEM_ATTENDANCE_REQUIRES_ADMIN_REVIEW");
-        verify(settlementService, never()).refundForMentorNoShow(booking);
-        verify(settlementService, never()).releaseForBooking(booking);
+        verify(settlementCommandPort, never()).requestMentorNoShowRefund(booking.getId());
+        verify(settlementCommandPort, never()).requestBookingRelease(booking.getId());
     }
 }

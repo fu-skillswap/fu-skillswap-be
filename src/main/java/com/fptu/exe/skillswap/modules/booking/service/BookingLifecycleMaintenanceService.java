@@ -12,6 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionAttendance;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -20,7 +21,7 @@ import com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplineCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +51,8 @@ public class BookingLifecycleMaintenanceService {
 
     private final BookingRepository bookingRepository;
     private final PaymentOrderService paymentOrderService;
-    private final SettlementService settlementService;
+    private final BookingSettlementCommandPort settlementCommandPort;
+    private final BookingPaymentSettlementPort bookingPaymentSettlementPort;
     private final ApplicationEventPublisher eventPublisher;
     private final BookingEventService bookingEventService;
     private final UserQueryPort userQueryPort;
@@ -63,13 +65,15 @@ public class BookingLifecycleMaintenanceService {
     public BookingLifecycleMaintenanceService(
             BookingRepository bookingRepository,
             PaymentOrderService paymentOrderService,
-            SettlementService settlementService,
+            BookingSettlementCommandPort settlementCommandPort,
+            BookingPaymentSettlementPort bookingPaymentSettlementPort,
             ApplicationEventPublisher eventPublisher,
             BookingEventService bookingEventService
     ) {
         this.bookingRepository = bookingRepository;
         this.paymentOrderService = paymentOrderService;
-        this.settlementService = settlementService;
+        this.settlementCommandPort = settlementCommandPort;
+        this.bookingPaymentSettlementPort = bookingPaymentSettlementPort;
         this.eventPublisher = eventPublisher;
         this.bookingEventService = bookingEventService;
         this.userQueryPort = null;
@@ -218,7 +222,7 @@ public class BookingLifecycleMaintenanceService {
             if (slotStartUtc != null && nowUtc.isBefore(slotStartUtc)) {
                 refreshSlotBookedFlag(booking.getSlot());
             }
-            paymentOrderService.expireAwaitingPayment(booking);
+                    paymentOrderService.expireAwaitingPayment(booking.getId());
             expiredBookings.add(booking);
         }
         if (expiredBookings.isEmpty()) {
@@ -297,7 +301,7 @@ public class BookingLifecycleMaintenanceService {
                 BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
                 sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
-                settlementService.releaseForBooking(booking);
+                settlementCommandPort.requestBookingRelease(booking.getId());
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 notifyMentor(booking, "Booking đã tự động hoàn tất",
                         "Bạn không xác nhận hoàn tất trong 24 giờ. Booking đã tự đóng và hệ thống ghi nhận điểm vi phạm nội bộ.");
@@ -331,7 +335,7 @@ public class BookingLifecycleMaintenanceService {
                 BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_CLOSE, nowUtc);
                 booking.setCompletionOutcome(BookingCompletionOutcome.AUTO_CLOSED);
                 sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
-                settlementService.releaseForBooking(booking);
+                settlementCommandPort.requestBookingRelease(booking.getId());
                 recordEvent(booking, BookingEventType.AUTO_CLOSED, oldStatus, BookingEventActorType.SYSTEM);
                 return true;
             }
@@ -378,7 +382,8 @@ public class BookingLifecycleMaintenanceService {
                     BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTOR_NO_SHOW, nowUtc);
                     booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR);
                     sessionFinalizationService.markSessionNotDelivered(booking);
-                    settlementService.refundForMentorNoShow(booking);
+                    bookingPaymentSettlementPort.findCancellationContext(booking.getId())
+                            .ifPresent(context -> settlementCommandPort.requestMentorNoShowRefund(booking.getId()));
                     if (mentorDisciplineCommandPort != null) {
                         mentorDisciplineCommandPort.recordMentorNoShow(booking.getMentorUserId(), booking.getId(),
                                 "Hệ thống xác nhận mentor no-show do không phản hồi báo cáo đúng hạn.");
@@ -387,7 +392,7 @@ public class BookingLifecycleMaintenanceService {
                     BookingTransitionExecutor.apply(booking, BookingTransitionCommand.AUTO_RESOLVE_MENTEE_NO_SHOW, nowUtc);
                     booking.setCompletionOutcome(BookingCompletionOutcome.NO_SHOW_MENTEE);
                     sessionFinalizationService.markSessionNotDelivered(booking);
-                    settlementService.releaseForBooking(booking);
+                    settlementCommandPort.requestBookingRelease(booking.getId());
                 }
                 recordEvent(booking, BookingEventType.ISSUE_RESOLVED, old, BookingEventActorType.SYSTEM);
                 if (bookingDisputeNotificationService != null) {
@@ -463,7 +468,7 @@ public class BookingLifecycleMaintenanceService {
         booking.setIssueResolutionNote("SYSTEM_AUTO_RELEASE_AFTER_ADMIN_SLA_OVERDUE");
         booking.setAdminSlaAutoReleasedAtUtc(nowUtc);
         sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
-        settlementService.releaseForBooking(booking);
+        settlementCommandPort.requestBookingRelease(booking.getId());
         recordEvent(booking, BookingEventType.ADMIN_SLA_AUTO_RELEASED, oldStatus, BookingEventActorType.SYSTEM);
         if (bookingDisputeNotificationService != null) {
             bookingDisputeNotificationService.notifyIssueResolved(booking, true);

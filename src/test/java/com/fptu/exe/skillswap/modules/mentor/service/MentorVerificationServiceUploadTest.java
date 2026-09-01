@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
+import com.fptu.exe.skillswap.modules.identity.port.AcademicEligibilityQuery;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.booking.port.BookingAvailabilityQueryPort;
 import com.fptu.exe.skillswap.modules.filestorage.port.VerificationDocumentStoragePort;
@@ -58,7 +58,7 @@ class MentorVerificationServiceUploadTest {
     @Mock
     private MentorProfileRepository mentorProfileRepository;
     @Mock
-    private AcademicService academicService;
+    private AcademicEligibilityQuery academicEligibilityQuery;
     @Mock
     private MentorProfileService mentorProfileService;
     @Mock
@@ -93,14 +93,12 @@ class MentorVerificationServiceUploadTest {
 
         request = MentorVerificationRequest.builder()
                 .id(UUID.randomUUID())
-                .mentor(user)
+                .mentorUserId(userId)
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.DRAFT)
                 .build();
 
         lenient().when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
-        lenient().when(mentorVerificationRequestRepository.findFirstByMentorIdAndStatusInOrderByCreatedAtDesc(eq(userId), anyCollection()))
-                .thenReturn(Optional.of(request));
         lenient().when(mentorVerificationRequestRepository.findByIdForUpdate(request.getId()))
                 .thenReturn(Optional.of(request));
         lenient().when(mentorVerificationDocumentRepository.findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(any(), any()))
@@ -122,7 +120,7 @@ class MentorVerificationServiceUploadTest {
             if (intent.getId() == null) intent.setId(UUID.randomUUID());
             return intent;
         });
-        lenient().when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
+        lenient().when(academicEligibilityQuery.hasCompletedStudentProfile(userId)).thenReturn(true);
         lenient().when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
         lenient().when(r2StorageProvider.getIfAvailable()).thenReturn(storageGateway);
         lenient().when(storageGateway.resolvePublicUrl(any())).thenAnswer(invocation -> "https://cdn.skillswap.com/" + invocation.getArgument(0));
@@ -141,14 +139,14 @@ class MentorVerificationServiceUploadTest {
                 mentorVerificationDocumentRepository,
                 mentorVerificationRequestEventRepository,
                 mentorProfileRepository,
-                academicService,
-                mentorProfileService,
-                r2StorageProvider,
-                uploadIntentRepository,
                 mentorServiceRepository,
+                academicEligibilityQuery,
+                mentorProfileService,
                 userQueryPort,
-                bookingAvailabilityQueryPort,
-                verificationDocumentStoragePort
+                verificationDocumentStoragePort,
+                uploadIntentRepository,
+                r2StorageProvider,
+                bookingAvailabilityQueryPort
         );
         ReflectionTestUtils.setField(service, "mentorTermsVersion", "SKILLSWAP_MENTOR_TERMS_V1");
         ReflectionTestUtils.setField(service, "requireCompletedStudentProfile", false);
@@ -178,7 +176,7 @@ class MentorVerificationServiceUploadTest {
     void uploadProof_shouldRejectUploadIntentOwnedByAnotherUser() {
         User otherUser = User.builder().id(UUID.randomUUID()).build();
         MentorVerificationUploadIntent intent = validIntent();
-        intent.setOwner(otherUser);
+        intent.setOwnerUserId(otherUser.getId());
         when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
                 VerificationDocumentType.FPTU_AFFILIATION_PROOF,
@@ -243,7 +241,7 @@ class MentorVerificationServiceUploadTest {
     private MentorVerificationUploadIntent validIntent() {
         return MentorVerificationUploadIntent.builder()
                 .id(UUID.randomUUID())
-                .owner(user)
+                .ownerUserId(userId)
                 .storageKey("skillswap/verification-documents/users/" + userId + "/proof.jpg")
                 .originalFilename("proof.jpg")
                 .expectedContentType("image/jpeg")

@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -47,6 +47,7 @@ public class PaymentOrderService {
      */
     public PaymentOrderService(
             BookingQueryPort bookingQueryPort,
+            BookingPaymentSettlementPort bookingPaymentSettlementPort,
             PaymentOrderRepository paymentOrderRepository,
             PaymentAttemptRepository paymentAttemptRepository,
             CouponService couponService,
@@ -68,22 +69,19 @@ public class PaymentOrderService {
                 paymentOrderRepository,
                 creditLedgerService,
                 couponService,
-                settlementService
+                settlementService,
+                bookingPaymentSettlementPort
         );
         PaymentWebhookService webhookService = new PaymentWebhookService(
                 paymentOrderRepository,
                 paymentAttemptRepository,
-                bookingQueryPort,
-                null,
                 creditLedgerService,
                 couponService,
                 settlementService,
-                sessionService,
-                conversationService,
+                bookingPaymentSettlementPort,
                 paymentGatewayProviderFactory,
                 lifecycleService,
                 responseMapper,
-                eventPublisher,
                 internalTelemetryService,
                 transactionTemplate,
                 paymentProperties
@@ -173,18 +171,18 @@ public class PaymentOrderService {
     }
 
     @Transactional
-    public void handleMenteeCancellation(Booking booking, boolean lateCancellation) {
-        paymentLifecycleService.handleMenteeCancellation(booking, lateCancellation);
+    public void handleMenteeCancellation(UUID bookingId, boolean lateCancellation) {
+        paymentLifecycleService.handleMenteeCancellation(bookingId, lateCancellation);
     }
 
     @Transactional
-    public void handleMentorCancellation(Booking booking) {
-        paymentLifecycleService.handleMentorCancellation(booking);
+    public void handleMentorCancellation(UUID bookingId) {
+        paymentLifecycleService.handleMentorCancellation(bookingId);
     }
 
     @Transactional
-    public void expireAwaitingPayment(Booking booking) {
-        paymentLifecycleService.expireAwaitingPayment(booking);
+    public void expireAwaitingPayment(UUID bookingId) {
+        paymentLifecycleService.expireAwaitingPayment(bookingId);
     }
 
     // Helper method for unit tests calling private generateProviderOrderCode via reflection

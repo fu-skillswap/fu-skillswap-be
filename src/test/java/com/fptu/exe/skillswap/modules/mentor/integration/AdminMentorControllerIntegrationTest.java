@@ -75,7 +75,7 @@ class AdminMentorControllerIntegrationTest {
         activeMentorId = user1.getId();
 
         StudentProfile sp1 = StudentProfile.builder()
-                .user(user1)
+                .userId(user1.getId())
                 .program(program)
                 .semester(5)
                 .intakeYear(2022)
@@ -83,7 +83,7 @@ class AdminMentorControllerIntegrationTest {
         studentProfileRepository.save(sp1);
 
         MentorProfile mp1 = MentorProfile.builder()
-                .user(user1)
+                .userId(user1.getId())
                 .status(MentorStatus.ACTIVE)
                 .isAvailable(true)
                 .headline("IT Headline")
@@ -103,7 +103,7 @@ class AdminMentorControllerIntegrationTest {
         draftMentorId = user2.getId();
 
         MentorProfile mp2 = MentorProfile.builder()
-                .user(user2)
+                .userId(user2.getId())
                 .status(MentorStatus.DRAFT)
                 .isAvailable(true)
                 .headline("Draft Headline")

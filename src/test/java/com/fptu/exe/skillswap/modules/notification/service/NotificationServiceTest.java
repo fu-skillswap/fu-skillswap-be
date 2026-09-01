@@ -80,7 +80,7 @@ class NotificationServiceTest {
         verify(notificationRepository).save(captor.capture());
 
         Notification saved = captor.getValue();
-        assertEquals(userId, saved.getRecipientUser().getId());
+        assertEquals(userId, saved.getRecipientUserId());
         assertEquals("Mentor đã nhận lịch", saved.getTitle());
         assertNull(saved.getReadAt());
         verify(domainEventOutboxService, times(2)).enqueue(any(), any(), any(), any());
@@ -88,8 +88,8 @@ class NotificationServiceTest {
 
     @Test
     void getMyNotifications_shouldReturnOnlyCurrentUserNotifications() {
-        Notification notif1 = Notification.builder().id(UUID.randomUUID()).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
-        Notification notif2 = Notification.builder().id(UUID.randomUUID()).recipientUser(mockUser).type(NotificationType.BOOKING_REJECTED).title("t2").build();
+        Notification notif1 = Notification.builder().id(UUID.randomUUID()).recipientUserId(userId).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
+        Notification notif2 = Notification.builder().id(UUID.randomUUID()).recipientUserId(userId).type(NotificationType.BOOKING_REJECTED).title("t2").build();
         when(notificationRepository.findByRecipientUserId(eq(userId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(notif1, notif2)));
 
@@ -101,7 +101,7 @@ class NotificationServiceTest {
 
     @Test
     void getMyNotifications_unreadOnly_shouldReturnOnlyUnread() {
-        Notification notif1 = Notification.builder().id(UUID.randomUUID()).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
+        Notification notif1 = Notification.builder().id(UUID.randomUUID()).recipientUserId(userId).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
         when(notificationRepository.findByRecipientUserIdAndReadAtIsNull(eq(userId), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(notif1)));
 
@@ -121,7 +121,7 @@ class NotificationServiceTest {
     @Test
     void markAsRead_shouldSetReadAt() {
         UUID notifId = UUID.randomUUID();
-        Notification notif = Notification.builder().id(notifId).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
+        Notification notif = Notification.builder().id(notifId).recipientUserId(userId).type(NotificationType.BOOKING_ACCEPTED).title("t1").build();
         when(notificationRepository.findByIdAndRecipientUserId(notifId, userId)).thenReturn(Optional.of(notif));
         when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
@@ -136,7 +136,7 @@ class NotificationServiceTest {
     void markAsRead_shouldBeIdempotentWhenAlreadyRead() {
         UUID notifId = UUID.randomUUID();
         LocalDateTime oldReadAt = LocalDateTime.now().minusDays(1);
-        Notification notif = Notification.builder().id(notifId).recipientUser(mockUser).type(NotificationType.BOOKING_ACCEPTED).title("t1").readAt(oldReadAt).build();
+        Notification notif = Notification.builder().id(notifId).recipientUserId(userId).type(NotificationType.BOOKING_ACCEPTED).title("t1").readAt(oldReadAt).build();
         when(notificationRepository.findByIdAndRecipientUserId(notifId, userId)).thenReturn(Optional.of(notif));
 
         notificationService.markAsRead(userId, notifId);

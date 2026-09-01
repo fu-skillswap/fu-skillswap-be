@@ -55,7 +55,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.persist(sp);
 
         MentorProfile profile = MentorProfile.builder()
-                .user(user)
+                .userId(user.getId())
                 .status(MentorStatus.ACTIVE)
                 .headline(headline)
                 .expertiseDescription("Test expertise")

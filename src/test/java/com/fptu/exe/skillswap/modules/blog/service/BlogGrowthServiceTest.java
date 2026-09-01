@@ -19,6 +19,7 @@ import com.fptu.exe.skillswap.modules.mentor.port.MentorContentAccessPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
@@ -61,6 +62,7 @@ class BlogGrowthServiceTest {
     @Mock private ContentEntitlementQuery contentEntitlementQuery;
     @Mock private MentorQueryPort mentorQueryPort;
     @Mock private MentorContentAccessPort mentorContentAccessPort;
+    @Mock private PublicUserQueryPort publicUserQueryPort;
 
     private BlogService service;
     private UUID userId;
@@ -79,13 +81,14 @@ class BlogGrowthServiceTest {
                 blogMapper,
                 cursorCodec,
                 new BlogContentPolicy(),
+                mentorContentAccessPort,
                 internalTelemetryService,
                 entityManager,
                 trendingCache,
                 eventPublisher,
                 contentEntitlementQuery,
                 mentorQueryPort,
-                mentorContentAccessPort
+                publicUserQueryPort
         );
         userId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         principal = UserPrincipal.create(userId, "user@example.com", List.of(RoleCode.MENTEE));
@@ -125,7 +128,7 @@ class BlogGrowthServiceTest {
         author.setFullName("Author");
         BlogPost post = BlogPost.builder()
                 .id(postId)
-                .authorUser(author)
+                .authorUserId(author.getId())
                 .title("Post")
                 .slug("post")
                 .status(BlogPostStatus.PUBLISHED)

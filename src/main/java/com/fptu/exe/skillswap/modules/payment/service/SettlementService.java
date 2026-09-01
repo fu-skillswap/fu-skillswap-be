@@ -1,11 +1,13 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
-import com.fptu.exe.skillswap.modules.booking.domain.AdminBookingIssueResolutionAction;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSettlementUpdate;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerAccountType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerEntryType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
@@ -40,7 +42,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class SettlementService {
+public class SettlementService implements BookingSettlementCommandPort {
 
     private static final UUID PLATFORM_OWNER_ID = new UUID(0L, 1L);
 
@@ -50,6 +52,8 @@ public class SettlementService {
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentProperties paymentProperties;
     private final CreditLedgerService creditLedgerService;
+    private final BookingPaymentQueryPort bookingPaymentQueryPort;
+    private final BookingPaymentSettlementPort bookingPaymentSettlementPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -77,23 +81,21 @@ public class SettlementService {
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
-    public void releaseForBooking(Booking booking) {
-        if (booking == null || booking.getId() == null) {
+    public void releaseForBooking(UUID bookingId) {
+        BookingSettlementSnapshot booking = bookingPaymentQueryPort.findSettlementSnapshot(bookingId).orElse(null);
+        if (booking == null || booking.bookingId() == null) {
             return;
         }
-        if (booking.getMentorUserId() == null) {
+        if (booking.mentorUserId() == null) {
             return;
         }
-        if (booking.getStatus() != BookingStatus.COMPLETED) {
+        if (!"COMPLETED".equals(booking.bookingStatus())) {
             return;
         }
-        if (booking.getCompletionOutcome() != BookingCompletionOutcome.USER_CONFIRMED
-                && booking.getCompletionOutcome() != BookingCompletionOutcome.AUTO_CLOSED
-                && booking.getCompletionOutcome() != BookingCompletionOutcome.NO_SHOW_MENTEE
-                && booking.getCompletionOutcome() != BookingCompletionOutcome.ADMIN_SLA_AUTO_RELEASED) {
+        if (!booking.settlementEligible()) {
             return;
         }
-        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.bookingId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
@@ -103,11 +105,11 @@ public class SettlementService {
         if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.REFUNDED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Payment đã được hoàn tiền, không thể release settlement");
         }
-        SettlementAccount mentorAccount = lockMentorAccount(booking.getMentorUserId());
+        SettlementAccount mentorAccount = lockMentorAccount(booking.mentorUserId());
         if (settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 mentorAccount.getId(),
                 LedgerSourceType.BOOKING,
-                booking.getId(),
+                booking.bookingId(),
                 SettlementEntryType.RELEASE
         ).isPresent()) {
             return;
@@ -131,14 +133,14 @@ public class SettlementService {
                 .accountId(mentorAccount.getId())
                 .entryType(SettlementEntryType.RELEASE)
                 .sourceType(LedgerSourceType.BOOKING)
-                .sourceId(booking.getId())
+                .sourceId(booking.bookingId())
                 .amountScoin(releasableScoin)
                 .balanceEffectScoin(releasableScoin)
                 .grossScoin(grossScoin)
                 .commissionRateBps(commissionBps)
                 .commissionScoin(commissionScoin)
                 .mentorNetScoin(releasableScoin)
-                .memo("Release for completed booking " + booking.getId())
+                .memo("Release for completed booking " + booking.bookingId())
                 .build());
 
         settlementAccountRepository.addBalance(platformAccount.getId(), java.math.BigDecimal.valueOf(commissionScoin));
@@ -146,19 +148,24 @@ public class SettlementService {
                 .accountId(platformAccount.getId())
                 .entryType(SettlementEntryType.COMMISSION)
                 .sourceType(LedgerSourceType.BOOKING)
-                .sourceId(booking.getId())
+                .sourceId(booking.bookingId())
                 .amountScoin(commissionScoin)
                 .balanceEffectScoin(commissionScoin)
                 .grossScoin(grossScoin)
                 .commissionRateBps(commissionBps)
                 .commissionScoin(commissionScoin)
                 .mentorNetScoin(releasableScoin)
-                .memo("Platform commission for booking " + booking.getId())
+                .memo("Platform commission for booking " + booking.bookingId())
                 .build());
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.RELEASED);
         paymentOrder.setReleasedAtUtc(timeProvider.instant());
         paymentOrder.setReleasedAt(timeProvider.nowBusiness());
         paymentOrderRepository.save(paymentOrder);
+    }
+
+    @Override
+    public void requestBookingRelease(UUID bookingId) {
+        releaseForBooking(bookingId);
     }
 
     /**
@@ -168,17 +175,18 @@ public class SettlementService {
      * an ordinary booking release.
      */
     @Transactional
-    public void applyAdminIssueResolution(Booking booking, BookingIssueResolution resolution) {
-        if (booking == null || booking.getId() == null || resolution == null || resolution.getId() == null) {
+    public void applyAdminIssueResolution(UUID bookingId, UUID resolutionId) {
+        BookingSettlementSnapshot booking = bookingPaymentSettlementPort.findSettlementSnapshot(bookingId).orElse(null);
+        BookingIssueResolutionSnapshot resolution = bookingPaymentSettlementPort.findIssueResolution(bookingId, resolutionId).orElse(null);
+        if (booking == null || booking.bookingId() == null || resolution == null || resolution.resolutionId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu booking hoặc quyết định dispute để settlement");
         }
         PaymentOrder paymentOrder = paymentOrderRepository
-                .findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId())
+                .findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.bookingId())
                 .orElse(null);
         if (paymentOrder == null) {
             // A free booking still needs the immutable decision/session outcome, but has no escrow.
-            setResolutionAmounts(resolution, 0, 0, 0, 0);
-            resolution.setSettlementAppliedAtUtc(timeProvider.instant());
+            persistResolutionState(bookingId, resolutionId, "APPLIED", 0, 0, 0, 0);
             return;
         }
         if (paymentOrder.getStatus() != PaymentOrderStatus.PAID
@@ -195,13 +203,13 @@ public class SettlementService {
 
         if (allocation.menteeRefund() > 0) {
             creditLedgerService.refundCredit(
-                    booking.getMentee().getId(),
+                    booking.payerUserId(),
                     CreditOriginType.REFUND,
                     LedgerSourceType.BOOKING_ISSUE_RESOLUTION,
-                    resolution.getId(),
+                    resolution.resolutionId(),
                     allocation.menteeRefund(),
-                    "Dispute settlement refund for booking " + booking.getId(),
-                    "BOOKING_ISSUE_RESOLUTION_REFUND:" + resolution.getId()
+                    "Dispute settlement refund for booking " + booking.bookingId(),
+                    "BOOKING_ISSUE_RESOLUTION_REFUND:" + resolution.resolutionId()
             );
         }
 
@@ -215,13 +223,13 @@ public class SettlementService {
                     .accountId(mentorAccount.getId())
                     .entryType(SettlementEntryType.RELEASE)
                     .sourceType(LedgerSourceType.BOOKING_ISSUE_RESOLUTION)
-                    .sourceId(resolution.getId())
+                    .sourceId(resolution.resolutionId())
                     .amountScoin(allocation.mentorSettlement())
                     .balanceEffectScoin(allocation.mentorSettlement())
                     .grossScoin(escrow)
                     .commissionScoin(allocation.platformSettlement())
                     .mentorNetScoin(allocation.mentorSettlement())
-                    .memo("Admin dispute " + resolution.getAction() + " for booking " + booking.getId())
+                    .memo("Admin dispute " + resolution.action() + " for booking " + booking.bookingId())
                     .build());
         }
         if (platformAccount != null) {
@@ -230,26 +238,23 @@ public class SettlementService {
                     .accountId(platformAccount.getId())
                     .entryType(SettlementEntryType.COMMISSION)
                     .sourceType(LedgerSourceType.BOOKING_ISSUE_RESOLUTION)
-                    .sourceId(resolution.getId())
+                    .sourceId(resolution.resolutionId())
                     .amountScoin(allocation.platformSettlement())
                     .balanceEffectScoin(allocation.platformSettlement())
                     .grossScoin(escrow)
                     .commissionScoin(allocation.platformSettlement())
                     .mentorNetScoin(allocation.mentorSettlement())
-                    .memo("Admin dispute platform allocation for booking " + booking.getId())
+                    .memo("Admin dispute platform allocation for booking " + booking.bookingId())
                     .build());
         }
 
-        setResolutionAmounts(resolution, escrow, allocation.menteeRefund(),
-                allocation.mentorSettlement(), allocation.platformSettlement());
-        resolution.setSettlementAppliedAtUtc(timeProvider.instant());
         if (allocation.menteeRefund() == escrow) {
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
             paymentOrder.setRefundedScoin(escrow);
-            paymentOrder.setRefundReason("ADMIN_DISPUTE_" + resolution.getAction());
+            paymentOrder.setRefundReason("ADMIN_DISPUTE_" + resolution.action());
             paymentOrder.setRefundedAtUtc(timeProvider.instant());
             paymentOrder.setRefundedAt(timeProvider.nowBusiness());
-        } else if (resolution.getAction() == AdminBookingIssueResolutionAction.PARTIAL_SETTLEMENT) {
+        } else if ("PARTIAL_SETTLEMENT".equals(resolution.action())) {
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.PARTIALLY_SETTLED);
             paymentOrder.setRefundedScoin(allocation.menteeRefund());
             paymentOrder.setRefundReason("ADMIN_DISPUTE_PARTIAL_SETTLEMENT");
@@ -261,15 +266,22 @@ public class SettlementService {
             paymentOrder.setReleasedAt(timeProvider.nowBusiness());
         }
         paymentOrderRepository.save(paymentOrder);
+        persistResolutionState(booking.bookingId(), resolution.resolutionId(), "APPLIED", escrow,
+                allocation.menteeRefund(), allocation.mentorSettlement(), allocation.platformSettlement());
     }
 
-    private Allocation allocationFor(PaymentOrder paymentOrder, BookingIssueResolution resolution, int escrow) {
-        if (resolution.getAction() == AdminBookingIssueResolutionAction.CONFIRM_MENTOR_NO_SHOW_REFUND) {
+    @Override
+    public void requestAdminIssueResolution(UUID bookingId, UUID resolutionId) {
+        applyAdminIssueResolution(bookingId, resolutionId);
+    }
+
+    private Allocation allocationFor(PaymentOrder paymentOrder, BookingIssueResolutionSnapshot resolution, int escrow) {
+        if ("CONFIRM_MENTOR_NO_SHOW_REFUND".equals(resolution.action())) {
             return new Allocation(escrow, 0, 0);
         }
-        if (resolution.getAction() == AdminBookingIssueResolutionAction.PARTIAL_SETTLEMENT) {
-            int mentee = PricingPolicy.bpsAmount(escrow, nonNegative(resolution.getMenteeBps()));
-            int mentor = PricingPolicy.bpsAmount(escrow, nonNegative(resolution.getMentorBps()));
+        if ("PARTIAL_SETTLEMENT".equals(resolution.action())) {
+            int mentee = PricingPolicy.bpsAmount(escrow, nonNegative(resolution.menteeBps()));
+            int mentor = PricingPolicy.bpsAmount(escrow, nonNegative(resolution.mentorBps()));
             // The platform absorbs only integer division remainder; the submitted BPS are still
             // validated to 100% by the booking policy before this method is reached.
             return new Allocation(mentee, mentor, Math.max(0, escrow - mentee - mentor));
@@ -285,13 +297,6 @@ public class SettlementService {
         return new Allocation(0, mentor, escrow - mentor);
     }
 
-    private void setResolutionAmounts(BookingIssueResolution resolution, int escrow, int mentee, int mentor, int platform) {
-        resolution.setEscrowScoin(escrow);
-        resolution.setMenteeRefundScoin(mentee);
-        resolution.setMentorSettlementScoin(mentor);
-        resolution.setPlatformSettlementScoin(platform);
-    }
-
     private int nonNegative(Integer amount) {
         return amount == null ? 0 : Math.max(0, amount);
     }
@@ -300,6 +305,11 @@ public class SettlementService {
         private int total() {
             return Math.addExact(Math.addExact(menteeRefund, mentorSettlement), platformSettlement);
         }
+    }
+
+    @Override
+    public void requestResolutionReversal(UUID bookingId, UUID originalResolutionId, UUID reversalRecordId) {
+        applyReversal(bookingId, originalResolutionId, reversalRecordId);
     }
 
     /**
@@ -311,56 +321,46 @@ public class SettlementService {
      * The caller must handle the MANUAL_FINANCE_REVIEW status accordingly.</p>
      */
     @Transactional
-    public void applyReversal(Booking booking,
-                              BookingIssueResolution originalResolution,
-                              BookingIssueResolution reversalRecord) {
-        if (booking == null || booking.getId() == null
-                || originalResolution == null || originalResolution.getId() == null
-                || reversalRecord == null || reversalRecord.getId() == null) {
+    public void applyReversal(UUID bookingId, UUID originalResolutionId, UUID reversalRecordId) {
+        BookingIssueResolutionSnapshot originalResolution = bookingPaymentSettlementPort
+                .findIssueResolution(bookingId, originalResolutionId).orElse(null);
+        BookingIssueResolutionSnapshot reversalRecord = bookingPaymentSettlementPort
+                .findIssueResolution(bookingId, reversalRecordId).orElse(null);
+        if (bookingId == null || originalResolution == null || originalResolution.resolutionId() == null
+                || reversalRecord == null || reversalRecord.resolutionId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu booking hoặc quyết định dispute để reversal");
         }
 
         PaymentOrder paymentOrder = paymentOrderRepository
-                .findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId())
+                .findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)
                 .orElse(null);
         if (paymentOrder == null) {
             // Free booking: no financial entries to reverse, just mark settlement applied.
-            reversalRecord.setEscrowScoin(0);
-            reversalRecord.setMenteeRefundScoin(0);
-            reversalRecord.setMentorSettlementScoin(0);
-            reversalRecord.setPlatformSettlementScoin(0);
-            reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+            persistResolutionState(bookingId, reversalRecordId, "APPLIED", 0, 0, 0, 0);
             return;
         }
 
-        int mentorDebit = nonNegative(originalResolution.getMentorSettlementScoin());
-        int platformDebit = nonNegative(originalResolution.getPlatformSettlementScoin());
-        int menteeDebit = nonNegative(originalResolution.getMenteeRefundScoin());
+        int mentorDebit = nonNegative(originalResolution.mentorSettlementScoin());
+        int platformDebit = nonNegative(originalResolution.platformSettlementScoin());
+        int menteeDebit = nonNegative(originalResolution.menteeRefundScoin());
 
         // Verify mentor and mentee have sufficient balances before committing any debits.
         if (mentorDebit > 0) {
             SettlementAccount mentorAccount = lockMentorAccount(paymentOrder.getMentorUserId());
             int mentorBalance = settlementBalance(mentorAccount);
             if (mentorBalance < mentorDebit) {
-                reversalRecord.setStatus(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.MANUAL_FINANCE_REVIEW);
-                reversalRecord.setEscrowScoin(nonNegative(originalResolution.getEscrowScoin()));
-                reversalRecord.setMenteeRefundScoin(menteeDebit);
-                reversalRecord.setMentorSettlementScoin(mentorDebit);
-                reversalRecord.setPlatformSettlementScoin(platformDebit);
-                reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
+                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
                 return;
             }
         }
 
         if (menteeDebit > 0) {
-            int menteeAvailable = creditLedgerService.getAvailableBalance(booking.getMentee().getId());
+            int menteeAvailable = creditLedgerService.getAvailableBalance(bookingPaymentSettlementPort
+                    .findCancellationContext(bookingId).map(BookingCancellationContext::payerUserId).orElse(null));
             if (menteeAvailable < menteeDebit) {
-                reversalRecord.setStatus(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.MANUAL_FINANCE_REVIEW);
-                reversalRecord.setEscrowScoin(nonNegative(originalResolution.getEscrowScoin()));
-                reversalRecord.setMenteeRefundScoin(menteeDebit);
-                reversalRecord.setMentorSettlementScoin(mentorDebit);
-                reversalRecord.setPlatformSettlementScoin(platformDebit);
-                reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
+                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
                 return;
             }
         }
@@ -369,24 +369,20 @@ public class SettlementService {
             SettlementAccount mentorAccount = lockMentorAccount(paymentOrder.getMentorUserId());
             int rows = settlementAccountRepository.deductBalanceSafely(mentorAccount.getId(), BigDecimal.valueOf(mentorDebit));
             if (rows == 0) {
-                reversalRecord.setStatus(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.MANUAL_FINANCE_REVIEW);
-                reversalRecord.setEscrowScoin(nonNegative(originalResolution.getEscrowScoin()));
-                reversalRecord.setMenteeRefundScoin(menteeDebit);
-                reversalRecord.setMentorSettlementScoin(mentorDebit);
-                reversalRecord.setPlatformSettlementScoin(platformDebit);
-                reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
+                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
                 return;
             }
             settlementEntryRepository.save(SettlementEntry.builder()
                     .accountId(mentorAccount.getId())
                     .entryType(SettlementEntryType.ADJUSTMENT)
                     .sourceType(LedgerSourceType.BOOKING_ISSUE_RESOLUTION)
-                    .sourceId(reversalRecord.getId())
+                    .sourceId(reversalRecord.resolutionId())
                     .amountScoin(mentorDebit)
                     .balanceEffectScoin(-mentorDebit)
-                    .grossScoin(nonNegative(originalResolution.getEscrowScoin()))
+                    .grossScoin(nonNegative(originalResolution.escrowScoin()))
                     .mentorNetScoin(-mentorDebit)
-                    .memo("Reversal debit for booking " + booking.getId() + " resolution " + originalResolution.getId())
+                    .memo("Reversal debit for booking " + bookingId + " resolution " + originalResolution.resolutionId())
                     .build());
         }
 
@@ -397,32 +393,28 @@ public class SettlementService {
                     .accountId(platformAccount.getId())
                     .entryType(SettlementEntryType.ADJUSTMENT)
                     .sourceType(LedgerSourceType.BOOKING_ISSUE_RESOLUTION)
-                    .sourceId(reversalRecord.getId())
+                    .sourceId(reversalRecord.resolutionId())
                     .amountScoin(platformDebit)
                     .balanceEffectScoin(-platformDebit)
-                    .grossScoin(nonNegative(originalResolution.getEscrowScoin()))
+                    .grossScoin(nonNegative(originalResolution.escrowScoin()))
                     .commissionScoin(-platformDebit)
-                    .memo("Reversal platform debit for booking " + booking.getId() + " resolution " + originalResolution.getId())
+                    .memo("Reversal platform debit for booking " + bookingId + " resolution " + originalResolution.resolutionId())
                     .build());
         }
 
         if (menteeDebit > 0) {
             boolean debited = creditLedgerService.debitCredit(
-                    booking.getMentee().getId(),
+                    bookingPaymentSettlementPort.findCancellationContext(bookingId).map(BookingCancellationContext::payerUserId).orElse(null),
                     CreditOriginType.REFUND,
                     LedgerSourceType.BOOKING_ISSUE_RESOLUTION,
-                    reversalRecord.getId(),
+                    reversalRecord.resolutionId(),
                     menteeDebit,
-                    "Reversal debit of prior dispute refund for booking " + booking.getId(),
-                    "BOOKING_ISSUE_RESOLUTION_REVERSAL_DEBIT:" + reversalRecord.getId()
+                    "Reversal debit of prior dispute refund for booking " + bookingId,
+                    "BOOKING_ISSUE_RESOLUTION_REVERSAL_DEBIT:" + reversalRecord.resolutionId()
             );
             if (!debited) {
-                reversalRecord.setStatus(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.MANUAL_FINANCE_REVIEW);
-                reversalRecord.setEscrowScoin(nonNegative(originalResolution.getEscrowScoin()));
-                reversalRecord.setMenteeRefundScoin(menteeDebit);
-                reversalRecord.setMentorSettlementScoin(mentorDebit);
-                reversalRecord.setPlatformSettlementScoin(platformDebit);
-                reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
+                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
                 return;
             }
         }
@@ -432,12 +424,27 @@ public class SettlementService {
         paymentOrder.setReleasedAtUtc(null);
         paymentOrder.setReleasedAt(null);
         paymentOrderRepository.save(paymentOrder);
+        persistResolutionState(bookingId, reversalRecordId, "APPLIED", originalResolution.escrowScoin(),
+                menteeDebit, mentorDebit, platformDebit);
+    }
 
-        reversalRecord.setEscrowScoin(nonNegative(originalResolution.getEscrowScoin()));
-        reversalRecord.setMenteeRefundScoin(menteeDebit);
-        reversalRecord.setMentorSettlementScoin(mentorDebit);
-        reversalRecord.setPlatformSettlementScoin(platformDebit);
-        reversalRecord.setSettlementAppliedAtUtc(timeProvider.instant());
+    private void persistResolutionState(UUID bookingId,
+                                        UUID resolutionId,
+                                        String status,
+                                        Integer escrowScoin,
+                                        Integer menteeRefundScoin,
+                                        Integer mentorSettlementScoin,
+                                        Integer platformSettlementScoin) {
+        bookingPaymentSettlementPort.updateIssueResolutionSettlement(
+                bookingId,
+                resolutionId,
+                new BookingIssueResolutionSettlementUpdate(
+                        status,
+                        escrowScoin,
+                        menteeRefundScoin,
+                        mentorSettlementScoin,
+                        platformSettlementScoin,
+                        timeProvider.instant()));
     }
 
     /**
@@ -496,13 +503,19 @@ public class SettlementService {
     }
 
     /** Full refund used only for the resolved mentor no-show path. */
+    @Override
+    public void requestMentorNoShowRefund(UUID bookingId) {
+        bookingPaymentSettlementPort.findCancellationContext(bookingId)
+                .ifPresent(this::refundForMentorNoShow);
+    }
+
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
-    public void refundForMentorNoShow(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null) {
+    public void refundForMentorNoShow(BookingCancellationContext booking) {
+        if (booking == null || booking.bookingId() == null || booking.payerUserId() == null) {
             return;
         }
-        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+        PaymentOrder paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, booking.bookingId()).orElse(null);
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
@@ -524,8 +537,8 @@ public class SettlementService {
         }
         String operationKey = "PAYMENT_REFUND:" + paymentOrder.getId();
         creditLedgerService.refundCredit(
-                booking.getMentee().getId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
-                booking.getId(), amount, "Full refund for mentor no-show booking " + booking.getId(), operationKey);
+                booking.payerUserId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
+                booking.bookingId(), amount, "Full refund for mentor no-show booking " + booking.bookingId(), operationKey);
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
         paymentOrder.setRefundedAtUtc(timeProvider.instant());
         paymentOrder.setRefundedAt(timeProvider.nowBusiness());
@@ -536,20 +549,20 @@ public class SettlementService {
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
-    public void handlePaidBookingCancelledByMentee(Booking booking, PaymentOrder paymentOrder, boolean lateCancellation) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
+    public void handlePaidBookingCancelledByMentee(BookingCancellationContext booking, PaymentOrder paymentOrder, boolean lateCancellation) {
+        if (booking == null || booking.bookingId() == null || booking.payerUserId() == null) {
             return;
         }
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
 
-        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.getMentee().getId());
+        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.payerUserId());
         boolean refundAlreadyRecorded = creditLedgerEntryRepository
                 .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                         creditAccount.getId(),
                         LedgerSourceType.BOOKING,
-                        booking.getId(),
+                        booking.bookingId(),
                         LedgerEntryType.REFUND
                 )
                 .isPresent();
@@ -564,12 +577,12 @@ public class SettlementService {
 
         if (!lateCancellation) {
             creditLedgerService.refundCredit(
-                    booking.getMentee().getId(),
+                    booking.payerUserId(),
                     CreditOriginType.REFUND,
                     LedgerSourceType.BOOKING,
-                    booking.getId(),
+                    booking.bookingId(),
                     grossScoin,
-                    "Full refund for early mentee cancellation of booking " + booking.getId()
+                    "Full refund for early mentee cancellation of booking " + booking.bookingId()
             );
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
             paymentOrder.setRefundedAtUtc(timeProvider.instant());
@@ -590,12 +603,12 @@ public class SettlementService {
 
         if (refundShare > 0) {
             creditLedgerService.refundCredit(
-                    booking.getMentee().getId(),
+                    booking.payerUserId(),
                     CreditOriginType.REFUND,
                     LedgerSourceType.BOOKING,
-                    booking.getId(),
+                    booking.bookingId(),
                     refundShare,
-                    "Refund for late mentee cancellation of booking " + booking.getId()
+                    "Refund for late mentee cancellation of booking " + booking.bookingId()
             );
         }
 
@@ -608,14 +621,14 @@ public class SettlementService {
                     .accountId(mentorAccount.getId())
                     .entryType(SettlementEntryType.RELEASE)
                     .sourceType(LedgerSourceType.BOOKING)
-                    .sourceId(booking.getId())
+                    .sourceId(booking.bookingId())
                     .amountScoin(mentorShare)
                     .balanceEffectScoin(mentorShare)
                     .grossScoin(grossScoin)
                     .commissionRateBps(latePlatformBps)
                     .commissionScoin(platformShare)
                     .mentorNetScoin(mentorShare)
-                    .memo("Late mentee cancellation compensation for booking " + booking.getId())
+                    .memo("Late mentee cancellation compensation for booking " + booking.bookingId())
                     .build());
         }
 
@@ -625,14 +638,14 @@ public class SettlementService {
                     .accountId(platformAccount.getId())
                     .entryType(SettlementEntryType.COMMISSION)
                     .sourceType(LedgerSourceType.BOOKING)
-                    .sourceId(booking.getId())
+                    .sourceId(booking.bookingId())
                     .amountScoin(platformShare)
                     .balanceEffectScoin(platformShare)
                     .grossScoin(grossScoin)
                     .commissionRateBps(latePlatformBps)
                     .commissionScoin(platformShare)
                     .mentorNetScoin(mentorShare)
-                    .memo("Platform commission from late mentee cancellation of booking " + booking.getId())
+                    .memo("Platform commission from late mentee cancellation of booking " + booking.bookingId())
                     .build());
         }
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.PARTIALLY_SETTLED);
@@ -645,20 +658,20 @@ public class SettlementService {
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))
     @Transactional
-    public void handlePaidBookingCancelledByMentor(Booking booking, PaymentOrder paymentOrder) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null || booking.getMentee().getId() == null) {
+    public void handlePaidBookingCancelledByMentor(BookingCancellationContext booking, PaymentOrder paymentOrder) {
+        if (booking == null || booking.bookingId() == null || booking.payerUserId() == null) {
             return;
         }
         if (paymentOrder == null || paymentOrder.getStatus() != PaymentOrderStatus.PAID) {
             return;
         }
 
-        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.getMentee().getId());
+        var creditAccount = creditLedgerService.getUserAccountForUpdate(booking.payerUserId());
         boolean refundAlreadyRecorded = creditLedgerEntryRepository
                 .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                         creditAccount.getId(),
                         LedgerSourceType.BOOKING,
-                        booking.getId(),
+                        booking.bookingId(),
                         LedgerEntryType.REFUND
                 )
                 .isPresent();
@@ -672,12 +685,12 @@ public class SettlementService {
         }
 
         creditLedgerService.refundCredit(
-                booking.getMentee().getId(),
+                booking.payerUserId(),
                 CreditOriginType.REFUND,
                 LedgerSourceType.BOOKING,
-                booking.getId(),
+                booking.bookingId(),
                 grossScoin,
-                "Full refund because mentor cancelled booking " + booking.getId()
+                "Full refund because mentor cancelled booking " + booking.bookingId()
         );
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
         paymentOrder.setRefundedAtUtc(timeProvider.instant());

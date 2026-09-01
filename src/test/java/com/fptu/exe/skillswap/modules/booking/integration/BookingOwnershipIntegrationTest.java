@@ -151,7 +151,7 @@ class BookingOwnershipIntegrationTest {
                 .build());
         mentorService = mentorServiceRepository.saveAndFlush(
                 com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
-                        .mentorUserId(mentorProfile.getUserId())
+                        .mentorProfile(mentorProfile)
                         .title("Ownership Service")
                         .description("Test ownership access")
                         .durationMinutes(60)

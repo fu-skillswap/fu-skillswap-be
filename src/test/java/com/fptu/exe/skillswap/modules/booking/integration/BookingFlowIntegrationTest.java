@@ -179,7 +179,7 @@ class BookingFlowIntegrationTest {
         // 1. Mentor configures one availability window manually for the integration test
         LocalDate effectiveDate = LocalDate.now().plusDays(1);
         MentorAvailabilityRule rule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .ruleType(AvailabilityRuleType.OPEN)
                 .repeatType(AvailabilityRepeatType.DAILY)
                 .effectiveFrom(effectiveDate)
@@ -192,7 +192,7 @@ class BookingFlowIntegrationTest {
                 .build());
 
         MentorAvailabilitySlot slotToBook = mentorAvailabilitySlotRepository.saveAndFlush(MentorAvailabilitySlot.builder()
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .rule(rule)
                 .startTime(LocalDateTime.of(effectiveDate, LocalTime.of(14, 0)))
                 .endTime(LocalDateTime.of(effectiveDate, LocalTime.of(16, 0)))

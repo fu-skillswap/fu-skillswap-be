@@ -24,6 +24,8 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -48,6 +50,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -86,15 +89,14 @@ class MentorAvailabilityServiceTest {
     @BeforeEach
     void setUp() {
         mentorAvailabilityService = new MentorAvailabilityService(
-                mentorQueryPort,
+                mock(MentorBookingQueryPort.class),
                 mentorAvailabilityRuleRepository,
                 mentorAvailabilitySlotRepository,
                 availabilitySlotServiceRepository,
                 bookingRepository,
-                notificationService,
+                mock(NotificationCommandPort.class),
                 calendarWindowCalculator,
-                new PaymentProperties(),
-                mentorBookingPolicyService
+                new PaymentProperties()
         );
         mentorUserId = UUID.randomUUID();
         user = new User();
@@ -103,7 +105,6 @@ class MentorAvailabilityServiceTest {
 
         mentorProfile = new MentorProfile();
         mentorProfile.setUserId(mentorUserId);
-        mentorProfile.setUser(user);
         mentorProfile.setStatus(MentorStatus.ACTIVE);
         mentorProfile.setVerifiedAt(LocalDateTime.now());
 
@@ -128,7 +129,7 @@ class MentorAvailabilityServiceTest {
 
         MentorAvailabilitySlot expectedSlot = MentorAvailabilitySlot.builder()
                 .id(UUID.randomUUID())
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .isActive(true)
@@ -196,7 +197,7 @@ class MentorAvailabilityServiceTest {
         UUID slotId = UUID.randomUUID();
         MentorAvailabilitySlot savedSlot = MentorAvailabilitySlot.builder()
                 .id(slotId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .isActive(true)
@@ -253,7 +254,7 @@ class MentorAvailabilityServiceTest {
         MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .id(slotId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .rule(rule)
                 .startTime(LocalDateTime.now().plusDays(1))
                 .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
@@ -292,7 +293,7 @@ class MentorAvailabilityServiceTest {
 
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .id(slotId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .isActive(true)
                 .isBooked(true)
                 .build();
@@ -319,7 +320,7 @@ class MentorAvailabilityServiceTest {
         MentorAvailabilityRule rule = MentorAvailabilityRule.builder().id(UUID.randomUUID()).build();
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .id(slotId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .rule(rule)
                 .startTime(LocalDateTime.now().plusDays(1))
                 .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
@@ -377,7 +378,7 @@ class MentorAvailabilityServiceTest {
 
         MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
                 .id(slotId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUserId)
                 .startTime(slotStart)
                 .endTime(slotEnd)
                 .isActive(true)
@@ -386,15 +387,10 @@ class MentorAvailabilityServiceTest {
 
         AvailabilitySlotService binding = AvailabilitySlotService.builder()
                 .slot(slot)
-                .service(service)
                 .build();
 
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
         when(availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)).thenReturn(Optional.of(binding));
-        when(mentorBookingPolicyService.getEffectivePolicy(mentorUserId)).thenReturn(
-                new MentorBookingPolicyService.MentorBookingPolicySnapshot(90, 30, "Asia/Ho_Chi_Minh") // 90 min lead time
-        );
-
         when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
         when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
 

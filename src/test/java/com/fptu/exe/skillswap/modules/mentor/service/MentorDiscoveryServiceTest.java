@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorAvailabilitySlotResponse;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryCardResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorRatingState;
@@ -175,7 +176,6 @@ class MentorDiscoveryServiceTest {
 
         mentorProfile = MentorProfile.builder()
                 .userId(MENTOR_USER_ID)
-                .user(mentorUser)
                 .status(MentorStatus.ACTIVE)
                 .headline("Java mentor")
                 .expertiseDescription("Java backend mentoring")
@@ -459,17 +459,17 @@ class MentorDiscoveryServiceTest {
     @Test
     void getMentorAvailability_availableMentor_shouldDelegateService() {
         when(mentorProfileRepository.findWithUserByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(mentorProfile));
-        when(mentorAvailabilityService.getAvailableSlots(eq(mentorProfile), any(), any()))
-                .thenReturn(List.of(MentorAvailabilitySlotResponse.builder()
-                        .slotId(UUID.fromString("018f3abf-0a22-7ff2-9748-6cf000c47b6e"))
-                        .durationMinutes(60)
-                        .build()));
+        when(mentorAvailabilityService.getAvailableSlots(eq(MENTOR_USER_ID), any(), any()))
+                .thenReturn(List.of(new MentorPublicAvailability(
+                        UUID.fromString("018f3abf-0a22-7ff2-9748-6cf000c47b6e"),
+                        LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(1),
+                        "Asia/Ho_Chi_Minh", 60, 0, 0, 3, 3, List.of())));
 
         List<MentorAvailabilitySlotResponse> response =
                 mentorDiscoveryService.getMentorAvailability(MENTOR_USER_ID, new AvailabilityQueryRequest());
 
         assertEquals(1, response.size());
-        verify(mentorAvailabilityService).getAvailableSlots(eq(mentorProfile), any(), any());
+        verify(mentorAvailabilityService).getAvailableSlots(eq(MENTOR_USER_ID), any(), any());
     }
 
     @Test

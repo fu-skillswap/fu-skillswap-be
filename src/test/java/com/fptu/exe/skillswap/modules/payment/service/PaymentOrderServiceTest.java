@@ -4,6 +4,8 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
 import com.fptu.exe.skillswap.modules.booking.service.BookingQueryPortImpl;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -71,6 +73,8 @@ class PaymentOrderServiceTest {
     @Mock
     private BookingRepository bookingRepository;
     @Mock
+    private BookingPaymentSettlementPort bookingPaymentSettlementPort;
+    @Mock
     private PaymentOrderRepository paymentOrderRepository;
     @Mock
     private PaymentAttemptRepository paymentAttemptRepository;
@@ -125,6 +129,7 @@ class PaymentOrderServiceTest {
 
         paymentOrderService = new PaymentOrderService(
                 new BookingQueryPortImpl(bookingRepository),
+                bookingPaymentSettlementPort,
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 couponService,
@@ -156,13 +161,12 @@ class PaymentOrderServiceTest {
 
         MentorProfile mentorProfile = MentorProfile.builder()
                 .userId(mentorId)
-                .user(mentorUser)
                 .build();
 
         booking = Booking.builder()
                 .id(bookingId)
                 .mentee(mentee)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorId)
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .serviceIsFreeSnapshot(false)
                 .serviceDurationSnapshot(60)
@@ -297,7 +301,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        paymentOrderService.handleMenteeCancellation(booking, false);
+        paymentOrderService.handleMenteeCancellation(booking.getId(), false);
 
         assertEquals(PaymentOrderStatus.CANCELLED, order.getStatus());
         assertNotNull(order.getCancelledAt());
@@ -320,10 +324,10 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        paymentOrderService.handleMenteeCancellation(booking, true);
+        paymentOrderService.handleMenteeCancellation(booking.getId(), true);
 
         assertNotNull(order.getCancelledAt());
-        verify(settlementService).handlePaidBookingCancelledByMentee(eq(booking), eq(order), eq(true));
+        verify(settlementService).handlePaidBookingCancelledByMentee(any(BookingCancellationContext.class), eq(order), eq(true));
     }
 
     @Test
@@ -340,7 +344,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        paymentOrderService.handleMentorCancellation(booking);
+        paymentOrderService.handleMentorCancellation(booking.getId());
 
         assertEquals(PaymentOrderStatus.CANCELLED, order.getStatus());
         verify(creditLedgerService).releaseReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
@@ -362,7 +366,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        paymentOrderService.expireAwaitingPayment(booking);
+        paymentOrderService.expireAwaitingPayment(booking.getId());
 
         assertEquals(PaymentOrderStatus.EXPIRED, order.getStatus());
         assertNotNull(order.getFailedAt());
@@ -384,10 +388,10 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.of(order));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        paymentOrderService.handleMentorCancellation(booking);
+        paymentOrderService.handleMentorCancellation(booking.getId());
 
         assertNotNull(order.getCancelledAt());
-        verify(settlementService).handlePaidBookingCancelledByMentor(eq(booking), eq(order));
+        verify(settlementService).handlePaidBookingCancelledByMentor(any(BookingCancellationContext.class), eq(order));
     }
 
     // ─── Webhook: valid signature (gateway returns success) ──────────────────────
@@ -784,12 +788,11 @@ class PaymentOrderServiceTest {
 
         MentorProfile mentorProfile = new MentorProfile();
         mentorProfile.setUserId(mentorId);
-        mentorProfile.setUser(mentorUser);
 
         Booking freeBooking = Booking.builder()
                 .id(UUID.randomUUID())
                 .mentee(menteeUser)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUser.getId())
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .serviceIsFreeSnapshot(true)
                 .servicePriceScoinSnapshot(0)
@@ -831,6 +834,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrderService customService = new PaymentOrderService(
                 new BookingQueryPortImpl(bookingRepository),
+                bookingPaymentSettlementPort,
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 couponService,

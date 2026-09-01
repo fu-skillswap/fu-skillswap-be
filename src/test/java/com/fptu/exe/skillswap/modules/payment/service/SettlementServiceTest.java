@@ -1,8 +1,12 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSettlementUpdate;
+import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementSnapshot;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerAccount;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
@@ -55,8 +59,14 @@ class SettlementServiceTest {
     @Mock
     private CreditLedgerService creditLedgerService;
 
+    @Mock
+    private BookingPaymentQueryPort bookingPaymentQueryPort;
+
+    @Mock
+    private BookingPaymentSettlementPort bookingPaymentSettlementPort;
+
     private SettlementService settlementService;
-    private Booking booking;
+    private BookingCancellationContext booking;
     private PaymentOrder paymentOrder;
     private UUID menteeId;
     private UUID mentorId;
@@ -73,21 +83,18 @@ class SettlementServiceTest {
                 creditLedgerEntryRepository,
                 paymentOrderRepository,
                 new PaymentProperties(),
-                creditLedgerService
+                creditLedgerService,
+                bookingPaymentQueryPort,
+                bookingPaymentSettlementPort
         );
 
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
         bookingId = UUID.randomUUID();
 
-        User mentee = new User();
-        mentee.setId(menteeId);
-
-        booking = Booking.builder()
-                .id(bookingId)
-                .mentee(mentee)
-                .mentorUserId(mentorId)
-                .build();
+        booking = new BookingCancellationContext(
+                bookingId, menteeId, mentorId, "CANCELLED_BY_MENTEE", null,
+                null, null, null, false, true);
 
         paymentOrder = PaymentOrder.builder()
                 .id(UUID.randomUUID())
@@ -194,5 +201,104 @@ class SettlementServiceTest {
                 any()
         );
         verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
+    }
+
+    @Test
+    void applyAdminIssueResolution_freeBooking_shouldPersistAppliedSettlementState() {
+        UUID resolutionId = UUID.randomUUID();
+        BookingIssueResolutionSnapshot resolution = resolution(resolutionId, "RELEASE_AS_IS");
+        when(bookingPaymentSettlementPort.findSettlementSnapshot(bookingId))
+                .thenReturn(Optional.of(settlementSnapshot()));
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, resolutionId))
+                .thenReturn(Optional.of(resolution));
+
+        settlementService.applyAdminIssueResolution(bookingId, resolutionId);
+
+        ArgumentCaptor<BookingIssueResolutionSettlementUpdate> updateCaptor =
+                ArgumentCaptor.forClass(BookingIssueResolutionSettlementUpdate.class);
+        verify(bookingPaymentSettlementPort).updateIssueResolutionSettlement(
+                eq(bookingId), eq(resolutionId), updateCaptor.capture());
+        BookingIssueResolutionSettlementUpdate update = updateCaptor.getValue();
+        assertEquals("APPLIED", update.status());
+        assertEquals(0, update.escrowScoin());
+        assertEquals(0, update.menteeRefundScoin());
+        assertEquals(0, update.mentorSettlementScoin());
+        assertEquals(0, update.platformSettlementScoin());
+        assertTrue(update.settlementAppliedAtUtc() != null);
+    }
+
+    @Test
+    void applyReversal_freeBooking_shouldPersistAppliedReversalState() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, originalId))
+                .thenReturn(Optional.of(resolution(originalId, "RELEASE_AS_IS")));
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
+                .thenReturn(Optional.of(resolution(reversalId, "RELEASE_AS_IS")));
+
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+
+        ArgumentCaptor<BookingIssueResolutionSettlementUpdate> updateCaptor =
+                ArgumentCaptor.forClass(BookingIssueResolutionSettlementUpdate.class);
+        verify(bookingPaymentSettlementPort).updateIssueResolutionSettlement(
+                eq(bookingId), eq(reversalId), updateCaptor.capture());
+        BookingIssueResolutionSettlementUpdate update = updateCaptor.getValue();
+        assertEquals("APPLIED", update.status());
+        assertEquals(0, update.escrowScoin());
+        assertTrue(update.settlementAppliedAtUtc() != null);
+    }
+
+    @Test
+    void applyReversal_insufficientMentorBalance_shouldPersistManualFinanceReview() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        PaymentOrder heldOrder = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .targetType(com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING)
+                .targetId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(100)
+                .status(PaymentOrderStatus.PAID)
+                .build();
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, originalId))
+                .thenReturn(Optional.of(new BookingIssueResolutionSnapshot(
+                        originalId, "PARTIAL_SETTLEMENT", null, "APPLIED", 50, 40, 10,
+                        100, 50, 40, 10, null, null)));
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
+                .thenReturn(Optional.of(resolution(reversalId, "PARTIAL_SETTLEMENT")));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
+                com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId))
+                .thenReturn(Optional.of(heldOrder));
+        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+                .thenReturn(true);
+        when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+                .thenReturn(Optional.of(mentorAccount));
+
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+
+        ArgumentCaptor<BookingIssueResolutionSettlementUpdate> updateCaptor =
+                ArgumentCaptor.forClass(BookingIssueResolutionSettlementUpdate.class);
+        verify(bookingPaymentSettlementPort).updateIssueResolutionSettlement(
+                eq(bookingId), eq(reversalId), updateCaptor.capture());
+        BookingIssueResolutionSettlementUpdate update = updateCaptor.getValue();
+        assertEquals("MANUAL_FINANCE_REVIEW", update.status());
+        assertEquals(100, update.escrowScoin());
+        assertEquals(50, update.menteeRefundScoin());
+        assertEquals(40, update.mentorSettlementScoin());
+        assertEquals(10, update.platformSettlementScoin());
+        verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
+    }
+
+    private BookingSettlementSnapshot settlementSnapshot() {
+        return new BookingSettlementSnapshot(
+                bookingId, menteeId, mentorId, 100, "COMPLETED", "USER_CONFIRMED",
+                null, true, null, null);
+    }
+
+    private BookingIssueResolutionSnapshot resolution(UUID resolutionId, String action) {
+        return new BookingIssueResolutionSnapshot(
+                resolutionId, action, null, "APPLIED", null, null, null,
+                null, null, null, null, null, null);
     }
 }

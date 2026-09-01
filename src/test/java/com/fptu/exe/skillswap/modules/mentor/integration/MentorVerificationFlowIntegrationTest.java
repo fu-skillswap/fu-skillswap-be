@@ -244,7 +244,7 @@ class MentorVerificationFlowIntegrationTest {
     void requestToBecomeMentor_existingDraftWithLegacyProfileMissingSupportLevelsShouldNotThrow() {
         UUID mentorId = mentorUser.getId();
         MentorProfile profile = new MentorProfile();
-        profile.setUser(mentorUser);
+        profile.setUserId(mentorUser.getId());
         profile.setStatus(MentorStatus.DRAFT);
         profile.setHeadline("Legacy mentor profile");
         profile.setExpertiseDescription("Legacy profile before support levels existed");

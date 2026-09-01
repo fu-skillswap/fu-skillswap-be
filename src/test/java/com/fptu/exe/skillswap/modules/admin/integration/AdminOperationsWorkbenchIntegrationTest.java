@@ -94,7 +94,7 @@ class AdminOperationsWorkbenchIntegrationTest {
         mentorUser = saveUser("phase3-mentor@test.com", Set.of(RoleCode.MENTOR), UserStatus.ACTIVE);
 
         MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .headline("Architecture Mentor")
                 .expertiseDescription("System Design")
@@ -105,7 +105,7 @@ class AdminOperationsWorkbenchIntegrationTest {
 
         underReviewBooking = bookingRepository.save(Booking.builder()
                 .mentee(menteeUser)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorUser.getId())
                 .status(BookingStatus.UNDER_REVIEW)
                 .learningGoalTitle("Need architecture review")
                 .selectedStartTime(LocalDateTime.of(2026, 7, 10, 9, 0))
@@ -135,20 +135,20 @@ class AdminOperationsWorkbenchIntegrationTest {
         updateEmailOutbox(sentEmailOutbox.getId(), LocalDateTime.of(2026, 7, 1, 10, 0), LocalDateTime.of(2026, 7, 1, 10, 10));
 
         lockedVerificationRequest = mentorVerificationRequestRepository.save(MentorVerificationRequest.builder()
-                .mentor(mentorUser)
+                .mentorUserId(mentorUser.getId())
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.PENDING_REVIEW)
                 .submittedAt(LocalDateTime.of(2026, 7, 1, 9, 0))
-                .lockedBy(adminUser)
+                .lockedByUserId(adminUser.getId())
                 .lockedAt(LocalDateTime.of(2026, 7, 1, 9, 5))
                 .lockExpiresAt(LocalDateTime.of(2026, 7, 1, 9, 10))
                 .build());
         secondLockedVerificationRequest = mentorVerificationRequestRepository.save(MentorVerificationRequest.builder()
-                .mentor(mentorUser)
+                .mentorUserId(mentorUser.getId())
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.PENDING_REVIEW)
                 .submittedAt(LocalDateTime.of(2026, 7, 1, 9, 30))
-                .lockedBy(adminUser)
+                .lockedByUserId(adminUser.getId())
                 .lockedAt(LocalDateTime.of(2026, 7, 1, 9, 35))
                 .lockExpiresAt(LocalDateTime.of(2026, 7, 1, 9, 40))
                 .build());

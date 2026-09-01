@@ -24,11 +24,11 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingIssueResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
+import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplineCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.payment.service.SettlementService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -47,7 +47,7 @@ import java.util.UUID;
 public class BookingCompletionService {
     private final BookingRepository bookingRepository;
     private final SessionFinalizationService sessionFinalizationService;
-    private final SettlementService settlementService;
+    private final BookingSettlementCommandPort settlementCommandPort;
     private final BookingEventService bookingEventService;
     private final ApplicationEventPublisher eventPublisher;
     private final InternalTelemetryService internalTelemetryService;
@@ -62,7 +62,7 @@ public class BookingCompletionService {
     public BookingCompletionService(
             BookingRepository bookingRepository,
             SessionFinalizationService sessionFinalizationService,
-            SettlementService settlementService,
+            BookingSettlementCommandPort settlementCommandPort,
             BookingEventService bookingEventService,
             ApplicationEventPublisher eventPublisher,
             InternalTelemetryService internalTelemetryService,
@@ -71,7 +71,7 @@ public class BookingCompletionService {
     ) {
         this.bookingRepository = bookingRepository;
         this.sessionFinalizationService = sessionFinalizationService;
-        this.settlementService = settlementService;
+        this.settlementCommandPort = settlementCommandPort;
         this.bookingEventService = bookingEventService;
         this.eventPublisher = eventPublisher;
         this.internalTelemetryService = internalTelemetryService;
@@ -82,13 +82,13 @@ public class BookingCompletionService {
     public BookingCompletionService(
             BookingRepository bookingRepository,
             SessionFinalizationService sessionFinalizationService,
-            SettlementService settlementService,
+            BookingSettlementCommandPort settlementCommandPort,
             BookingEventService bookingEventService,
             ApplicationEventPublisher eventPublisher,
             InternalTelemetryService internalTelemetryService,
             BookingResponseMapper bookingResponseMapper
     ) {
-        this(bookingRepository, sessionFinalizationService, settlementService, bookingEventService,
+        this(bookingRepository, sessionFinalizationService, settlementCommandPort, bookingEventService,
                 eventPublisher, internalTelemetryService, bookingResponseMapper, null);
     }
 
@@ -222,8 +222,8 @@ public class BookingCompletionService {
 
         sessionFinalizationService.finalizeDeliveredSession(booking, nowUtc);
         Booking savedBooking = bookingRepository.save(booking);
-        if (settlementService != null) {
-            settlementService.releaseForBooking(savedBooking);
+        if (settlementCommandPort != null) {
+            settlementCommandPort.requestBookingRelease(savedBooking.getId());
         }
         recordBookingEvent(savedBooking, BookingEventType.MENTEE_CONFIRMED,
                 oldStatus, BookingEventActorType.USER, currentUserId, null);
@@ -425,8 +425,8 @@ public class BookingCompletionService {
         } else {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Action resolve dispute không hợp lệ");
         }
-        if (settlementService != null) {
-            settlementService.applyAdminIssueResolution(booking, resolution);
+        if (settlementCommandPort != null) {
+            settlementCommandPort.requestAdminIssueResolution(booking.getId(), resolution.getId());
         }
 
         Booking savedBooking = bookingRepository.save(booking);
@@ -492,8 +492,8 @@ public class BookingCompletionService {
                 .createdAtUtc(nowUtc)
                 .build());
 
-        if (settlementService != null) {
-            settlementService.applyReversal(booking, originalResolution, reversalRecord);
+        if (settlementCommandPort != null) {
+            settlementCommandPort.requestResolutionReversal(booking.getId(), originalResolution.getId(), reversalRecord.getId());
         }
         requireIssueResolutionRepository().save(reversalRecord);
 

@@ -81,7 +81,8 @@ class BookingCommandLockOrderTest {
     void accept_locksBookingBeforeUsersMentorAndSlot() {
         booking.setAcceptedAt(DateTimeUtil.now()); // idempotent return after lock acquisition
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(booking));
-        when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(booking.getMentee(), mentorProfile.getUser()));
+        when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(booking.getMentee(),
+                User.builder().id(mentorProfile.getUserId()).build()));
         when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(slotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
 

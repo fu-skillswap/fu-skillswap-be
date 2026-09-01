@@ -13,6 +13,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository
 import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorContentAccessPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
@@ -57,6 +58,7 @@ class BlogEngagementServiceTest {
     @Mock private ContentEntitlementQuery contentEntitlementQuery;
     @Mock private MentorQueryPort mentorQueryPort;
     @Mock private MentorContentAccessPort mentorContentAccessPort;
+    @Mock private PublicUserQueryPort publicUserQueryPort;
 
     private BlogService service;
     private UUID userId;
@@ -78,13 +80,14 @@ class BlogEngagementServiceTest {
                 blogMapper,
                 cursorCodec,
                 new BlogContentPolicy(),
+                mentorContentAccessPort,
                 internalTelemetryService,
                 entityManager,
                 trendingCache,
                 eventPublisher,
                 contentEntitlementQuery,
                 mentorQueryPort,
-                mentorContentAccessPort
+                publicUserQueryPort
         );
         userId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
         postId = UUID.fromString("018f3abf-0a22-7132-9748-6cf000c47b6e");
@@ -95,7 +98,7 @@ class BlogEngagementServiceTest {
         author.setRoles(Set.of(RoleCode.MENTOR));
         post = BlogPost.builder()
                 .id(postId)
-                .authorUser(author)
+                .authorUserId(author.getId())
                 .title("Post")
                 .slug("post")
                 .status(BlogPostStatus.PUBLISHED)

@@ -37,8 +37,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
-import com.fptu.exe.skillswap.modules.identity.dto.request.AdminUserListRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.response.AdminUserListItemResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.request.AdminUserListFilterRequest;
+import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserListItem;
 import com.fptu.exe.skillswap.modules.admin.service.AdminMentorVerificationModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminUserModerationService;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
@@ -150,10 +150,10 @@ class CoreMentorshipFlowSmokeTest {
         completeAcademic(u2.getId(), "se123456 "); // should normalize
 
         // Admin checks users
-        AdminUserListRequest req = new AdminUserListRequest();
-        PageResponse<AdminUserListItemResponse> res = adminUserService.getVisibleUsers(req);
+        AdminUserListFilterRequest req = new AdminUserListFilterRequest();
+        PageResponse<UserListItem> res = adminUserService.getVisibleUsers(req);
         
-        List<AdminUserListItemResponse> conflicts = res.getContent().stream()
+        List<UserListItem> conflicts = res.getContent().stream()
             .filter(u -> u.academicProfile() != null && "SE123456".equals(u.academicProfile().claimedStudentCode()))
             .toList();
 
@@ -271,8 +271,7 @@ class CoreMentorshipFlowSmokeTest {
         CreateBookingRequest bReq = new CreateBookingRequest(
                 slot.getId(),
                 mentorService.getId(),
-                slot.getStartTime(),
-                slot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                BookingTime.toInstant(slot.getStartTime()),
                 "Help",
                 "Please help"
         );
@@ -357,8 +356,7 @@ class CoreMentorshipFlowSmokeTest {
         CreateBookingRequest bReq = new CreateBookingRequest(
                 slot.getId(),
                 mentorService.getId(),
-                slot.getStartTime(),
-                slot.getStartTime().plusMinutes(mentorService.getDurationMinutes()),
+                BookingTime.toInstant(slot.getStartTime()),
                 "Learn Spring",
                 "Learn Spring fast"
         );

@@ -125,7 +125,7 @@ class AdminDashboardControllerIntegrationTest {
         User systemAdminUser = saveUser("dashboard-system@test.com", Set.of(RoleCode.SYSTEM_ADMIN), UserStatus.ACTIVE);
 
         MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .status(MentorStatus.ACTIVE)
                 .headline("Backend Mentor")
                 .expertiseDescription("Spring Boot")
@@ -261,7 +261,7 @@ class AdminDashboardControllerIntegrationTest {
 
     private void createVerificationRequest(User mentorUser, VerificationStatus status, LocalDateTime createdAt, LocalDateTime submittedAt) {
         MentorVerificationRequest request = mentorVerificationRequestRepository.save(MentorVerificationRequest.builder()
-                .mentor(mentorUser)
+                .mentorUserId(mentorUser.getId())
                 .method(VerificationMethod.MANUAL)
                 .status(status)
                 .build());
@@ -279,7 +279,7 @@ class AdminDashboardControllerIntegrationTest {
     private void createBooking(User menteeUser, MentorProfile mentorProfile, BookingStatus status, LocalDateTime createdAt) {
         Booking booking = bookingRepository.save(Booking.builder()
                 .mentee(menteeUser)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .status(status)
                 .learningGoalTitle("Need help")
                 .selectedStartTime(createdAt.plusDays(1))

@@ -113,7 +113,7 @@ public class BookingCancellationService {
         }
         eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(bookingId, savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CANCEL));
         if (paymentOrderService != null) {
-            paymentOrderService.handleMentorCancellation(savedBooking);
+                paymentOrderService.handleMentorCancellation(savedBooking.getId());
         }
 
         UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
@@ -197,7 +197,7 @@ public class BookingCancellationService {
         }
         eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(bookingId, savedBooking.getMentorUserId(), BookingCalendarLifecycleEvent.Action.CANCEL));
         if (paymentOrderService != null && (currentStatus == BookingStatus.ACCEPTED_AWAITING_PAYMENT || currentStatus == BookingStatus.PAID)) {
-            paymentOrderService.handleMenteeCancellation(savedBooking, lateCancellation);
+            paymentOrderService.handleMenteeCancellation(savedBooking.getId(), lateCancellation);
         }
 
         UserSummaryRecord mentorSummary = userQueryPort.findUserSummaryById(savedBooking.getMentorUserId()).orElse(null);

@@ -1,11 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
-import com.fptu.exe.skillswap.modules.filestorage.domain.FilePurpose;
-import com.fptu.exe.skillswap.modules.filestorage.domain.StoredFile;
-import com.fptu.exe.skillswap.modules.filestorage.dto.request.PublicAssetUploadIntentRequest;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetResponse;
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PublicAssetUploadIntentResponse;
-import com.fptu.exe.skillswap.modules.filestorage.service.PublicAssetUploadService;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -49,7 +44,7 @@ class MentorProfileItemServiceTest {
     private MentorAchievementRepository mentorAchievementRepository;
 
     @Mock
-    private PublicAssetUploadService publicAssetUploadService;
+    private PublicAssetUploadPort publicAssetUploadService;
 
     private MentorProfileItemService service;
 
@@ -116,11 +111,8 @@ class MentorProfileItemServiceTest {
     @Test
     void createProject_WithPictureAssetId_Success() {
         UUID assetId = UUID.randomUUID();
-        StoredFile file = StoredFile.builder()
-                .id(assetId)
-                .purpose(FilePurpose.PORTFOLIO)
-                .publicUrl("https://cdn.skillswap.asia/portfolio/pic.jpg")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata file = new PublicAssetUploadPort.FileAssetMetadata(
+                assetId, "https://cdn.skillswap.asia/portfolio/pic.jpg", "image/jpeg", 1024L);
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
         when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId)).thenReturn(file);
@@ -146,13 +138,13 @@ class MentorProfileItemServiceTest {
     @Test
     void createProjectPictureUploadIntent_Success() {
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
-        PublicAssetUploadIntentRequest req = new PublicAssetUploadIntentRequest("photo.png", "image/png");
-        PublicAssetUploadIntentResponse intentResponse = new PublicAssetUploadIntentResponse(
+        PublicAssetUploadPort.UploadRequest req = new PublicAssetUploadPort.UploadRequest("photo.png", "image/png");
+        PublicAssetUploadPort.UploadIntent intentResponse = new PublicAssetUploadPort.UploadIntent(
                 UUID.randomUUID(), "https://r2.example.com/upload", LocalDateTime.now().plusMinutes(15), Map.of("Content-Type", "image/png")
         );
         when(publicAssetUploadService.createPortfolioImageIntent(mentorUserId, req)).thenReturn(intentResponse);
 
-        PublicAssetUploadIntentResponse res = service.createProjectPictureUploadIntent(mentorUserId, req);
+        PublicAssetUploadPort.UploadIntent res = service.createProjectPictureUploadIntent(mentorUserId, req);
         assertEquals(intentResponse.uploadIntentId(), res.uploadIntentId());
         assertEquals(intentResponse.uploadUrl(), res.uploadUrl());
     }
@@ -163,7 +155,7 @@ class MentorProfileItemServiceTest {
         when(mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId))
                 .thenReturn(Optional.empty());
 
-        PublicAssetUploadIntentRequest req = new PublicAssetUploadIntentRequest("photo.png", "image/png");
+        PublicAssetUploadPort.UploadRequest req = new PublicAssetUploadPort.UploadRequest("photo.png", "image/png");
         BaseException ex = assertThrows(BaseException.class,
                 () -> service.createProjectPictureUploadIntentForProject(mentorUserId, projectId, req));
         assertEquals(ErrorCode.NOT_FOUND, ex.getErrorCode());
@@ -181,16 +173,13 @@ class MentorProfileItemServiceTest {
                 .title("Alpha")
                 .build();
 
-        StoredFile storedFile = StoredFile.builder()
-                .id(assetId)
-                .purpose(FilePurpose.PORTFOLIO)
-                .publicUrl("https://cdn.skillswap.asia/portfolio/pic.png")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata storedFile = new PublicAssetUploadPort.FileAssetMetadata(
+                assetId, "https://cdn.skillswap.asia/portfolio/pic.png", "image/png", 1024L);
 
         when(mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId))
                 .thenReturn(Optional.of(project));
         when(publicAssetUploadService.confirmPortfolioImage(mentorUserId, intentId))
-                .thenReturn(new PublicAssetResponse(assetId, "https://cdn.skillswap.asia/portfolio/pic.png", "image/png", 1024L));
+                .thenReturn(new PublicAssetUploadPort.FileAssetMetadata(assetId, "https://cdn.skillswap.asia/portfolio/pic.png", "image/png", 1024L));
         when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId))
                 .thenReturn(storedFile);
         when(mentorFeaturedProjectRepository.save(any(MentorFeaturedProject.class)))
@@ -204,16 +193,14 @@ class MentorProfileItemServiceTest {
     @Test
     void removeProjectPicture_Success() {
         UUID projectId = UUID.randomUUID();
-        StoredFile storedFile = StoredFile.builder()
-                .id(UUID.randomUUID())
-                .publicUrl("https://cdn.skillswap.asia/portfolio/pic.png")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata storedFile = new PublicAssetUploadPort.FileAssetMetadata(
+                UUID.randomUUID(), "https://cdn.skillswap.asia/portfolio/pic.png", "image/png", 1024L);
 
         MentorFeaturedProject project = MentorFeaturedProject.builder()
                 .id(projectId)
                 .mentorProfile(profile)
                 .title("Alpha")
-                .pictureFile(storedFile)
+                .pictureFileId(storedFile.assetId())
                 .build();
 
         when(mentorFeaturedProjectRepository.findByIdAndMentorProfileUserId(projectId, mentorUserId))
@@ -268,11 +255,8 @@ class MentorProfileItemServiceTest {
     @Test
     void createAchievement_WithPictureAssetId_Success() {
         UUID assetId = UUID.randomUUID();
-        StoredFile file = StoredFile.builder()
-                .id(assetId)
-                .purpose(FilePurpose.PORTFOLIO)
-                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.jpg")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata file = new PublicAssetUploadPort.FileAssetMetadata(
+                assetId, "https://cdn.skillswap.asia/portfolio/cert.jpg", "image/jpeg", 2048L);
 
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
         when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId)).thenReturn(file);
@@ -298,13 +282,13 @@ class MentorProfileItemServiceTest {
     @Test
     void createAchievementPictureUploadIntent_Success() {
         when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(profile));
-        PublicAssetUploadIntentRequest req = new PublicAssetUploadIntentRequest("cert.png", "image/png");
-        PublicAssetUploadIntentResponse intentResponse = new PublicAssetUploadIntentResponse(
+        PublicAssetUploadPort.UploadRequest req = new PublicAssetUploadPort.UploadRequest("cert.png", "image/png");
+        PublicAssetUploadPort.UploadIntent intentResponse = new PublicAssetUploadPort.UploadIntent(
                 UUID.randomUUID(), "https://r2.example.com/upload", LocalDateTime.now().plusMinutes(15), Map.of("Content-Type", "image/png")
         );
         when(publicAssetUploadService.createPortfolioImageIntent(mentorUserId, req)).thenReturn(intentResponse);
 
-        PublicAssetUploadIntentResponse res = service.createAchievementPictureUploadIntent(mentorUserId, req);
+        PublicAssetUploadPort.UploadIntent res = service.createAchievementPictureUploadIntent(mentorUserId, req);
         assertEquals(intentResponse.uploadIntentId(), res.uploadIntentId());
         assertEquals(intentResponse.uploadUrl(), res.uploadUrl());
     }
@@ -321,16 +305,13 @@ class MentorProfileItemServiceTest {
                 .title("Certified Kubernetes Admin")
                 .build();
 
-        StoredFile storedFile = StoredFile.builder()
-                .id(assetId)
-                .purpose(FilePurpose.PORTFOLIO)
-                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.png")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata storedFile = new PublicAssetUploadPort.FileAssetMetadata(
+                assetId, "https://cdn.skillswap.asia/portfolio/cert.png", "image/png", 2048L);
 
         when(mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId))
                 .thenReturn(Optional.of(achievement));
         when(publicAssetUploadService.confirmPortfolioImage(mentorUserId, intentId))
-                .thenReturn(new PublicAssetResponse(assetId, "https://cdn.skillswap.asia/portfolio/cert.png", "image/png", 2048L));
+                .thenReturn(new PublicAssetUploadPort.FileAssetMetadata(assetId, "https://cdn.skillswap.asia/portfolio/cert.png", "image/png", 2048L));
         when(publicAssetUploadService.requireOwnedPortfolioImage(mentorUserId, assetId))
                 .thenReturn(storedFile);
         when(mentorAchievementRepository.save(any(MentorAchievement.class)))
@@ -344,16 +325,14 @@ class MentorProfileItemServiceTest {
     @Test
     void removeAchievementPicture_Success() {
         UUID achievementId = UUID.randomUUID();
-        StoredFile storedFile = StoredFile.builder()
-                .id(UUID.randomUUID())
-                .publicUrl("https://cdn.skillswap.asia/portfolio/cert.png")
-                .build();
+        PublicAssetUploadPort.FileAssetMetadata storedFile = new PublicAssetUploadPort.FileAssetMetadata(
+                UUID.randomUUID(), "https://cdn.skillswap.asia/portfolio/cert.png", "image/png", 2048L);
 
         MentorAchievement achievement = MentorAchievement.builder()
                 .id(achievementId)
                 .mentorProfile(profile)
                 .title("Certified Kubernetes Admin")
-                .pictureFile(storedFile)
+                .pictureFileId(storedFile.assetId())
                 .build();
 
         when(mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId))

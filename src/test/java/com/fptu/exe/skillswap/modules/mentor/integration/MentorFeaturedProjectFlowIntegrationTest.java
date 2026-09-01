@@ -77,7 +77,7 @@ class MentorFeaturedProjectFlowIntegrationTest {
                 .build());
 
         MentorProfile profile = MentorProfile.builder()
-                .user(mentorUser)
+                .userId(mentorUser.getId())
                 .headline("Software Engineer")
                 .status(MentorStatus.ACTIVE)
                 .teachingMode(TeachingMode.HYBRID)

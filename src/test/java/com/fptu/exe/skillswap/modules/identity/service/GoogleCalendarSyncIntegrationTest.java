@@ -83,7 +83,7 @@ class GoogleCalendarSyncIntegrationTest {
                     .build());
 
             mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
-                    .user(mentorUser)
+                    .userId(mentorUser.getId())
                     .status(MentorStatus.ACTIVE)
                     .isAvailable(true)
                     .build());
@@ -96,7 +96,7 @@ class GoogleCalendarSyncIntegrationTest {
 
             booking = bookingRepository.save(Booking.builder()
                     .mentee(menteeUser)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentorProfile.getUserId())
                     .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                     .learningGoalTitle("Test Sync Booking")
                     .selectedStartTime(DateTimeUtil.now().plusDays(1))

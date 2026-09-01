@@ -66,7 +66,6 @@ class MentorProfileServiceTest {
 
         profile = MentorProfile.builder()
                 .userId(mentorUserId)
-                .user(mentorUser)
                 .isAvailable(true)
                 .build();
 

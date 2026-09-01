@@ -73,6 +73,9 @@ class ConversationServiceUnitTest {
     @Mock
     private ConversationSafetyPolicy conversationSafetyPolicy;
 
+    @Mock
+    private ChatService chatService;
+
     @InjectMocks
     private ConversationService conversationService;
 
@@ -96,11 +99,10 @@ class ConversationServiceUnitTest {
 
         mentorProfile = new MentorProfile();
         mentorProfile.setUserId(mentorUser.getId());
-        mentorProfile.setUser(mentorUser);
 
         booking = Booking.builder()
                 .id(bookingId)
-                .mentorProfile(mentorProfile)
+                .mentorUserId(mentorProfile.getUserId())
                 .mentee(menteeUser)
                 .build();
 
@@ -141,7 +143,8 @@ class ConversationServiceUnitTest {
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), mentorUser.getId())).thenReturn(true);
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), menteeUser.getId())).thenReturn(true);
 
-        Conversation result = conversationService.createDirectForAcceptedBooking(booking);
+        Conversation result = conversationService.createDirectForAcceptedBooking(
+                booking.getId(), mentorUser.getId(), menteeUser.getId());
 
         assertNotNull(result);
         assertEquals(existing.getId(), result.getId());
@@ -168,7 +171,8 @@ class ConversationServiceUnitTest {
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), mentorUser.getId())).thenReturn(true);
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), menteeUser.getId())).thenReturn(true);
 
-        Conversation result = conversationService.createDirectForAcceptedBooking(booking);
+        Conversation result = conversationService.createDirectForAcceptedBooking(
+                booking.getId(), mentorUser.getId(), menteeUser.getId());
 
         assertNotNull(result);
         assertEquals(existing.getId(), result.getId());
@@ -200,7 +204,8 @@ class ConversationServiceUnitTest {
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), mentorUser.getId())).thenReturn(true);
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), menteeUser.getId())).thenReturn(true);
 
-        Conversation result = conversationService.createDirectForAcceptedBooking(booking);
+        Conversation result = conversationService.createDirectForAcceptedBooking(
+                booking.getId(), mentorUser.getId(), menteeUser.getId());
 
         assertNotNull(result);
         assertEquals(existing.getId(), result.getId());
@@ -226,7 +231,7 @@ class ConversationServiceUnitTest {
                 ConversationStatus.ACTIVE
         )).thenReturn(List.of(existing));
 
-        java.util.Map<UUID, UUID> result = conversationService.findConversationIdsForBookings(List.of(booking));
+        java.util.Map<UUID, UUID> result = conversationService.findConversationIdsByBookingIds(List.of(bookingId));
 
         assertEquals(existing.getId(), result.get(bookingId));
     }

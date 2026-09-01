@@ -106,7 +106,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
                     .build());
 
             com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile mentorProfile = com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile.builder()
-                    .user(mentor)
+                    .userId(mentor.getId())
                     .status(com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE)
                     .verifiedAt(LocalDateTime.now().minusDays(1))
                     .isAvailable(true)
@@ -123,7 +123,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
             booking = Booking.builder()
                     .id(UUID.randomUUID())
                     .mentee(mentee)
-                    .mentorProfile(mentorProfile)
+                    .mentorUserId(mentor.getId())
                     .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                     .learningGoalTitle("Test Booking")
                     .learningGoalDescription("Test Description")
