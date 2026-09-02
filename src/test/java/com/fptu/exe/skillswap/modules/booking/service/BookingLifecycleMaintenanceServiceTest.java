@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -76,6 +77,9 @@ class BookingLifecycleMaintenanceServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private UserQueryPort userQueryPort;
+
     private BookingLifecycleMaintenanceService maintenanceService;
 
     private User mentee;
@@ -91,7 +95,8 @@ class BookingLifecycleMaintenanceServiceTest {
                 settlementCommandPort,
                 bookingPaymentSettlementPort,
                 eventPublisher,
-                bookingEventService
+                bookingEventService,
+                userQueryPort
         );
         maintenanceService.setSessionFinalizationService(sessionFinalizationService);
         org.mockito.Mockito.doAnswer(invocation -> {
@@ -145,7 +150,7 @@ class BookingLifecycleMaintenanceServiceTest {
         LocalDateTime now = LocalDateTime.now();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTOR_COMPLETION)
@@ -171,7 +176,7 @@ class BookingLifecycleMaintenanceServiceTest {
         LocalDateTime now = LocalDateTime.now();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
@@ -199,7 +204,7 @@ class BookingLifecycleMaintenanceServiceTest {
         LocalDateTime now = LocalDateTime.now();
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.AWAITING_MENTEE_CONFIRMATION)
@@ -230,7 +235,7 @@ class BookingLifecycleMaintenanceServiceTest {
         maintenanceService.setTimeProvider(TimeProvider.from(Clock.fixed(nowUtc, ZoneOffset.UTC)));
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.UNDER_REVIEW)
@@ -257,6 +262,12 @@ class BookingLifecycleMaintenanceServiceTest {
                 .thenReturn(new PageImpl<>(List.of(adminUser)));
         when(userRepository.findUsersByRole(eq(RoleCode.SYSTEM_ADMIN), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
+        when(userQueryPort.findUsersByRole(RoleCode.ADMIN)).thenReturn(List.of(adminUser));
+        when(userQueryPort.findUsersByRole(RoleCode.SYSTEM_ADMIN)).thenReturn(List.of());
+        when(userQueryPort.findUserSummaryById(adminUser.getId())).thenReturn(Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
+                        adminUser.getId(), adminUser.getEmail(), adminUser.getFullName(), null,
+                        Set.of(RoleCode.ADMIN), "ACTIVE", true)));
 
         int changed = maintenanceService.processPostSessionLifecycle();
 
@@ -278,7 +289,7 @@ class BookingLifecycleMaintenanceServiceTest {
         maintenanceService.setTimeProvider(TimeProvider.from(Clock.fixed(nowUtc, ZoneOffset.UTC)));
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.UNDER_REVIEW)

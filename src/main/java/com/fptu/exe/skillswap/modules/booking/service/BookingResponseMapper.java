@@ -7,7 +7,6 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.SessionAttendanceResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingIssueResolutionRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
@@ -85,7 +84,9 @@ public class BookingResponseMapper {
         UserSummaryRecord mentorUser = mentorUserId != null && userQueryPort != null
                 ? userQueryPort.findUserSummaryById(mentorUserId).orElse(null)
                 : null;
-        User mentee = booking.getMentee();
+        UserSummaryRecord mentee = booking.getMenteeUserId() != null && userQueryPort != null
+                ? userQueryPort.findUserSummaryById(booking.getMenteeUserId()).orElse(null)
+                : null;
         MentorAvailabilitySlot slot = booking.getSlot();
 
         Session session = null;
@@ -117,7 +118,8 @@ public class BookingResponseMapper {
             currentUserId = ((UserPrincipal) auth.getPrincipal()).getPublicId();
         }
 
-        boolean isMenteeUser = currentUserId != null && mentee != null && currentUserId.equals(mentee.getId());
+        boolean isMenteeUser = currentUserId != null && booking.getMenteeUserId() != null
+                && currentUserId.equals(booking.getMenteeUserId());
         boolean isMentorUser = currentUserId != null && mentorUserId != null && currentUserId.equals(mentorUserId);
 
         Instant nowUtc = timeProvider.instant();
@@ -228,9 +230,9 @@ public class BookingResponseMapper {
                 .mentorUserId(mentorUserId)
                 .mentorDisplayName(mentorUser == null ? null : mentorUser.fullName())
                 .mentorAvatarUrl(mentorUser == null ? null : mentorUser.avatarUrl())
-                .menteeUserId(mentee == null ? null : mentee.getId())
-                .menteeDisplayName(mentee == null ? null : mentee.getFullName())
-                .menteeAvatarUrl(mentee == null ? null : mentee.getAvatarUrl())
+                .menteeUserId(mentee == null ? booking.getMenteeUserId() : mentee.userId())
+                .menteeDisplayName(mentee == null ? null : mentee.fullName())
+                .menteeAvatarUrl(mentee == null ? null : mentee.avatarUrl())
                 .availabilitySlotId(slot == null ? null : slot.getId())
                 .serviceId(booking.getServiceId())
                 .serviceTitle(booking.getServiceTitleSnapshot())

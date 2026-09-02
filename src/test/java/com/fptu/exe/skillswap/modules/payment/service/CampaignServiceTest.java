@@ -1,8 +1,8 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefitType;
@@ -53,9 +53,8 @@ class CampaignServiceTest {
         UUID userId = UUID.randomUUID();
         UUID campaignId = UUID.randomUUID();
 
-        User user = new User();
-        user.setId(userId);
-        user.setRoles(Set.<RoleCode>of());
+        UserSummaryRecord user = new UserSummaryRecord(
+                userId, "user@test.com", "Test User", null, Set.<RoleCode>of(), "ACTIVE", true);
 
         Campaign campaign = Campaign.builder()
                 .id(campaignId)
@@ -73,8 +72,8 @@ class CampaignServiceTest {
                 .active(true)
                 .build();
 
-        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
-        when(userQueryPort.findStudentProfileWithDetailsByUserId(userId)).thenReturn(Optional.empty());
+        when(userQueryPort.findUserSummaryById(userId)).thenReturn(Optional.of(user));
+        when(userQueryPort.findStudentProfileRecordByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findByIdForUpdate(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));
@@ -82,7 +81,7 @@ class CampaignServiceTest {
 
         CampaignService.CampaignCreditApplication result = campaignService.resolveCampaignCredit(
                 userId,
-                Booking.builder().build(),
+                checkoutSnapshot(),
                 400
         );
 
@@ -98,9 +97,8 @@ class CampaignServiceTest {
         UUID userId = UUID.randomUUID();
         UUID campaignId = UUID.randomUUID();
 
-        User user = new User();
-        user.setId(userId);
-        user.setRoles(Set.<RoleCode>of());
+        UserSummaryRecord user = new UserSummaryRecord(
+                userId, "user@test.com", "Test User", null, Set.<RoleCode>of(), "ACTIVE", true);
 
         Campaign campaign = Campaign.builder()
                 .id(campaignId)
@@ -117,8 +115,8 @@ class CampaignServiceTest {
                 .active(true)
                 .build();
 
-        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
-        when(userQueryPort.findStudentProfileWithDetailsByUserId(userId)).thenReturn(Optional.empty());
+        when(userQueryPort.findUserSummaryById(userId)).thenReturn(Optional.of(user));
+        when(userQueryPort.findStudentProfileRecordByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));
@@ -126,12 +124,18 @@ class CampaignServiceTest {
 
         CampaignService.CampaignCreditApplication result = campaignService.estimateCampaignCredit(
                 userId,
-                Booking.builder().build(),
+                checkoutSnapshot(),
                 300
         );
 
         assertEquals(200, result.appliedScoin());
         verify(campaignRepository).findById(campaignId);
         verify(campaignRepository, never()).findByIdForUpdate(campaignId);
+    }
+
+    private BookingCheckoutSnapshot checkoutSnapshot() {
+        return new BookingCheckoutSnapshot(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                false, 10_000, 60, null, "ACCEPTED_AWAITING_PAYMENT", null);
     }
 }

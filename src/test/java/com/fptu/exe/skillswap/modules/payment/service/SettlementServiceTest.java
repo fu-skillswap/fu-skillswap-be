@@ -22,6 +22,7 @@ import com.fptu.exe.skillswap.modules.payment.repository.CreditLedgerEntryReposi
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementAccountRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.SettlementEntryRepository;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,8 +32,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -126,8 +129,8 @@ class SettlementServiceTest {
                 .accountCode("CREDIT-" + menteeId)
                 .build();
 
-        when(creditLedgerService.getUserAccountForUpdate(menteeId)).thenReturn(creditAccount);
-        when(creditLedgerEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+        org.mockito.Mockito.lenient().when(creditLedgerService.getUserAccountForUpdate(menteeId)).thenReturn(creditAccount);
+        org.mockito.Mockito.lenient().when(creditLedgerEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
                 eq(creditAccount.getId()),
                 eq(LedgerSourceType.BOOKING),
                 eq(bookingId),
@@ -231,9 +234,9 @@ class SettlementServiceTest {
     void applyReversal_freeBooking_shouldPersistAppliedReversalState() {
         UUID originalId = UUID.randomUUID();
         UUID reversalId = UUID.randomUUID();
-        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, originalId))
+        org.mockito.Mockito.lenient().when(bookingPaymentSettlementPort.findIssueResolution(bookingId, originalId))
                 .thenReturn(Optional.of(resolution(originalId, "RELEASE_AS_IS")));
-        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
+        org.mockito.Mockito.lenient().when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
                 .thenReturn(Optional.of(resolution(reversalId, "RELEASE_AS_IS")));
 
         settlementService.applyReversal(bookingId, originalId, reversalId);
@@ -267,13 +270,17 @@ class SettlementServiceTest {
                         100, 50, 40, 10, null, null)));
         when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
                 .thenReturn(Optional.of(resolution(reversalId, "PARTIAL_SETTLEMENT")));
-        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
+        org.mockito.Mockito.lenient().when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
                 com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId))
                 .thenReturn(Optional.of(heldOrder));
-        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+        org.mockito.Mockito.lenient().when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
                 .thenReturn(true);
         when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
                 .thenReturn(Optional.of(mentorAccount));
+        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, new UUID(0L, 1L)))
+                .thenReturn(true);
+        when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.PLATFORM_SETTLEMENT, new UUID(0L, 1L)))
+                .thenReturn(Optional.of(platformAccount));
 
         settlementService.applyReversal(bookingId, originalId, reversalId);
 
@@ -290,6 +297,111 @@ class SettlementServiceTest {
         verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
     }
 
+    @Test
+    void applyReversal_success_shouldDebitBothSettlementAccountsAndCreditLedger() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        mentorAccount.setBalance(BigDecimal.valueOf(100));
+        platformAccount.setBalance(BigDecimal.valueOf(100));
+        stubPaidReversal(originalId, reversalId, resolutionWithAllocation(originalId, 100, 50, 40),
+                resolutionWithAllocation(reversalId, 100, 50, 40));
+        when(creditLedgerService.getAvailableBalance(menteeId)).thenReturn(100);
+        when(settlementAccountRepository.deductBalanceSafely(any(UUID.class), any(BigDecimal.class))).thenReturn(1);
+        when(creditLedgerService.debitCredit(any(), any(), any(), any(), any(Integer.class), any(), any()))
+                .thenReturn(true);
+
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+
+        verify(settlementAccountRepository, times(2)).deductBalanceSafely(any(UUID.class), any(BigDecimal.class));
+        verify(creditLedgerService).debitCredit(eq(menteeId), eq(CreditOriginType.REFUND),
+                eq(LedgerSourceType.BOOKING_ISSUE_RESOLUTION), eq(reversalId), eq(50), any(), any());
+        verify(settlementEntryRepository, times(2)).save(any(SettlementEntry.class));
+        verify(paymentOrderRepository).save(paymentOrder);
+        verify(bookingPaymentSettlementPort).updateIssueResolutionSettlement(eq(bookingId), eq(reversalId), any());
+    }
+
+    @Test
+    void applyReversal_duplicate_shouldNotRepeatFinancialMutations() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        mentorAccount.setBalance(BigDecimal.valueOf(100));
+        platformAccount.setBalance(BigDecimal.valueOf(100));
+        stubPaidReversal(originalId, reversalId, resolutionWithAllocation(originalId, 100, 50, 40),
+                resolutionWithAllocation(reversalId, 100, 50, 40));
+        when(creditLedgerService.getAvailableBalance(menteeId)).thenReturn(100);
+        when(settlementAccountRepository.deductBalanceSafely(any(UUID.class), any(BigDecimal.class))).thenReturn(1);
+        when(creditLedgerService.debitCredit(any(), any(), any(), any(), any(Integer.class), any(), any()))
+                .thenReturn(true);
+        SettlementEntry existingReversal = SettlementEntry.builder().id(UUID.randomUUID()).build();
+        when(settlementEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                eq(mentorAccount.getId()), eq(LedgerSourceType.BOOKING_ISSUE_RESOLUTION), eq(reversalId),
+                eq(SettlementEntryType.ADJUSTMENT)))
+                .thenReturn(Optional.empty(), Optional.of(existingReversal));
+
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+
+        verify(settlementAccountRepository, times(2)).deductBalanceSafely(any(UUID.class), any(BigDecimal.class));
+        verify(creditLedgerService, times(1)).debitCredit(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(settlementEntryRepository, times(2)).save(any(SettlementEntry.class));
+    }
+
+    @Test
+    void applyReversal_failedMenteeDebit_shouldThrowForTransactionRollback() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        mentorAccount.setBalance(BigDecimal.valueOf(100));
+        platformAccount.setBalance(BigDecimal.valueOf(100));
+        stubPaidReversal(originalId, reversalId, resolutionWithAllocation(originalId, 100, 50, 40),
+                resolutionWithAllocation(reversalId, 100, 50, 40));
+        when(creditLedgerService.getAvailableBalance(menteeId)).thenReturn(100);
+        when(settlementAccountRepository.deductBalanceSafely(any(UUID.class), any(BigDecimal.class))).thenReturn(1);
+        when(creditLedgerService.debitCredit(any(), any(), any(), any(), any(Integer.class), any(), any()))
+                .thenReturn(false);
+
+        assertThrows(BaseException.class, () -> settlementService.applyReversal(bookingId, originalId, reversalId));
+
+        verify(paymentOrderRepository, never()).save(any(PaymentOrder.class));
+        verify(bookingPaymentSettlementPort, never()).updateIssueResolutionSettlement(eq(bookingId), eq(reversalId), any());
+    }
+
+    @Test
+    void applyReversal_insufficientPlatformBalance_shouldNotMutateFinancialState() {
+        UUID originalId = UUID.randomUUID();
+        UUID reversalId = UUID.randomUUID();
+        mentorAccount.setBalance(BigDecimal.valueOf(100));
+        platformAccount.setBalance(BigDecimal.valueOf(5));
+        stubPaidReversal(originalId, reversalId, resolutionWithAllocation(originalId, 100, 50, 40),
+                resolutionWithAllocation(reversalId, 100, 50, 40));
+
+        settlementService.applyReversal(bookingId, originalId, reversalId);
+
+        verify(settlementAccountRepository, never()).deductBalanceSafely(any(UUID.class), any(BigDecimal.class));
+        verify(creditLedgerService, never()).debitCredit(any(), any(), any(), any(), any(Integer.class), any(), any());
+        verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
+    }
+
+    private void stubPaidReversal(UUID originalId, UUID reversalId,
+                                  BookingIssueResolutionSnapshot original,
+                                  BookingIssueResolutionSnapshot reversal) {
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, originalId))
+                .thenReturn(Optional.of(original));
+        when(bookingPaymentSettlementPort.findIssueResolution(bookingId, reversalId))
+                .thenReturn(Optional.of(reversal));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
+                com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId))
+                .thenReturn(Optional.of(paymentOrder));
+        when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+                .thenReturn(true);
+        org.mockito.Mockito.lenient().when(settlementAccountRepository.existsByOwnerTypeAndOwnerId(LedgerAccountType.PLATFORM_SETTLEMENT, new UUID(0L, 1L)))
+                .thenReturn(true);
+        org.mockito.Mockito.lenient().when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.MENTOR_SETTLEMENT, mentorId))
+                .thenReturn(Optional.of(mentorAccount));
+        org.mockito.Mockito.lenient().when(settlementAccountRepository.findByOwnerTypeAndOwnerIdForUpdate(LedgerAccountType.PLATFORM_SETTLEMENT, new UUID(0L, 1L)))
+                .thenReturn(Optional.of(platformAccount));
+        org.mockito.Mockito.lenient().when(bookingPaymentSettlementPort.findCancellationContext(bookingId)).thenReturn(Optional.of(booking));
+    }
+
     private BookingSettlementSnapshot settlementSnapshot() {
         return new BookingSettlementSnapshot(
                 bookingId, menteeId, mentorId, 100, "COMPLETED", "USER_CONFIRMED",
@@ -300,5 +412,15 @@ class SettlementServiceTest {
         return new BookingIssueResolutionSnapshot(
                 resolutionId, action, null, "APPLIED", null, null, null,
                 null, null, null, null, null, null);
+    }
+
+    private BookingIssueResolutionSnapshot resolutionWithAllocation(UUID resolutionId,
+                                                                     int escrow,
+                                                                     int menteeRefund,
+                                                                     int mentorSettlement) {
+        return new BookingIssueResolutionSnapshot(
+                resolutionId, "PARTIAL_SETTLEMENT", null, "APPLIED", 50, 40, 10,
+                escrow, menteeRefund, mentorSettlement, escrow - menteeRefund - mentorSettlement,
+                null, null);
     }
 }

@@ -371,7 +371,7 @@ class ForumPostServiceTest {
         });
         when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new DataIntegrityViolationException("notification schema mismatch"))
-                .when(notificationService).createNotification(any(), any(), any(), any(), any(), any());
+                .when(notificationService).publish(any());
 
         var response = forumPostService.createComment(mentee.getId(), post.getId(), request);
 

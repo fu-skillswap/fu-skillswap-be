@@ -4,9 +4,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -34,8 +33,8 @@ public class BookingDisputeNotificationService {
     private final TimeProvider timeProvider;
 
     public void notifyIssueReported(Booking booking, UUID reporterUserId) {
-        User recipient = counterparty(booking, reporterUserId);
-        User reporter = participant(booking, reporterUserId);
+        UserSummaryRecord recipient = counterparty(booking, reporterUserId);
+        UserSummaryRecord reporter = participant(booking, reporterUserId);
         emit(booking, recipient, reporter, NotificationType.BOOKING_ISSUE_REPORTED,
                 "Có tranh chấp booking cần phản hồi",
                 "Đối tác đã báo vấn đề. Hãy xem minh chứng và phản hồi trong 24 giờ.",
@@ -44,8 +43,8 @@ public class BookingDisputeNotificationService {
     }
 
     public void notifyIssueResponded(Booking booking, UUID responderUserId) {
-        User reporter = participant(booking, booking.getIssueSubmittedByUserId());
-        User responder = participant(booking, responderUserId);
+        UserSummaryRecord reporter = participant(booking, booking.getIssueSubmittedByUserId());
+        UserSummaryRecord responder = participant(booking, responderUserId);
         emit(booking, reporter, responder, NotificationType.BOOKING_ISSUE_RESPONSE_RECEIVED,
                 "Tranh chấp booking đã có phản hồi",
                 "Đối tác đã phản hồi tranh chấp. Bạn có thể xem nội dung và minh chứng trong booking.",
@@ -54,7 +53,7 @@ public class BookingDisputeNotificationService {
     }
 
     public void notifyResponseReminder(Booking booking) {
-        User recipient = counterparty(booking, booking.getIssueSubmittedByUserId());
+        UserSummaryRecord recipient = counterparty(booking, booking.getIssueSubmittedByUserId());
         emit(booking, recipient, participant(booking, booking.getIssueSubmittedByUserId()),
                 NotificationType.BOOKING_ISSUE_RESPONSE_REMINDER,
                 "Cần phản hồi tranh chấp booking",
@@ -86,12 +85,12 @@ public class BookingDisputeNotificationService {
     public void notifyIssueResolved(Booking booking, boolean autoResolved, BookingIssueResolution resolution) {
         String result = resolveMessage(booking, autoResolved, resolution);
         String reason = trimToMax(booking.getIssueResolutionNote(), 500);
-        User mentee = mentee(booking);
-        User mentor = mentor(booking);
+        UserSummaryRecord mentee = mentee(booking);
+        UserSummaryRecord mentor = mentor(booking);
         emit(booking, mentee, null, NotificationType.BOOKING_ISSUE_RESOLVED,
                 "Tranh chấp booking đã được xử lý", result,
                 BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLVED_EMAIL, reason);
-        if (mentor != null && (mentee == null || !mentor.getId().equals(mentee.getId()))) {
+        if (mentor != null && (mentee == null || !mentor.userId().equals(mentee.userId()))) {
             emit(booking, mentor, null, NotificationType.BOOKING_ISSUE_RESOLVED,
                     "Tranh chấp booking đã được xử lý", result,
                     BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLVED_EMAIL, reason);
@@ -103,12 +102,12 @@ public class BookingDisputeNotificationService {
         String reason = reversalRecord != null && reversalRecord.getAdminNote() != null
                 ? trimToMax(reversalRecord.getAdminNote(), 500)
                 : trimToMax(booking.getIssueResolutionNote(), 500);
-        User mentee = mentee(booking);
-        User mentor = mentor(booking);
+        UserSummaryRecord mentee = mentee(booking);
+        UserSummaryRecord mentor = mentor(booking);
         emit(booking, mentee, null, NotificationType.BOOKING_ISSUE_RESOLUTION_REVERSED,
                 "Quyết định khiếu nại booking được xem xét lại", result,
                 BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLUTION_REVERSED_EMAIL, reason);
-        if (mentor != null && (mentee == null || !mentor.getId().equals(mentee.getId()))) {
+        if (mentor != null && (mentee == null || !mentor.userId().equals(mentee.userId()))) {
             emit(booking, mentor, null, NotificationType.BOOKING_ISSUE_RESOLUTION_REVERSED,
                     "Quyết định khiếu nại booking được xem xét lại", result,
                     BookingEmailNotificationEvent.EventType.BOOKING_ISSUE_RESOLUTION_REVERSED_EMAIL, reason);
@@ -117,27 +116,28 @@ public class BookingDisputeNotificationService {
 
     private void notifyActiveAdmins(Booking booking, NotificationType type, String title, String message,
                                     BookingEmailNotificationEvent.EventType emailType) {
-        Map<UUID, User> activeAdmins = new LinkedHashMap<>();
+        Map<UUID, UserSummaryRecord> activeAdmins = new LinkedHashMap<>();
         addActiveAdmins(activeAdmins, RoleCode.ADMIN);
         addActiveAdmins(activeAdmins, RoleCode.SYSTEM_ADMIN);
         activeAdmins.values().forEach(admin -> emit(booking, admin, null, type, title, message, emailType, null));
     }
 
-    private void addActiveAdmins(Map<UUID, User> target, RoleCode roleCode) {
+    private void addActiveAdmins(Map<UUID, UserSummaryRecord> target, RoleCode roleCode) {
         userQueryPort.findUsersByRole(roleCode).stream()
-                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
-                .forEach(user -> target.putIfAbsent(user.getId(), user));
+                .map(user -> userQueryPort.findUserSummaryById(user.getId()).orElse(null))
+                .filter(summary -> summary != null && summary.isActive())
+                .forEach(summary -> target.putIfAbsent(summary.userId(), summary));
     }
 
-    private void emit(Booking booking, User recipient, User actor, NotificationType type, String title,
+    private void emit(Booking booking, UserSummaryRecord recipient, UserSummaryRecord actor, NotificationType type, String title,
                       String message, BookingEmailNotificationEvent.EventType emailType, String reason) {
-        if (booking == null || recipient == null || recipient.getId() == null) return;
-        eventPublisher.publishEvent(new NotificationEvent(recipient.getId(), type, title, message, "BOOKING", booking.getId()));
-        if (recipient.getEmail() == null || recipient.getEmail().isBlank()) return;
+        if (booking == null || recipient == null || recipient.userId() == null) return;
+        eventPublisher.publishEvent(new NotificationEvent(recipient.userId(), type, title, message, "BOOKING", booking.getId()));
+        if (recipient.email() == null || recipient.email().isBlank()) return;
         eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                 .bookingId(booking.getId()).eventType(emailType)
-                .recipientEmail(recipient.getEmail()).recipientName(recipient.getFullName())
-                .actorName(actor == null ? "SkillSwap" : actor.getFullName())
+                .recipientEmail(recipient.email()).recipientName(recipient.fullName())
+                .actorName(actor == null ? "SkillSwap" : actor.fullName())
                 .bookingStartTime(booking.getSelectedStartTime()).bookingEndTime(booking.getSelectedEndTime())
                 .serviceTitle(booking.getServiceTitleSnapshot()).serviceDurationMinutes(booking.getServiceDurationSnapshot())
                 .serviceFree(booking.getServiceIsFreeSnapshot()).servicePriceScoin(booking.getServicePriceScoinSnapshot())
@@ -146,35 +146,29 @@ public class BookingDisputeNotificationService {
                 .createdAt(timeProvider.nowBusiness()).build());
     }
 
-    private User counterparty(Booking booking, UUID actorUserId) {
-        User mentee = mentee(booking);
-        User mentor = mentor(booking);
-        return mentor != null && mentor.getId().equals(actorUserId) ? mentee : mentor;
+    private UserSummaryRecord counterparty(Booking booking, UUID actorUserId) {
+        UserSummaryRecord mentee = mentee(booking);
+        UserSummaryRecord mentor = mentor(booking);
+        return mentor != null && mentor.userId().equals(actorUserId) ? mentee : mentor;
     }
 
-    private User participant(Booking booking, UUID userId) {
-        User mentee = mentee(booking);
-        if (mentee != null && mentee.getId().equals(userId)) return mentee;
-        User mentor = mentor(booking);
-        return mentor != null && mentor.getId().equals(userId) ? mentor : null;
+    private UserSummaryRecord participant(Booking booking, UUID userId) {
+        UserSummaryRecord mentee = mentee(booking);
+        if (mentee != null && mentee.userId().equals(userId)) return mentee;
+        UserSummaryRecord mentor = mentor(booking);
+        return mentor != null && mentor.userId().equals(userId) ? mentor : null;
     }
 
-    private User mentee(Booking booking) {
-        return booking == null ? null : booking.getMentee();
+    private UserSummaryRecord mentee(Booking booking) {
+        return booking == null || booking.getMenteeUserId() == null ? null
+                : userQueryPort.findUserSummaryById(booking.getMenteeUserId()).orElse(null);
     }
 
-    private User mentor(Booking booking) {
+    private UserSummaryRecord mentor(Booking booking) {
         if (booking == null || booking.getMentorUserId() == null || userQueryPort == null) {
             return null;
         }
-        return userQueryPort.findUserSummaryById(booking.getMentorUserId())
-                .map(summary -> User.builder()
-                        .id(summary.userId())
-                        .email(summary.email())
-                        .fullName(summary.fullName())
-                        .avatarUrl(summary.avatarUrl())
-                        .build())
-                .orElse(null);
+        return userQueryPort.findUserSummaryById(booking.getMentorUserId()).orElse(null);
     }
 
     private String resolveMessage(Booking booking, boolean autoResolved, BookingIssueResolution resolution) {

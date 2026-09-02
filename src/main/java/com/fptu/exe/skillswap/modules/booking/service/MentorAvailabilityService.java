@@ -27,13 +27,13 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleR
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.BookingSegmentPendingCountProjection;
 import com.fptu.exe.skillswap.modules.booking.support.AvailabilityCalendarWindowCalculator;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidateItemResponse;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
 import com.fptu.exe.skillswap.modules.mentor.port.EffectiveBookingPolicy;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorPublicAvailability;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidateItem;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidates;
 import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -456,7 +456,7 @@ public class MentorAvailabilityService {
     }
 
     @Transactional(readOnly = true)
-    public ServiceSlotCandidatesResponse getServiceSlotCandidates(UUID mentorUserId, UUID slotId, UUID serviceId) {
+    public ServiceSlotCandidates getServiceSlotCandidates(UUID mentorUserId, UUID slotId, UUID serviceId) {
         if (mentorUserId == null || slotId == null || serviceId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId, slotId và serviceId là bắt buộc");
         }
@@ -469,13 +469,8 @@ public class MentorAvailabilityService {
         ServiceSlotCandidate service = mentorBookingQueryPort.getActiveServiceCandidate(serviceId, mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.RESOURCE_CONFLICT, "Service hiện không còn hoạt động hoặc không thuộc mentor"));
 
-        List<ServiceSlotCandidateItemResponse> candidates = buildSegmentCandidates(slot, service);
-        return ServiceSlotCandidatesResponse.builder()
-                .slotId(slotId)
-                .serviceId(serviceId)
-                .serviceDurationMinutes(service.durationMinutes())
-                .candidateServiceSlots(candidates)
-                .build();
+        List<ServiceSlotCandidateItem> candidates = buildSegmentCandidates(slot, service);
+        return new ServiceSlotCandidates(slotId, serviceId, service.durationMinutes(), candidates);
     }
 
     @Async("slotGenerationExecutor")
@@ -518,7 +513,7 @@ public class MentorAvailabilityService {
         }
     }
 
-    private List<ServiceSlotCandidateItemResponse> buildSegmentCandidates(MentorAvailabilitySlot slot, ServiceSlotCandidate service) {
+    private List<ServiceSlotCandidateItem> buildSegmentCandidates(MentorAvailabilitySlot slot, ServiceSlotCandidate service) {
         validateSlotSegmentBase(slot, service);
 
         UUID mentorUserId = slot.getMentorUserId();
@@ -539,7 +534,7 @@ public class MentorAvailabilityService {
         LocalDateTime now = now();
         LocalDateTime earliestAllowed = now.plusMinutes(leadTimeMinutes);
         LocalDateTime latestAllowed = now.plusDays(horizonDays);
-        List<ServiceSlotCandidateItemResponse> results = new ArrayList<>();
+        List<ServiceSlotCandidateItem> results = new ArrayList<>();
 
         while (!current.plusMinutes(durationMinutes).isAfter(slot.getEndTime())) {
             LocalDateTime candidateStart = current;
@@ -587,23 +582,12 @@ public class MentorAvailabilityService {
                 bookingConflictNote = "Segment này đã đạt tối đa 3 yêu cầu chờ xác nhận";
             }
 
-            results.add(ServiceSlotCandidateItemResponse.builder()
-                    .startTime(candidateStart)
-                    .endTime(candidateEnd)
-                    .startAt(BookingTime.toInstant(candidateStart))
-                    .endAt(BookingTime.toInstant(candidateEnd))
-                    .pendingCount(pendingCount)
-                    .remainingPendingQuota(Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount))
-                    .isSelectable(selectable)
-                    .reasonIfBlocked(reasonIfBlocked)
-                    .blockedByAcceptedBooking(blockedByAccepted)
-                    .blockingBookingId(blockingAcceptedBooking == null ? null : blockingAcceptedBooking.getId())
-                    .blockingServiceId(blockingServiceId)
-                    .blockingServiceTitle(blockingServiceTitle)
-                    .blockedBySameService(blockedBySameService)
-                    .blockedByDifferentService(blockedByDifferentService)
-                    .bookingConflictNote(bookingConflictNote)
-                    .build());
+            results.add(new ServiceSlotCandidateItem(
+                    candidateStart, candidateEnd, BookingTime.toInstant(candidateStart), BookingTime.toInstant(candidateEnd),
+                    pendingCount, Math.max(0, BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT - pendingCount),
+                    selectable, reasonIfBlocked, blockedByAccepted,
+                    blockingAcceptedBooking == null ? null : blockingAcceptedBooking.getId(), blockingServiceId,
+                    blockingServiceTitle, blockedBySameService, blockedByDifferentService, bookingConflictNote));
             current = candidateEnd;
         }
 
@@ -900,7 +884,7 @@ public class MentorAvailabilityService {
         bookingRepository.saveAll(pendingBookings);
         for (Booking pendingBooking : pendingBookings) {
             notificationCommandPort.publish(new NotificationCommandPort.NotificationIntent(
-                    pendingBooking.getMentee().getId(), "BOOKING_AUTO_REJECTED",
+                    pendingBooking.getMenteeUserId(), "BOOKING_AUTO_REJECTED",
                     "Yêu cầu đặt lịch không còn hiệu lực",
                     "Yêu cầu đặt lịch của bạn đã bị từ chối: " + reason,
                     "BOOKING", pendingBooking.getId(), "/bookings/" + pendingBooking.getId()));

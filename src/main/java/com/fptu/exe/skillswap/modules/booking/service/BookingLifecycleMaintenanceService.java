@@ -14,9 +14,8 @@ import com.fptu.exe.skillswap.modules.booking.domain.SessionParticipantRole;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorDisciplineCommandPort;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
@@ -136,7 +135,7 @@ public class BookingLifecycleMaintenanceService {
         bookingRepository.saveAll(pendingBookings);
         for (Booking booking : pendingBookings) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentee().getId(),
+                    booking.getMenteeUserId(),
                     NotificationType.BOOKING_AUTO_REJECTED,
                     "Yêu cầu đặt lịch không còn hiệu lực",
                     buildAutoRejectedMessage(reason),
@@ -145,7 +144,7 @@ public class BookingLifecycleMaintenanceService {
             ));
             eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                     booking.getId(),
-                    booking.getMentee().getId(),
+                    booking.getMenteeUserId(),
                     booking.getMentorUserId(),
                     booking.getStatus(),
                     "Yêu cầu đặt lịch không còn hiệu lực.",
@@ -175,7 +174,7 @@ public class BookingLifecycleMaintenanceService {
         bookingRepository.saveAll(staleBookings);
         for (Booking booking : staleBookings) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentee().getId(), NotificationType.BOOKING_REQUEST_EXPIRED,
+                    booking.getMenteeUserId(), NotificationType.BOOKING_REQUEST_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì mentor chưa phản hồi đúng hạn. Bạn có thể chọn khung giờ khác để đặt lịch lại.",
                     "BOOKING", booking.getId()));
@@ -185,7 +184,7 @@ public class BookingLifecycleMaintenanceService {
                     "Một yêu cầu booking chưa được phản hồi đã hết hạn. Khung giờ hiện có thể nhận yêu cầu khác.",
                     "BOOKING", booking.getId()));
             eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
-                    booking.getId(), booking.getMentee().getId(), booking.getMentorUserId(),
+                    booking.getId(), booking.getMenteeUserId(), booking.getMentorUserId(),
                     booking.getStatus(), "Yêu cầu đặt lịch đã hết hạn.",
                     booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()));
         }
@@ -231,7 +230,7 @@ public class BookingLifecycleMaintenanceService {
         bookingRepository.saveAll(expiredBookings);
         for (Booking booking : expiredBookings) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentee().getId(), NotificationType.BOOKING_PAYMENT_EXPIRED,
+                    booking.getMenteeUserId(), NotificationType.BOOKING_PAYMENT_EXPIRED,
                     "Yêu cầu đặt lịch đã hết hạn thanh toán",
                     "Yêu cầu đặt lịch của bạn đã tự động hết hạn vì chưa hoàn tất thanh toán trong vòng "
                             + BookingDeadlinePolicy.paymentDeadlineText() + ".",
@@ -242,7 +241,7 @@ public class BookingLifecycleMaintenanceService {
                     "Mentee chưa hoàn tất thanh toán đúng hạn. Khung giờ mentoring hiện có thể nhận yêu cầu khác.",
                     "BOOKING", booking.getId()));
             eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
-                    booking.getId(), booking.getMentee().getId(), booking.getMentorUserId(),
+                    booking.getId(), booking.getMenteeUserId(), booking.getMentorUserId(),
                     booking.getStatus(), "Yêu cầu đặt lịch đã hết hạn thanh toán.",
                     booking.getUpdatedAt() != null ? booking.getUpdatedAt() : timeProvider.nowBusiness()));
         }
@@ -502,15 +501,16 @@ public class BookingLifecycleMaintenanceService {
         if (userQueryPort == null) {
             return;
         }
-        List<User> admins = new ArrayList<>();
-        admins.addAll(userQueryPort.findUsersByRole(RoleCode.ADMIN));
-        admins.addAll(userQueryPort.findUsersByRole(RoleCode.SYSTEM_ADMIN));
-        Map<UUID, User> activeAdmins = admins.stream()
-                .filter(u -> u.getStatus() == UserStatus.ACTIVE)
-                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
-        for (User admin : activeAdmins.values()) {
+        List<UUID> admins = new ArrayList<>();
+        userQueryPort.findUsersByRole(RoleCode.ADMIN).forEach(user -> admins.add(user.getId()));
+        userQueryPort.findUsersByRole(RoleCode.SYSTEM_ADMIN).forEach(user -> admins.add(user.getId()));
+        Map<UUID, UserSummaryRecord> activeAdmins = admins.stream()
+                .map(userId -> userQueryPort.findUserSummaryById(userId).orElse(null))
+                .filter(summary -> summary != null && summary.isActive())
+                .collect(Collectors.toMap(UserSummaryRecord::userId, summary -> summary, (a, b) -> a));
+        for (UserSummaryRecord admin : activeAdmins.values()) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    admin.getId(),
+                    admin.userId(),
                     NotificationType.ADMIN_DISPUTE_SLA_BREACH,
                     "Cảnh báo SLA Khiếu nại Booking",
                     "Booking #" + booking.getId() + " có khiếu nại chưa được Admin xử lý sau 48 giờ.",
@@ -552,8 +552,8 @@ public class BookingLifecycleMaintenanceService {
     }
 
     private void notifyMentee(Booking booking, String title, String message) {
-        if (booking.getMentee() != null) eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentee().getId(), NotificationType.SESSION_COMPLETED, title, message, "BOOKING", booking.getId()));
+        if (booking.getMenteeUserId() != null) eventPublisher.publishEvent(new NotificationEvent(
+                booking.getMenteeUserId(), NotificationType.SESSION_COMPLETED, title, message, "BOOKING", booking.getId()));
     }
 
     private String buildAutoRejectedMessage(String reason) {

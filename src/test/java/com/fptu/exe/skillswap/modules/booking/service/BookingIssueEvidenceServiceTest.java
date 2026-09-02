@@ -45,7 +45,7 @@ class BookingIssueEvidenceServiceTest {
         User mentee = org.mockito.Mockito.mock(User.class);
         org.mockito.Mockito.when(mentee.getId()).thenReturn(menteeId);
         booking = Booking.builder().id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(UUID.randomUUID())
                 .selectedEndTimeUtc(Instant.parse("2026-08-25T07:30:00Z")).build();
     }

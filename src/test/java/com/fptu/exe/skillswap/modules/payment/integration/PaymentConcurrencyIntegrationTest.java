@@ -122,7 +122,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
 
             booking = Booking.builder()
                     .id(UUID.randomUUID())
-                    .mentee(mentee)
+                    .menteeUserId(mentee.getId())
                     .mentorUserId(mentor.getId())
                     .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                     .learningGoalTitle("Test Booking")

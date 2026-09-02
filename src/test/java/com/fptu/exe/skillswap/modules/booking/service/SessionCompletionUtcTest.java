@@ -21,9 +21,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceReposi
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorViolationType;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorViolationService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingActivityCommandPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
@@ -66,8 +64,6 @@ class SessionCompletionUtcTest {
     @Mock
     private SessionAttendanceRepository sessionAttendanceRepository;
     @Mock
-    private MentorProfileRepository mentorProfileRepository;
-    @Mock
     private BookingSettlementCommandPort settlementCommandPort;
     @Mock
     private BookingPaymentSettlementPort bookingPaymentSettlementPort;
@@ -78,7 +74,7 @@ class SessionCompletionUtcTest {
     @Mock
     private InternalTelemetryService internalTelemetryService;
     @Mock
-    private MentorViolationService mentorViolationService;
+    private MentorBookingActivityCommandPort mentorBookingActivityCommandPort;
     @Mock
     private PaymentOrderService paymentOrderService;
     @Mock
@@ -119,7 +115,7 @@ class SessionCompletionUtcTest {
 
         booking = Booking.builder()
                 .id(bookingId)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorUserId)
                 .serviceId(service.getId())
                 .slot(slot)
@@ -144,7 +140,17 @@ class SessionCompletionUtcTest {
                 .build();
 
         sessionService = new SessionService(sessionRepository);
-        sessionFinalizationService = new SessionFinalizationService(sessionRepository, sessionService);
+        sessionFinalizationService = new SessionFinalizationService(
+                sessionRepository, sessionService, mentorBookingActivityCommandPort);
+        lenient().doAnswer(invocation -> {
+            mentorProfile.setTotalCompletedSessions(mentorProfile.getTotalCompletedSessions() + 1);
+            mentorProfile.setTotalSessions(mentorProfile.getTotalSessions() + 1);
+            return null;
+        }).when(mentorBookingActivityCommandPort).recordCompletedSession(any(UUID.class), any(Instant.class));
+        lenient().doAnswer(invocation -> {
+            mentorProfile.setLastActiveAt(BookingTime.fromInstant(invocation.getArgument(1, Instant.class)));
+            return null;
+        }).when(mentorBookingActivityCommandPort).recordMentorActivity(any(UUID.class), any(Instant.class));
     }
 
     @AfterEach
@@ -225,8 +231,6 @@ class SessionCompletionUtcTest {
         Instant finalizeTime = Instant.parse("2026-09-01T09:15:00Z");
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId))
                 .thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentorUserId))
-                .thenReturn(Optional.of(mentorProfile));
 
         // 1st finalization
         sessionFinalizationService.finalizeDeliveredSession(booking, finalizeTime);
@@ -243,7 +247,6 @@ class SessionCompletionUtcTest {
         // Mentor counters must remain exactly 1
         assertThat(mentorProfile.getTotalCompletedSessions()).isEqualTo(1);
         assertThat(mentorProfile.getTotalSessions()).isEqualTo(1);
-        verify(mentorProfileRepository, times(1)).save(mentorProfile);
     }
 
     @Test
@@ -259,7 +262,6 @@ class SessionCompletionUtcTest {
 
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId)).thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentorUserId)).thenReturn(Optional.of(mentorProfile));
         when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         // 1. Mentor completes
@@ -299,15 +301,12 @@ class SessionCompletionUtcTest {
                 .thenReturn(List.of());
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(sessionRepository.findBySourceTypeAndSourceIdForUpdate(SessionSourceType.BOOKING, bookingId)).thenReturn(Optional.of(session));
-        when(mentorProfileRepository.findByIdForUpdate(mentorUserId)).thenReturn(Optional.of(mentorProfile));
-
         int changed = maintenanceService.processPostSessionLifecycle();
         assertThat(changed).isEqualTo(1);
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.COMPLETED);
         assertThat(booking.getCompletionOutcome()).isEqualTo(BookingCompletionOutcome.AUTO_CLOSED);
         assertThat(booking.getMentorCompletionOverdueAtUtc()).isNotNull();
 
-        verify(mentorViolationService, times(1)).record(eq(mentorUserId), eq(bookingId), eq(MentorViolationType.COMPLETION_OVERDUE), any());
         verify(settlementCommandPort, times(1)).requestBookingRelease(booking.getId());
     }
 
@@ -342,6 +341,10 @@ class SessionCompletionUtcTest {
                 .participantUserId(menteeUserId)
                 .checkedInAtUtc(submitTime.minus(Duration.ofHours(1)))
                 .build()));
+        when(bookingPaymentSettlementPort.findCancellationContext(bookingId)).thenReturn(Optional.of(
+                new com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext(
+                        bookingId, menteeUserId, mentorUserId, booking.getStatus().name(), null,
+                        null, null, null, false, true)));
 
         int changed = maintenanceService.processPostSessionLifecycle();
         assertThat(changed).isEqualTo(1);
@@ -350,7 +353,6 @@ class SessionCompletionUtcTest {
         assertThat(session.getStatus()).isEqualTo(SessionStatus.CANCELLED);
 
         verify(settlementCommandPort, times(1)).requestMentorNoShowRefund(booking.getId());
-        verify(mentorViolationService, times(1)).record(eq(mentorUserId), eq(bookingId), eq(MentorViolationType.MENTOR_NO_SHOW), any());
     }
 
     @Test

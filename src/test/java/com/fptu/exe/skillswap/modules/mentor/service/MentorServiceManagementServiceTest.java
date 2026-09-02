@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.MentorServiceRetirementPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -47,6 +49,12 @@ class MentorServiceManagementServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private UserQueryPort userQueryPort;
+
+    @Mock
+    private MentorServiceRetirementPort mentorServiceRetirementPort;
 
     @Mock
     private MentorProfileService mentorProfileService;
@@ -102,6 +110,8 @@ class MentorServiceManagementServiceTest {
                 .build();
 
         org.mockito.Mockito.lenient().when(userRepository.findById(mentorUserId)).thenReturn(Optional.of(User.builder().id(mentorUserId).build()));
+        org.mockito.Mockito.lenient().when(userQueryPort.findUserById(mentorUserId))
+                .thenReturn(Optional.of(User.builder().id(mentorUserId).build()));
         org.mockito.Mockito.lenient().when(mentorProfileRepository.findWithUserByUserId(mentorUserId)).thenReturn(Optional.of(mentorProfile));
         org.mockito.Mockito.lenient().when(mentorProfileService.hasCompletedMentorProfile(mentorUserId)).thenReturn(true);
     }

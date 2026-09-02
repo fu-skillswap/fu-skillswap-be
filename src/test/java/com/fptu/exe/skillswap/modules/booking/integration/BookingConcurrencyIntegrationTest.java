@@ -282,7 +282,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             for (int index = 0; index < 4; index++) {
                 bookingRepository.save( com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                        .mentee(mentee)
+                        .menteeUserId(mentee.getId())
                         .mentorUserId(mentorProfile.getUserId())
                         .slot(existingSlot)
                         .status(BookingStatus.PENDING)
@@ -320,7 +320,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             boolean firstSucceeded = getFuture(first);
             boolean secondSucceeded = getFuture(second);
             assertEquals(1, (firstSucceeded ? 1 : 0) + (secondSucceeded ? 1 : 0));
-            assertEquals(5L, bookingRepository.countByMenteeIdAndStatus(setupData.menteeId(), BookingStatus.PENDING));
+            assertEquals(5L, bookingRepository.countByMenteeUserIdAndStatus(setupData.menteeId(), BookingStatus.PENDING));
         } finally {
             executorService.shutdownNow();
         }
@@ -618,7 +618,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                    .mentee(mentee1)
+                    .menteeUserId(mentee1.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .slot(slot1)
                     .learningGoalTitle("Goal 1")
@@ -630,7 +630,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                    .mentee(mentee2)
+                    .menteeUserId(mentee2.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .slot(slot2)
                     .learningGoalTitle("Goal 2")
@@ -642,7 +642,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking3 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                    .mentee(mentee3)
+                    .menteeUserId(mentee3.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .slot(slot3)
                     .learningGoalTitle("Goal 3")
@@ -750,7 +750,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking1 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                    .mentee(mentee1)
+                    .menteeUserId(mentee1.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .slot(slot1)
                     .learningGoalTitle("Completed Booking")
@@ -762,7 +762,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             com.fptu.exe.skillswap.modules.booking.domain.Booking booking2 = bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                    .mentee(mentee2)
+                    .menteeUserId(mentee2.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .slot(slot2)
                     .learningGoalTitle("Accepted Booking")

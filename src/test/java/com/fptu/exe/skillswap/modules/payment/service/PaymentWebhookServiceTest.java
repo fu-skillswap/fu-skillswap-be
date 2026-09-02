@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttemptStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentProvider;
+import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentWebhookRequest;
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProvider;
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
@@ -85,7 +87,7 @@ class PaymentWebhookServiceTest {
 
         verify(bookingPaymentSettlementPort).expirePayment(
                 bookingId, deadline, "Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
-        verify(settlementService).handlePaidBookingCancelledByMentor(any(), order);
+        verify(settlementService).handlePaidBookingCancelledByMentor(any(), eq(order));
     }
 
     @Test
@@ -109,15 +111,28 @@ class PaymentWebhookServiceTest {
     void missingBookingContract_shouldFailExplicitly() {
         PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class));
 
-        assertThrows(BaseException.class, () -> service.finalizePaidBooking(
+        // This is a programmer/precondition error: the caller must supply its already-locked
+        // immutable booking snapshot, so the method intentionally uses IllegalArgumentException.
+        assertThrows(IllegalArgumentException.class, () -> service.finalizePaidBooking(
                 PaymentOrder.builder().build(), null));
     }
 
     @Test
-    void invalidWebhookRequest_shouldBeRejectedBeforeProviderProcessing() {
-        PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class));
+    void invalidWebhookRequest_shouldBeRejectedByProviderValidation() {
+        PaymentGatewayProviderFactory factory = mock(PaymentGatewayProviderFactory.class);
+        PaymentGatewayProvider provider = mock(PaymentGatewayProvider.class);
+        PaymentWebhookService service = newService(mock(BookingPaymentSettlementPort.class), mock(SettlementService.class), factory);
+        PaymentWebhookRequest request = mock(PaymentWebhookRequest.class);
+        PaymentWebhookRequest.PaymentWebhookDataRequest data = mock(PaymentWebhookRequest.PaymentWebhookDataRequest.class);
+        when(request.data()).thenReturn(data);
+        when(data.orderCode()).thenReturn(123L);
+        when(factory.getProvider(PaymentProvider.PAYOS)).thenReturn(provider);
+        when(provider.verifyWebhook(request)).thenThrow(new BaseException(
+                com.fptu.exe.skillswap.shared.exception.ErrorCode.UNAUTHORIZED,
+                "Webhook PayOS không hợp lệ hoặc sai chữ ký"));
 
-        assertThrows(BaseException.class, () -> service.handleWebhook(null));
+        assertThrows(BaseException.class, () -> service.handleWebhook(request));
+        verify(provider).verifyWebhook(request);
     }
 
     @Test
@@ -168,6 +183,12 @@ class PaymentWebhookServiceTest {
 
     private PaymentWebhookService newService(BookingPaymentSettlementPort bookingPaymentSettlementPort,
                                              SettlementService settlementService) {
+        return newService(bookingPaymentSettlementPort, settlementService, mock(PaymentGatewayProviderFactory.class));
+    }
+
+    private PaymentWebhookService newService(BookingPaymentSettlementPort bookingPaymentSettlementPort,
+                                             SettlementService settlementService,
+                                             PaymentGatewayProviderFactory paymentGatewayProviderFactory) {
         return new PaymentWebhookService(
                 mock(PaymentOrderRepository.class),
                 mock(PaymentAttemptRepository.class),
@@ -175,7 +196,7 @@ class PaymentWebhookServiceTest {
                 mock(CouponService.class),
                 settlementService,
                 bookingPaymentSettlementPort,
-                mock(PaymentGatewayProviderFactory.class),
+                paymentGatewayProviderFactory,
                 mock(PaymentLifecycleService.class),
                 mock(PaymentResponseMapper.class),
                 mock(InternalTelemetryService.class),

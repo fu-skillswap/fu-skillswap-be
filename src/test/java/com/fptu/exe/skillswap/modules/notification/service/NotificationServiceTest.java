@@ -70,7 +70,7 @@ class NotificationServiceTest {
 
     @Test
     void createNotification_shouldPersistUnreadNotification() {
-        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(mockUser));
+        when(userQueryPort.existsById(userId)).thenReturn(true);
         when(notificationRepository.save(any(Notification.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 

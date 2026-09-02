@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
-import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.shared.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.PublicUserQueryPort;
@@ -127,8 +127,6 @@ class BlogEngagementServiceTest {
         when(blogBookmarkRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false, true);
         when(blogPostLikeRepository.existsByPostIdAndUserId(postId, userId)).thenReturn(false);
         when(entityManager.getReference(BlogPost.class, postId)).thenReturn(post);
-        when(entityManager.getReference(User.class, userId)).thenReturn(new User());
-
         service.bookmark(principal, postId);
 
         verify(blogBookmarkRepository).save(any());

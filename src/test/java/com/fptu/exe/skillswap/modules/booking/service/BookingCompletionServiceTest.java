@@ -249,7 +249,7 @@ class BookingCompletionServiceTest {
         verify(sessionFinalizationService).finalizeDisputedSessionWithoutCompletionCounter(
                 org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
         verify(settlementCommandPort).requestAdminIssueResolution(
-                booking.getId(), org.mockito.ArgumentMatchers.any(UUID.class));
+                org.mockito.ArgumentMatchers.eq(booking.getId()), org.mockito.ArgumentMatchers.any(UUID.class));
     }
 
     @Test
@@ -298,7 +298,8 @@ class BookingCompletionServiceTest {
         assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.UNDER_REVIEW, booking.getCompletionOutcome());
         assertEquals(com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolutionStatus.REVERSED, originalResolution.getStatus());
         verify(settlementCommandPort).requestResolutionReversal(
-                booking.getId(), originalResolution.getId(), org.mockito.ArgumentMatchers.any(UUID.class));
+                org.mockito.ArgumentMatchers.eq(booking.getId()), org.mockito.ArgumentMatchers.eq(originalResolution.getId()),
+                org.mockito.ArgumentMatchers.any(UUID.class));
     }
 
     @Test
@@ -351,7 +352,7 @@ class BookingCompletionServiceTest {
         LocalDateTime now = LocalDateTime.ofInstant(FIXED_NOW, APP_ZONE);
         return Booking.builder()
                 .id(bookingId)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentor.getUserId())
                 .status(status)
                 .selectedStartTime(now.minusHours(2))

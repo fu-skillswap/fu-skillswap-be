@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSnapsho
 import com.fptu.exe.skillswap.modules.booking.port.BookingIssueResolutionSettlementUpdate;
 import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementSnapshot;
 import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSnapshot;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatPort;
 import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
@@ -39,7 +39,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
     private final BookingIssueResolutionRepository bookingIssueResolutionRepository;
     private final BookingPaymentQueryPort bookingPaymentQueryPort;
     private final SessionService sessionService;
-    private final ConversationService conversationService;
+    private final BookingChatPort bookingChatPort;
     private final UserQueryPort userQueryPort;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -132,7 +132,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
                 ? booking.getAcceptedAtUtc() : BookingTime.toInstant(booking.getAcceptedAt());
         return new BookingPaymentSnapshot(
                 booking.getId(),
-                booking.getMentee() == null ? null : booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getServiceId(),
                 booking.getServicePriceScoinSnapshot(),
@@ -146,7 +146,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
     private void createPaidSideEffects(Booking booking, Instant eventAtUtc) {
         createSessionAndConversation(booking);
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
-                booking.getId(), booking.getMentee().getId(), booking.getMentorUserId(), booking.getStatus(),
+                booking.getId(), booking.getMenteeUserId(), booking.getMentorUserId(), booking.getStatus(),
                 "Thanh toán thành công. Lịch học đã được xác nhận.",
                 booking.getUpdatedAt() != null ? booking.getUpdatedAt() : BookingTime.fromInstant(eventAtUtc)));
         eventPublisher.publishEvent(BookingCalendarLifecycleEvent.of(
@@ -156,7 +156,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
                     booking.getMentorUserId(),
                     com.fptu.exe.skillswap.modules.notification.NotificationType.BOOKING_PAYMENT_CONFIRMED,
                     "Mentee đã hoàn tất thanh toán và lịch đã được xác nhận",
-                    booking.getMentee().getFullName() + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
+                    menteeName(booking) + " đã hoàn tất thanh toán cho lịch mentoring với bạn.",
                     "BOOKING", booking.getId()));
         }
         var mentorUser = booking.getMentorUserId() != null && userQueryPort != null
@@ -166,7 +166,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
                 .recipientEmail(mentorUser == null ? null : mentorUser.email())
                 .recipientName(mentorUser == null ? null : mentorUser.fullName())
-                .actorName(booking.getMentee().getFullName())
+                .actorName(menteeName(booking))
                 .bookingStartTime(booking.getSelectedStartTime())
                 .bookingEndTime(booking.getSelectedEndTime())
                 .learningGoalTitle(booking.getLearningGoalTitle())
@@ -185,9 +185,9 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
         if (sessionService != null) {
             sessionService.createForAcceptedBooking(booking);
         }
-        if (conversationService != null) {
-            conversationService.createDirectForAcceptedBooking(
-                    booking.getId(), booking.getMentorUserId(), booking.getMentee() == null ? null : booking.getMentee().getId());
+        if (bookingChatPort != null) {
+            bookingChatPort.createDirectForAcceptedBooking(
+                    booking.getId(), booking.getMentorUserId(), booking.getMenteeUserId());
         }
     }
 
@@ -206,7 +206,7 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
 
         return new BookingCancellationContext(
                 booking.getId(),
-                booking.getMentee() == null ? null : booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getStatus() == null ? null : booking.getStatus().name(),
                 booking.getCancelReason(),
@@ -216,5 +216,12 @@ public class BookingPaymentSettlementAdapter implements BookingPaymentSettlement
                 BookingDeadlinePolicy.isLateCancellation(minutesUntilStart),
                 cancelled && acceptedAtUtc != null
         );
+    }
+
+    private String menteeName(Booking booking) {
+        if (booking == null || booking.getMenteeUserId() == null || userQueryPort == null) return "Mentee";
+        return userQueryPort.findUserSummaryById(booking.getMenteeUserId())
+                .map(com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord::fullName)
+                .orElse("Mentee");
     }
 }

@@ -6,8 +6,11 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.port.BookingCancellationContext;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSnapshot;
 import com.fptu.exe.skillswap.modules.booking.service.BookingQueryPortImpl;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
@@ -25,8 +28,6 @@ import com.fptu.exe.skillswap.modules.payment.integration.payos.PayOsPaymentGate
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -40,6 +41,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -73,6 +75,8 @@ class PaymentOrderServiceTest {
     @Mock
     private BookingRepository bookingRepository;
     @Mock
+    private UserQueryPort userQueryPort;
+    @Mock
     private BookingPaymentSettlementPort bookingPaymentSettlementPort;
     @Mock
     private PaymentOrderRepository paymentOrderRepository;
@@ -88,13 +92,6 @@ class PaymentOrderServiceTest {
     private PayOsGateway payOsGateway;
     @Mock
     private SettlementService settlementService;
-    @Mock
-    private SessionService sessionService;
-    @Mock
-    private com.fptu.exe.skillswap.modules.chat.service.ConversationService conversationService;
-    @Mock
-    private NotificationService notificationService;
-    @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private InternalTelemetryService internalTelemetryService;
@@ -129,6 +126,7 @@ class PaymentOrderServiceTest {
 
         paymentOrderService = new PaymentOrderService(
                 new BookingQueryPortImpl(bookingRepository),
+                userQueryPort,
                 bookingPaymentSettlementPort,
                 paymentOrderRepository,
                 paymentAttemptRepository,
@@ -138,9 +136,6 @@ class PaymentOrderServiceTest {
                 paymentProperties,
                 new PaymentGatewayProviderFactory(List.of(new PayOsPaymentGatewayProvider(payOsGateway))),
                 settlementService,
-                sessionService,
-                conversationService,
-                notificationService,
                 eventPublisher,
                 internalTelemetryService,
                 transactionTemplate
@@ -165,13 +160,23 @@ class PaymentOrderServiceTest {
 
         booking = Booking.builder()
                 .id(bookingId)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorId)
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .serviceIsFreeSnapshot(false)
                 .serviceDurationSnapshot(60)
                 .servicePriceScoinSnapshot(72_000)
                 .build();
+        org.mockito.Mockito.lenient().when(bookingPaymentSettlementPort.findPaymentSnapshotForUpdate(bookingId))
+                .thenReturn(Optional.of(new BookingPaymentSnapshot(
+                        bookingId, menteeId, mentorId, null, 72_000, false,
+                        "ACCEPTED_AWAITING_PAYMENT", Instant.now().minusSeconds(60),
+                        Instant.now().plusSeconds(3600), Instant.now().plusSeconds(900))));
+        org.mockito.Mockito.lenient().when(bookingPaymentSettlementPort.findCancellationContext(bookingId))
+                .thenReturn(Optional.of(new BookingCancellationContext(
+                        bookingId, menteeId, mentorId, "CANCELLED_BY_MENTEE", null,
+                        Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600),
+                        Instant.now(), false, true)));
         java.util.Map<CreditOriginType, Integer> defaultBalances = new java.util.EnumMap<>(CreditOriginType.class);
         for (CreditOriginType type : CreditOriginType.values()) {
             defaultBalances.put(type, 1000000);
@@ -218,7 +223,7 @@ class PaymentOrderServiceTest {
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(72_000)))
+        when(campaignService.resolveCampaignCredit(eq(menteeId), any(BookingCheckoutSnapshot.class), eq(72_000)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
         when(creditLedgerService.reserveCredit(eq(menteeId), eq(72_000), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
                 .thenReturn(List.of(CreditLedgerEntry.builder()
@@ -248,7 +253,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId))
                 .thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(72_000)))
+        when(campaignService.resolveCampaignCredit(eq(menteeId), any(BookingCheckoutSnapshot.class), eq(72_000)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
         when(creditLedgerService.getAvailableBalanceByOrigin(menteeId))
                 .thenReturn(new java.util.EnumMap<>(CreditOriginType.class));
@@ -426,8 +431,6 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
         when(paymentAttemptRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -505,7 +508,6 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(request)).thenReturn(notPaid);
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -546,7 +548,6 @@ class PaymentOrderServiceTest {
         // Optimistic read before entering the transaction
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
         // Simulate already-processed event
@@ -632,7 +633,6 @@ class PaymentOrderServiceTest {
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
         when(paymentAttemptRepository.existsByProviderEventId("evt-" + orderCode)).thenReturn(false);
@@ -672,7 +672,6 @@ class PaymentOrderServiceTest {
         when(payOsGateway.verifyWebhook(request)).thenReturn(verifiedWebhook(String.valueOf(orderCode), "txn-surplus"));
         when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
         when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
         when(paymentOrderRepository.existsByProviderEventId(any())).thenReturn(false);
@@ -717,9 +716,12 @@ class PaymentOrderServiceTest {
         when(paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(order.getId())).thenReturn(Optional.of(attempt));
         when(payOsGateway.getPaymentLink(123456789L))
                 .thenReturn(new PayOsGateway.PaymentLinkDetails("pl-123", "PAID", LocalDateTime.now().minusMinutes(5), null));
-        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenAnswer(invocation -> {
+        when(bookingPaymentSettlementPort.findPaymentSnapshotForUpdate(bookingId)).thenAnswer(invocation -> {
             acquiredLocks.add("booking");
-            return Optional.of(booking);
+            return Optional.of(new BookingPaymentSnapshot(
+                    bookingId, menteeId, mentorId, null, 100, false,
+                    "ACCEPTED_AWAITING_PAYMENT", Instant.now().minusSeconds(60),
+                    Instant.now().plusSeconds(3600), Instant.now().plusSeconds(900)));
         });
         when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenAnswer(invocation -> {
             acquiredLocks.add("payment-order");
@@ -729,7 +731,6 @@ class PaymentOrderServiceTest {
             acquiredLocks.add("payment-attempt");
             return Optional.of(attempt);
         });
-        when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
         when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -741,8 +742,8 @@ class PaymentOrderServiceTest {
 
         assertEquals(PaymentOrderStatus.PAID, response.status());
         assertEquals(PaymentAttemptStatus.SUCCEEDED, attempt.getStatus());
-        assertEquals(BookingStatus.PAID, booking.getStatus());
         assertEquals(List.of("booking", "payment-order", "payment-attempt"), acquiredLocks);
+        verify(bookingPaymentSettlementPort).confirmPayment(eq(bookingId), any(Instant.class));
         verify(creditLedgerService).issueCredit(eq(menteeId), eq(CreditOriginType.MANUAL), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), eq(50), any());
         verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), eq(order.getId()), any());
     }
@@ -791,7 +792,7 @@ class PaymentOrderServiceTest {
 
         Booking freeBooking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .mentorUserId(mentorUser.getId())
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .serviceIsFreeSnapshot(true)
@@ -834,6 +835,7 @@ class PaymentOrderServiceTest {
 
         PaymentOrderService customService = new PaymentOrderService(
                 new BookingQueryPortImpl(bookingRepository),
+                userQueryPort,
                 bookingPaymentSettlementPort,
                 paymentOrderRepository,
                 paymentAttemptRepository,
@@ -843,9 +845,6 @@ class PaymentOrderServiceTest {
                 props,
                 new PaymentGatewayProviderFactory(List.of(new PayOsPaymentGatewayProvider(payOsGateway))),
                 settlementService,
-                sessionService,
-                conversationService,
-                notificationService,
                 eventPublisher,
                 internalTelemetryService,
                 transactionTemplate
@@ -855,7 +854,7 @@ class PaymentOrderServiceTest {
         when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.empty());
         when(couponService.resolveCoupon(null)).thenReturn(null);
         // With surcharge-added price = 79,200
-        when(campaignService.resolveCampaignCredit(eq(menteeId), eq(booking), eq(79_200)))
+        when(campaignService.resolveCampaignCredit(eq(menteeId), any(BookingCheckoutSnapshot.class), eq(79_200)))
                 .thenReturn(CampaignService.CampaignCreditApplication.none());
         when(creditLedgerService.reserveCredit(eq(menteeId), eq(79_200), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any()))
                 .thenReturn(List.of(CreditLedgerEntry.builder()

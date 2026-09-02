@@ -104,7 +104,7 @@ class AdminOperationsWorkbenchIntegrationTest {
                 .build());
 
         underReviewBooking = bookingRepository.save(Booking.builder()
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .mentorUserId(mentorUser.getId())
                 .status(BookingStatus.UNDER_REVIEW)
                 .learningGoalTitle("Need architecture review")

@@ -36,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -67,6 +68,7 @@ class SessionFeedbackServiceTest {
     private UUID mentorId;
     private Booking booking;
     private MentorProfile mentorProfile;
+    private User mentee;
     private User mentor;
 
     @BeforeEach
@@ -74,7 +76,7 @@ class SessionFeedbackServiceTest {
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
 
-        User mentee = new User();
+        mentee = new User();
         mentee.setId(menteeId);
         mentee.setFullName("Mentee");
 
@@ -91,10 +93,11 @@ class SessionFeedbackServiceTest {
         booking.setId(UUID.randomUUID());
         BookingStateTestSupport.setStatus(booking, BookingStatus.COMPLETED);
         booking.setCompletionOutcome(BookingCompletionOutcome.USER_CONFIRMED);
-        booking.setMentee(mentee);
+        booking.setMenteeUserId(menteeId);
         booking.setMentorUserId(mentorId);
-        when(userQueryPort.existsById(mentorId)).thenReturn(true);
-        when(entityManager.getReference(User.class, mentorId)).thenReturn(mentor);
+        lenient().when(userQueryPort.existsById(mentorId)).thenReturn(true);
+        lenient().when(entityManager.getReference(User.class, mentorId)).thenReturn(mentor);
+        lenient().when(entityManager.getReference(User.class, menteeId)).thenReturn(mentee);
     }
 
     @Test
@@ -223,7 +226,7 @@ class SessionFeedbackServiceTest {
         SessionFeedback feedback = SessionFeedback.builder()
                 .id(UUID.randomUUID())
                 .booking(booking)
-                .reviewer(booking.getMentee())
+                .reviewer(mentee)
                 .reviewee(mentor)
                 .rating(5)
                 .comment("Excellent mentor")
@@ -244,7 +247,7 @@ class SessionFeedbackServiceTest {
         SessionFeedback feedback = SessionFeedback.builder()
                 .id(UUID.randomUUID())
                 .booking(booking)
-                .reviewer(booking.getMentee())
+                .reviewer(mentee)
                 .reviewee(mentor)
                 .rating(4)
                 .comment("Good session")

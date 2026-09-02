@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.identity.port.StudentProfileRecord;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefit;
 import com.fptu.exe.skillswap.modules.payment.domain.CampaignBenefitType;
@@ -46,7 +46,7 @@ public class CampaignService {
     }
 
     @Transactional
-    public CampaignCreditApplication resolveCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
+    public CampaignCreditApplication resolveCampaignCredit(UUID userId, BookingCheckoutSnapshot booking, int amountAfterCouponScoin) {
         return resolveCampaignCredit(userId, booking, amountAfterCouponScoin, true);
     }
 
@@ -55,13 +55,13 @@ public class CampaignService {
      * campaign budget or acquire the checkout row lock.
      */
     @Transactional(readOnly = true)
-    public CampaignCreditApplication estimateCampaignCredit(UUID userId, Booking booking, int amountAfterCouponScoin) {
+    public CampaignCreditApplication estimateCampaignCredit(UUID userId, BookingCheckoutSnapshot booking, int amountAfterCouponScoin) {
         return resolveCampaignCredit(userId, booking, amountAfterCouponScoin, false);
     }
 
     private CampaignCreditApplication resolveCampaignCredit(
             UUID userId,
-            Booking booking,
+            BookingCheckoutSnapshot booking,
             int amountAfterCouponScoin,
             boolean lockCampaign
     ) {
@@ -69,9 +69,9 @@ public class CampaignService {
             return CampaignCreditApplication.none();
         }
 
-        User user = userQueryPort.findUserById(userId)
+        UserSummaryRecord user = userQueryPort.findUserSummaryById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng để áp campaign"));
-        StudentProfile studentProfile = userQueryPort.findStudentProfileWithDetailsByUserId(userId).orElse(null);
+        StudentProfileRecord studentProfile = userQueryPort.findStudentProfileRecordByUserId(userId).orElse(null);
 
         CampaignCreditApplication bestMatch = CampaignCreditApplication.none();
         for (UUID campaignId : campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)) {
@@ -118,24 +118,24 @@ public class CampaignService {
         return campaign.getEndAt() == null || !timeProvider.nowBusiness().isAfter(campaign.getEndAt());
     }
 
-    private boolean matchesAudience(Campaign campaign, User user, StudentProfile studentProfile, Booking booking) {
+    private boolean matchesAudience(Campaign campaign, UserSummaryRecord user, StudentProfileRecord studentProfile, BookingCheckoutSnapshot booking) {
         if (!campaign.getAudienceRoleCodes().isEmpty()
-                && user.getRoles().stream().map(Enum::name).noneMatch(campaign.getAudienceRoleCodes()::contains)) {
+                && (user.roles() == null || user.roles().stream().map(Enum::name).noneMatch(campaign.getAudienceRoleCodes()::contains))) {
             return false;
         }
         if (!campaign.getAudienceCampusIds().isEmpty()
-                && (studentProfile == null || studentProfile.getCampus() == null
-                || !campaign.getAudienceCampusIds().contains(studentProfile.getCampus().getId()))) {
+                && (studentProfile == null || studentProfile.campusId() == null
+                || !campaign.getAudienceCampusIds().contains(studentProfile.campusId()))) {
             return false;
         }
         if (!campaign.getAudienceProgramIds().isEmpty()
-                && (studentProfile == null || studentProfile.getProgram() == null
-                || !campaign.getAudienceProgramIds().contains(studentProfile.getProgram().getId()))) {
+                && (studentProfile == null || studentProfile.programId() == null
+                || !campaign.getAudienceProgramIds().contains(studentProfile.programId()))) {
             return false;
         }
         if (!campaign.getAudienceSpecializationIds().isEmpty()
-                && (studentProfile == null || studentProfile.getSpecialization() == null
-                || !campaign.getAudienceSpecializationIds().contains(studentProfile.getSpecialization().getId()))) {
+                && (studentProfile == null || studentProfile.specializationId() == null
+                || !campaign.getAudienceSpecializationIds().contains(studentProfile.specializationId()))) {
             return false;
         }
         return true;

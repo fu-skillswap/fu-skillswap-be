@@ -304,7 +304,7 @@ class AdminDataCenterControllerIntegrationTest {
 
     private void seedBookings() {
         Booking asMentee = bookingRepository.save(Booking.builder()
-                .mentee(targetUser)
+                .menteeUserId(targetUser.getId())
                 .mentorUserId(anotherMentorProfile.getUserId())
                 .status(BookingStatus.PENDING)
                 .learningGoalTitle("Need architecture guidance")
@@ -313,7 +313,7 @@ class AdminDataCenterControllerIntegrationTest {
                 .build());
 
         Booking asMentor = bookingRepository.save(Booking.builder()
-                .mentee(anotherMentee)
+                .menteeUserId(anotherMentee.getId())
                 .mentorUserId(targetMentorProfile.getUserId())
                 .status(BookingStatus.PAID)
                 .learningGoalTitle("Need backend guidance")

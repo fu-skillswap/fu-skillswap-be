@@ -65,7 +65,7 @@ class SessionAttendanceServiceTest {
                 .id(bookingId)
                 .status(BookingStatus.PAID)
                 .mentorUserId(mentorId)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .selectedStartTimeUtc(START)
                 .selectedStartTime(BookingTime.fromInstant(START))
                 .selectedEndTimeUtc(END)

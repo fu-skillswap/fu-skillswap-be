@@ -344,9 +344,27 @@ public class SettlementService implements BookingSettlementCommandPort {
         int platformDebit = nonNegative(originalResolution.platformSettlementScoin());
         int menteeDebit = nonNegative(originalResolution.menteeRefundScoin());
 
-        // Verify mentor and mentee have sufficient balances before committing any debits.
+        SettlementAccount mentorAccount = mentorDebit > 0
+                ? lockMentorAccount(paymentOrder.getMentorUserId()) : null;
+        SettlementAccount platformAccount = platformDebit > 0
+                ? lockPlatformAccount() : null;
+
+        // The reversal record is the idempotency key for settlement adjustments. The credit
+        // ledger has its own operation key, but settlement accounts need an explicit guard too.
+        if ((mentorAccount != null && settlementEntryRepository
+                .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                        mentorAccount.getId(), LedgerSourceType.BOOKING_ISSUE_RESOLUTION,
+                        reversalRecord.resolutionId(), SettlementEntryType.ADJUSTMENT).isPresent())
+                || (platformAccount != null && settlementEntryRepository
+                .findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                        platformAccount.getId(), LedgerSourceType.BOOKING_ISSUE_RESOLUTION,
+                        reversalRecord.resolutionId(), SettlementEntryType.ADJUSTMENT).isPresent())) {
+            return;
+        }
+
+        // Verify every balance before committing any debits. The transaction must still be
+        // rolled back if a concurrent mutation makes a later debit fail.
         if (mentorDebit > 0) {
-            SettlementAccount mentorAccount = lockMentorAccount(paymentOrder.getMentorUserId());
             int mentorBalance = settlementBalance(mentorAccount);
             if (mentorBalance < mentorDebit) {
                 persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
@@ -355,9 +373,16 @@ public class SettlementService implements BookingSettlementCommandPort {
             }
         }
 
+        if (platformDebit > 0 && settlementBalance(platformAccount) < platformDebit) {
+            persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
+                    originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
+            return;
+        }
+
         if (menteeDebit > 0) {
-            int menteeAvailable = creditLedgerService.getAvailableBalance(bookingPaymentSettlementPort
-                    .findCancellationContext(bookingId).map(BookingCancellationContext::payerUserId).orElse(null));
+            UUID payerUserId = bookingPaymentSettlementPort.findCancellationContext(bookingId)
+                    .map(BookingCancellationContext::payerUserId).orElse(null);
+            int menteeAvailable = creditLedgerService.getAvailableBalance(payerUserId);
             if (menteeAvailable < menteeDebit) {
                 persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
                         originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
@@ -366,12 +391,10 @@ public class SettlementService implements BookingSettlementCommandPort {
         }
 
         if (mentorDebit > 0) {
-            SettlementAccount mentorAccount = lockMentorAccount(paymentOrder.getMentorUserId());
             int rows = settlementAccountRepository.deductBalanceSafely(mentorAccount.getId(), BigDecimal.valueOf(mentorDebit));
             if (rows == 0) {
-                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
-                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
-                return;
+                throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE,
+                        "Số dư mentor không đủ để reversal settlement");
             }
             settlementEntryRepository.save(SettlementEntry.builder()
                     .accountId(mentorAccount.getId())
@@ -387,8 +410,12 @@ public class SettlementService implements BookingSettlementCommandPort {
         }
 
         if (platformDebit > 0) {
-            SettlementAccount platformAccount = lockPlatformAccount();
-            settlementAccountRepository.addBalance(platformAccount.getId(), BigDecimal.valueOf(-platformDebit));
+            int rows = settlementAccountRepository.deductBalanceSafely(
+                    platformAccount.getId(), BigDecimal.valueOf(platformDebit));
+            if (rows == 0) {
+                throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE,
+                        "Số dư platform không đủ để reversal settlement");
+            }
             settlementEntryRepository.save(SettlementEntry.builder()
                     .accountId(platformAccount.getId())
                     .entryType(SettlementEntryType.ADJUSTMENT)
@@ -413,9 +440,8 @@ public class SettlementService implements BookingSettlementCommandPort {
                     "BOOKING_ISSUE_RESOLUTION_REVERSAL_DEBIT:" + reversalRecord.resolutionId()
             );
             if (!debited) {
-                persistResolutionState(bookingId, reversalRecordId, "MANUAL_FINANCE_REVIEW",
-                        originalResolution.escrowScoin(), menteeDebit, mentorDebit, platformDebit);
-                return;
+                throw new BaseException(ErrorCode.INSUFFICIENT_BALANCE,
+                        "Số dư mentee không đủ để reversal settlement");
             }
         }
 

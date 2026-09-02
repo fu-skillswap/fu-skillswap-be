@@ -10,7 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.request.BookingListRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatPort;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -71,7 +71,7 @@ public class BookingQueryService {
     private final BookingRepository bookingRepository;
     private final SessionService sessionService;
     private final SessionAttendanceRepository sessionAttendanceRepository;
-    private final ConversationService conversationService;
+    private final BookingChatPort bookingChatPort;
     private final PaymentOrderRepository paymentOrderRepository;
     private final BookingResponseMapper bookingResponseMapper;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
@@ -110,7 +110,7 @@ public class BookingQueryService {
                             startTimeEndUtc,
                             pageable
                     )
-                    : bookingRepository.findByMenteeIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
+                    : bookingRepository.findByMenteeUserIdAndStatus(currentUserId, safeRequest.getStatus(), pageable);
             case MENTOR -> safeRequest.getStatus() == null
                     ? bookingRepository.findMyMentorBookingsOrderedByDashboardPriorityUtc(
                             currentUserId,
@@ -126,8 +126,8 @@ public class BookingQueryService {
         };
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
-        Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+        Map<UUID, UUID> bookingToConvMap = bookingChatPort != null
+                ? bookingChatPort.findConversationIdsByBookingIds(bookingIds)
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -183,8 +183,8 @@ public class BookingQueryService {
         );
 
         List<UUID> bookingIds = page.getContent().stream().map(Booking::getId).toList();
-        Map<UUID, UUID> bookingToConvMap = conversationService != null
-                ? conversationService.findConversationIdsByBookingIds(bookingIds)
+        Map<UUID, UUID> bookingToConvMap = bookingChatPort != null
+                ? bookingChatPort.findConversationIdsByBookingIds(bookingIds)
                 : Collections.emptyMap();
         Map<UUID, Session> sessionsByBookingId = sessionService != null
                 ? sessionService.findByBookingIds(bookingIds)
@@ -213,7 +213,7 @@ public class BookingQueryService {
     }
 
     private void assertBookingAccess(Booking booking, UUID currentUserId) {
-        boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
+        boolean isMentee = booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId());
         boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem booking này");

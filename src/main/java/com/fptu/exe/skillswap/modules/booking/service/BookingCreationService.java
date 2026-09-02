@@ -12,8 +12,6 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
@@ -74,14 +72,15 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu tạo booking");
         }
 
-        List<User> lockedMentees = userLockPort.lockUsersForUpdate(List.of(menteeUserId));
+        var lockedMentees = userLockPort.lockUsersForUpdate(List.of(menteeUserId));
         if (lockedMentees.size() != 1) {
             throw new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại");
         }
-        User mentee = lockedMentees.getFirst();
+        UserSummaryRecord mentee = userQueryPort.findUserSummaryById(menteeUserId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
         bookingEligibilityPolicy.validateBookerEligibility(mentee);
 
-        long menteePendingCount = bookingRepository.countByMenteeIdAndStatus(menteeUserId, BookingStatus.PENDING);
+        long menteePendingCount = bookingRepository.countByMenteeUserIdAndStatus(menteeUserId, BookingStatus.PENDING);
         if (menteePendingCount >= BookingQueueConstants.MAX_PENDING_BOOKINGS_PER_MENTEE) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
                     "Bạn đang có tối đa 5 yêu cầu đặt lịch đang chờ phản hồi. Vui lòng chờ mentor phản hồi hoặc hủy bớt yêu cầu đang chờ để đặt lịch mới.");
@@ -157,7 +156,7 @@ public class BookingCreationService {
             mentorBookingPolicyQuery.validateBookingWindow(mentorUserId, selectedStartTime, nowBusiness);
         }
 
-        if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
+        if (bookingRepository.existsByMenteeUserIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
                 menteeUserId,
                 slot.getId(),
                 requestedStartAt,
@@ -176,7 +175,7 @@ public class BookingCreationService {
         LocalDateTime pendingExpireAt = BookingTime.fromInstant(pendingExpireAtUtc);
 
         Booking savedBooking = bookingRepository.save(Booking.builder()
-                .mentee(mentee)
+                .menteeUserId(mentee.userId())
                 .mentorUserId(mentorUserId)
                 .serviceId(serviceCandidate.serviceId())
                 .slot(slot)
@@ -201,14 +200,14 @@ public class BookingCreationService {
                 mentorUserId,
                 NotificationType.BOOKING_REQUEST_CREATED,
                 "Bạn có yêu cầu đặt lịch mới",
-                mentee.getFullName() + " đã gửi yêu cầu đặt lịch mentoring.",
+                mentee.fullName() + " đã gửi yêu cầu đặt lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
         ));
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Yêu cầu đặt lịch mới đã được gửi.",

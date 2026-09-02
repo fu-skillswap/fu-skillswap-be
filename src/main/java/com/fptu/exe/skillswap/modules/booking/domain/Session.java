@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarSyncStatus;
 import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -87,7 +86,7 @@ public class Session {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "calendar_sync_status", length = 50)
-    private GoogleCalendarSyncStatus calendarSyncStatus;
+    private CalendarSyncStatus calendarSyncStatus;
 
     @Column(name = "calendar_sync_error_code", length = 100)
     private String calendarSyncErrorCode;

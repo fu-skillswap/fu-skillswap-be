@@ -1,10 +1,10 @@
-package com.fptu.exe.skillswap.modules.booking.port;
+package com.fptu.exe.skillswap.shared.port;
 
 import java.util.Collection;
 import java.util.Set;
 import java.util.UUID;
 
-/** Read-only entitlement capability for content modules. */
+/** Neutral read-only entitlement capability for content modules. */
 public interface ContentEntitlementQuery {
 
     boolean hasServiceContentEntitlement(UUID viewerId, UUID serviceId);

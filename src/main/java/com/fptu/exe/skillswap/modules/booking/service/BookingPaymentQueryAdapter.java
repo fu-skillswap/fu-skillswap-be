@@ -88,10 +88,9 @@ public class BookingPaymentQueryAdapter implements BookingPaymentQueryPort {
             acceptedAtUtc = com.fptu.exe.skillswap.shared.time.BusinessTime.toInstant(booking.getAcceptedAt());
         }
 
-        var mentee = booking.getMentee();
         return new BookingPaymentSnapshot(
                 booking.getId(),
-                mentee == null ? null : mentee.getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getServiceId(),
                 booking.getServicePriceScoinSnapshot(),

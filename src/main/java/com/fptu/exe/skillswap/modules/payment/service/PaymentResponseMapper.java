@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentAttempt;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
@@ -44,8 +44,8 @@ public class PaymentResponseMapper {
                 .checkoutUrl(attempt == null ? order.getPaymentLink() : attempt.getCheckoutUrl())
                 .paymentLink(order.getPaymentLink())
                 .expiresAt(order.getExpiresAtUtc() != null
-                        ? BookingTime.toOffsetDateTime(order.getExpiresAtUtc())
-                        : (order.getExpiresAt() != null ? BookingTime.toOffsetDateTime(order.getExpiresAt()) : null))
+                        ? BusinessTime.toOffsetDateTime(order.getExpiresAtUtc())
+                        : (order.getExpiresAt() != null ? BusinessTime.toOffsetDateTime(order.getExpiresAt()) : null))
                 .build();
     }
 

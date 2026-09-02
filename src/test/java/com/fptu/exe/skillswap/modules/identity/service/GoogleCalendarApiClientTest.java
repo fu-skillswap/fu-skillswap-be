@@ -2,11 +2,8 @@ package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCalendarPort.BookingCalendarSnapshot;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -15,7 +12,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -101,21 +99,15 @@ class GoogleCalendarApiClientTest {
                 .setHeader("Content-Type", "application/json")
                 .setBody("{\"id\":\"evt-123\",\"etag\":\"etag-123\",\"hangoutLink\":\"http://meet.google.com/abc\"}"));
 
-        User mentee = User.builder().fullName("Mentee Name").email("mentee@example.com").build();
-        User mentor = User.builder().fullName("Mentor Name").email("mentor@example.com").build();
-        Booking booking = Booking.builder()
-                .learningGoalTitle("Learn Java")
-                .learningGoalDescription("PRJ301 preparation")
-                .mentee(mentee)
-                .mentorUserId(mentor.getId())
-                .build();
-        Session session = Session.builder()
-                .scheduledStartTime(LocalDateTime.of(2026, 7, 10, 10, 0))
-                .scheduledEndTime(LocalDateTime.of(2026, 7, 10, 11, 0))
-                .build();
+        BookingCalendarSnapshot booking = new BookingCalendarSnapshot(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                "Java mentoring", "Learn Java", "PRJ301 preparation", null,
+                Instant.parse("2026-07-10T03:00:00Z"), Instant.parse("2026-07-10T04:00:00Z"),
+                null, null, true, false
+        );
 
         GoogleCalendarApiClient.GoogleCalendarEventResponse response = client.createBookingEvent(
-                "acc-123", "primary", "req-123", booking, session
+                "acc-123", "primary", "req-123", booking
         );
 
         assertNotNull(response);

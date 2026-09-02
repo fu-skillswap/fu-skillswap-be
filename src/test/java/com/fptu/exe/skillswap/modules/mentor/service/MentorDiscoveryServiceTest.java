@@ -17,6 +17,7 @@ import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
@@ -189,6 +190,16 @@ class MentorDiscoveryServiceTest {
                 .totalReviews(4)
                 .totalCompletedSessions(5)
                 .build();
+        lenient().when(userQueryPort.findUserSummaryById(MENTOR_USER_ID)).thenReturn(Optional.of(
+                new UserSummaryRecord(
+                        MENTOR_USER_ID,
+                        "mentor@example.com",
+                        "Mentor Full Name",
+                        "avatar.png",
+                        Set.of(RoleCode.MENTOR),
+                        "ACTIVE",
+                        true
+                )));
     }
 
     @Test
@@ -452,7 +463,11 @@ class MentorDiscoveryServiceTest {
 
         MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(MENTOR_USER_ID);
 
-        assertEquals(List.of(preview), response.evidence().authorityContent().recentPublicArticles());
+        var article = response.evidence().authorityContent().recentPublicArticles().getFirst();
+        assertEquals(preview.id(), article.id());
+        assertEquals(preview.title(), article.title());
+        assertEquals(preview.slug(), article.slug());
+        assertEquals(preview.excerpt(), article.excerpt());
         verify(blogQueryPort).findMentorPublicProfilePreviews(eq(MENTOR_USER_ID), eq(3));
     }
 

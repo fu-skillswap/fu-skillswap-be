@@ -26,7 +26,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.domain.BlogMentorFollow;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
-import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.shared.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorContentAccessPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;

@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCalendarPort;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
@@ -25,7 +25,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 public class GoogleCalendarFallbackNotificationListener {
 
     private final ApplicationEventPublisher eventPublisher;
-    private final BookingQueryPort bookingQueryPort;
+    private final BookingCalendarPort bookingCalendarPort;
     private final EmailDispatchService emailDispatchService;
     private final UserRepository userRepository;
 
@@ -78,11 +78,13 @@ public class GoogleCalendarFallbackNotificationListener {
     }
 
     private void sendEmailBestEffort(java.util.UUID bookingId, String errorMessage) {
-        bookingQueryPort.findByIdForSessionUpdate(bookingId).ifPresent(booking -> {
+        bookingCalendarPort.findForCalendarSync(bookingId, false).ifPresent(booking -> {
+            String menteeEmail = booking.menteeUserId() == null ? null
+                    : userRepository.findById(booking.menteeUserId()).map(User::getEmail).orElse(null);
             String subject = "[SkillSwap] Google Calendar chưa đồng bộ được cho buổi mentoring";
             String summary = "Hệ thống chưa thể tự đồng bộ lịch lên Google Calendar, nhưng booking của bạn trên SkillSwap vẫn còn hiệu lực.";
             String detailRows = HtmlEmailTemplate.detailRow("Mã booking", HtmlEmailTemplate.escape(bookingId.toString()))
-                    + HtmlEmailTemplate.detailRow("Mục tiêu", HtmlEmailTemplate.escape(HtmlEmailTemplate.defaultText(booking.getLearningGoalTitle(), "Mentoring session")))
+                    + HtmlEmailTemplate.detailRow("Mục tiêu", HtmlEmailTemplate.escape(HtmlEmailTemplate.defaultText(booking.learningGoalTitle(), "Mentoring session")))
                     + HtmlEmailTemplate.detailRow("Chi tiết lỗi", HtmlEmailTemplate.escape(HtmlEmailTemplate.defaultText(errorMessage, "Google Calendar tạm thời không phản hồi đúng.")));
             String html = HtmlEmailTemplate.render(new HtmlEmailTemplate.Model(
                     subject,
@@ -91,7 +93,7 @@ public class GoogleCalendarFallbackNotificationListener {
                     "Google Calendar chưa đồng bộ được",
                     summary,
                     "Booking",
-                    HtmlEmailTemplate.defaultText(booking.getLearningGoalTitle(), "Mentoring session"),
+                    HtmlEmailTemplate.defaultText(booking.learningGoalTitle(), "Mentoring session"),
                     "bạn",
                     summary,
                     detailRows,
@@ -101,16 +103,16 @@ public class GoogleCalendarFallbackNotificationListener {
             ));
             String plain = subject + "\n\n" + summary + "\nBooking: " + bookingId;
             try {
-                emailDispatchService.sendHtmlOnce(
-                        "GCALENDAR_FALLBACK:" + bookingId + ":" + booking.getMentee().getEmail(),
-                        booking.getMentee().getEmail(),
+                if (menteeEmail != null) emailDispatchService.sendHtmlOnce(
+                        "GCALENDAR_FALLBACK:" + bookingId + ":" + menteeEmail,
+                        menteeEmail,
                         subject,
                         html,
                         plain,
                         "GOOGLE_CALENDAR_SYNC_FALLBACK"
                 );
-                String mentorEmail = booking.getMentorUserId() != null
-                        ? userRepository.findById(booking.getMentorUserId()).map(User::getEmail).orElse(null)
+                String mentorEmail = booking.mentorUserId() != null
+                        ? userRepository.findById(booking.mentorUserId()).map(User::getEmail).orElse(null)
                         : null;
                 if (mentorEmail != null) {
                     emailDispatchService.sendHtmlOnce(

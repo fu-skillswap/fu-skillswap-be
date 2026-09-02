@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponRedemption;
@@ -70,7 +70,7 @@ public class CouponService {
     }
 
     @Transactional(readOnly = true)
-    public void validateApplicable(Coupon coupon, Booking booking, UUID userId, int grossScoin) {
+    public void validateApplicable(Coupon coupon, BookingCheckoutSnapshot booking, UUID userId, int grossScoin) {
         if (coupon == null) {
             return;
         }
@@ -85,14 +85,14 @@ public class CouponService {
         }
         validateQuotaAvailability(coupon, userId);
         if (!coupon.getApplicableServiceIds().isEmpty()
-                && (booking == null || booking.getServiceId() == null
-                || !coupon.getApplicableServiceIds().contains(booking.getServiceId()))) {
+                && (booking == null || booking.serviceId() == null
+                || !coupon.getApplicableServiceIds().contains(booking.serviceId()))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon không áp dụng cho service đã chọn");
         }
         if (!coupon.getApplicableMentorIds().isEmpty()
                 && (booking == null
-                || booking.getMentorUserId() == null
-                || !coupon.getApplicableMentorIds().contains(booking.getMentorUserId()))) {
+                || booking.mentorUserId() == null
+                || !coupon.getApplicableMentorIds().contains(booking.mentorUserId()))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Coupon không áp dụng cho mentor đã chọn");
         }
     }

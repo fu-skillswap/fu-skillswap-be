@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.modules.booking.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.modules.booking.port.BookingEligibilityQueryPort;
+import com.fptu.exe.skillswap.shared.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.AcademicEligibilityQuery;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Component
-public class BookingEligibilityPolicy implements ContentEntitlementQuery {
+public class BookingEligibilityPolicy implements ContentEntitlementQuery, BookingEligibilityQueryPort {
 
     private final AcademicEligibilityQuery academicEligibilityQuery;
     private final BookingRepository bookingRepository;
@@ -41,7 +41,7 @@ public class BookingEligibilityPolicy implements ContentEntitlementQuery {
     @Override
     public boolean hasServiceContentEntitlement(UUID viewerId, UUID serviceId) {
         if (viewerId == null || serviceId == null || bookingRepository == null) return false;
-        return bookingRepository.existsByMenteeIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceContentEntitlementStatuses());
+        return bookingRepository.existsByMenteeUserIdAndServiceIdAndStatusIn(viewerId, serviceId, serviceContentEntitlementStatuses());
     }
 
     /** Notification and content modules ask the policy for recipients rather than duplicating lifecycle status rules. */
@@ -51,14 +51,14 @@ public class BookingEligibilityPolicy implements ContentEntitlementQuery {
         return new LinkedHashSet<>(bookingRepository.findDistinctMenteeIdsByServiceIdsAndStatusIn(serviceIds, serviceContentEntitlementStatuses()));
     }
 
-    public void validateBookerEligibility(User mentee) {
-        if (mentee.getStatus() != UserStatus.ACTIVE) {
+    public void validateBookerEligibility(UserSummaryRecord mentee) {
+        if (mentee == null || !mentee.isActive()) {
             throw new BaseException(ErrorCode.USER_INACTIVE, "Tài khoản hiện tại không ở trạng thái có thể tạo booking");
         }
         if (hasAnyRole(mentee, RoleCode.ADMIN, RoleCode.SYSTEM_ADMIN)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản quản trị không được phép tạo booking");
         }
-        if (!academicEligibilityQuery.hasCompletedStudentProfile(mentee.getId())) {
+        if (!academicEligibilityQuery.hasCompletedStudentProfile(mentee.userId())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn cần hoàn thành hồ sơ học thuật trước khi tạo booking");
         }
     }
@@ -81,12 +81,12 @@ public class BookingEligibilityPolicy implements ContentEntitlementQuery {
         return capability.canAcceptBookings(now);
     }
 
-    private boolean hasAnyRole(User user, RoleCode... roles) {
-        if (user == null || user.getRoles() == null || user.getRoles().isEmpty() || roles == null) {
+    private boolean hasAnyRole(UserSummaryRecord user, RoleCode... roles) {
+        if (user == null || user.roles() == null || user.roles().isEmpty() || roles == null) {
             return false;
         }
         for (RoleCode role : roles) {
-            if (role != null && user.getRoles().contains(role)) {
+            if (role != null && user.roles().contains(role)) {
                 return true;
             }
         }

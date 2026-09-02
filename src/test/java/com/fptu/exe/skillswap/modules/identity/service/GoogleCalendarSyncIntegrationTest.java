@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 
 import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCalendarPort.BookingCalendarSnapshot;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarConnection;
 import com.fptu.exe.skillswap.modules.identity.domain.GoogleCalendarConnectionStatus;
@@ -95,7 +96,7 @@ class GoogleCalendarSyncIntegrationTest {
                     .build());
 
             booking = bookingRepository.save(Booking.builder()
-                    .mentee(menteeUser)
+                    .menteeUserId(menteeUser.getId())
                     .mentorUserId(mentorProfile.getUserId())
                     .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                     .learningGoalTitle("Test Sync Booking")
@@ -132,7 +133,7 @@ class GoogleCalendarSyncIntegrationTest {
                 .runAfter(DateTimeUtil.now().minusMinutes(1))
                 .build());
 
-        when(apiClient.createBookingEvent(any(), any(), any(), any(), any()))
+        when(apiClient.createBookingEvent(any(), any(), any(), any(BookingCalendarSnapshot.class)))
                 .thenThrow(new GoogleCalendarApiClient.GoogleCalendarTransientException("500", "Google Internal Error"));
 
         syncService.processSingleJob(job.getId());
@@ -155,7 +156,7 @@ class GoogleCalendarSyncIntegrationTest {
                 .runAfter(DateTimeUtil.now().minusMinutes(1))
                 .build());
 
-        when(apiClient.createBookingEvent(any(), any(), any(), any(), any()))
+        when(apiClient.createBookingEvent(any(), any(), any(), any(BookingCalendarSnapshot.class)))
                 .thenReturn(new GoogleCalendarApiClient.GoogleCalendarEventResponse("event_id", "https://meet.google.com/abc", "etag1"));
 
         int numThreads = 10;
@@ -180,7 +181,7 @@ class GoogleCalendarSyncIntegrationTest {
         doneLatch.await(5, TimeUnit.SECONDS);
 
         // Verify the API was only called once, meaning concurrency control (status update) worked
-        verify(apiClient, times(1)).createBookingEvent(any(), any(), any(), any(), any());
+        verify(apiClient, times(1)).createBookingEvent(any(), any(), any(), any(BookingCalendarSnapshot.class));
 
         GoogleCalendarSyncJob updatedJob = jobRepository.findById(job.getId()).orElseThrow();
         assertEquals(GoogleCalendarSyncJobStatus.SUCCEEDED, updatedJob.getStatus());

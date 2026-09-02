@@ -278,7 +278,7 @@ class AdminDashboardControllerIntegrationTest {
 
     private void createBooking(User menteeUser, MentorProfile mentorProfile, BookingStatus status, LocalDateTime createdAt) {
         Booking booking = bookingRepository.save(Booking.builder()
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .status(status)
                 .learningGoalTitle("Need help")

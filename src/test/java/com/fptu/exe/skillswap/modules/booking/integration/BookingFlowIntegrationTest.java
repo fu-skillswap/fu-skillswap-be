@@ -300,7 +300,7 @@ class BookingFlowIntegrationTest {
     void checkIn_persistsEvidenceForBothParticipantsAndStartsSessionWithoutChangingBookingSettlement() {
         Instant nowUtc = Instant.now();
         var booking = bookingRepository.saveAndFlush(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .serviceId(mentorService.getId())
                 .status(BookingStatus.PAID)

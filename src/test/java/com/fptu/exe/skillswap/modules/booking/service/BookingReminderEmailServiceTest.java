@@ -76,6 +76,9 @@ class BookingReminderEmailServiceTest {
                 new PendingRow(mentorId, "mentor@test.com", "Mentor A", "Review Project", 2),
                 new PendingRow(mentorId, "mentor@test.com", "Mentor A", "CV Review", 1)
         ));
+        when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(java.util.Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
+                        mentorId, "mentor@test.com", "Mentor A", null, java.util.Set.of(), "MENTOR", true)));
         when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         int sent = service.sendPendingRequestDigests();
@@ -125,7 +128,7 @@ class BookingReminderEmailServiceTest {
         Booking booking1 = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentor1Id)
                 .serviceTitleSnapshot("Coding 1:1")
                 .selectedStartTime(LocalDateTime.now().withHour(9).withMinute(0))
@@ -136,7 +139,7 @@ class BookingReminderEmailServiceTest {
         Booking booking2 = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentor1Id)
                 .serviceTitleSnapshot("CV Review")
                 .selectedStartTime(LocalDateTime.now().withHour(14).withMinute(0))
@@ -146,7 +149,7 @@ class BookingReminderEmailServiceTest {
         Booking booking3 = Booking.builder()
                 .id(UUID.randomUUID())
                 .status(BookingStatus.PAID)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentor2Id)
                 .serviceTitleSnapshot("System Design")
                 .selectedStartTime(LocalDateTime.now().withHour(16).withMinute(0))
@@ -208,12 +211,15 @@ class BookingReminderEmailServiceTest {
         when(mentee.getId()).thenReturn(menteeId);
         when(mentee.getEmail()).thenReturn("mentee@test.com");
         when(mentee.getFullName()).thenReturn("Mentee A");
+        when(userQueryPort.findUserSummaryById(menteeId)).thenReturn(java.util.Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
+                        menteeId, "mentee@test.com", "Mentee A", null, java.util.Set.of(), "MENTEE", true)));
         when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(java.util.Optional.of(
                 new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(mentorId, "mentor@test.com", "Mentor A", null, java.util.Set.of(), "MENTOR", true)));
         return Booking.builder()
                 .id(UUID.randomUUID())
                 .status(status)
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorId)
                 .serviceTitleSnapshot("Review Project")
                 .serviceDurationSnapshot(60)

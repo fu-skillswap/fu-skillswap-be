@@ -15,6 +15,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotR
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -113,7 +115,7 @@ class BookingRescheduleServiceTest {
 
         booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .serviceId(service.getId())
                 .slot(currentSlot)
@@ -122,6 +124,22 @@ class BookingRescheduleServiceTest {
                 .selectedEndTime(currentSlot.getEndTime())
                 .rescheduleCount(0)
                 .build();
+
+        lenient().when(mentorBookingQueryPort.getActiveServiceCandidate(booking.getServiceId(), mentorId))
+                .thenReturn(Optional.of(new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        service.getId(),
+                        mentorId,
+                        "Mentoring",
+                        "Support",
+                        null,
+                        service.getDurationMinutes(),
+                        0,
+                        false,
+                        true,
+                        null,
+                        TeachingMode.ONLINE.name(),
+                        false
+                )));
     }
 
     @Test

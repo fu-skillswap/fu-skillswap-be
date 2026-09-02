@@ -318,7 +318,7 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
     }
 
     private void assertParticipant(Booking booking, UUID actorUserId) {
-        boolean mentee = booking.getMentee() != null && actorUserId.equals(booking.getMentee().getId());
+        boolean mentee = booking.getMenteeUserId() != null && actorUserId.equals(booking.getMenteeUserId());
         boolean mentor = booking.getMentorUserId() != null && actorUserId.equals(booking.getMentorUserId());
         if (!mentee && !mentor) throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền truy cập minh chứng của booking này");
     }

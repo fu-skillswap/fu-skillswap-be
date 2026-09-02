@@ -22,11 +22,10 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
-import com.fptu.exe.skillswap.modules.mentor.dto.response.ServiceSlotCandidatesResponse;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidates;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
+import com.fptu.exe.skillswap.modules.mentor.port.EffectiveBookingPolicy;
 import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorBookingPolicyService;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -58,7 +57,7 @@ import static org.mockito.Mockito.when;
 class MentorAvailabilityServiceTest {
 
     @Mock
-    private MentorQueryPort mentorQueryPort;
+    private MentorBookingQueryPort mentorBookingQueryPort;
 
     @Mock
     private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
@@ -75,9 +74,6 @@ class MentorAvailabilityServiceTest {
     @Mock
     private NotificationService notificationService;
 
-    @Mock
-    private MentorBookingPolicyService mentorBookingPolicyService;
-
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator = new AvailabilityCalendarWindowCalculator();
 
     private MentorAvailabilityService mentorAvailabilityService;
@@ -89,7 +85,7 @@ class MentorAvailabilityServiceTest {
     @BeforeEach
     void setUp() {
         mentorAvailabilityService = new MentorAvailabilityService(
-                mock(MentorBookingQueryPort.class),
+                mentorBookingQueryPort,
                 mentorAvailabilityRuleRepository,
                 mentorAvailabilitySlotRepository,
                 availabilitySlotServiceRepository,
@@ -108,8 +104,11 @@ class MentorAvailabilityServiceTest {
         mentorProfile.setStatus(MentorStatus.ACTIVE);
         mentorProfile.setVerifiedAt(LocalDateTime.now());
 
-        org.mockito.Mockito.lenient().when(mentorBookingPolicyService.getEffectivePolicy(any()))
-                .thenReturn(new MentorBookingPolicyService.MentorBookingPolicySnapshot(120, 30, "Asia/Ho_Chi_Minh"));
+        org.mockito.Mockito.lenient().when(mentorBookingQueryPort.getBookingCapability(mentorUserId))
+                .thenReturn(Optional.of(new com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability(
+                        mentorUserId, "ACTIVE", true, 60, null, 0, null, true, true)));
+        org.mockito.Mockito.lenient().when(mentorBookingQueryPort.getEffectiveBookingPolicy(mentorUserId))
+                .thenReturn(new EffectiveBookingPolicy(mentorUserId, 90, 30, "Asia/Ho_Chi_Minh"));
     }
 
     @Test
@@ -122,8 +121,6 @@ class MentorAvailabilityServiceTest {
                 List.of()
         );
 
-        when(mentorQueryPort.findWithUserByUserId(mentorUserId))
-                .thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
 
@@ -160,8 +157,6 @@ class MentorAvailabilityServiceTest {
                 List.of()
         );
 
-        when(mentorQueryPort.findWithUserByUserId(mentorUserId))
-                .thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
@@ -188,12 +183,12 @@ class MentorAvailabilityServiceTest {
         mentorService.setMentorProfile(mentorProfile);
         mentorService.setActive(true);
 
-        when(mentorQueryPort.findWithUserByUserId(mentorUserId))
-                .thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
-        when(mentorQueryPort.findAllServicesByIdIn(request.serviceIds()))
-                .thenReturn(List.of(mentorService));
+        when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
+                .thenReturn(java.util.Map.of(serviceId, new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        serviceId, mentorUserId, "1:1 Mentoring", null, null, 60, 100, false, true,
+                        "ONE_TO_ONE", null, false)));
         UUID slotId = UUID.randomUUID();
         MentorAvailabilitySlot savedSlot = MentorAvailabilitySlot.builder()
                 .id(slotId)
@@ -227,12 +222,10 @@ class MentorAvailabilityServiceTest {
                 List.of(requestedServiceId)
         );
 
-        when(mentorQueryPort.findWithUserByUserId(mentorUserId))
-                .thenReturn(Optional.of(mentorProfile));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
-        when(mentorQueryPort.findAllServicesByIdIn(request.serviceIds()))
-                .thenReturn(List.of());
+        when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
+                .thenReturn(java.util.Map.of());
 
         BaseException ex = assertThrows(BaseException.class, () ->
                 mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
@@ -331,8 +324,8 @@ class MentorAvailabilityServiceTest {
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
         when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
                 .thenReturn(false);
-        when(mentorQueryPort.findAllServicesByIdIn(request.serviceIds()))
-                .thenReturn(List.of());
+        when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
+                .thenReturn(java.util.Map.of());
 
         BaseException ex = assertThrows(BaseException.class, () ->
                 mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
@@ -391,11 +384,15 @@ class MentorAvailabilityServiceTest {
 
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
         when(availabilitySlotServiceRepository.findBySlotIdAndServiceId(slotId, serviceId)).thenReturn(Optional.of(binding));
+        when(mentorBookingQueryPort.getActiveServiceCandidate(serviceId, mentorUserId)).thenReturn(Optional.of(
+                new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        serviceId, mentorUserId, "1:1 Mentoring", null, null, 60, 100, false, true,
+                        "ONE_TO_ONE", null, false)));
         when(bookingRepository.findBySlotIdAndStatusOrderBySelectedStartTimeAsc(eq(slotId), any())).thenReturn(List.of());
         when(bookingRepository.countPendingSegmentsBySlotId(eq(slotId), eq(BookingStatus.PENDING))).thenReturn(List.of());
 
         // Act
-        ServiceSlotCandidatesResponse response = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+        ServiceSlotCandidates response = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
 
         // Assert
         assertNotNull(response);
@@ -403,18 +400,18 @@ class MentorAvailabilityServiceTest {
 
         // Candidate 1 (now + 1h to now + 2h): blocked by lead time (90min required, but only 60min away)
         var candidate1 = response.candidateServiceSlots().get(0);
-        org.junit.jupiter.api.Assertions.assertFalse(candidate1.isSelectable());
+        org.junit.jupiter.api.Assertions.assertFalse(candidate1.selectable());
         assertEquals("Yêu cầu đặt trước tối thiểu", candidate1.reasonIfBlocked());
         assertTrue(candidate1.bookingConflictNote().contains("90 phút"));
 
         // Candidate 2 (now + 2h to now + 3h): valid and selectable (120min away > 90min required)
         var candidate2 = response.candidateServiceSlots().get(1);
-        assertTrue(candidate2.isSelectable());
+        assertTrue(candidate2.selectable());
         org.junit.jupiter.api.Assertions.assertNull(candidate2.reasonIfBlocked());
 
         // Candidate 3 has no conflicting booking in SkillSwap, therefore stays selectable.
         var candidate3 = response.candidateServiceSlots().get(2);
-        assertTrue(candidate3.isSelectable());
+        assertTrue(candidate3.selectable());
         org.junit.jupiter.api.Assertions.assertNull(candidate3.reasonIfBlocked());
     }
 }

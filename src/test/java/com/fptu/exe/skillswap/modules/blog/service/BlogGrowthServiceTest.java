@@ -14,7 +14,7 @@ import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostLikeRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogPostRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
-import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.shared.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorContentAccessPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogTagRepository;
@@ -108,7 +108,6 @@ class BlogGrowthServiceTest {
         when(blogCategoryRepository.findById(categoryId)).thenReturn(Optional.of(category));
         when(blogCategoryFollowRepository.existsByUserIdAndCategoryId(userId, categoryId)).thenReturn(false);
         when(blogCategoryFollowRepository.countByUserId(userId)).thenReturn(0L);
-        when(entityManager.getReference(User.class, userId)).thenReturn(new User());
         when(blogCategoryFollowRepository.findByUserIdOrderByCreatedAtDesc(userId))
                 .thenReturn(List.of(BlogCategoryFollow.builder().category(category).build()));
         when(blogMentorFollowRepository.findByUserIdOrderByCreatedAtDesc(userId)).thenReturn(List.of());

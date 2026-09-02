@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,7 +60,7 @@ class CourseEnrollmentServiceTest {
                 .title("Test Course")
                 .priceScoin(100)
                 .build();
-        when(coursePaymentPort.quoteEnrollment(100)).thenReturn(
+        lenient().when(coursePaymentPort.quoteEnrollment(100)).thenReturn(
                 new CoursePaymentPort.CoursePaymentQuote(100, 0, 100, 0, 100));
     }
 

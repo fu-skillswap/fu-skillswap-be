@@ -34,6 +34,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorDiscoverySearchRe
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationSubmitRequest;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
@@ -81,6 +82,7 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private MentorAvailabilitySlotRepository slotRepository;
     @Autowired private MentorProfileRepository mentorProfileRepository;
     @Autowired private MentorServiceRepository mentorServiceRepository;
+    @Autowired private MentorVerificationUploadIntentRepository uploadIntentRepository;
     @Autowired private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
     @Autowired private BookingRepository bookingRepository;
     @Autowired private EntityManager entityManager;
@@ -410,11 +412,18 @@ class CoreMentorshipFlowSmokeTest {
     private void uploadVerificationDocument(UUID mentorId,
                                             com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentType type,
                                             String filename) {
-        var intent = mentorVerificationService.createDocumentUploadIntent(mentorId,
+        mentorVerificationService.createDocumentUploadIntent(mentorId,
                 new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest(
                         filename, "image/jpeg", 1024L));
+        entityManager.flush();
+        UUID persistedIntentId = uploadIntentRepository.findAll().stream()
+                .filter(candidate -> mentorId.equals(candidate.getOwnerUserId()))
+                .filter(candidate -> filename.equals(candidate.getOriginalFilename()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("created verification upload intent should be persisted before upload"))
+                .getId();
         mentorVerificationService.uploadDocument(mentorId,
-                new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(type, intent.uploadIntentId()));
+                new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadRequest(type, persistedIntentId));
     }
 
     private MentorAvailabilityRule createAvailabilityRule(MentorProfile mentorProfile, LocalDateTime startTime, LocalDateTime endTime) {

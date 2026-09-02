@@ -110,7 +110,7 @@ public class SessionAttendanceService {
         if (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId())) {
             return SessionParticipantRole.MENTOR;
         }
-        if (booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId())) {
+        if (booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId())) {
             return SessionParticipantRole.MENTEE;
         }
         throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền check-in cho booking này");

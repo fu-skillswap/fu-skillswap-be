@@ -98,7 +98,9 @@ class MentorVerificationServiceUploadTest {
                 .status(VerificationStatus.DRAFT)
                 .build();
 
-        lenient().when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(user));
+        lenient().when(userQueryPort.existsById(userId)).thenReturn(true);
+        lenient().when(mentorVerificationRequestRepository.findFirstByMentorUserIdAndStatusInOrderByCreatedAtDesc(
+                eq(userId), anyCollection())).thenReturn(Optional.of(request));
         lenient().when(mentorVerificationRequestRepository.findByIdForUpdate(request.getId()))
                 .thenReturn(Optional.of(request));
         lenient().when(mentorVerificationDocumentRepository.findByRequestIdAndDocumentTypeAndIsActiveTrueOrderByUploadedAtDesc(any(), any()))
@@ -208,12 +210,7 @@ class MentorVerificationServiceUploadTest {
     }
 
     @Test
-    void uploadAffiliationProofBeyondQuota_shouldBeRejected() {
-        when(mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
-                request.getId(),
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF
-        )).thenReturn(1L);
-
+    void uploadAffiliationProof_shouldBeAcceptedBeforeSubmissionQuotaCheck() {
         MentorVerificationUploadIntent intent = validIntent();
         when(uploadIntentRepository.findByIdForUpdate(intent.getId())).thenReturn(Optional.of(intent));
         MentorVerificationDocumentUploadRequest uploadRequest = new MentorVerificationDocumentUploadRequest(
@@ -221,10 +218,9 @@ class MentorVerificationServiceUploadTest {
                 intent.getId()
         );
 
-        assertThatThrownBy(() -> service.uploadDocument(userId, uploadRequest))
-                .isInstanceOf(BaseException.class)
-                .extracting("errorCode")
-                .isEqualTo(ErrorCode.BAD_REQUEST);
+        service.uploadDocument(userId, uploadRequest);
+
+        verify(mentorVerificationDocumentRepository).save(any());
     }
 
     @Test

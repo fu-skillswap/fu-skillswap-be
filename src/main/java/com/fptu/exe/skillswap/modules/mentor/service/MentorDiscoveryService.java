@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.blog.port.BlogMentorArticlePreview;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServiceBasicResponse;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidateItem;
+import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidates;
 import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.Campus;
 import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
@@ -364,7 +366,27 @@ public class MentorDiscoveryService {
         if (isBookingSuspended(mentorProfile)) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor hiện đang tạm khóa nhận booking mới");
         }
-        return mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+        ServiceSlotCandidates candidates = mentorAvailabilityService.getServiceSlotCandidates(mentorUserId, slotId, serviceId);
+        List<ServiceSlotCandidateItemResponse> items = candidates.candidateServiceSlots().stream()
+                .map(this::toServiceSlotCandidateItemResponse)
+                .toList();
+        return ServiceSlotCandidatesResponse.builder()
+                .slotId(candidates.slotId())
+                .serviceId(candidates.serviceId())
+                .serviceDurationMinutes(candidates.serviceDurationMinutes())
+                .candidateServiceSlots(items)
+                .build();
+    }
+
+    private ServiceSlotCandidateItemResponse toServiceSlotCandidateItemResponse(ServiceSlotCandidateItem item) {
+        return ServiceSlotCandidateItemResponse.builder()
+                .startTime(item.startTime()).endTime(item.endTime()).startAt(item.startAt()).endAt(item.endAt())
+                .pendingCount(item.pendingCount()).remainingPendingQuota(item.remainingPendingQuota())
+                .isSelectable(item.selectable()).reasonIfBlocked(item.reasonIfBlocked())
+                .blockedByAcceptedBooking(item.blockedByAcceptedBooking()).blockingBookingId(item.blockingBookingId())
+                .blockingServiceId(item.blockingServiceId()).blockingServiceTitle(item.blockingServiceTitle())
+                .blockedBySameService(item.blockedBySameService()).blockedByDifferentService(item.blockedByDifferentService())
+                .bookingConflictNote(item.bookingConflictNote()).build();
     }
 
     @Transactional(readOnly = true)

@@ -106,7 +106,7 @@ public class BookingMeetingService {
                     ? userQueryPort.findUserSummaryById(savedBooking.getMentorUserId()).map(com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord::fullName).orElse("Mentor")
                     : "Mentor";
             eventPublisher.publishEvent(new NotificationEvent(
-                    savedBooking.getMentee().getId(),
+                    savedBooking.getMenteeUserId(),
                     NotificationType.MEETING_LINK_UPDATED,
                     "Thông tin buổi học đã được cập nhật",
                     mentorName + " đã cập nhật link hoặc địa điểm học.",
@@ -119,7 +119,7 @@ public class BookingMeetingService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Thông tin phòng học đã được cập nhật.",

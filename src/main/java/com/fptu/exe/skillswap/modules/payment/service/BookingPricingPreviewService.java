@@ -1,14 +1,12 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
-import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.booking.port.BookingEligibilityQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPricingEstimate;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPricingPreviewPort;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
@@ -30,10 +28,10 @@ import java.util.UUID;
 /** Read-only pricing surface. Checkout remains the only path that reserves value. */
 @Service
 @RequiredArgsConstructor
-public class BookingPricingPreviewService {
+public class BookingPricingPreviewService implements BookingPricingPreviewPort {
 
     public static final String PRICING_VERSION = "v1";
-    public static final String ESTIMATE_DISCLAIMER = "Final price is calculated at checkout.";
+    public static final String ESTIMATE_DISCLAIMER = BookingPricingPreviewPort.ESTIMATE_DISCLAIMER;
     private static final List<CreditOriginType> USABLE_CREDIT_ORIGINS = List.of(
             CreditOriginType.CAMPAIGN_BONUS,
             CreditOriginType.COUPON_BONUS,
@@ -41,13 +39,12 @@ public class BookingPricingPreviewService {
             CreditOriginType.MANUAL
     );
 
-    private final MentorQueryPort mentorQueryPort;
     private final MentorBookingQueryPort mentorBookingQueryPort;
     private final CampaignService campaignService;
     private final CouponService couponService;
     private final CreditLedgerService creditLedgerService;
     private final PaymentProperties paymentProperties;
-    private final BookingEligibilityPolicy bookingEligibilityPolicy;
+    private final BookingEligibilityQueryPort bookingEligibilityQueryPort;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -62,64 +59,42 @@ public class BookingPricingPreviewService {
         if (viewerUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        MentorService service = mentorQueryPort.findByIdForPricingPreview(serviceId)
+        ServiceSlotCandidate candidate = mentorBookingQueryPort.getServiceCandidate(serviceId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring"));
-        validateDiscoverable(service);
-        return estimateForService(viewerUserId, service);
+        validateDiscoverable(candidate);
+        BookingPricingEstimate estimate = estimateForCandidate(viewerUserId, candidate);
+        return new ServicePricingPreviewResponse(
+                estimate.pricingVersion(),
+                estimate.calculatedAt(),
+                estimate.serviceId(),
+                estimate.priceScoin(),
+                estimate.priceBeforeCampaignScoin(),
+                estimate.campaignDiscountScoin(),
+                estimate.estimatedPayableScoin(),
+                estimate.campaignName(),
+                estimate.isEstimate(),
+                estimate.disclaimer()
+        );
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public ServicePricingPreviewResponse estimateForCandidate(UUID viewerUserId, ServiceSlotCandidate candidate) {
+    public BookingPricingEstimate estimateForCandidate(UUID viewerUserId, ServiceSlotCandidate candidate) {
         if (viewerUserId == null || candidate == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu để tính giá preview");
         }
         int basePrice = Boolean.TRUE.equals(candidate.isFree()) ? 0 : Math.max(0, candidate.priceScoin() == null ? 0 : candidate.priceScoin());
         int beforeCampaign = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
-        Booking pricingContext = Booking.builder()
-                .serviceId(candidate.serviceId())
-                .mentorUserId(candidate.mentorUserId())
-                .serviceIsFreeSnapshot(candidate.isFree())
-                .servicePriceScoinSnapshot(basePrice)
-                .serviceDurationSnapshot(candidate.durationMinutes())
-                .build();
+        BookingCheckoutSnapshot pricingContext = new BookingCheckoutSnapshot(
+                null, null, candidate.mentorUserId(), candidate.serviceId(), candidate.isFree(),
+                basePrice, candidate.durationMinutes(), null, null, null);
         CampaignService.CampaignCreditApplication campaign =
                 campaignService.estimateCampaignCredit(viewerUserId, pricingContext, beforeCampaign);
         int campaignDiscount = Math.max(0, Math.min(beforeCampaign, campaign.appliedScoin()));
-        return new ServicePricingPreviewResponse(
+        return new BookingPricingEstimate(
                 PRICING_VERSION,
-                BookingTime.toOffsetDateTime(timeProvider.instant()),
+                com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(timeProvider.instant()),
                 candidate.serviceId(),
-                beforeCampaign,
-                beforeCampaign,
-                campaignDiscount,
-                Math.max(0, beforeCampaign - campaignDiscount),
-                campaign.campaignName(),
-                true,
-                ESTIMATE_DISCLAIMER
-        );
-    }
-
-    @Transactional(readOnly = true)
-    public ServicePricingPreviewResponse estimateForService(UUID viewerUserId, MentorService service) {
-        if (viewerUserId == null || service == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu để tính giá preview");
-        }
-        int basePrice = normalizedBasePrice(service);
-        int beforeCampaign = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
-        Booking pricingContext = Booking.builder()
-                .serviceId(service.getId())
-                .mentorUserId(service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId())
-                .serviceIsFreeSnapshot(service.isFree())
-                .servicePriceScoinSnapshot(basePrice)
-                .serviceDurationSnapshot(service.getDurationMinutes())
-                .build();
-        CampaignService.CampaignCreditApplication campaign =
-                campaignService.estimateCampaignCredit(viewerUserId, pricingContext, beforeCampaign);
-        int campaignDiscount = Math.max(0, Math.min(beforeCampaign, campaign.appliedScoin()));
-        return new ServicePricingPreviewResponse(
-                PRICING_VERSION,
-                BookingTime.toOffsetDateTime(timeProvider.instant()),
-                service.getId(),
                 beforeCampaign,
                 beforeCampaign,
                 campaignDiscount,
@@ -133,15 +108,15 @@ public class BookingPricingPreviewService {
     @Transactional(readOnly = true)
     public PaymentCheckoutPreviewResponse previewCheckout(
             UUID viewerUserId,
-            Booking booking,
+            BookingCheckoutSnapshot booking,
             String couponCode,
             OffsetDateTime paymentDeadlineAt
     ) {
-        if (booking == null || booking.getServiceId() == null) {
+        if (booking == null || booking.serviceId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không có service hợp lệ để tính giá");
         }
-        int basePrice = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot()) ? 0
-                : Math.max(0, booking.getServicePriceScoinSnapshot() == null ? 0 : booking.getServicePriceScoinSnapshot());
+        int basePrice = Boolean.TRUE.equals(booking.serviceIsFree()) ? 0
+                : Math.max(0, booking.servicePriceScoin() == null ? 0 : booking.servicePriceScoin());
         int beforeDiscount = PricingPolicy.menteePayableScoin(basePrice, paymentProperties);
 
         Coupon coupon = couponService.resolveCouponForPreview(couponCode);
@@ -156,7 +131,7 @@ public class BookingPricingPreviewService {
         int userCredit = Math.min(afterCampaign, availableCredit);
 
         return new PaymentCheckoutPreviewResponse(
-                booking.getId(),
+                booking.bookingId(),
                 beforeDiscount,
                 beforeDiscount,
                 couponDiscount,
@@ -176,21 +151,14 @@ public class BookingPricingPreviewService {
                 .sum();
     }
 
-    private int normalizedBasePrice(MentorService service) {
-        if (service.isFree()) {
-            return 0;
-        }
-        return Math.max(0, service.getPriceScoin() == null ? 0 : service.getPriceScoin());
-    }
-
-    private void validateDiscoverable(MentorService service) {
-        if (service == null || !service.isActive() || service.getMentorProfile() == null) {
+    private void validateDiscoverable(ServiceSlotCandidate candidate) {
+        if (candidate == null || !Boolean.TRUE.equals(candidate.active()) || candidate.mentorUserId() == null) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring khả dụng");
         }
-        UUID mentorUserId = service.getMentorProfile().getUserId();
+        UUID mentorUserId = candidate.mentorUserId();
         MentorBookingCapability capability = mentorBookingQueryPort.getBookingCapability(mentorUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring khả dụng"));
-        if (!bookingEligibilityPolicy.isDiscoverableMentorForBooking(capability)) {
+        if (!bookingEligibilityQueryPort.isDiscoverableMentorForBooking(capability)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy dịch vụ mentoring khả dụng");
         }
     }

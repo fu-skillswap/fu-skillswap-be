@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
-import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.SettlementEntry;
 import com.fptu.exe.skillswap.modules.payment.dto.response.CreditWalletResponse;
@@ -48,8 +48,8 @@ public class WalletQueryService {
                 .balanceEffectScoin(entry.getBalanceEffectScoin())
                 .memo(entry.getMemo())
                 .createdAt(entry.getCreatedAtUtc() != null
-                        ? BookingTime.toOffsetDateTime(entry.getCreatedAtUtc())
-                        : (entry.getCreatedAt() != null ? BookingTime.toOffsetDateTime(entry.getCreatedAt()) : null))
+                        ? BusinessTime.toOffsetDateTime(entry.getCreatedAtUtc())
+                        : (entry.getCreatedAt() != null ? BusinessTime.toOffsetDateTime(entry.getCreatedAt()) : null))
                 .build();
     }
 
@@ -63,7 +63,7 @@ public class WalletQueryService {
                 .amountScoin(entry.getAmountScoin())
                 .balanceEffectScoin(entry.getBalanceEffectScoin())
                 .memo(entry.getMemo())
-                .createdAt(entry.getCreatedAt() != null ? BookingTime.toOffsetDateTime(entry.getCreatedAt()) : null)
+                .createdAt(entry.getCreatedAt() != null ? BusinessTime.toOffsetDateTime(entry.getCreatedAt()) : null)
                 .build();
     }
 }

@@ -255,7 +255,7 @@ public class BookingRescheduleService {
         bookingSlotValidator.validateCandidateSelection(
                 proposedSlot,
                 serviceCandidate,
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 rescheduleRequest.getProposedSelectedStartTime(),
                 rescheduleRequest.getProposedSelectedEndTime()
         );
@@ -360,7 +360,7 @@ public class BookingRescheduleService {
     private void validateCreatePermission(Booking booking, UUID currentUserId, BookingRescheduleActorRole actorRole) {
         switch (actorRole) {
             case MENTEE -> {
-                if (booking.getMentee() == null || !currentUserId.equals(booking.getMentee().getId())) {
+                if (booking.getMenteeUserId() == null || !currentUserId.equals(booking.getMenteeUserId())) {
                     throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền tạo reschedule request cho booking này");
                 }
             }
@@ -373,7 +373,7 @@ public class BookingRescheduleService {
     }
 
     private BookingRescheduleActorRole resolveParticipantResponderRole(Booking booking, UUID currentUserId) {
-        if (booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId())) {
+        if (booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId())) {
             return BookingRescheduleActorRole.MENTEE;
         }
         if (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId())) {
@@ -383,7 +383,7 @@ public class BookingRescheduleService {
     }
 
     private void assertParticipantAccess(Booking booking, UUID currentUserId) {
-        if ((booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId()))
+        if ((booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId()))
                 || (booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId()))) {
             return;
         }
@@ -478,10 +478,10 @@ public class BookingRescheduleService {
         Booking booking = request.getBooking();
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
                 ? booking.getMentorUserId()
-                : booking.getMentee().getId();
+                : booking.getMenteeUserId();
         if (request.getRequesterRole() == BookingRescheduleActorRole.ADMIN) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    booking.getMentee().getId(),
+                    booking.getMenteeUserId(),
                     NotificationType.BOOKING_RESCHEDULE_REQUESTED,
                     "Admin đã tạo đề xuất dời lịch",
                     "Admin đã tạo một reschedule request cho booking của bạn.",
@@ -520,7 +520,7 @@ public class BookingRescheduleService {
             return;
         }
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
-                ? booking.getMentee().getId()
+                ? booking.getMenteeUserId()
                 : booking.getMentorUserId();
         eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
@@ -533,7 +533,7 @@ public class BookingRescheduleService {
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã được chấp nhận.",
@@ -553,7 +553,7 @@ public class BookingRescheduleService {
             return;
         }
         UUID recipientId = request.getRequesterRole() == BookingRescheduleActorRole.MENTEE
-                ? booking.getMentee().getId()
+                ? booking.getMenteeUserId()
                 : booking.getMentorUserId();
         eventPublisher.publishEvent(new NotificationEvent(
                 recipientId,
@@ -566,7 +566,7 @@ public class BookingRescheduleService {
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã bị từ chối.",
@@ -577,7 +577,7 @@ public class BookingRescheduleService {
     private void notifyExpire(BookingRescheduleRequest request) {
         Booking booking = request.getBooking();
         eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 NotificationType.BOOKING_RESCHEDULE_EXPIRED,
                 "Đề xuất dời lịch đã hết hạn",
                 "Reschedule request của booking đã hết hạn vì chưa được phản hồi trước giờ học cũ.",
@@ -595,7 +595,7 @@ public class BookingRescheduleService {
 
         eventPublisher.publishEvent(new com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent(
                 booking.getId(),
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 booking.getMentorUserId(),
                 booking.getStatus(),
                 "Yêu cầu dời lịch đã hết hạn.",
@@ -605,7 +605,7 @@ public class BookingRescheduleService {
 
     private void notifyBothParticipants(Booking booking, NotificationType type, String title, String message) {
         eventPublisher.publishEvent(new NotificationEvent(
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 type,
                 title,
                 message,
@@ -625,7 +625,7 @@ public class BookingRescheduleService {
     private void notifyAutoRejectedPendingBookings(List<Booking> pendingBookings) {
         for (Booking pendingBooking : pendingBookings) {
             eventPublisher.publishEvent(new NotificationEvent(
-                    pendingBooking.getMentee().getId(),
+                    pendingBooking.getMenteeUserId(),
                     NotificationType.BOOKING_AUTO_REJECTED,
                     "Yêu cầu đặt lịch không còn khả dụng",
                     "Khung giờ này đã được một booking khác sử dụng sau khi dời lịch.",

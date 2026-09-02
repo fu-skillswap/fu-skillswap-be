@@ -12,12 +12,17 @@ import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.ConversationBookingLinkRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.ChatAttachmentRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.ChatUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationSafetyPolicy;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
@@ -31,6 +36,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -74,9 +80,24 @@ class ConversationServiceUnitTest {
     private ConversationSafetyPolicy conversationSafetyPolicy;
 
     @Mock
-    private ChatService chatService;
+    private ConversationBookingLinkRepository conversationBookingLinkRepository;
+    @Mock
+    private ChatAttachmentRepository chatAttachmentRepository;
+    @Mock
+    private ChatUploadIntentRepository chatUploadIntentRepository;
+    @Mock
+    private UserQueryPort userQueryPort;
+    @Mock
+    private CourseQueryPort courseQueryPort;
+    @Mock
+    private ChatAttachmentService chatAttachmentService;
+    @Mock
+    private ChatAccessResolutionService chatAccessResolutionService;
+    @Mock
+    private ObjectProvider<GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider;
+    @Mock
+    private ObjectProvider<UserQueryPort> userQueryPortProvider;
 
-    @InjectMocks
     private ConversationService conversationService;
 
     private Booking booking;
@@ -103,8 +124,58 @@ class ConversationServiceUnitTest {
         booking = Booking.builder()
                 .id(bookingId)
                 .mentorUserId(mentorProfile.getUserId())
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .build();
+
+        ChatRoomService chatRoomService = new ChatRoomService(
+                conversationRepository,
+                participantRepository,
+                conversationBookingLinkRepository,
+                courseQueryPort,
+                userQueryPort
+        );
+        ChatResponseMapper chatResponseMapper = new ChatResponseMapper(
+                cursorCodec,
+                chatAttachmentRepository,
+                participantRepository
+        );
+        ChatMessageService chatMessageService = new ChatMessageService(
+                messageRepository,
+                conversationRepository,
+                participantRepository,
+                chatAttachmentRepository,
+                chatAttachmentService,
+                chatAccessResolutionService,
+                chatResponseMapper,
+                domainEventOutboxService,
+                realtimeOutboxProperties,
+                groupChatFanoutDispatcherProvider,
+                userQueryPortProvider
+        );
+        ChatReadReceiptService chatReadReceiptService = new ChatReadReceiptService(
+                participantRepository,
+                conversationRepository,
+                domainEventOutboxService,
+                realtimeOutboxProperties
+        );
+        ChatQueryService chatQueryService = new ChatQueryService(
+                conversationRepository,
+                participantRepository,
+                messageRepository,
+                chatRoomService,
+                chatAccessResolutionService,
+                chatResponseMapper,
+                internalTelemetryService,
+                courseQueryPort
+        );
+        ChatService chatService = new ChatService(
+                chatRoomService,
+                chatMessageService,
+                chatAttachmentService,
+                chatReadReceiptService,
+                chatQueryService
+        );
+        conversationService = new ConversationService(chatService);
 
         lenient().when(messageRepository.findByBookingIdAndSystemEventType(any(), eq("BOOKING_CONFIRMED")))
                 .thenReturn(Optional.of(new Message()));
@@ -139,6 +210,8 @@ class ConversationServiceUnitTest {
 
         when(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId))
                 .thenReturn(Optional.of(existing));
+        when(userQueryPort.findUserById(mentorUser.getId())).thenReturn(Optional.of(mentorUser));
+        when(userQueryPort.findUserById(menteeUser.getId())).thenReturn(Optional.of(menteeUser));
 
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), mentorUser.getId())).thenReturn(true);
         when(participantRepository.existsByConversationIdAndUserId(existing.getId(), menteeUser.getId())).thenReturn(true);
@@ -163,6 +236,8 @@ class ConversationServiceUnitTest {
         when(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(existing)); // Second find in catch block recovers it
+        when(userQueryPort.findUserById(mentorUser.getId())).thenReturn(Optional.of(mentorUser));
+        when(userQueryPort.findUserById(menteeUser.getId())).thenReturn(Optional.of(menteeUser));
 
         // Save fails due to DataIntegrityViolationException
         when(conversationRepository.save(any(Conversation.class)))
@@ -186,16 +261,16 @@ class ConversationServiceUnitTest {
         Conversation existing = Conversation.builder()
                 .id(UUID.randomUUID())
                 .sourceType(ConversationSourceType.BOOKING)
-                .sourceId(UUID.randomUUID())
+                .sourceId(bookingId)
                 .type(ConversationType.DIRECT)
                 .status(ConversationStatus.ACTIVE)
                 .build();
 
         when(conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, secondBookingId))
                 .thenReturn(Optional.empty());
-        when(conversationRepository.findByMentorUserIdAndMenteeUserId(mentorUser.getId(), menteeUser.getId()))
-                .thenReturn(Optional.of(existing));
-        lenient().when(conversationRepository.findDirectActiveByParticipantPair(
+        when(userQueryPort.findUserById(mentorUser.getId())).thenReturn(Optional.of(mentorUser));
+        when(userQueryPort.findUserById(menteeUser.getId())).thenReturn(Optional.of(menteeUser));
+        when(conversationRepository.findDirectActiveByParticipantPair(
                 mentorUser.getId(),
                 menteeUser.getId(),
                 ConversationType.DIRECT,
@@ -213,23 +288,17 @@ class ConversationServiceUnitTest {
     }
 
     @Test
-    void findConversationIdsForBookings_shouldFallbackToDirectConversationByParticipants() {
+    void findConversationIdsForBookings_shouldLoadBookingLinkedConversations() {
         Conversation existing = Conversation.builder()
                 .id(UUID.randomUUID())
                 .sourceType(ConversationSourceType.BOOKING)
-                .sourceId(UUID.randomUUID())
+                .sourceId(bookingId)
                 .type(ConversationType.DIRECT)
                 .status(ConversationStatus.ACTIVE)
                 .build();
 
         when(conversationRepository.findBySourceTypeAndSourceIdIn(ConversationSourceType.BOOKING, List.of(bookingId)))
-                .thenReturn(List.of());
-        when(conversationRepository.findDirectActiveByParticipantPair(
-                mentorUser.getId(),
-                menteeUser.getId(),
-                ConversationType.DIRECT,
-                ConversationStatus.ACTIVE
-        )).thenReturn(List.of(existing));
+                .thenReturn(List.of(existing));
 
         java.util.Map<UUID, UUID> result = conversationService.findConversationIdsByBookingIds(List.of(bookingId));
 
@@ -271,6 +340,9 @@ class ConversationServiceUnitTest {
 
         when(participantRepository.findByConversationIdInWithUser(anyList()))
                 .thenReturn(List.of(cp1_conv1, cp2_conv1, cp1_conv2, cp2_conv2));
+        when(messageRepository.countUnreadMessagesBatch(anyList(), eq(userId))).thenReturn(List.of());
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(userId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
 
         Page<ConversationResponse> response = conversationService.getMyConversations(userId, PageRequest.of(0, 10));
 
@@ -289,12 +361,12 @@ class ConversationServiceUnitTest {
         Conversation conversation = Conversation.builder().id(conversationId).type(ConversationType.DIRECT).build();
         User sender = new User(); sender.setId(senderId); sender.setFullName("Sender Name");
 
-        MessageRepository messageRepository = mock(MessageRepository.class);
-        UserRepository userRepository = mock(UserRepository.class);
-
         when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
-        lenient().when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
-        when(userRepository.findById(senderId)).thenReturn(Optional.of(sender));
+        when(conversationRepository.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
+        when(userQueryPort.findUserById(senderId)).thenReturn(Optional.of(sender));
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), any()))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
         when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
 
         Message savedMessage = Message.builder()
@@ -305,7 +377,7 @@ class ConversationServiceUnitTest {
                 .sequence(1L)
                 .createdAt(LocalDateTime.now())
                 .build();
-        when(messageRepository.save(any(Message.class))).thenReturn(savedMessage);
+        when(this.messageRepository.save(any(Message.class))).thenReturn(savedMessage);
 
         ConversationParticipant otherParticipant = ConversationParticipant.builder()
                 .conversation(conversation)
@@ -396,8 +468,10 @@ class ConversationServiceUnitTest {
                 .build();
 
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
-        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(me, other));
+        when(participantRepository.findByConversationIdWithUser(conversationId)).thenReturn(List.of(me, other));
         when(messageRepository.countUnreadMessages(eq(conversationId), eq(userId), eq(42L))).thenReturn(5L);
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(userId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
 
         ConversationResponse response = conversationService.getConversationDetail(conversationId, userId);
 
@@ -415,7 +489,7 @@ class ConversationServiceUnitTest {
 
         Conversation conversation = Conversation.builder().id(conversationId).build();
         when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
-        when(participantRepository.findByConversationId(conversationId)).thenReturn(Collections.emptyList());
+        when(participantRepository.findByConversationIdWithUser(conversationId)).thenReturn(Collections.emptyList());
 
         assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
                 () -> conversationService.getConversationDetail(conversationId, userId));

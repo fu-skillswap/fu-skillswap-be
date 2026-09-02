@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.modules.booking.event.BookingStatusUpdatedEvent;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatPort;
 import com.fptu.exe.skillswap.modules.booking.event.BookingCalendarLifecycleEvent;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
@@ -63,7 +63,7 @@ public class BookingDecisionService {
     private final BookingResponseMapper bookingResponseMapper;
     private final GoogleCalendarConnectionPort googleCalendarConnectionPort;
     private final MeetingProviderFactory meetingProviderFactory;
-    private ConversationService conversationService;
+    private BookingChatPort bookingChatPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -75,8 +75,8 @@ public class BookingDecisionService {
     }
 
     @Autowired(required = false)
-    void setConversationService(ConversationService conversationService) {
-        this.conversationService = conversationService;
+    void setBookingChatPort(BookingChatPort bookingChatPort) {
+        this.bookingChatPort = bookingChatPort;
     }
 
     @Transactional
@@ -87,7 +87,7 @@ public class BookingDecisionService {
 
         Booking booking = getBookingForMentorDecision(mentorUserId, bookingId);
         UUID slotId = booking.getSlot() == null ? null : booking.getSlot().getId();
-        UUID menteeId = booking.getMentee() == null ? null : booking.getMentee().getId();
+        UUID menteeId = booking.getMenteeUserId() == null ? null : booking.getMenteeUserId();
         if (slotId == null || menteeId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking chưa gắn đầy đủ mentee và khung giờ mentoring");
         }
@@ -141,7 +141,7 @@ public class BookingDecisionService {
         }
 
         List<Booking> menteeOverlappingBookings = bookingRepository.findMenteeOverlappingBookingsForUpdateUtc(
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 SLOT_LOCKING_STATUSES,
                 selectedStartAt,
                 selectedEndAt
@@ -160,7 +160,7 @@ public class BookingDecisionService {
                 selectedEndAt
         );
         List<Booking> menteePendingBookings = bookingRepository.findMenteeOverlappingBookingsForUpdateUtc(
-                booking.getMentee().getId(),
+                booking.getMenteeUserId(),
                 List.of(BookingStatus.PENDING),
                 selectedStartAt,
                 selectedEndAt
@@ -232,13 +232,13 @@ public class BookingDecisionService {
             if (sessionService != null) {
                 sessionService.createForAcceptedBooking(savedBooking);
             }
-            if (conversationService != null) {
-                conversationService.createDirectForAcceptedBooking(
-                        savedBooking.getId(), savedBooking.getMentorUserId(), savedBooking.getMentee().getId());
+            if (bookingChatPort != null) {
+                bookingChatPort.createDirectForAcceptedBooking(
+                        savedBooking.getId(), savedBooking.getMentorUserId(), savedBooking.getMenteeUserId());
             }
 
             eventPublisher.publishEvent(new NotificationEvent(
-                    savedBooking.getMentee().getId(),
+                    savedBooking.getMenteeUserId(),
                     NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu học miễn phí",
                     mentorName + " đã chấp nhận lịch mentoring miễn phí của bạn. Buổi học đã được xác nhận.",
@@ -249,8 +249,8 @@ public class BookingDecisionService {
             eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                     .bookingId(savedBooking.getId())
                     .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
-                    .recipientEmail(savedBooking.getMentee().getEmail())
-                    .recipientName(savedBooking.getMentee().getFullName())
+                    .recipientEmail(menteeEmail(savedBooking))
+                    .recipientName(menteeName(savedBooking))
                     .actorName(mentorName)
                     .bookingStartTime(savedBooking.getSelectedStartTime())
                     .bookingEndTime(savedBooking.getSelectedEndTime())
@@ -272,7 +272,7 @@ public class BookingDecisionService {
                         .eventType(BookingEmailNotificationEvent.EventType.BOOKING_PAID_CONFIRMED_EMAIL)
                         .recipientEmail(mentorEmail)
                         .recipientName(mentorName)
-                        .actorName(savedBooking.getMentee().getFullName())
+                        .actorName(menteeName(savedBooking))
                         .bookingStartTime(savedBooking.getSelectedStartTime())
                         .bookingEndTime(savedBooking.getSelectedEndTime())
                         .learningGoalTitle(savedBooking.getLearningGoalTitle())
@@ -291,8 +291,8 @@ public class BookingDecisionService {
             eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                     .bookingId(savedBooking.getId())
                     .eventType(BookingEmailNotificationEvent.EventType.BOOKING_ACCEPTED_EMAIL)
-                    .recipientEmail(savedBooking.getMentee().getEmail())
-                    .recipientName(savedBooking.getMentee().getFullName())
+                    .recipientEmail(menteeEmail(savedBooking))
+                    .recipientName(menteeName(savedBooking))
                     .actorName(mentorName)
                     .bookingStartTime(savedBooking.getSelectedStartTime())
                     .bookingEndTime(savedBooking.getSelectedEndTime())
@@ -310,7 +310,7 @@ public class BookingDecisionService {
                     .build());
 
             eventPublisher.publishEvent(new NotificationEvent(
-                    savedBooking.getMentee().getId(),
+                    savedBooking.getMenteeUserId(),
                     NotificationType.BOOKING_ACCEPTED,
                     "Mentor đã chấp nhận yêu cầu",
                     mentorName + " đã chấp nhận lịch mentoring của bạn. Vui lòng thanh toán để xác nhận buổi học.",
@@ -321,7 +321,7 @@ public class BookingDecisionService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 isFree ? "Mentor đã chấp nhận yêu cầu học miễn phí. Buổi học đã được xác nhận."
@@ -335,7 +335,7 @@ public class BookingDecisionService {
         for (Booking pendingBooking : pendingBookings) {
             if (!pendingBooking.getId().equals(booking.getId())) {
                 eventPublisher.publishEvent(new NotificationEvent(
-                        pendingBooking.getMentee().getId(),
+                        pendingBooking.getMenteeUserId(),
                         NotificationType.BOOKING_AUTO_REJECTED,
                         "Yêu cầu đặt lịch đã bị hủy tự động",
                         "Khung giờ bạn chọn đã được mentor xác nhận cho một học viên khác.",
@@ -345,8 +345,8 @@ public class BookingDecisionService {
                 eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                         .bookingId(pendingBooking.getId())
                         .eventType(BookingEmailNotificationEvent.EventType.BOOKING_REJECTED_EMAIL)
-                        .recipientEmail(pendingBooking.getMentee().getEmail())
-                        .recipientName(pendingBooking.getMentee().getFullName())
+                        .recipientEmail(menteeEmail(pendingBooking))
+                        .recipientName(menteeName(pendingBooking))
                         .actorName(mentorName)
                         .bookingStartTime(pendingBooking.getSelectedStartTime())
                         .bookingEndTime(pendingBooking.getSelectedEndTime())
@@ -361,7 +361,7 @@ public class BookingDecisionService {
                         .build());
                 eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                         pendingBooking.getId(),
-                        pendingBooking.getMentee().getId(),
+                        pendingBooking.getMenteeUserId(),
                         pendingBooking.getMentorUserId(),
                         BookingStatus.REJECTED,
                         "Yêu cầu đặt lịch không còn khả dụng.",
@@ -395,7 +395,7 @@ public class BookingDecisionService {
         String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
 
         eventPublisher.publishEvent(new NotificationEvent(
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 NotificationType.BOOKING_REJECTED,
                 "Yêu cầu đặt lịch đã bị từ chối",
                 mentorName + " đã từ chối yêu cầu đặt lịch của bạn.",
@@ -406,8 +406,8 @@ public class BookingDecisionService {
         eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                 .bookingId(savedBooking.getId())
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_REJECTED_EMAIL)
-                .recipientEmail(savedBooking.getMentee().getEmail())
-                .recipientName(savedBooking.getMentee().getFullName())
+                .recipientEmail(menteeEmail(savedBooking))
+                .recipientName(menteeName(savedBooking))
                 .actorName(mentorName)
                 .reason(savedBooking.getRejectReason())
                 .createdAt(nowBusiness)
@@ -415,7 +415,7 @@ public class BookingDecisionService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Yêu cầu đặt lịch đã bị từ chối.",
@@ -450,5 +450,20 @@ public class BookingDecisionService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private UserSummaryRecord menteeSummary(Booking booking) {
+        return booking == null || booking.getMenteeUserId() == null
+                ? null : userQueryPort.findUserSummaryById(booking.getMenteeUserId()).orElse(null);
+    }
+
+    private String menteeEmail(Booking booking) {
+        UserSummaryRecord mentee = menteeSummary(booking);
+        return mentee == null ? null : mentee.email();
+    }
+
+    private String menteeName(Booking booking) {
+        UserSummaryRecord mentee = menteeSummary(booking);
+        return mentee == null ? "Mentee" : mentee.fullName();
     }
 }

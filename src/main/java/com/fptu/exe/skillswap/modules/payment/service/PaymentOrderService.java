@@ -1,11 +1,9 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutQueryPort;
 import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
-import com.fptu.exe.skillswap.modules.booking.service.SessionService;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutPreviewRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
@@ -46,7 +44,8 @@ public class PaymentOrderService {
      * Constructor hỗ trợ khởi tạo trực tiếp với Spring DI và Factory.
      */
     public PaymentOrderService(
-            BookingQueryPort bookingQueryPort,
+            BookingCheckoutQueryPort bookingCheckoutQueryPort,
+            UserQueryPort userQueryPort,
             BookingPaymentSettlementPort bookingPaymentSettlementPort,
             PaymentOrderRepository paymentOrderRepository,
             PaymentAttemptRepository paymentAttemptRepository,
@@ -56,9 +55,6 @@ public class PaymentOrderService {
             PaymentProperties paymentProperties,
             PaymentGatewayProviderFactory paymentGatewayProviderFactory,
             SettlementService settlementService,
-            SessionService sessionService,
-            ConversationService conversationService,
-            NotificationService notificationService,
             ApplicationEventPublisher eventPublisher,
             InternalTelemetryService internalTelemetryService,
             TransactionTemplate transactionTemplate
@@ -87,7 +83,8 @@ public class PaymentOrderService {
                 paymentProperties
         );
         PaymentCheckoutService checkoutService = new PaymentCheckoutService(
-                bookingQueryPort,
+                bookingCheckoutQueryPort,
+                userQueryPort,
                 paymentOrderRepository,
                 paymentAttemptRepository,
                 couponService,

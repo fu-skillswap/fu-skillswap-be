@@ -3,8 +3,7 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.dto.response.OnboardingStatusResponse;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorOnboardingQueryPort;
 
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -30,8 +29,7 @@ import java.util.UUID;
 public class OnboardingStatusController {
 
     private final AcademicService academicService;
-    private final MentorProfileService mentorProfileService;
-    private final MentorVerificationService mentorVerificationService;
+    private final MentorOnboardingQueryPort mentorOnboardingQueryPort;
 
 
     @GetMapping
@@ -47,9 +45,9 @@ public class OnboardingStatusController {
 
         UUID userId = principal.getPublicId();
         boolean studentProfileCompleted = academicService.hasCompletedStudentProfile(userId);
-        boolean mentorProfileCompleted = mentorProfileService.hasCompletedMentorProfile(userId);
+        boolean mentorProfileCompleted = mentorOnboardingQueryPort.hasCompletedMentorProfile(userId);
 
-        String verificationStatus = mentorVerificationService.getLatestVerificationStatus(userId);
+        String verificationStatus = mentorOnboardingQueryPort.getLatestVerificationStatus(userId);
         List<RoleCode> roles = principal.getRoles();
 
         String nextAction;

@@ -27,7 +27,6 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class BookingReminderEmailService {
 
     // Reminder should cover both paid bookings and legacy accepted bookings that are already confirmed for scheduling.
@@ -45,6 +44,17 @@ public class BookingReminderEmailService {
     private final UserQueryPort userQueryPort;
     private SessionService sessionService;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
+
+    @Autowired
+    public BookingReminderEmailService(
+            BookingRepository bookingRepository,
+            EmailDispatchService emailDispatchService,
+            UserQueryPort userQueryPort
+    ) {
+        this.bookingRepository = bookingRepository;
+        this.emailDispatchService = emailDispatchService;
+        this.userQueryPort = userQueryPort;
+    }
 
     public BookingReminderEmailService(BookingRepository bookingRepository, EmailDispatchService emailDispatchService) {
         this.bookingRepository = bookingRepository;
@@ -233,18 +243,18 @@ public class BookingReminderEmailService {
     }
 
     private boolean sendMissingAccessWarningToMentee(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) return false;
+        if (booking == null || booking.getId() == null || !hasText(menteeEmail(booking))) return false;
         String subject = "[SkillSwap] Buổi học chưa có thông tin tham gia";
         EmailPayload payload = buildSessionReminderPayload(booking, subject, "Cần kiểm tra thông tin buổi học",
                 "Cần chú ý", menteeName(booking), mentorName(booking),
                 "Buổi mentoring sẽ bắt đầu sau 30 phút nhưng hiện chưa có link họp hoặc địa điểm hợp lệ.",
                 "Hãy liên hệ mentor qua SkillSwap; nếu không thể tham gia khi tới giờ, bạn có thể báo mentor no-show.", "Xem booking");
         return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTEE:" + booking.getId(),
-                booking.getMentee().getEmail(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTEE");
+                menteeEmail(booking), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTEE");
     }
 
     private boolean sendMenteeAutoCloseWarning(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) {
+        if (booking == null || booking.getId() == null || !hasText(menteeEmail(booking))) {
             return false;
         }
         EmailPayload payload = buildSessionReminderPayload(
@@ -252,7 +262,7 @@ public class BookingReminderEmailService {
                 "[SkillSwap] Sắp tự động đóng buổi học",
                 "Buổi học sắp tự động đóng",
                 "Đang chờ xác nhận",
-                defaultText(booking.getMentee().getFullName(), "bạn"),
+                defaultText(menteeName(booking), "bạn"),
                 mentorName(booking),
                 "Chỉ còn 1 giờ nữa buổi học với " + mentorName(booking) + " sẽ tự động đóng và giải ngân cho mentor.",
                 "Vui lòng vào SkillSwap để xác nhận hoàn tất hoặc báo cáo sự cố nếu có.",
@@ -260,7 +270,7 @@ public class BookingReminderEmailService {
         );
         return emailDispatchService.sendHtmlOnce(
                 "BOOKING_AUTO_CLOSE_WARNING_MENTEE:" + booking.getId(),
-                booking.getMentee().getEmail(),
+                menteeEmail(booking),
                 payload.subject(),
                 payload.html(),
                 payload.plainText(),
@@ -298,7 +308,7 @@ public class BookingReminderEmailService {
     }
 
     private boolean sendMenteeReminder(Booking booking) {
-        if (booking == null || booking.getId() == null || booking.getMentee() == null || !hasText(booking.getMentee().getEmail())) {
+        if (booking == null || booking.getId() == null || !hasText(menteeEmail(booking))) {
             return false;
         }
         EmailPayload payload = buildSessionReminderPayload(
@@ -306,7 +316,7 @@ public class BookingReminderEmailService {
                 "[SkillSwap] Buổi học của bạn bắt đầu sau 30 phút",
                 "Buổi học của bạn bắt đầu sau 30 phút",
                 "Lịch học",
-                defaultText(booking.getMentee().getFullName(), "bạn"),
+                defaultText(menteeName(booking), "bạn"),
                 mentorName(booking),
                 "Buổi học của bạn với " + mentorName(booking) + " sẽ bắt đầu sau khoảng 30 phút.",
                 "Chuẩn bị nội dung cần hỏi và truy cập SkillSwap đúng giờ để vào buổi học.",
@@ -314,7 +324,7 @@ public class BookingReminderEmailService {
         );
         return emailDispatchService.sendHtmlOnce(
                 "BOOKING_SESSION_REMINDER_MENTEE:" + booking.getId(),
-                booking.getMentee().getEmail(),
+                menteeEmail(booking),
                 payload.subject(),
                 payload.html(),
                 payload.plainText(),
@@ -566,11 +576,16 @@ public class BookingReminderEmailService {
     }
 
     private String menteeName(Booking booking) {
-        if (booking.getMentee() != null) {
-            return defaultText(booking.getMentee().getFullName(), "mentee");
-        }
-        return "mentee";
+        UserSummaryRecord mentee = menteeSummary(booking);
+        return defaultText(mentee == null ? null : mentee.fullName(), "mentee");
     }
+
+    private UserSummaryRecord menteeSummary(Booking booking) {
+        return booking == null || booking.getMenteeUserId() == null || userQueryPort == null
+                ? null : userQueryPort.findUserSummaryById(booking.getMenteeUserId()).orElse(null);
+    }
+
+    private String menteeEmail(Booking booking) { UserSummaryRecord mentee = menteeSummary(booking); return mentee == null ? null : mentee.email(); }
 
     private String defaultText(String value, String fallback) {
         return hasText(value) ? value.trim() : fallback;

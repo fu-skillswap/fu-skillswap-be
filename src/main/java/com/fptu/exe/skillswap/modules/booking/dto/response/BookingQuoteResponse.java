@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.dto.response;
 
-import com.fptu.exe.skillswap.modules.payment.dto.response.ServicePricingPreviewResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPricingEstimate;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
@@ -27,7 +27,7 @@ public record BookingQuoteResponse(
         @Schema(description = "Booking phải thanh toán xong trước giờ học ít nhất số phút này", example = "60")
         int paymentPreparationBufferMinutes,
         @Schema(description = "Chi tiết giá backend đã tính")
-        ServicePricingPreviewResponse pricing,
+        BookingPricingEstimate pricing,
         @Schema(description = "Chính sách hoàn/chia tiền hiện hành")
         BookingCancellationRefundPolicyResponse cancellationRefundPolicy,
         @Schema(description = "true vì quote có thể thay đổi khi tạo booking hoặc checkout")

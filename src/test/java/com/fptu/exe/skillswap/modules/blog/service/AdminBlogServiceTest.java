@@ -72,9 +72,6 @@ class AdminBlogServiceTest {
     @Test
     void createPost_shouldGenerateSlugAndContentHash() {
         UUID authorId = UUID.fromString("018f3abf-0a22-7112-9748-6cf000c47b6e");
-        User author = new User();
-        author.setId(authorId);
-        when(entityManager.getReference(User.class, authorId)).thenReturn(author);
         when(blogPostRepository.save(any(BlogPost.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.createPost(authorId, new AdminBlogPostCreateRequest(

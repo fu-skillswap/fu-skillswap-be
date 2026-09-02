@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome;
 import com.fptu.exe.skillswap.modules.booking.event.BookingEmailNotificationEvent;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
@@ -23,10 +24,12 @@ import org.springframework.data.domain.Pageable;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,12 +53,14 @@ class BookingDisputeNotificationServiceTest {
         mentor = user("mentor@skillswap.vn", "Mentor");
         booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentor.getId())
                 .serviceTitleSnapshot("Mock interview")
                 .issueSubmittedByUserId(mentee.getId())
                 .completionOutcome(BookingCompletionOutcome.NO_SHOW_MENTOR)
                 .build();
+        lenient().when(userQueryPort.findUserSummaryById(mentee.getId())).thenReturn(Optional.of(summary(mentee)));
+        lenient().when(userQueryPort.findUserSummaryById(mentor.getId())).thenReturn(Optional.of(summary(mentor)));
     }
 
     @Test
@@ -105,11 +110,14 @@ class BookingDisputeNotificationServiceTest {
     void humanReview_notifiesAndEmailsActiveAdminsOnly() {
         User activeAdmin = user("admin@skillswap.vn", "Admin");
         User inactiveAdmin = user("inactive@skillswap.vn", "Inactive");
+        activeAdmin.setStatus(UserStatus.ACTIVE);
         inactiveAdmin.setStatus(com.fptu.exe.skillswap.modules.identity.domain.UserStatus.INACTIVE);
         when(userQueryPort.findUsersByRole(eq(RoleCode.ADMIN)))
                 .thenReturn(List.of(activeAdmin, inactiveAdmin));
         when(userQueryPort.findUsersByRole(eq(RoleCode.SYSTEM_ADMIN)))
                 .thenReturn(List.of(activeAdmin));
+        when(userQueryPort.findUserSummaryById(activeAdmin.getId())).thenReturn(Optional.of(summary(activeAdmin)));
+        when(userQueryPort.findUserSummaryById(inactiveAdmin.getId())).thenReturn(Optional.of(summary(inactiveAdmin)));
 
         service.notifyHumanReviewRequired(booking);
 
@@ -123,5 +131,12 @@ class BookingDisputeNotificationServiceTest {
 
     private User user(String email, String name) {
         return User.builder().id(UUID.randomUUID()).email(email).fullName(name).build();
+    }
+
+    private com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord summary(User user) {
+        return new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
+                user.getId(), user.getEmail(), user.getFullName(), null, java.util.Set.of(),
+                user.getStatus() == null ? null : user.getStatus().name(),
+                user.getStatus() == UserStatus.ACTIVE);
     }
 }

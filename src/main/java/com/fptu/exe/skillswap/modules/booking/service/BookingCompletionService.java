@@ -167,7 +167,7 @@ public class BookingCompletionService {
         recordBookingEvent(savedBooking, BookingEventType.MENTOR_COMPLETED,
                 oldStatus, BookingEventActorType.USER, mentorUserId, null);
         eventPublisher.publishEvent(new NotificationEvent(
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 NotificationType.SESSION_COMPLETED,
                 "Mentor đã xác nhận hoàn tất buổi mentoring",
                 "Buổi mentoring đã chờ bạn xác nhận hoặc báo vấn đề trong " + PostSessionPolicy.MENTEE_REVIEW_WINDOW_HOURS + " giờ.",
@@ -177,7 +177,7 @@ public class BookingCompletionService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã xác nhận hoàn tất buổi học.",
@@ -241,7 +241,7 @@ public class BookingCompletionService {
         }
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentee xác nhận hoàn tất buổi học thành công.",
@@ -306,7 +306,7 @@ public class BookingCompletionService {
         }
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Buổi học đã được báo cáo vấn đề và đang được xem xét.",
@@ -575,7 +575,7 @@ public class BookingCompletionService {
     }
 
     private void assertBookingAccess(Booking booking, UUID currentUserId) {
-        boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
+        boolean isMentee = booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId());
         boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền xem hoặc thao tác booking này");
@@ -621,7 +621,7 @@ public class BookingCompletionService {
     }
 
     private void validateIssueReporter(Booking booking, UUID currentUserId, BookingIssueType issueType) {
-        boolean isMentee = booking.getMentee() != null && currentUserId.equals(booking.getMentee().getId());
+        boolean isMentee = booking.getMenteeUserId() != null && currentUserId.equals(booking.getMenteeUserId());
         boolean isMentor = booking.getMentorUserId() != null && currentUserId.equals(booking.getMentorUserId());
         if (!isMentee && !isMentor) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền báo cáo vấn đề cho booking này");

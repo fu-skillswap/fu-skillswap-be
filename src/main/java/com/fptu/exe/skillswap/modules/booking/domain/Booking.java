@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.*;
@@ -41,9 +39,8 @@ public class Booking {
     @Builder.Default
     private Long version = 0L;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mentee_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_bookings_mentee"))
-    private User mentee;
+    @Column(name = "mentee_user_id", nullable = false)
+    private UUID menteeUserId;
 
     @Column(name = "mentor_user_id", nullable = false)
     private UUID mentorUserId;

@@ -38,7 +38,7 @@ public class BookingEngagementService {
     public void promptFeedbackIfEligible(UUID bookingId) {
         bookingRepository.findById(bookingId).ifPresent(booking -> {
             if (booking.getStatus() == BookingStatus.COMPLETED && booking.getCompletionOutcome() == BookingCompletionOutcome.USER_CONFIRMED) {
-                deliver(booking, booking.getMentee().getId(), BookingEngagementDeliveryType.FEEDBACK_PROMPT,
+                deliver(booking, booking.getMenteeUserId(), BookingEngagementDeliveryType.FEEDBACK_PROMPT,
                         "FEEDBACK_PROMPT", "Đánh giá buổi mentoring", "Buổi học đã hoàn tất. Hãy chia sẻ đánh giá của bạn.");
             }
         });
@@ -49,7 +49,7 @@ public class BookingEngagementService {
                 now.plus(Duration.ofMinutes(minutes)).minusSeconds(30), now.plus(Duration.ofMinutes(minutes)).plusSeconds(30));
         int count = 0;
         for (Booking booking : bookings) {
-            count += deliver(booking, booking.getMentee().getId(), type, "BOOKING_REMINDER", title, "Kiểm tra lịch học và chuẩn bị trước giờ bắt đầu.") ? 1 : 0;
+            count += deliver(booking, booking.getMenteeUserId(), type, "BOOKING_REMINDER", title, "Kiểm tra lịch học và chuẩn bị trước giờ bắt đầu.") ? 1 : 0;
             if (booking.getMentorUserId() != null) {
                 count += deliver(booking, booking.getMentorUserId(), type, "BOOKING_REMINDER", title, "Kiểm tra lịch mentoring và chuẩn bị trước giờ bắt đầu.") ? 1 : 0;
             }

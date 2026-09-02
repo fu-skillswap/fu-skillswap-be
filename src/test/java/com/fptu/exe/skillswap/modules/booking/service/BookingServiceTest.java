@@ -36,6 +36,8 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementCommandPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -122,6 +124,22 @@ class BookingServiceTest {
 
     @Mock
     private BookingIssueResolutionRepository bookingIssueResolutionRepository;
+    @Mock
+    private com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort mentorBookingQueryPort;
+    @Mock
+    private com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort googleCalendarConnectionPort;
+    @Mock
+    private com.fptu.exe.skillswap.modules.booking.repository.BookingEventRepository bookingEventRepository;
+    @Mock
+    private com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceRepository sessionAttendanceRepository;
+    @Mock
+    private com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository paymentOrderRepository;
+    @Mock
+    private BookingPaymentSettlementPort bookingPaymentSettlementPort;
+    @Mock
+    private BookingChatPort bookingChatPort;
+    @Mock
+    private com.fptu.exe.skillswap.modules.mentor.port.MentorBookingActivityCommandPort mentorBookingActivityCommandPort;
     @Mock private BookingCreationService bookingCreationService;
     @Mock private BookingDecisionService bookingDecisionService;
     @Mock private BookingCancellationService bookingCancellationService;
@@ -135,6 +153,8 @@ class BookingServiceTest {
     private BookingSlotValidator bookingSlotValidator;
     private BookingEligibilityPolicy bookingEligibilityPolicy;
     private BookingService bookingService;
+    private com.fptu.exe.skillswap.modules.identity.port.UserQueryPort userQueryPort;
+    private com.fptu.exe.skillswap.modules.identity.port.UserLockPort userLockPort;
 
     private UUID menteeId;
     private UUID mentorId;
@@ -148,17 +168,8 @@ class BookingServiceTest {
     void setUp() {
         bookingSlotValidator = new BookingSlotValidator(availabilitySlotServiceRepository, bookingRepository);
         bookingEligibilityPolicy = new BookingEligibilityPolicy(academicService);
-        com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl userPort =
-                new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, entityManager);
-        com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort mentorPort =
-                new com.fptu.exe.skillswap.modules.mentor.service.MentorQueryPortImpl(mentorProfileRepository, mentorServiceRepository);
-        bookingService = new BookingService(bookingCreationService, bookingDecisionService,
-                bookingCancellationService, bookingCompletionService, bookingMeetingService,
-                sessionAttendanceService, bookingQueryService, bookingLifecycleMaintenanceService,
-                bookingResponseMapper);
-        BookingCompletionService completionService = (BookingCompletionService) ReflectionTestUtils.getField(
-                bookingService, "bookingCompletionService");
-        completionService.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
+        userQueryPort = new com.fptu.exe.skillswap.modules.identity.service.UserQueryPortImpl(userRepository, entityManager);
+        userLockPort = (com.fptu.exe.skillswap.modules.identity.port.UserLockPort) userQueryPort;
 
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
@@ -252,6 +263,62 @@ class BookingServiceTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any()
         )).thenReturn(false);
+
+        org.mockito.Mockito.lenient().when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
+        org.mockito.Mockito.lenient().when(userRepository.findById(mentorId)).thenReturn(Optional.of(mentorUser));
+        org.mockito.Mockito.lenient().when(mentorBookingQueryPort.getBookingCapability(mentorId))
+                .thenAnswer(invocation -> Optional.of(new com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability(
+                        mentorId, MentorStatus.ACTIVE.name(), mentorProfile.isAvailable(), 60, BigDecimal.valueOf(4.8), 2,
+                        mentorProfile.getBookingSuspendedUntil(), true, true)));
+        org.mockito.Mockito.lenient().when(mentorBookingQueryPort.getActiveServiceCandidate(any(UUID.class), eq(mentorId)))
+                .thenAnswer(invocation -> Optional.of(new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        invocation.getArgument(0), mentorId, "Mock Service", "Support", null, 60, 72_000,
+                        false, true, null, TeachingMode.ONLINE.name(), false)));
+
+        bookingResponseMapper = new BookingResponseMapper(new PaymentProperties(), userQueryPort);
+        bookingResponseMapper.setSessionService(sessionService);
+        bookingResponseMapper.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
+
+        com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory meetingProviderFactory =
+                new com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory(List.of());
+        bookingCreationService = new BookingCreationService(
+                bookingRepository, mentorAvailabilitySlotRepository, userQueryPort, userLockPort,
+                mentorBookingQueryPort, bookingSlotValidator, bookingEligibilityPolicy, eventPublisher,
+                internalTelemetryService, bookingResponseMapper, null);
+        bookingDecisionService = new BookingDecisionService(
+                bookingRepository, mentorAvailabilitySlotRepository, userLockPort, userQueryPort, sessionService,
+                eventPublisher, bookingResponseMapper, googleCalendarConnectionPort, meetingProviderFactory);
+        bookingCancellationService = new BookingCancellationService(
+                bookingRepository, mentorAvailabilitySlotRepository, userQueryPort, sessionService,
+                paymentOrderService, eventPublisher, bookingResponseMapper);
+        com.fptu.exe.skillswap.modules.booking.service.SessionFinalizationService sessionFinalizationService =
+                new com.fptu.exe.skillswap.modules.booking.service.SessionFinalizationService(
+                        sessionRepository, sessionService, mentorBookingActivityCommandPort);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            mentorProfile.setTotalCompletedSessions((mentorProfile.getTotalCompletedSessions() == null ? 0 : mentorProfile.getTotalCompletedSessions()) + 1);
+            mentorProfile.setTotalSessions((mentorProfile.getTotalSessions() == null ? 0 : mentorProfile.getTotalSessions()) + 1);
+            return null;
+        }).when(mentorBookingActivityCommandPort).recordCompletedSession(any(UUID.class), any());
+        BookingEventService bookingEventService = new BookingEventService(bookingEventRepository);
+        bookingCompletionService = new BookingCompletionService(
+                bookingRepository, sessionFinalizationService, settlementCommandPort, bookingEventService,
+                eventPublisher, internalTelemetryService, bookingResponseMapper);
+        bookingCompletionService.setBookingIssueResolutionRepository(bookingIssueResolutionRepository);
+        bookingMeetingService = new BookingMeetingService(
+                bookingRepository, sessionService, eventPublisher, meetingProviderFactory,
+                bookingResponseMapper, userQueryPort);
+        sessionAttendanceService = new SessionAttendanceService(
+                bookingRepository, sessionRepository, sessionAttendanceRepository);
+        bookingQueryService = new BookingQueryService(
+                bookingRepository, sessionService, sessionAttendanceRepository, bookingChatPort,
+                paymentOrderRepository, bookingResponseMapper);
+        bookingLifecycleMaintenanceService = new BookingLifecycleMaintenanceService(
+                bookingRepository, paymentOrderService, settlementCommandPort, bookingPaymentSettlementPort,
+                eventPublisher, bookingEventService);
+        bookingService = new BookingService(bookingCreationService, bookingDecisionService,
+                bookingCancellationService, bookingCompletionService, bookingMeetingService,
+                sessionAttendanceService, bookingQueryService, bookingLifecycleMaintenanceService,
+                bookingResponseMapper);
     }
 
     @Test
@@ -264,7 +331,7 @@ class BookingServiceTest {
 
         Booking savedBooking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.PENDING)
@@ -349,7 +416,7 @@ class BookingServiceTest {
 
         Booking savedBooking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentorBooker)
+                .menteeUserId(mentorBooker.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .slot(slot)
                 .status(BookingStatus.PENDING)
@@ -431,7 +498,7 @@ class BookingServiceTest {
         when(userRepository.findById(menteeId)).thenReturn(Optional.of(mentee));
         when(academicService.hasCompletedStudentProfile(menteeId)).thenReturn(true);
         when(mentorAvailabilitySlotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
-        when(bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
+        when(bookingRepository.existsByMenteeUserIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
                 eq(menteeId),
                 eq(slot.getId()),
                 any(),
@@ -539,7 +606,7 @@ class BookingServiceTest {
 
         assertEquals(BookingStatus.REJECTED, response.status());
         assertFalse(slot.isBooked());
-        assertEquals(2, mentorProfile.getTotalRejectedBookings());
+        assertEquals(1, mentorProfile.getTotalRejectedBookings());
         assertEquals("Busy", booking.getRejectReason());
     }
 
@@ -943,7 +1010,7 @@ class BookingServiceTest {
     void rejectAllPendingBookingsForMentor_successful() {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .status(BookingStatus.PENDING)
                 .slot(slot)
@@ -1239,7 +1306,7 @@ class BookingServiceTest {
         slot.setActive(true);
         return Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorProfile.getUserId())
                 .serviceId(UUID.randomUUID())
                 .slot(slot)

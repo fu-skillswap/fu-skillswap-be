@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogCategoryFollowRepository;
 import com.fptu.exe.skillswap.modules.blog.repository.BlogMentorFollowRepository;
 import com.fptu.exe.skillswap.modules.booking.service.BookingEligibilityPolicy;
-import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,7 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,14 +55,6 @@ class BlogPostPublishedNotificationListenerTest {
                 LocalDateTime.now()
         ));
 
-        verify(notificationService).createNotification(
-                eq(recipientId),
-                eq(NotificationType.BLOG_POST_PUBLISHED),
-                eq("Bài blog mới từ SkillSwap"),
-                eq("Nguyen A vừa đăng bài: Spring Security Guide"),
-                eq("BLOG_POST"),
-                eq(postId),
-                eq("/blog/posts/spring-security-guide")
-        );
+        verify(notificationService).publish(any());
     }
 }

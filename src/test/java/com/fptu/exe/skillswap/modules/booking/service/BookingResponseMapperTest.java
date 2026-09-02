@@ -42,6 +42,7 @@ class BookingResponseMapperTest {
     void setUp() {
         timeProvider = TimeProvider.fixed(FIXED_NOW, APP_ZONE);
         mapper = new BookingResponseMapper(new PaymentProperties(), null);
+        mapper.setTimeProvider(timeProvider);
         menteeId = UUID.randomUUID();
         mentorId = UUID.randomUUID();
     }
@@ -215,7 +216,7 @@ class BookingResponseMapperTest {
         User mentor = User.builder().id(mentorId).email("mentor@test.com").fullName("Mentor").build();
         return Booking.builder()
                 .id(UUID.randomUUID())
-                .mentee(mentee)
+                .menteeUserId(mentee.getId())
                 .mentorUserId(mentorId)
                 .serviceId(UUID.randomUUID())
                 .status(status)

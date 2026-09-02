@@ -41,10 +41,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "FLYWAY_ENABLED=false",
         "HIBERNATE_DDL_AUTO=create-drop",
         "application.storage.enabled=true",
-        "application.storage.endpoint=https://aff0f4ea8308e09d37a3633c.r2.cloudflarestorage.com",
-        "application.storage.access-key=f5f2ce66fdae81d5cc333",
-        "application.storage.secret-key=e57a60eaa0bc1f9059c5a8f95fb4a21f9f0f98c827e4e792a5fc",
-        "application.storage.bucket=skillswap-prod",
+        "application.storage.endpoint=https://test.r2.cloudflarestorage.com",
+        "application.storage.access-key=test-access-key",
+        "application.storage.secret-key=test-secret-key",
+        "application.storage.bucket=test-bucket",
         "application.storage.region=auto",
         "application.storage.public-url-prefix=https://cdn.skillswap.asia",
         "JWT_SECRET_KEY=c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0",
@@ -105,8 +105,8 @@ class MentorVerificationProdUploadIntentIntegrationTest {
                 .andExpect(jsonPath("$.status").value(201))
                 .andExpect(jsonPath("$.data.uploadIntentId").exists())
                 .andExpect(jsonPath("$.data.uploadUrl", notNullValue()))
-                .andExpect(jsonPath("$.data.uploadUrl", containsString("r2.cloudflarestorage.com")))
-                .andExpect(jsonPath("$.data.uploadUrl", containsString("skillswap-prod")))
+                .andExpect(jsonPath("$.data.uploadUrl", containsString("test.r2.cloudflarestorage.com")))
+                .andExpect(jsonPath("$.data.uploadUrl", containsString("test-bucket")))
                 .andExpect(jsonPath("$.data.requiredHeaders['Content-Type']").value("image/jpeg"))
                 .andExpect(jsonPath("$.data.status").value("PENDING_UPLOAD"));
     }

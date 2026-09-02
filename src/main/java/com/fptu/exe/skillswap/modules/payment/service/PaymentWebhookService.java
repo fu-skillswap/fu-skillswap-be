@@ -404,7 +404,7 @@ public class PaymentWebhookService {
         if (booking.paymentExpiresAtUtc() != null && !booking.paymentExpiresAtUtc().isAfter(paidAtUtc)) {
             bookingPaymentSettlementPort.expirePayment(booking.bookingId(), paidAtUtc,
                     "Yêu cầu đặt lịch đã hết hạn trước khi cổng thanh toán xác nhận giao dịch.");
-            compensateCapturedPaymentForTerminalBooking(booking, order);
+            compensateCapturedPaymentForTerminalBooking(booking, order, "EXPIRED");
             log.warn("finalizePaidBooking: payment order {} was paid after booking {} payment deadline; refunding capture",
                     order.getId(), booking.bookingId());
             return;
@@ -427,10 +427,19 @@ public class PaymentWebhookService {
     }
 
     private void compensateCapturedPaymentForTerminalBooking(BookingPaymentSnapshot booking, PaymentOrder order) {
+        compensateCapturedPaymentForTerminalBooking(booking, order, booking == null ? null : booking.paymentStatus());
+    }
+
+    private void compensateCapturedPaymentForTerminalBooking(BookingPaymentSnapshot booking,
+                                                             PaymentOrder order,
+                                                             String bookingStatus) {
         if (booking == null || order == null || settlementService == null) {
             return;
         }
-        switch (booking.paymentStatus()) {
+        if (bookingStatus == null) {
+            return;
+        }
+        switch (bookingStatus) {
             case "CANCELLED_BY_MENTEE" -> {
                 BookingCancellationContext context = bookingPaymentSettlementPort.findCancellationContext(booking.bookingId())
                         .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND,

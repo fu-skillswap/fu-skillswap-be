@@ -4,8 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.identity.controller.OnboardingStatusController;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorProfileService;
-import com.fptu.exe.skillswap.modules.mentor.service.MentorVerificationService;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorOnboardingQueryPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,10 +35,7 @@ class OnboardingStatusControllerTest {
     private AcademicService academicService;
 
     @MockBean
-    private MentorProfileService mentorProfileService;
-
-    @MockBean
-    private MentorVerificationService mentorVerificationService;
+    private MentorOnboardingQueryPort mentorOnboardingQueryPort;
 
     @Test
     void getOnboardingStatus_notAuthenticated_shouldReturnUnauthorized() throws Exception {
@@ -53,8 +49,8 @@ class OnboardingStatusControllerTest {
         UserPrincipal principal = UserPrincipal.create(userId, "mentee@test.com", List.of(RoleCode.MENTEE));
 
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(false);
-        when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(false);
-        when(mentorVerificationService.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
+        when(mentorOnboardingQueryPort.hasCompletedMentorProfile(userId)).thenReturn(false);
+        when(mentorOnboardingQueryPort.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
 
         mockMvc.perform(get("/api/me/onboarding-status")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
@@ -70,8 +66,8 @@ class OnboardingStatusControllerTest {
         UserPrincipal principal = UserPrincipal.create(userId, "mentor@test.com", List.of(RoleCode.MENTEE, RoleCode.MENTOR));
 
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
-        when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
-        when(mentorVerificationService.getLatestVerificationStatus(userId)).thenReturn("APPROVED");
+        when(mentorOnboardingQueryPort.hasCompletedMentorProfile(userId)).thenReturn(true);
+        when(mentorOnboardingQueryPort.getLatestVerificationStatus(userId)).thenReturn("APPROVED");
 
         mockMvc.perform(get("/api/me/onboarding-status")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
@@ -86,8 +82,8 @@ class OnboardingStatusControllerTest {
         UserPrincipal principal = UserPrincipal.create(userId, "mentee@test.com", List.of(RoleCode.MENTEE));
 
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
-        when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
-        when(mentorVerificationService.getLatestVerificationStatus(userId)).thenReturn("PENDING_REVIEW");
+        when(mentorOnboardingQueryPort.hasCompletedMentorProfile(userId)).thenReturn(true);
+        when(mentorOnboardingQueryPort.getLatestVerificationStatus(userId)).thenReturn("PENDING_REVIEW");
 
         mockMvc.perform(get("/api/me/onboarding-status")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
@@ -102,8 +98,8 @@ class OnboardingStatusControllerTest {
         UserPrincipal principal = UserPrincipal.create(userId, "mentee@test.com", List.of(RoleCode.MENTEE));
 
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
-        when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(false);
-        when(mentorVerificationService.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
+        when(mentorOnboardingQueryPort.hasCompletedMentorProfile(userId)).thenReturn(false);
+        when(mentorOnboardingQueryPort.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
 
         mockMvc.perform(get("/api/me/onboarding-status")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))
@@ -118,8 +114,8 @@ class OnboardingStatusControllerTest {
         UserPrincipal principal = UserPrincipal.create(userId, "mentee@test.com", List.of(RoleCode.MENTEE));
 
         when(academicService.hasCompletedStudentProfile(userId)).thenReturn(true);
-        when(mentorProfileService.hasCompletedMentorProfile(userId)).thenReturn(true);
-        when(mentorVerificationService.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
+        when(mentorOnboardingQueryPort.hasCompletedMentorProfile(userId)).thenReturn(true);
+        when(mentorOnboardingQueryPort.getLatestVerificationStatus(userId)).thenReturn("NOT_STARTED");
 
         mockMvc.perform(get("/api/me/onboarding-status")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()))))

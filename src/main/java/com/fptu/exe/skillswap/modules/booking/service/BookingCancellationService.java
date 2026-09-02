@@ -120,7 +120,7 @@ public class BookingCancellationService {
         String mentorName = mentorSummary == null ? "Mentor" : mentorSummary.fullName();
 
         eventPublisher.publishEvent(new NotificationEvent(
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 NotificationType.BOOKING_CANCELLED_BY_MENTOR,
                 "Mentor đã hủy lịch",
                 mentorName + " đã hủy lịch mentoring.",
@@ -131,8 +131,8 @@ public class BookingCancellationService {
         eventPublisher.publishEvent(BookingEmailNotificationEvent.builder()
                 .bookingId(savedBooking.getId())
                 .eventType(BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTOR_EMAIL)
-                .recipientEmail(savedBooking.getMentee().getEmail())
-                .recipientName(savedBooking.getMentee().getFullName())
+                .recipientEmail(menteeEmail(savedBooking))
+                .recipientName(menteeName(savedBooking))
                 .actorName(mentorName)
                 .bookingStartTime(savedBooking.getSelectedStartTime())
                 .bookingEndTime(savedBooking.getSelectedEndTime())
@@ -150,7 +150,7 @@ public class BookingCancellationService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentor đã hủy lịch học.",
@@ -165,7 +165,7 @@ public class BookingCancellationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã booking không hợp lệ");
         }
         Booking booking = getBookingForCancellation(bookingId);
-        if (menteeId == null || booking.getMentee() == null || !menteeId.equals(booking.getMentee().getId())) {
+        if (menteeId == null || booking.getMenteeUserId() == null || !menteeId.equals(booking.getMenteeUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Bạn không có quyền hủy booking này");
         }
         if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE && booking.getCancelledAt() != null) {
@@ -208,7 +208,7 @@ public class BookingCancellationService {
                 savedBooking.getMentorUserId(),
                 NotificationType.BOOKING_CANCELLED_BY_MENTEE,
                 "Mentee đã hủy lịch",
-                savedBooking.getMentee().getFullName() + " đã hủy lịch mentoring.",
+                menteeName(savedBooking) + " đã hủy lịch mentoring.",
                 "BOOKING",
                 savedBooking.getId()
         ));
@@ -219,7 +219,7 @@ public class BookingCancellationService {
                     .eventType(BookingEmailNotificationEvent.EventType.BOOKING_CANCELLED_BY_MENTEE_EMAIL)
                     .recipientEmail(mentorEmail)
                     .recipientName(mentorName)
-                    .actorName(savedBooking.getMentee().getFullName())
+                    .actorName(menteeName(savedBooking))
                     .bookingStartTime(savedBooking.getSelectedStartTime())
                     .bookingEndTime(savedBooking.getSelectedEndTime())
                     .learningGoalTitle(savedBooking.getLearningGoalTitle())
@@ -237,7 +237,7 @@ public class BookingCancellationService {
 
         eventPublisher.publishEvent(new BookingStatusUpdatedEvent(
                 savedBooking.getId(),
-                savedBooking.getMentee().getId(),
+                savedBooking.getMenteeUserId(),
                 savedBooking.getMentorUserId(),
                 savedBooking.getStatus(),
                 "Mentee đã hủy lịch học.",
@@ -304,4 +304,12 @@ public class BookingCancellationService {
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
     }
+
+    private UserSummaryRecord menteeSummary(Booking booking) {
+        return booking == null || booking.getMenteeUserId() == null
+                ? null : userQueryPort.findUserSummaryById(booking.getMenteeUserId()).orElse(null);
+    }
+
+    private String menteeEmail(Booking booking) { UserSummaryRecord mentee = menteeSummary(booking); return mentee == null ? null : mentee.email(); }
+    private String menteeName(Booking booking) { UserSummaryRecord mentee = menteeSummary(booking); return mentee == null ? "Mentee" : mentee.fullName(); }
 }

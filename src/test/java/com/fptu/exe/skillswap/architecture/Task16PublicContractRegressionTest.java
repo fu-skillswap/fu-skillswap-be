@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.architecture;
 
-import com.fptu.exe.skillswap.modules.booking.port.ContentEntitlementQuery;
+import com.fptu.exe.skillswap.shared.port.ContentEntitlementQuery;
 import com.fptu.exe.skillswap.modules.chat.port.ChatAccessSnapshotPort;
 import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetPort;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPort;

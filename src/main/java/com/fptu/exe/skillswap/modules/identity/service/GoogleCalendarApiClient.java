@@ -3,9 +3,7 @@ package com.fptu.exe.skillswap.modules.identity.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.config.GoogleApiProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
-import com.fptu.exe.skillswap.modules.booking.domain.Session;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCalendarPort.BookingCalendarSnapshot;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -91,11 +89,10 @@ public class GoogleCalendarApiClient {
     public GoogleCalendarEventResponse createBookingEvent(String accessToken,
                                                           String calendarId,
                                                           String requestId,
-                                                          Booking booking,
-                                                          Session session) {
-        Map<String, Object> body = buildBaseEventBody(booking, session);
-        boolean hasManualMeeting = (session != null && !session.isGoogleCalendarManaged() && StringUtils.hasText(session.getMeetingLink()))
-                || (session != null && session.getMeetingPlatform() != null && session.getMeetingPlatform() != MeetingPlatform.GOOGLE_MEET);
+                                                          BookingCalendarSnapshot booking) {
+        Map<String, Object> body = buildBaseEventBody(booking);
+        boolean hasManualMeeting = (!booking.googleCalendarManaged() && StringUtils.hasText(booking.meetingLink()))
+                || (booking.meetingPlatform() != null && !"GOOGLE_MEET".equals(booking.meetingPlatform()));
         if (!hasManualMeeting) {
             body.put("conferenceData", Map.of(
                     "createRequest", Map.of(
@@ -111,9 +108,8 @@ public class GoogleCalendarApiClient {
     public GoogleCalendarEventResponse updateBookingEvent(String accessToken,
                                                           String calendarId,
                                                           String eventId,
-                                                          Booking booking,
-                                                          Session session) {
-        Map<String, Object> body = buildBaseEventBody(booking, session);
+                                                          BookingCalendarSnapshot booking) {
+        Map<String, Object> body = buildBaseEventBody(booking);
         String url = googleApiProperties.getCalendarBaseUrl() + "/" + urlEncode(calendarId) + "/events/" + urlEncode(eventId) + "?sendUpdates=all";
         return sendCalendarWrite(accessToken, url, "PUT", body);
     }
@@ -144,10 +140,10 @@ public class GoogleCalendarApiClient {
         }
     }
 
-    private Map<String, Object> buildBaseEventBody(Booking booking, Session session) {
-        String serviceTitle = booking.getServiceTitleSnapshot() != null
-                ? booking.getServiceTitleSnapshot()
-                : booking.getLearningGoalTitle();
+    private Map<String, Object> buildBaseEventBody(BookingCalendarSnapshot booking) {
+        User mentee = booking.menteeUserId() == null ? null
+                : userRepository.findById(booking.menteeUserId()).orElse(null);
+        String serviceTitle = booking.serviceTitle() != null ? booking.serviceTitle() : booking.learningGoalTitle();
         StringBuilder descriptionBuilder = new StringBuilder();
         descriptionBuilder.append("""
                 SkillSwap booking
@@ -157,43 +153,31 @@ public class GoogleCalendarApiClient {
                 Mục tiêu: %s
                 Mô tả: %s
                 """.formatted(
-                booking.getMentee() == null ? "N/A" : defaultText(booking.getMentee().getFullName(), booking.getMentee().getEmail()),
-                resolveMentorDisplayName(booking.getMentorUserId()),
-                defaultText(booking.getLearningGoalTitle(), "Mentoring session"),
-                defaultText(booking.getLearningGoalDescription(), "Không có mô tả thêm")
+                mentee == null ? "N/A" : defaultText(mentee.getFullName(), mentee.getEmail()),
+                resolveMentorDisplayName(booking.mentorUserId()),
+                defaultText(booking.learningGoalTitle(), "Mentoring session"),
+                defaultText(booking.learningGoalDescription(), "Không có mô tả thêm")
         ));
 
-        String manualLink = session != null && StringUtils.hasText(session.getMeetingLink())
-                ? session.getMeetingLink()
-                : (StringUtils.hasText(booking.getMeetingLink()) ? booking.getMeetingLink() : null);
+        String manualLink = booking.meetingLink();
 
-        MeetingPlatform platform = session != null && session.getMeetingPlatform() != null
-                ? session.getMeetingPlatform()
-                : booking.getMeetingPlatform();
+        String platform = booking.meetingPlatform();
 
         if (manualLink != null) {
-            String platformName = platform != null ? platform.name() : "Online";
+            String platformName = platform != null ? platform : "Online";
             descriptionBuilder.append("\nNền tảng: ").append(platformName)
                     .append("\nLink phòng học: ").append(manualLink).append("\n");
         }
-        if (StringUtils.hasText(booking.getLocation())) {
-            descriptionBuilder.append("\nĐịa điểm: ").append(booking.getLocation()).append("\n");
+        if (StringUtils.hasText(booking.location())) {
+            descriptionBuilder.append("\nĐịa điểm: ").append(booking.location()).append("\n");
         }
 
         List<Map<String, String>> attendees = new ArrayList<>();
-        if (booking.getMentee() != null && StringUtils.hasText(booking.getMentee().getEmail())) {
-            attendees.add(Map.of("email", booking.getMentee().getEmail()));
+        if (mentee != null && StringUtils.hasText(mentee.getEmail())) {
+            attendees.add(Map.of("email", mentee.getEmail()));
         }
-        Instant startUtc = session != null && session.getScheduledStartTimeUtc() != null
-                ? session.getScheduledStartTimeUtc()
-                : (session != null && session.getScheduledStartTime() != null
-                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledStartTime())
-                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedStartUtc(booking));
-        Instant endUtc = session != null && session.getScheduledEndTimeUtc() != null
-                ? session.getScheduledEndTimeUtc()
-                : (session != null && session.getScheduledEndTime() != null
-                    ? com.fptu.exe.skillswap.modules.booking.service.BookingTime.toInstant(session.getScheduledEndTime())
-                    : com.fptu.exe.skillswap.modules.booking.service.BookingTime.resolveSelectedEndUtc(booking));
+        Instant startUtc = booking.startUtc();
+        Instant endUtc = booking.endUtc();
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("summary", defaultText(serviceTitle, "SkillSwap Mentoring Session"));
@@ -202,8 +186,8 @@ public class GoogleCalendarApiClient {
         body.put("end", dateTimeMapper.toGoogleDateTime(endUtc));
         body.put("attendees", attendees);
 
-        if (StringUtils.hasText(booking.getLocation())) {
-            body.put("location", booking.getLocation());
+        if (StringUtils.hasText(booking.location())) {
+            body.put("location", booking.location());
         } else if (manualLink != null) {
             body.put("location", manualLink);
         }

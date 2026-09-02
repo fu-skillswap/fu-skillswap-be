@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
-import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
@@ -52,7 +52,8 @@ import static com.fptu.exe.skillswap.modules.payment.service.PaymentLifecycleSer
 @RequiredArgsConstructor
 public class PaymentCheckoutService {
 
-    private final BookingQueryPort bookingQueryPort;
+    private final BookingCheckoutQueryPort bookingCheckoutQueryPort;
+    private final UserQueryPort userQueryPort;
     private final PaymentOrderRepository paymentOrderRepository;
     private final PaymentAttemptRepository paymentAttemptRepository;
     private final CouponService couponService;
@@ -90,11 +91,11 @@ public class PaymentCheckoutService {
         if (currentUserId == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }
-        Booking booking = bookingQueryPort.findById(bookingId)
+        BookingCheckoutSnapshot booking = bookingCheckoutQueryPort.findCheckoutSnapshot(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         validateCheckoutOwnership(currentUserId, booking);
-        if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
-                || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
+        if (Boolean.TRUE.equals(booking.serviceIsFree())
+                || (booking.servicePriceScoin() != null && booking.servicePriceScoin() == 0)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
         }
         if (bookingPricingPreviewService == null) {
@@ -117,16 +118,16 @@ public class PaymentCheckoutService {
         }
 
         CheckoutPreparation preparation = transactionTemplate.execute(status -> {
-            Booking booking = bookingQueryPort.findByIdForSessionUpdate(request.bookingId())
+            BookingCheckoutSnapshot booking = bookingCheckoutQueryPort.findCheckoutSnapshotForUpdate(request.bookingId())
                     .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
             validateCheckoutOwnership(currentUserId, booking);
 
-            if (Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot())
-                    || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0)) {
+            if (Boolean.TRUE.equals(booking.serviceIsFree())
+                    || (booking.servicePriceScoin() != null && booking.servicePriceScoin() == 0)) {
                 throw new BaseException(ErrorCode.BAD_REQUEST, "Không cần thanh toán cho dịch vụ miễn phí");
             }
 
-            PaymentOrder existingOrder = paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, booking.getId()).orElse(null);
+            PaymentOrder existingOrder = paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, booking.bookingId()).orElse(null);
             PaymentAttempt latestAttempt = existingOrder == null
                     ? null
                     : paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(existingOrder.getId()).orElse(null);
@@ -283,25 +284,25 @@ public class PaymentCheckoutService {
         }
     }
 
-    private void validateCheckoutOwnership(UUID currentUserId, Booking booking) {
-        if (booking.getMentee() == null || !currentUserId.equals(booking.getMentee().getId())) {
+    private void validateCheckoutOwnership(UUID currentUserId, BookingCheckoutSnapshot booking) {
+        if (booking.menteeUserId() == null || !currentUserId.equals(booking.menteeUserId())) {
             throw new BaseException(ErrorCode.UNAUTHORIZED, "Chỉ mentee của booking mới có thể thanh toán");
         }
-        if (booking.getMentorUserId() == null) {
+        if (booking.mentorUserId() == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Booking không gắn với mentor hợp lệ");
         }
-        if (booking.getStatus() == BookingStatus.PAID) {
+        if ("PAID".equals(booking.status())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking này đã được thanh toán trước đó");
         }
-        if (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE
-                || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR
-                || booking.getStatus() == BookingStatus.REJECTED
-                || booking.getStatus() == BookingStatus.EXPIRED) {
+        if ("CANCELLED_BY_MENTEE".equals(booking.status())
+                || "CANCELLED_BY_MENTOR".equals(booking.status())
+                || "REJECTED".equals(booking.status())
+                || "EXPIRED".equals(booking.status())) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Booking đã kết thúc ở trạng thái " + booking.getStatus() + " và không thể thanh toán");
+                    "Booking đã kết thúc ở trạng thái " + booking.status() + " và không thể thanh toán");
         }
-        if (booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.getStatus() + ")");
+        if (!"ACCEPTED_AWAITING_PAYMENT".equals(booking.status())) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa sẵn sàng để thanh toán (trạng thái: " + booking.status() + ")");
         }
         Instant deadlineUtc = paymentDeadlineUtc(booking);
         if (deadlineUtc != null && !deadlineUtc.isAfter(timeProvider.instant())) {
@@ -309,26 +310,26 @@ public class PaymentCheckoutService {
         }
     }
 
-    private Instant paymentDeadlineUtc(Booking booking) {
-        return BookingDeadlinePolicy.resolvePaymentDeadlineUtc(booking);
+    private Instant paymentDeadlineUtc(BookingCheckoutSnapshot booking) {
+        return booking.paymentDeadlineUtc();
     }
 
-    private OffsetDateTime paymentDeadline(Booking booking) {
+    private OffsetDateTime paymentDeadline(BookingCheckoutSnapshot booking) {
         Instant deadlineUtc = paymentDeadlineUtc(booking);
         return deadlineUtc != null
                 ? com.fptu.exe.skillswap.shared.time.BusinessTime.toOffsetDateTime(deadlineUtc)
                 : null;
     }
 
-    private int resolveBasePriceScoin(Booking booking) {
-        boolean isFree = Boolean.TRUE.equals(booking.getServiceIsFreeSnapshot());
-        int basePriceScoin = booking.getServicePriceScoinSnapshot() != null
-                ? booking.getServicePriceScoinSnapshot()
+    private int resolveBasePriceScoin(BookingCheckoutSnapshot booking) {
+        boolean isFree = Boolean.TRUE.equals(booking.serviceIsFree());
+        int basePriceScoin = booking.servicePriceScoin() != null
+                ? booking.servicePriceScoin()
                 : 0;
         if (isFree) {
             return 0;
         }
-        Integer durationMinutes = booking.getServiceDurationSnapshot();
+        Integer durationMinutes = booking.serviceDurationMinutes();
         if (durationMinutes == null || durationMinutes <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Dịch vụ mentoring đang có thời lượng không hợp lệ");
         }
@@ -338,7 +339,7 @@ public class PaymentCheckoutService {
     }
 
     private void prepareOrderForCheckout(PaymentOrder draftOrder,
-                                         Booking booking,
+                                         BookingCheckoutSnapshot booking,
                                          UUID currentUserId,
                                          Coupon coupon,
                                          CampaignService.CampaignCreditApplication campaignApplication,
@@ -352,10 +353,10 @@ public class PaymentCheckoutService {
             draftOrder.setOrderCode(paymentOrderCodeGenerator.generateOrderCode(paymentOrderId));
         }
         draftOrder.setTargetType(PaymentTargetType.BOOKING);
-        draftOrder.setTargetId(booking.getId());
+        draftOrder.setTargetId(booking.bookingId());
         draftOrder.setPayerUserId(currentUserId);
-        draftOrder.setMentorUserId(booking.getMentorUserId());
-        draftOrder.setServiceId(booking.getServiceId());
+        draftOrder.setMentorUserId(booking.mentorUserId());
+        draftOrder.setServiceId(booking.serviceId());
 
         int menteeSurchargeBps = paymentProperties.getMenteeSurchargeBps();
         int mentorCommissionBps = paymentProperties.getMentorCommissionBps();
@@ -417,10 +418,11 @@ public class PaymentCheckoutService {
                 .sum();
     }
 
-    private PaymentGatewayProvider.CreatePaymentLinkCommand buildCreatePaymentLinkCommand(Booking booking,
+    private PaymentGatewayProvider.CreatePaymentLinkCommand buildCreatePaymentLinkCommand(BookingCheckoutSnapshot booking,
                                                                                 PaymentOrder order,
                                                                                 long providerOrderCode) {
         long expiredAtEpoch = resolveProviderLinkExpiryUtc(booking).getEpochSecond();
+        UserSummaryRecord mentee = userQueryPort.findUserSummaryById(booking.menteeUserId()).orElse(null);
         return new PaymentGatewayProvider.CreatePaymentLinkCommand(
                 providerOrderCode,
                 PricingPolicy.toVnd(order.getRemainingPayableScoin(), paymentProperties),
@@ -428,8 +430,8 @@ public class PaymentCheckoutService {
                 paymentProperties.getPayos().getReturnUrl(),
                 paymentProperties.getPayos().getCancelUrl(),
                 expiredAtEpoch,
-                booking.getMentee() == null ? null : booking.getMentee().getFullName(),
-                booking.getMentee() == null ? null : booking.getMentee().getEmail(),
+                mentee == null ? null : mentee.fullName(),
+                mentee == null ? null : mentee.email(),
                 null,
                 List.of(new PaymentGatewayProvider.PaymentItem(
                         buildPaymentItemName(booking),
@@ -445,9 +447,9 @@ public class PaymentCheckoutService {
         return description.length() > 25 ? description.substring(0, 25) : description;
     }
 
-    private String buildPaymentItemName(Booking booking) {
-        if (StringUtils.hasText(booking.getServiceTitleSnapshot())) {
-            return booking.getServiceTitleSnapshot();
+    private String buildPaymentItemName(BookingCheckoutSnapshot booking) {
+        if (StringUtils.hasText(booking.serviceTitle())) {
+            return booking.serviceTitle();
         }
         return "SkillSwap mentoring session";
     }
@@ -470,7 +472,7 @@ public class PaymentCheckoutService {
      * The gateway link must never outlive the booking's server-enforced payment window.
      * This protects the short-window case where a session is close to starting.
      */
-    Instant resolveProviderLinkExpiryUtc(Booking booking) {
+    Instant resolveProviderLinkExpiryUtc(BookingCheckoutSnapshot booking) {
         Instant nowUtc = timeProvider.instant();
         Instant configuredLinkExpiryUtc = nowUtc.plus(Duration.ofMinutes(paymentProperties.getPaymentLinkExpiryMinutes()));
         Instant bookingDeadlineUtc = paymentDeadlineUtc(booking);
@@ -494,7 +496,7 @@ public class PaymentCheckoutService {
     private record CheckoutPreparation(
             PaymentOrder order,
             PaymentAttempt attempt,
-            Booking booking,
+            BookingCheckoutSnapshot booking,
             boolean providerCreationRequired
     ) {
         private static CheckoutPreparation existing(PaymentOrder order, PaymentAttempt attempt) {
@@ -505,7 +507,7 @@ public class PaymentCheckoutService {
             return new CheckoutPreparation(order, attempt, null, false);
         }
 
-        private static CheckoutPreparation providerCreation(PaymentOrder order, PaymentAttempt attempt, Booking booking) {
+        private static CheckoutPreparation providerCreation(PaymentOrder order, PaymentAttempt attempt, BookingCheckoutSnapshot booking) {
             return new CheckoutPreparation(order, attempt, booking, true);
         }
     }

@@ -87,7 +87,7 @@ class BookingMeetingServiceTest {
         booking = Booking.builder()
                 .id(bookingId)
                 .mentorUserId(mentorId)
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .slot(slot)
                 .status(BookingStatus.PAID)
                 .selectedStartTimeUtc(startUtc)

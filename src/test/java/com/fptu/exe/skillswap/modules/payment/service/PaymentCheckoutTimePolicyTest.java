@@ -1,8 +1,9 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
-import com.fptu.exe.skillswap.modules.booking.domain.Booking;
-import com.fptu.exe.skillswap.modules.booking.port.BookingQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutQueryPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.payment.integration.PaymentGatewayProviderFactory;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentAttemptRepository;
 import com.fptu.exe.skillswap.modules.payment.repository.PaymentOrderRepository;
@@ -27,11 +28,7 @@ class PaymentCheckoutTimePolicyTest {
     @Test
     void providerLinkExpiry_isCappedByTheBookingPaymentDeadline() {
         PaymentCheckoutService service = serviceWithFixedTime();
-        Booking booking = Booking.builder()
-                .id(UUID.randomUUID())
-                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(230)))
-                .selectedStartTimeUtc(NOW.plus(Duration.ofHours(3)))
-                .build();
+        BookingCheckoutSnapshot booking = snapshotWithDeadline(NOW.plus(Duration.ofMinutes(10)));
 
         assertEquals(NOW.plus(Duration.ofMinutes(10)), service.resolveProviderLinkExpiryUtc(booking));
     }
@@ -39,11 +36,7 @@ class PaymentCheckoutTimePolicyTest {
     @Test
     void providerLinkExpiry_rejectsTheExactBookingDeadline() {
         PaymentCheckoutService service = serviceWithFixedTime();
-        Booking booking = Booking.builder()
-                .id(UUID.randomUUID())
-                .acceptedAtUtc(NOW.minus(Duration.ofMinutes(240)))
-                .selectedStartTimeUtc(NOW.plus(Duration.ofHours(3)))
-                .build();
+        BookingCheckoutSnapshot booking = snapshotWithDeadline(NOW);
 
         assertThrows(BaseException.class, () -> service.resolveProviderLinkExpiryUtc(booking));
     }
@@ -52,7 +45,8 @@ class PaymentCheckoutTimePolicyTest {
         PaymentProperties properties = new PaymentProperties();
         properties.setPaymentLinkExpiryMinutes(30);
         PaymentCheckoutService service = new PaymentCheckoutService(
-                mock(BookingQueryPort.class),
+                mock(BookingCheckoutQueryPort.class),
+                mock(UserQueryPort.class),
                 mock(PaymentOrderRepository.class),
                 mock(PaymentAttemptRepository.class),
                 mock(CouponService.class),
@@ -69,5 +63,11 @@ class PaymentCheckoutTimePolicyTest {
         );
         service.setTimeProvider(TimeProvider.fixed(NOW, TimeProvider.BUSINESS_ZONE));
         return service;
+    }
+
+    private BookingCheckoutSnapshot snapshotWithDeadline(Instant deadlineUtc) {
+        return new BookingCheckoutSnapshot(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                false, 10_000, 60, null, "ACCEPTED_AWAITING_PAYMENT", deadlineUtc);
     }
 }

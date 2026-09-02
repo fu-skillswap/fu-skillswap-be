@@ -12,7 +12,7 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.booking.service.meeting.MeetingProviderFactory;
-import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
@@ -64,7 +64,7 @@ class BookingDecisionServiceTest {
     @Mock
     private SessionService sessionService;
     @Mock
-    private ConversationService conversationService;
+    private BookingChatPort bookingChatPort;
     @Mock
     private ApplicationEventPublisher eventPublisher;
     @Mock
@@ -108,7 +108,7 @@ class BookingDecisionServiceTest {
         pendingBooking = Booking.builder()
                 .id(bookingId)
                 .mentorUserId(mentorProfile.getUserId())
-                .mentee(menteeUser)
+                .menteeUserId(menteeUser.getId())
                 .slot(slot)
                 .status(BookingStatus.PENDING)
                 .selectedStartTimeUtc(startUtc)
@@ -140,7 +140,7 @@ class BookingDecisionServiceTest {
                 meetingProviderFactory
         );
         bookingDecisionService.setTimeProvider(TimeProvider.from(Clock.fixed(Instant.parse("2026-08-01T10:00:00Z"), ZoneOffset.UTC)));
-        bookingDecisionService.setConversationService(conversationService);
+        bookingDecisionService.setBookingChatPort(bookingChatPort);
 
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(pendingBooking));
         when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
@@ -275,6 +275,6 @@ class BookingDecisionServiceTest {
 
         assertEquals(BookingStatus.PAID, pendingBooking.getStatus());
         verify(sessionService).createForAcceptedBooking(pendingBooking);
-        verify(conversationService).createDirectForAcceptedBooking(bookingId, mentorId, menteeId);
+        verify(bookingChatPort).createDirectForAcceptedBooking(bookingId, mentorId, menteeId);
     }
 }

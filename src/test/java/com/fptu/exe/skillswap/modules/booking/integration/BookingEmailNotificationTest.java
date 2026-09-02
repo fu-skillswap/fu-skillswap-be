@@ -27,9 +27,11 @@ import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,6 +75,9 @@ class BookingEmailNotificationTest {
     private MentorServiceRepository mentorServiceRepository;
 
     @Autowired
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
+
+    @Autowired
     private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     @MockBean
@@ -101,6 +106,7 @@ class BookingEmailNotificationTest {
                 .isAvailable(true)
                 .headline("Email Mentor")
                 .expertiseDescription("Support Email")
+                .phoneNumber("0900000000")
                 .foundationSupportLevel(3)
                 .outputReviewSupportLevel(3)
                 .directionSupportLevel(2)
@@ -131,6 +137,14 @@ class BookingEmailNotificationTest {
                 .endTime(slotStart.plusHours(1))
                 .isActive(true)
                 .isBooked(false)
+                .build());
+
+        mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                .mentorProfile(profile)
+                .subjectCode("SE1234")
+                .subjectName("Software Engineering")
+                .scoreValue(java.math.BigDecimal.valueOf(9.0))
+                .displayOrder(0)
                 .build());
 
         mentorService = mentorServiceRepository.save(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()

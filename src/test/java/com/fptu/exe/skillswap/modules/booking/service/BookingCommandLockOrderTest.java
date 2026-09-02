@@ -12,7 +12,6 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
-import com.fptu.exe.skillswap.modules.mentor.port.MentorQueryPort;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.EntityManager;
@@ -40,7 +39,6 @@ class BookingCommandLockOrderTest {
     @Mock BookingRepository bookingRepository;
     @Mock MentorAvailabilitySlotRepository slotRepository;
     @Mock UserLockPort userLockPort;
-    @Mock MentorQueryPort mentorQueryPort;
     @Mock UserQueryPort userQueryPort;
     @Mock EntityManager entityManager;
     @Mock SessionService sessionService;
@@ -70,7 +68,7 @@ class BookingCommandLockOrderTest {
                 .startTime(DateTimeUtil.now().plusDays(1)).endTime(DateTimeUtil.now().plusDays(1).plusHours(1))
                 .build();
         booking = Booking.builder()
-                .id(bookingId).mentee(mentee).mentorUserId(mentorId).slot(slot)
+                .id(bookingId).menteeUserId(mentee.getId()).mentorUserId(mentorId).slot(slot)
                 .status(BookingStatus.ACCEPTED_AWAITING_PAYMENT)
                 .selectedStartTime(slot.getStartTime()).selectedEndTime(slot.getEndTime())
                 .serviceIsFreeSnapshot(false).servicePriceScoinSnapshot(30_000)
@@ -81,9 +79,8 @@ class BookingCommandLockOrderTest {
     void accept_locksBookingBeforeUsersMentorAndSlot() {
         booking.setAcceptedAt(DateTimeUtil.now()); // idempotent return after lock acquisition
         when(bookingRepository.findByIdForMentorDecision(bookingId)).thenReturn(Optional.of(booking));
-        when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(booking.getMentee(),
+        when(userLockPort.lockUsersForUpdate(any())).thenReturn(List.of(User.builder().id(booking.getMenteeUserId()).build(),
                 User.builder().id(mentorProfile.getUserId()).build()));
-        when(mentorQueryPort.findMentorProfileByIdForUpdate(mentorId)).thenReturn(Optional.of(mentorProfile));
         when(slotRepository.findByIdForUpdate(slot.getId())).thenReturn(Optional.of(slot));
 
         BookingDecisionService service = new BookingDecisionService(
@@ -93,10 +90,9 @@ class BookingCommandLockOrderTest {
         service.acceptBooking(mentorId, bookingId,
                 new AcceptBookingRequest("retry", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null));
 
-        InOrder order = inOrder(bookingRepository, userLockPort, mentorQueryPort, slotRepository);
+        InOrder order = inOrder(bookingRepository, userLockPort, slotRepository);
         order.verify(bookingRepository).findByIdForMentorDecision(bookingId);
         order.verify(userLockPort).lockUsersForUpdate(any());
-        order.verify(mentorQueryPort).findMentorProfileByIdForUpdate(mentorId);
         order.verify(slotRepository).findByIdForUpdate(slot.getId());
     }
 

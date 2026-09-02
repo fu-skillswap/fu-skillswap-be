@@ -1,4 +1,4 @@
--- Expand verification documents with immutable file metadata.
+-- rollout: EXPAND
 -- This migration is intentionally forward-only and keeps the columns nullable:
 -- historical rows may reference a file that has already been removed. The
 -- application must therefore tolerate a missing metadata snapshot.

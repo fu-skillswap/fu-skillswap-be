@@ -7,17 +7,15 @@ import com.fptu.exe.skillswap.modules.booking.domain.BookingTime;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.dto.request.BookingQuoteRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingQuoteResponse;
+import com.fptu.exe.skillswap.modules.booking.port.BookingPricingPreviewPort;
 import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingCapability;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingPolicyQuery;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
-import com.fptu.exe.skillswap.modules.payment.service.BookingPricingPreviewService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -45,7 +43,7 @@ public class BookingQuoteService {
     private final BookingEligibilityPolicy bookingEligibilityPolicy;
     private final BookingSlotValidator bookingSlotValidator;
     private final MentorBookingPolicyQuery mentorBookingPolicyQuery;
-    private final BookingPricingPreviewService pricingPreviewService;
+    private final BookingPricingPreviewPort pricingPreviewPort;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -66,10 +64,10 @@ public class BookingQuoteService {
         }
         Instant normalizedStartAt = request.startAt().truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
 
-        User mentee = userQueryPort.findUserById(menteeUserId)
+        UserSummaryRecord mentee = userQueryPort.findUserSummaryById(menteeUserId)
                 .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng hiện tại"));
         bookingEligibilityPolicy.validateBookerEligibility(mentee);
-        if (bookingRepository.countByMenteeIdAndStatus(menteeUserId, BookingStatus.PENDING)
+        if (bookingRepository.countByMenteeUserIdAndStatus(menteeUserId, BookingStatus.PENDING)
                 >= BookingQueueConstants.MAX_PENDING_BOOKINGS_PER_MENTEE) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đang có tối đa 5 yêu cầu đặt lịch đang chờ phản hồi.");
         }
@@ -104,7 +102,7 @@ public class BookingQuoteService {
             mentorBookingPolicyQuery.validateBookingWindow(mentorUserId, start, nowBusiness);
         }
 
-        if (bookingRepository.existsByMenteeIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
+        if (bookingRepository.existsByMenteeUserIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
                 menteeUserId, slot.getId(), normalizedStartAt, normalizedEndAt,
                 List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID))) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã có booking cho exact segment này.");
@@ -124,10 +122,10 @@ public class BookingQuoteService {
                 BookingTime.toOffsetDateTime(pendingExpireAtUtc),
                 (int) BookingDeadlinePolicy.PAYMENT_WINDOW_MINUTES,
                 (int) BookingDeadlinePolicy.PAYMENT_PREPARATION_MINUTES,
-                pricingPreviewService.estimateForCandidate(menteeUserId, serviceCandidate),
+                pricingPreviewPort.estimateForCandidate(menteeUserId, serviceCandidate),
                 BookingCancellationRefundPolicy.current(),
                 true,
-                BookingPricingPreviewService.ESTIMATE_DISCLAIMER
+                BookingPricingPreviewPort.ESTIMATE_DISCLAIMER
         );
     }
 

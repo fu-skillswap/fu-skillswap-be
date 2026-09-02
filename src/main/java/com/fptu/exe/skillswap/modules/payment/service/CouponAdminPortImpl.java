@@ -6,8 +6,8 @@ import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponStatusReque
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponUpdateRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponRedemptionResponse;
 import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponResponse;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponRedemption;
@@ -187,13 +187,12 @@ public class CouponAdminPortImpl implements CouponAdminPort {
                 .map(CouponRedemption::getRedeemerUserId)
                 .collect(Collectors.toSet());
 
-        Map<UUID, User> userMap = userQueryPort.findUsersByIdIn(userIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<UUID, UserSummaryRecord> userMap = userQueryPort.findUserSummariesByIdIn(userIds);
 
         List<CouponAdminPort.CouponRedemptionView> content = page.getContent().stream()
                 .map(r -> {
-                    User user = userMap.get(r.getRedeemerUserId());
-                    String name = user == null ? "Unknown User" : user.getFullName();
+                    UserSummaryRecord user = userMap.get(r.getRedeemerUserId());
+                    String name = user == null ? "Unknown User" : user.fullName();
                     return new CouponAdminPort.CouponRedemptionView(
                             r.getId(),
                             r.getCouponId(),

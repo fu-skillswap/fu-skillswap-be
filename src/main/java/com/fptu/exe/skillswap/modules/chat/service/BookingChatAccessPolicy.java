@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
-import com.fptu.exe.skillswap.modules.chat.port.ChatAccessSnapshotPort;
+import com.fptu.exe.skillswap.modules.booking.port.BookingChatAccessPort;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatMessagingAccess;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationBookingLink;
@@ -19,12 +19,12 @@ import java.util.UUID;
 public class BookingChatAccessPolicy {
 
     private final ConversationBookingLinkRepository linkRepository;
-    private final ChatAccessSnapshotPort chatAccessSnapshotPort;
+    private final BookingChatAccessPort chatAccessSnapshotPort;
 
     public Access resolve(UUID conversationId, ConversationStatus conversationStatus, LocalDateTime now) {
         var links = linkRepository.findByConversationId(conversationId);
         if (conversationStatus == ConversationStatus.LOCKED) return Access.readOnly(ChatReadOnlyReason.ADMIN_LOCKED);
-        List<ChatAccessSnapshotPort.ChatAccessSnapshot> bookings = chatAccessSnapshotPort.findChatAccessSnapshots(
+        List<BookingChatAccessPort.ChatAccessSnapshot> bookings = chatAccessSnapshotPort.findChatAccessSnapshots(
                 links.stream().map(ConversationBookingLink::getBookingId).toList());
         boolean underReview = bookings.stream().anyMatch(b -> "UNDER_REVIEW".equals(b.status()));
         if (underReview) return Access.readOnly(ChatReadOnlyReason.UNDER_REVIEW);
@@ -33,18 +33,18 @@ public class BookingChatAccessPolicy {
         LocalDateTime deadline = bookings.stream()
                 .filter(this::isEffective)
                 .filter(b -> !b.maintainPostSessionChat())
-                .map(ChatAccessSnapshotPort.ChatAccessSnapshot::selectedEndTime).filter(java.util.Objects::nonNull)
+                .map(BookingChatAccessPort.ChatAccessSnapshot::selectedEndTime).filter(java.util.Objects::nonNull)
                 .map(end -> end.plusHours(24)).max(LocalDateTime::compareTo).orElse(null);
         if (deadline != null && now.isBefore(deadline)) return Access.open(deadline, false);
         return Access.readOnly(deadline == null ? ChatReadOnlyReason.NO_EFFECTIVE_BOOKING : ChatReadOnlyReason.CHAT_WINDOW_EXPIRED);
     }
 
-    private boolean isEffective(ChatAccessSnapshotPort.ChatAccessSnapshot booking) {
+    private boolean isEffective(BookingChatAccessPort.ChatAccessSnapshot booking) {
         return "PAID".equals(booking.status()) || "AWAITING_MENTOR_COMPLETION".equals(booking.status())
                 || "AWAITING_MENTEE_CONFIRMATION".equals(booking.status()) || "COMPLETED".equals(booking.status());
     }
 
-    private boolean hasPermanentEntitlement(ChatAccessSnapshotPort.ChatAccessSnapshot booking) {
+    private boolean hasPermanentEntitlement(BookingChatAccessPort.ChatAccessSnapshot booking) {
         return booking.maintainPostSessionChat()
                 && ("USER_CONFIRMED".equals(booking.completionOutcome()) || "AUTO_CLOSED".equals(booking.completionOutcome()));
     }
