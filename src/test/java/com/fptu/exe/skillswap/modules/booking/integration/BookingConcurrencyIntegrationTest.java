@@ -154,6 +154,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile)
                     .title("Spring Transaction Mentoring")
                     .description("Support Java backend and transaction handling")
                     .durationMinutes(60)
@@ -270,6 +271,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             var service = mentorServiceRepository.saveAndFlush(
                     com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                            .mentorProfile(mentorProfile)
                             .title("Pending quota service")
                             .description("Service dùng cho concurrency quota test")
                             .durationMinutes(60)
@@ -425,6 +427,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService1 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile1)
                     .title("Service 1")
                     .description("Desc 1")
                     .durationMinutes(60)
@@ -434,6 +437,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .build());
 
             var mentorService2 = mentorServiceRepository.saveAndFlush(com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
+                    .mentorProfile(mentorProfile2)
                     .title("Service 2")
                     .description("Desc 2")
                     .durationMinutes(60)
