@@ -7,7 +7,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBooki
 import com.fptu.exe.skillswap.modules.booking.service.BookingReminderEmailService;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -29,9 +29,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 class BookingReminderEmailServiceTest {
 
     private final BookingRepository bookingRepository = mock(BookingRepository.class);
-    private final EmailDispatchService emailDispatchService = mock(EmailDispatchService.class);
+    private final EmailDispatchPort emailDispatchPort = mock(EmailDispatchPort.class);
     private final UserQueryPort userQueryPort = mock(UserQueryPort.class);
-    private final BookingReminderEmailService service = new BookingReminderEmailService(bookingRepository, emailDispatchService);
+    private final BookingReminderEmailService service = new BookingReminderEmailService(bookingRepository, emailDispatchPort);
 
     {
         ReflectionTestUtils.setField(service, "userQueryPort", userQueryPort);
@@ -41,7 +41,7 @@ class BookingReminderEmailServiceTest {
     void sendUpcomingSessionReminders_shouldSendMenteeAndMentorEmailsForConfirmedBookings() {
         Booking booking = confirmedBooking(BookingStatus.PAID);
         when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any())).thenReturn(List.of(booking));
-        when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
+        when(emailDispatchPort.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         int sent = service.sendUpcomingSessionReminders();
 
@@ -51,7 +51,7 @@ class BookingReminderEmailServiceTest {
         verify(bookingRepository).findConfirmedBookingsStartingBetweenUtc(statusesCaptor.capture(), any(), any());
         assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
         assertTrue(statusesCaptor.getValue().contains(BookingStatus.PAID));
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 eq("BOOKING_SESSION_REMINDER_MENTEE:" + booking.getId()),
                 eq("mentee@test.com"),
                 eq("[SkillSwap] Buổi học của bạn bắt đầu sau 30 phút"),
@@ -59,7 +59,7 @@ class BookingReminderEmailServiceTest {
                 any(),
                 eq("BOOKING_SESSION_REMINDER_MENTEE")
         );
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 eq("BOOKING_SESSION_REMINDER_MENTOR:" + booking.getId()),
                 eq("mentor@test.com"),
                 eq("[SkillSwap] Buổi mentoring bắt đầu sau 30 phút"),
@@ -79,14 +79,14 @@ class BookingReminderEmailServiceTest {
         when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(java.util.Optional.of(
                 new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
                         mentorId, "mentor@test.com", "Mentor A", null, java.util.Set.of(), "MENTOR", true)));
-        when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
+        when(emailDispatchPort.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         int sent = service.sendPendingRequestDigests();
 
         assertEquals(1, sent);
         ArgumentCaptor<String> htmlCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> plainCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 any(),
                 eq("mentor@test.com"),
                 eq("[SkillSwap] Bạn có 3 yêu cầu mentoring đang chờ xác nhận"),
@@ -106,7 +106,7 @@ class BookingReminderEmailServiceTest {
         int sent = service.sendPendingRequestDigests();
 
         assertEquals(0, sent);
-        verify(emailDispatchService, never()).sendHtmlOnce(any(), any(), any(), any(), any(), any());
+        verify(emailDispatchPort, never()).sendHtmlOnce(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -158,14 +158,14 @@ class BookingReminderEmailServiceTest {
 
         when(bookingRepository.findConfirmedBookingsStartingBetweenUtc(any(), any(), any()))
                 .thenReturn(List.of(booking1, booking2, booking3));
-        when(emailDispatchService.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
+        when(emailDispatchPort.sendHtmlOnce(any(), any(), any(), any(), any(), any())).thenReturn(true);
 
         int sent = service.sendDailyMentorScheduleDigests();
 
         assertEquals(2, sent);
 
         ArgumentCaptor<String> htmlCaptor1 = ArgumentCaptor.forClass(String.class);
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:" + mentor1Id),
                 eq("mentor1@test.com"),
                 org.mockito.ArgumentMatchers.contains("2 buổi học"),
@@ -176,7 +176,7 @@ class BookingReminderEmailServiceTest {
         assertTrue(htmlCaptor1.getValue().contains("Coding 1:1"));
         assertTrue(htmlCaptor1.getValue().contains("CV Review"));
 
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:" + mentor2Id),
                 eq("mentor2@test.com"),
                 org.mockito.ArgumentMatchers.contains("1 buổi học"),
@@ -194,7 +194,7 @@ class BookingReminderEmailServiceTest {
         int sent = service.sendDailyMentorScheduleDigests();
 
         assertEquals(0, sent);
-        verify(emailDispatchService, never()).sendHtmlOnce(
+        verify(emailDispatchPort, never()).sendHtmlOnce(
                 org.mockito.ArgumentMatchers.startsWith("MENTOR_DAILY_SCHEDULE_DIGEST:"),
                 any(),
                 any(),

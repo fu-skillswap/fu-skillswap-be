@@ -1,7 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDeadlinePolicy;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +23,7 @@ public class BookingEmailListener {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
     private static final String PAYMENT_DEADLINE_TEXT = "trong vòng " + BookingDeadlinePolicy.paymentDeadlineText();
 
-    private final EmailDispatchService emailDispatchService;
+    private final EmailDispatchPort emailDispatchPort;
 
     // Queue the email in the same transaction as the booking. Dispatch remains async
     // through EmailOutbox, so a process crash cannot lose the notification intent.
@@ -32,7 +32,7 @@ public class BookingEmailListener {
         log.info("Processing email event: {} for booking: {}", event.getEventType(), event.getBookingId());
 
         EmailContent content = buildContent(event);
-        java.util.UUID outboxId = emailDispatchService.queueHtmlOnce(
+        java.util.UUID outboxId = emailDispatchPort.queueHtmlOnce(
                 dedupeKey(event),
                 event.getRecipientEmail(),
                 content.subject(),
@@ -44,7 +44,7 @@ public class BookingEmailListener {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    emailDispatchService.dispatchEmailAsync(outboxId);
+                    emailDispatchPort.dispatchEmailAsync(outboxId);
                 }
             });
         }

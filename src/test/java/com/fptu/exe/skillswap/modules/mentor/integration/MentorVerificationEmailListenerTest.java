@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.integration;
 
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailListener;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorVerificationEmailNotificationEvent;
 import org.junit.jupiter.api.Test;
@@ -17,10 +17,10 @@ class MentorVerificationEmailListenerTest {
 
     @Test
     void handleApprovedEmail_shouldQueueDispatch() {
-        EmailDispatchService emailDispatchService = mock(EmailDispatchService.class);
-        when(emailDispatchService.sendHtmlOnce(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        EmailDispatchPort emailDispatchPort = mock(EmailDispatchPort.class);
+        when(emailDispatchPort.sendHtmlOnce(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(true);
-        MentorVerificationEmailListener listener = new MentorVerificationEmailListener(emailDispatchService);
+        MentorVerificationEmailListener listener = new MentorVerificationEmailListener(emailDispatchPort);
 
         listener.handleMentorVerificationEmail(MentorVerificationEmailNotificationEvent.builder()
                 .eventType(MentorVerificationEmailNotificationEvent.EventType.APPROVED_EMAIL)
@@ -33,7 +33,7 @@ class MentorVerificationEmailListenerTest {
                 .reviewedAt(LocalDateTime.of(2026, 6, 29, 10, 0))
                 .build());
 
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 org.mockito.ArgumentMatchers.startsWith("MENTOR_VERIFICATION_EMAIL:APPROVED_EMAIL:"),
                 eq("mentor@test.com"),
                 eq("[SkillSwap] Hồ sơ mentor của bạn đã được duyệt"),
@@ -45,10 +45,10 @@ class MentorVerificationEmailListenerTest {
 
     @Test
     void handleNeedsRevisionEmail_shouldQueueDispatchWithReviewNote() {
-        EmailDispatchService emailDispatchService = mock(EmailDispatchService.class);
-        when(emailDispatchService.sendHtmlOnce(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+        EmailDispatchPort emailDispatchPort = mock(EmailDispatchPort.class);
+        when(emailDispatchPort.sendHtmlOnce(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(true);
-        MentorVerificationEmailListener listener = new MentorVerificationEmailListener(emailDispatchService);
+        MentorVerificationEmailListener listener = new MentorVerificationEmailListener(emailDispatchPort);
 
         listener.handleMentorVerificationEmail(MentorVerificationEmailNotificationEvent.builder()
                 .eventType(MentorVerificationEmailNotificationEvent.EventType.NEEDS_REVISION_EMAIL)
@@ -61,7 +61,7 @@ class MentorVerificationEmailListenerTest {
                 .reviewedAt(LocalDateTime.of(2026, 6, 29, 10, 0))
                 .build());
 
-        verify(emailDispatchService).sendHtmlOnce(
+        verify(emailDispatchPort).sendHtmlOnce(
                 org.mockito.ArgumentMatchers.startsWith("MENTOR_VERIFICATION_EMAIL:NEEDS_REVISION_EMAIL:"),
                 eq("mentor@test.com"),
                 eq("[SkillSwap] Cần bổ sung hồ sơ mentor"),

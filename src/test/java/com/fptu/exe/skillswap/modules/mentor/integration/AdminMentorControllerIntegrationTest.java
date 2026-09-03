@@ -75,7 +75,7 @@ class AdminMentorControllerIntegrationTest {
         activeMentorId = user1.getId();
 
         StudentProfile sp1 = StudentProfile.builder()
-                .userId(user1.getId())
+                .user(user1)
                 .program(program)
                 .semester(5)
                 .intakeYear(2022)

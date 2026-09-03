@@ -4,7 +4,7 @@ import com.fptu.exe.skillswap.modules.booking.port.BookingCalendarPort;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncAbortedNearStartTimeEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncConnectionRevokedEvent;
 import com.fptu.exe.skillswap.modules.identity.event.CalendarSyncFailedEvent;
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
@@ -26,7 +26,7 @@ public class GoogleCalendarFallbackNotificationListener {
 
     private final ApplicationEventPublisher eventPublisher;
     private final BookingCalendarPort bookingCalendarPort;
-    private final EmailDispatchService emailDispatchService;
+    private final EmailDispatchPort emailDispatchPort;
     private final UserRepository userRepository;
 
     @Async("notificationExecutor")
@@ -103,7 +103,7 @@ public class GoogleCalendarFallbackNotificationListener {
             ));
             String plain = subject + "\n\n" + summary + "\nBooking: " + bookingId;
             try {
-                if (menteeEmail != null) emailDispatchService.sendHtmlOnce(
+                if (menteeEmail != null) emailDispatchPort.sendHtmlOnce(
                         "GCALENDAR_FALLBACK:" + bookingId + ":" + menteeEmail,
                         menteeEmail,
                         subject,
@@ -115,7 +115,7 @@ public class GoogleCalendarFallbackNotificationListener {
                         ? userRepository.findById(booking.mentorUserId()).map(User::getEmail).orElse(null)
                         : null;
                 if (mentorEmail != null) {
-                    emailDispatchService.sendHtmlOnce(
+                    emailDispatchPort.sendHtmlOnce(
                             "GCALENDAR_FALLBACK:" + bookingId + ":" + mentorEmail,
                             mentorEmail,
                             subject,

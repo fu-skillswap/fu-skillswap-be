@@ -18,7 +18,7 @@ import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileReposito
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.request.BasePageRequest;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -56,7 +56,7 @@ public class UserAdminPortImpl implements UserAdminPort {
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
     private final StudentProfileRepository studentProfileRepository;
-    private final NotificationService notificationService;
+    private final NotificationCommandPort notificationCommandPort;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -261,14 +261,15 @@ public class UserAdminPortImpl implements UserAdminPort {
     private void notifyAccountUnlockedSafely(UUID userId) {
         Runnable notificationTask = () -> {
             try {
-                notificationService.createNotification(
+                notificationCommandPort.publish(new NotificationCommandPort.NotificationIntent(
                         userId,
-                        NotificationType.ACCOUNT_UNLOCKED,
+                        NotificationType.ACCOUNT_UNLOCKED.name(),
                         "Tài khoản của bạn đã được mở lại",
                         "Bạn có thể đăng nhập và tiếp tục sử dụng SkillSwap bình thường.",
                         "USER",
-                        userId
-                );
+                        userId,
+                        null
+                ));
             } catch (Exception ex) {
                 log.warn("Failed to create account unlocked notification for user {}", userId, ex);
             }
@@ -431,7 +432,10 @@ public class UserAdminPortImpl implements UserAdminPort {
     }
 
     private List<String> roleNames(java.util.Collection<RoleCode> roles) {
-        return roles == null ? List.of() : roles.stream().map(RoleCode::name).toList();
+        return roles == null ? List.of() : roles.stream()
+                .sorted(java.util.Comparator.comparingInt(RoleCode::ordinal))
+                .map(RoleCode::name)
+                .toList();
     }
 
     private String normalizeEmail(String email) {

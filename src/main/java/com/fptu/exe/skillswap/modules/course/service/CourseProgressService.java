@@ -36,7 +36,7 @@ public class CourseProgressService {
         if (!material.getChapter().getCourse().getId().equals(courseId)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Material does not belong to specified course");
         }
-        boolean isMentor = material.getChapter().getCourse().getMentorProfile().getUserId().equals(studentUserId);
+        boolean isMentor = material.getChapter().getCourse().getMentorUserId().equals(studentUserId);
         if (!isMentor && enrollmentRepository.findByCourseIdAndStudentUserId(courseId, studentUserId)
                 .filter(enrollment -> enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.ACTIVE
                         || enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.COMPLETED)

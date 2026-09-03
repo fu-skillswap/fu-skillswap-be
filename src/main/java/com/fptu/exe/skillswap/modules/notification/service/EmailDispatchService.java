@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.modules.notification.domain.EmailOutbox;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationStatus;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -17,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class EmailDispatchService {
+public class EmailDispatchService implements EmailDispatchPort {
 
     private final EmailService emailService;
     private final EmailOutboxRepository emailOutboxRepository;
@@ -28,6 +29,7 @@ public class EmailDispatchService {
     private EmailDispatchService self;
 
     @Transactional
+    @Override
     public boolean sendHtmlOnce(
             String dedupeKey,
             String toEmail,
@@ -58,6 +60,7 @@ public class EmailDispatchService {
      * trigger an async send, so callers can use it from a BEFORE_COMMIT listener.
      */
     @Transactional
+    @Override
     public java.util.UUID queueHtmlOnce(
             String dedupeKey,
             String toEmail,
@@ -101,6 +104,7 @@ public class EmailDispatchService {
     }
 
     @org.springframework.scheduling.annotation.Async("emailTaskExecutor")
+    @Override
     public void dispatchEmailAsync(java.util.UUID outboxId) {
         EmailOutbox outbox = emailOutboxRepository.findById(outboxId).orElse(null);
         if (outbox == null || outbox.getStatus() != NotificationStatus.PENDING) {

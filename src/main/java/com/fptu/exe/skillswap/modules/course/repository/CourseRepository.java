@@ -15,9 +15,12 @@ import java.util.UUID;
 
 @Repository
 public interface CourseRepository extends JpaRepository<Course, UUID> {
-    Page<Course> findByMentorProfileUserId(UUID mentorUserId, Pageable pageable);
+    Page<Course> findByMentorUserId(UUID mentorUserId, Pageable pageable);
     
-    Optional<Course> findByIdAndMentorProfileUserId(UUID id, UUID mentorUserId);
+    Optional<Course> findByIdAndMentorUserId(UUID id, UUID mentorUserId);
+
+    @Query("select c.mentorUserId from Course c where c.id = :courseId")
+    Optional<UUID> findMentorUserIdByCourseId(@Param("courseId") UUID courseId);
     
     Page<Course> findByStatus(CourseStatus status, Pageable pageable);
     

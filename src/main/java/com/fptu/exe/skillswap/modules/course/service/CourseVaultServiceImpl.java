@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequ
 import com.fptu.exe.skillswap.modules.course.dto.response.*;
 import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
 import com.fptu.exe.skillswap.modules.course.repository.*;
+import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
@@ -44,6 +45,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private final StorageGateway storageGateway;
     private final CourseMaterialProperties materialProperties;
     private final TransactionTemplate transactionTemplate;
+    private final MentorOwnershipQueryPort mentorOwnershipQueryPort;
 
     @Override
     public CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request) {
@@ -161,12 +163,17 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     @Override @Transactional(readOnly=true) public List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId) { return materialRepository.findActiveByCourseIdOrderByCurriculum(courseId).stream().map(m -> CourseMaterialSummaryResponse.builder().materialId(m.getId()).chapterId(m.getChapter().getId()).title(m.getTitle()).materialType(m.getMaterialType()).storageProviderType(m.getStorageProviderType()).status(m.getStatus()).durationSeconds(m.getDurationSeconds()).thumbnailUrl(m.getThumbnailUrl()).uploadedAt(m.getUploadedAt()).available(canAccess(userId,m)).lockedReason(canAccess(userId,m)?null:"NOT_ENROLLED").build()).toList(); }
     @Override @Transactional public void deleteMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=ownedMaterial(userId,courseId,materialId);if(m.getStatus()==MaterialStatus.DELETED||m.getStatus()==MaterialStatus.DELETING)return;m.setStatus(MaterialStatus.DELETING);outboxEventRepository.save(outbox(m.getId(),DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED));}
 
-    private CourseChapter ownedChapter(UUID userId,UUID courseId,UUID chapterId){CourseChapter c=chapterRepository.findById(chapterId).orElseThrow(()->new ResourceNotFoundException("Chapter not found"));if(!c.getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Chapter does not belong to course");if(!c.getCourse().getMentorProfile().getUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return c;}
-    private CourseMaterial ownedMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=materialForCourse(courseId,materialId);if(!m.getChapter().getCourse().getMentorProfile().getUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return m;}
+    private CourseChapter ownedChapter(UUID userId,UUID courseId,UUID chapterId){CourseChapter c=chapterRepository.findById(chapterId).orElseThrow(()->new ResourceNotFoundException("Chapter not found"));if(!c.getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Chapter does not belong to course");if(!isCourseMentor(userId, courseId))throw new AccessDeniedException("Only course mentor can change curriculum");return c;}
+    private CourseMaterial ownedMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=materialForCourse(courseId,materialId);if(!isCourseMentor(userId, courseId))throw new AccessDeniedException("Only course mentor can change curriculum");return m;}
     private CourseMaterial materialForCourse(UUID courseId,UUID materialId){CourseMaterial m=materialRepository.findActiveWithCurriculumById(materialId).orElseThrow(()->new ResourceNotFoundException("Course material not found"));if(!m.getChapter().getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Material does not belong to course");return m;}
     private void assertUnusedOrder(UUID chapterId,int order,UUID self){materialRepository.findByChapterIdAndDeletedAtIsNullOrderBySortOrderAsc(chapterId).stream().filter(m->m.getSortOrder()==order&&!m.getId().equals(self)).findAny().ifPresent(m->{throw new BadRequestException(ErrorCode.RESOURCE_CONFLICT,"Material sort order already exists in this chapter");});}
     private boolean canAccess(UUID user,CourseMaterial m){try{assertAvailable(user,m);return true;}catch(AccessDeniedException e){return false;}}
-    private void assertAvailable(UUID user,CourseMaterial m){Course c=m.getChapter().getCourse();if(c.getMentorProfile().getUserId().equals(user)||m.isPreviewable())return;CourseEnrollment e=enrollmentRepository.findByCourseIdAndStudentUserId(c.getId(),user).orElseThrow(()->new AccessDeniedException("User is not enrolled"));if(e.getStatus()!=EnrollmentStatus.ACTIVE&&e.getStatus()!=EnrollmentStatus.COMPLETED)throw new AccessDeniedException("No active course entitlement");}
+    private void assertAvailable(UUID user,CourseMaterial m){Course c=m.getChapter().getCourse();if(isCourseMentor(user, c.getId())||m.isPreviewable())return;CourseEnrollment e=enrollmentRepository.findByCourseIdAndStudentUserId(c.getId(),user).orElseThrow(()->new AccessDeniedException("User is not enrolled"));if(e.getStatus()!=EnrollmentStatus.ACTIVE&&e.getStatus()!=EnrollmentStatus.COMPLETED)throw new AccessDeniedException("No active course entitlement");}
+    private boolean isCourseMentor(UUID userId, UUID courseId) {
+        return courseRepository.findMentorUserIdByCourseId(courseId)
+                .map(mentorUserId -> mentorOwnershipQueryPort.isOwnedBy(mentorUserId, userId))
+                .orElse(false);
+    }
     private CourseOutboxEvent outbox(UUID id,String type){return CourseOutboxEvent.builder().aggregateType("CourseMaterial").aggregateId(id).eventType(type).payloadJson("{}").status("PENDING").build();}
     private void refreshCourseTotals(Course c){c.setTotalMaterials(Math.toIntExact(materialRepository.countByChapterCourseIdAndDeletedAtIsNullAndIsPublishedTrue(c.getId())));}
     private Duration pdfUploadTtl() { return Duration.ofMinutes(materialProperties.getPdfUploadTtlMinutes()); }

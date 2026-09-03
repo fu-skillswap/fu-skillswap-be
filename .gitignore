@@ -1,7 +1,9 @@
 HELP.md
+*.log
 target/
 uploads/
 logs/
+.claude/
 .env
 .env.*
 !.env.example

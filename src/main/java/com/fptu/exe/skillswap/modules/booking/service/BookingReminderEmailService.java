@@ -8,7 +8,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.projection.PendingBookingServiceCountProjection;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +40,7 @@ public class BookingReminderEmailService {
     private static final String DEFAULT_SERVICE_TITLE = "Dịch vụ mentoring";
 
     private final BookingRepository bookingRepository;
-    private final EmailDispatchService emailDispatchService;
+    private final EmailDispatchPort emailDispatchPort;
     private final UserQueryPort userQueryPort;
     private SessionService sessionService;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
@@ -48,17 +48,17 @@ public class BookingReminderEmailService {
     @Autowired
     public BookingReminderEmailService(
             BookingRepository bookingRepository,
-            EmailDispatchService emailDispatchService,
+            EmailDispatchPort emailDispatchPort,
             UserQueryPort userQueryPort
     ) {
         this.bookingRepository = bookingRepository;
-        this.emailDispatchService = emailDispatchService;
+        this.emailDispatchPort = emailDispatchPort;
         this.userQueryPort = userQueryPort;
     }
 
-    public BookingReminderEmailService(BookingRepository bookingRepository, EmailDispatchService emailDispatchService) {
+    public BookingReminderEmailService(BookingRepository bookingRepository, EmailDispatchPort emailDispatchPort) {
         this.bookingRepository = bookingRepository;
-        this.emailDispatchService = emailDispatchService;
+        this.emailDispatchPort = emailDispatchPort;
         this.userQueryPort = null;
     }
 
@@ -238,7 +238,7 @@ public class BookingReminderEmailService {
                 "Cần thao tác", mentorName(booking), menteeName(booking),
                 "Buổi mentoring sẽ bắt đầu sau " + remainingTime + " nhưng chưa có link họp hoặc địa điểm hợp lệ.",
                 "Hãy vào SkillSwap để bổ sung link họp hoặc địa điểm ngay.", "Cập nhật thông tin buổi học");
-        return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTOR:" + remainingTime + ":" + booking.getId(),
+        return emailDispatchPort.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTOR:" + remainingTime + ":" + booking.getId(),
                 mentorUser.email(), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTOR");
     }
 
@@ -249,7 +249,7 @@ public class BookingReminderEmailService {
                 "Cần chú ý", menteeName(booking), mentorName(booking),
                 "Buổi mentoring sẽ bắt đầu sau 30 phút nhưng hiện chưa có link họp hoặc địa điểm hợp lệ.",
                 "Hãy liên hệ mentor qua SkillSwap; nếu không thể tham gia khi tới giờ, bạn có thể báo mentor no-show.", "Xem booking");
-        return emailDispatchService.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTEE:" + booking.getId(),
+        return emailDispatchPort.sendHtmlOnce("BOOKING_MISSING_ACCESS_MENTEE:" + booking.getId(),
                 menteeEmail(booking), payload.subject(), payload.html(), payload.plainText(), "BOOKING_MISSING_ACCESS_MENTEE");
     }
 
@@ -268,7 +268,7 @@ public class BookingReminderEmailService {
                 "Vui lòng vào SkillSwap để xác nhận hoàn tất hoặc báo cáo sự cố nếu có.",
                 "Đến trang quản lý"
         );
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "BOOKING_AUTO_CLOSE_WARNING_MENTEE:" + booking.getId(),
                 menteeEmail(booking),
                 payload.subject(),
@@ -297,7 +297,7 @@ public class BookingReminderEmailService {
                 "Theo dõi trạng thái buổi mentoring trên hệ thống.",
                 "Đến trang quản lý"
         );
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "BOOKING_AUTO_CLOSE_WARNING_MENTOR:" + booking.getId(),
                 mentorUser.email(),
                 payload.subject(),
@@ -322,7 +322,7 @@ public class BookingReminderEmailService {
                 "Chuẩn bị nội dung cần hỏi và truy cập SkillSwap đúng giờ để vào buổi học.",
                 "Xem lịch học"
         );
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "BOOKING_SESSION_REMINDER_MENTEE:" + booking.getId(),
                 menteeEmail(booking),
                 payload.subject(),
@@ -351,7 +351,7 @@ public class BookingReminderEmailService {
                 "Kiểm tra mục tiêu của mentee, chuẩn bị link học hoặc không gian mentoring trước giờ bắt đầu.",
                 "Xem lịch mentoring"
         );
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "BOOKING_SESSION_REMINDER_MENTOR:" + booking.getId(),
                 mentorUser.email(),
                 payload.subject(),
@@ -391,7 +391,7 @@ public class BookingReminderEmailService {
                 .map(entry -> "- " + entry.getKey() + ": " + entry.getValue() + " yêu cầu")
                 .reduce("", (left, right) -> left + right + "\n")
                 + "\nTruy cập SkillSwap: " + PLATFORM_URL + "\n";
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "MENTOR_PENDING_REQUEST_DIGEST:" + digest.mentorUserId() + ":" + slotKey,
                 digest.mentorEmail(),
                 subject,
@@ -459,7 +459,7 @@ public class BookingReminderEmailService {
                 + "Vui lòng chuẩn bị và tham gia đúng giờ.\n"
                 + "Truy cập SkillSwap: " + PLATFORM_URL + "\n";
 
-        return emailDispatchService.sendHtmlOnce(
+        return emailDispatchPort.sendHtmlOnce(
                 "MENTOR_DAILY_SCHEDULE_DIGEST:" + mentorUserId + ":" + dateKey,
                 mentorEmail,
                 subject,

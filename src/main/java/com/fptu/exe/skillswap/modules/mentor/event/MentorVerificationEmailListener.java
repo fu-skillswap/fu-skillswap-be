@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.event;
 
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ public class MentorVerificationEmailListener {
     private static final String PLATFORM_URL = HtmlEmailTemplate.PLATFORM_URL;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy");
 
-    private final EmailDispatchService emailDispatchService;
+    private final EmailDispatchPort emailDispatchPort;
 
     @Async("mailNotificationExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -30,7 +30,7 @@ public class MentorVerificationEmailListener {
 
         EmailContent content = buildContent(event);
         try {
-            emailDispatchService.sendHtmlOnce(
+            emailDispatchPort.sendHtmlOnce(
                     dedupeKey(event),
                     event.getRecipientEmail(),
                     content.subject(),

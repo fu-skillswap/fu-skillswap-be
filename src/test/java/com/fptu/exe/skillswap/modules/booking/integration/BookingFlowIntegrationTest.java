@@ -31,8 +31,11 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.modules.booking.domain.SessionSourceType;
@@ -47,11 +50,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -95,6 +100,9 @@ class BookingFlowIntegrationTest {
 
     @Autowired
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
 
     @Autowired
     private SessionRepository sessionRepository;
@@ -142,6 +150,7 @@ class BookingFlowIntegrationTest {
                 .email("mentor-booking@test.com")
                 .fullName("Active Mentor")
                 .status(UserStatus.ACTIVE)
+                .roles(Set.of(RoleCode.MENTOR))
                 .build());
 
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
@@ -151,11 +160,20 @@ class BookingFlowIntegrationTest {
                 .isAvailable(true)
                 .headline("Spring Boot Mentor")
                 .expertiseDescription("Support Java backend and database mentoring")
+                .phoneNumber("0900000000")
                 .foundationSupportLevel(3)
                 .outputReviewSupportLevel(3)
                 .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
+                .build());
+
+        mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                .mentorProfile(mentorProfile)
+                .subjectCode("SE1234")
+                .subjectName("Software Engineering")
+                .scoreValue(BigDecimal.valueOf(9.0))
+                .displayOrder(0)
                 .build());
 
         mentorService = mentorServiceRepository.saveAndFlush(

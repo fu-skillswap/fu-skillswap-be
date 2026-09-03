@@ -19,7 +19,6 @@ import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate;
 import com.fptu.exe.skillswap.modules.notification.NotificationEvent;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
@@ -50,7 +49,6 @@ public class BookingRescheduleService {
     private final MentorAvailabilitySlotRepository mentorAvailabilitySlotRepository;
     private final BookingSlotValidator bookingSlotValidator;
     private final MentorBookingQueryPort mentorBookingQueryPort;
-    private final NotificationService notificationService;
     private final SessionService sessionService;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 

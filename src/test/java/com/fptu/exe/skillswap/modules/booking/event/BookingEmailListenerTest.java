@@ -1,6 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.event;
 
-import com.fptu.exe.skillswap.modules.notification.service.EmailDispatchService;
+import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -15,13 +15,13 @@ import static org.mockito.Mockito.doThrow;
 @ExtendWith(MockitoExtension.class)
 class BookingEmailListenerTest {
 
-    @Mock private EmailDispatchService emailDispatchService;
+    @Mock private EmailDispatchPort emailDispatchPort;
 
     @Test
     void queueFailure_mustPropagateSoTheBookingTransactionDoesNotCommitWithoutEmailIntent() {
-        BookingEmailListener listener = new BookingEmailListener(emailDispatchService);
+        BookingEmailListener listener = new BookingEmailListener(emailDispatchPort);
         doThrow(new IllegalStateException("email outbox unavailable"))
-                .when(emailDispatchService).queueHtmlOnce(any(), any(), any(), any(), any(), any());
+                .when(emailDispatchPort).queueHtmlOnce(any(), any(), any(), any(), any(), any());
 
         BookingEmailNotificationEvent event = BookingEmailNotificationEvent.builder()
                 .bookingId(UUID.randomUUID())

@@ -82,7 +82,7 @@ public class CourseCurriculumService {
     @Transactional
     public CourseMaterial updateMaterial(UUID userId, UUID courseId, UUID materialId, UpdateCourseMaterialRequest request) {
         CourseMaterial material = materialRepository.findActiveWithCurriculumById(materialId).orElseThrow(() -> new ResourceNotFoundException("Course material not found"));
-        if (!material.getChapter().getCourse().getId().equals(courseId) || !material.getChapter().getCourse().getMentorProfile().getUserId().equals(userId)) throw new AccessDeniedException("Only course mentor can change curriculum");
+        if (!material.getChapter().getCourse().getId().equals(courseId) || !material.getChapter().getCourse().getMentorUserId().equals(userId)) throw new AccessDeniedException("Only course mentor can change curriculum");
         assertVersion(material.getId(), material.getVersion(), request.expectedVersion());
         material.setTitle(request.title()); material.setPreviewable(request.previewable()); material.setPublished(request.published());
         refreshCourseTotal(material.getChapter().getCourse());
@@ -95,7 +95,7 @@ public class CourseCurriculumService {
     @Transactional(readOnly = true)
     public CourseCurriculumResponse getCurriculum(UUID userId, UUID courseId) {
         Course course = courseRepository.findById(courseId).orElseThrow(() -> new ResourceNotFoundException("Course not found"));
-        boolean mentor = course.getMentorProfile().getUserId().equals(userId);
+        boolean mentor = course.getMentorUserId().equals(userId);
         boolean enrolled = mentor || hasEntitlement(courseId, userId);
         List<CourseChapter> chapters = mentor ? chapterRepository.findByCourseIdOrderBySortOrderAsc(courseId) : chapterRepository.findByCourseIdAndIsPublishedTrueOrderBySortOrderAsc(courseId);
         Map<UUID, CourseMaterialProgress> progresses = materialProgressRepository.findByStudentUserIdAndCourseId(userId, courseId).stream().collect(Collectors.toMap(p -> p.getMaterial().getId(), Function.identity()));
@@ -110,8 +110,8 @@ public class CourseCurriculumService {
         return new CourseCurriculumResponse.Material(material.getId(), material.getTitle(), material.getMaterialType(), material.getSortOrder(), material.isPreviewable(), material.isPublished(), material.getStatus(), material.getDurationSeconds(), material.getThumbnailUrl(), access, progress == null ? null : progress.getCompletionPercentage(), progress != null && progress.isCompleted(), material.getVersion());
     }
     private boolean hasEntitlement(UUID courseId, UUID userId) { return enrollmentRepository.findByCourseIdAndStudentUserId(courseId, userId).map(e -> e.getStatus() == EnrollmentStatus.ACTIVE || e.getStatus() == EnrollmentStatus.COMPLETED).orElse(false); }
-    private Course ownedCourse(UUID userId, UUID courseId) { Course course=courseRepository.findByIdAndMentorProfileUserId(courseId,userId).orElseThrow(() -> new AccessDeniedException("Only course mentor can change curriculum")); return course; }
-    private CourseChapter ownedChapter(UUID userId, UUID courseId, UUID chapterId) { CourseChapter chapter=chapterRepository.findById(chapterId).orElseThrow(() -> new ResourceNotFoundException("Chapter not found")); if(!chapter.getCourse().getId().equals(courseId)||!chapter.getCourse().getMentorProfile().getUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return chapter; }
+    private Course ownedCourse(UUID userId, UUID courseId) { Course course=courseRepository.findByIdAndMentorUserId(courseId,userId).orElseThrow(() -> new AccessDeniedException("Only course mentor can change curriculum")); return course; }
+    private CourseChapter ownedChapter(UUID userId, UUID courseId, UUID chapterId) { CourseChapter chapter=chapterRepository.findById(chapterId).orElseThrow(() -> new ResourceNotFoundException("Chapter not found")); if(!chapter.getCourse().getId().equals(courseId)||!chapter.getCourse().getMentorUserId().equals(userId))throw new AccessDeniedException("Only course mentor can change curriculum");return chapter; }
     private void refreshCourseTotal(Course course) { course.setTotalMaterials(Math.toIntExact(materialRepository.countByChapterCourseIdAndDeletedAtIsNullAndIsPublishedTrue(course.getId()))); }
     private void assertVersion(UUID id, Long actual, Long expected) { if (!Objects.equals(actual, expected)) throw new BadRequestException(ErrorCode.RESOURCE_CONFLICT, "Curriculum changed by another request; refresh and retry"); }
     private void validateExactIds(Set<UUID> actual, List<UUID> requested, String label) { if(requested.size()!=actual.size()||new HashSet<>(requested).size()!=requested.size()||!actual.equals(new HashSet<>(requested)))throw new BadRequestException(ErrorCode.BAD_REQUEST,"The " + label + " order must contain every current item exactly once"); }

@@ -95,7 +95,7 @@ public class CourseSettlementService {
         }
         String operationKey = "COURSE_SETTLEMENT_RELEASE:" + allocation.getId();
         coursePaymentPort.releaseAllocation(new CoursePaymentPort.CourseAllocationRelease(
-                enrollment.getCourse().getMentorProfile().getUserId(),
+                enrollment.getCourse().getMentorUserId(),
                 allocation.getId(),
                 allocation.getMentorPayoutScoin(),
                 allocation.getPlatformRevenueScoin(),

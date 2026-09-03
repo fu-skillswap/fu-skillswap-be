@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
-import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentStatusContract;
 
 public final class BookingStateMapper {
 
@@ -16,7 +15,7 @@ public final class BookingStateMapper {
      * Keeps the public lifecycle explicit when the shared internal EXPIRED value
      * came from either a request timeout or a payment timeout.
      */
-    public static BookingLifecycleStatus toLifecycleStatus(Booking booking, PaymentOrder paymentOrder) {
+    public static BookingLifecycleStatus toLifecycleStatus(Booking booking, PaymentStatusContract paymentStatus) {
         if (booking == null) {
             return null;
         }
@@ -29,7 +28,7 @@ public final class BookingStateMapper {
             case ACCEPTED_AWAITING_PAYMENT -> BookingLifecycleStatus.WAITING_PAYMENT;
             case PAID, AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION -> BookingLifecycleStatus.CONFIRMED;
             case REJECTED -> BookingLifecycleStatus.REJECTED_BY_MENTOR;
-            case EXPIRED -> paymentOrder != null && paymentOrder.getStatus() == PaymentOrderStatus.EXPIRED
+            case EXPIRED -> paymentStatus != null && "EXPIRED".equals(paymentStatus.orderStatus())
                     ? BookingLifecycleStatus.PAYMENT_EXPIRED
                     : BookingLifecycleStatus.REQUEST_EXPIRED;
             case CANCELLED_BY_MENTEE -> BookingLifecycleStatus.CANCELED_BY_MENTEE;
@@ -39,28 +38,37 @@ public final class BookingStateMapper {
         };
     }
 
-    public static BookingPaymentStatus toPaymentStatus(Booking booking, PaymentOrder paymentOrder) {
+    public static BookingPaymentStatus toPaymentStatus(Booking booking, PaymentStatusContract paymentStatus) {
         if (booking == null) {
             return null;
         }
         if (Boolean.TRUE.equals(isFreeBooking(booking))) {
             return BookingPaymentStatus.NOT_REQUIRED;
         }
-        if (paymentOrder != null && paymentOrder.getStatus() != null) {
-            if (paymentOrder.getSettlementStatus() != null
-                    && "REFUNDED".equals(paymentOrder.getSettlementStatus().name())) {
+        if (paymentStatus != null && paymentStatus.orderStatus() != null) {
+            if ("REFUNDED".equals(paymentStatus.settlementStatus())) {
                 return BookingPaymentStatus.REFUNDED;
             }
-            return switch (paymentOrder.getStatus()) {
-                case PENDING, PARTIALLY_COVERED_BY_CREDIT, AWAITING_PROVIDER_PAYMENT -> BookingPaymentStatus.PENDING;
-                case PAID -> isTerminalCancelled(booking)
+            return switch (paymentStatus.orderStatus()) {
+                case "PENDING", "PARTIALLY_COVERED_BY_CREDIT", "AWAITING_PROVIDER_PAYMENT" -> BookingPaymentStatus.PENDING;
+                case "PAID" -> isTerminalCancelled(booking)
                         ? BookingPaymentStatus.REFUNDED
                         : BookingPaymentStatus.PAID;
-                case FAILED -> BookingPaymentStatus.FAILED;
-                case CANCELLED -> BookingPaymentStatus.EXPIRED;
-                case EXPIRED -> BookingPaymentStatus.EXPIRED;
+                case "FAILED" -> BookingPaymentStatus.FAILED;
+                case "CANCELLED", "EXPIRED" -> BookingPaymentStatus.EXPIRED;
+                default -> fallbackPaymentStatus(booking);
             };
         }
+        return switch (booking.getStatus()) {
+            case PENDING -> BookingPaymentStatus.PENDING;
+            case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;
+            case REJECTED, EXPIRED -> BookingPaymentStatus.EXPIRED;
+            case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.REFUNDED;
+            case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
+        };
+    }
+
+    private static BookingPaymentStatus fallbackPaymentStatus(Booking booking) {
         return switch (booking.getStatus()) {
             case PENDING -> BookingPaymentStatus.PENDING;
             case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;

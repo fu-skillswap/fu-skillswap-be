@@ -46,7 +46,6 @@ public class CourseQueryPortImpl implements CourseQueryPort {
     @Override
     public Optional<CourseChatContext> findCourseChatContext(UUID courseId) {
         return courseId == null ? Optional.empty() : courseRepository.findById(courseId)
-                .map(course -> new CourseChatContext(course.getId(), course.getMentorProfile() == null
-                        ? null : course.getMentorProfile().getUserId()));
+                .map(course -> new CourseChatContext(course.getId(), course.getMentorUserId()));
     }
 }

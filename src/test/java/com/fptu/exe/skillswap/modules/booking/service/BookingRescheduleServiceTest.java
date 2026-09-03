@@ -17,7 +17,6 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorBookingQueryPort;
-import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
@@ -54,8 +53,6 @@ class BookingRescheduleServiceTest {
     @Mock
     private BookingSlotValidator bookingSlotValidator;
     @Mock
-    private NotificationService notificationService;
-    @Mock
     private SessionService sessionService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
@@ -78,7 +75,6 @@ class BookingRescheduleServiceTest {
                 mentorAvailabilitySlotRepository,
                 bookingSlotValidator,
                 mentorBookingQueryPort,
-                notificationService,
                 sessionService,
                 eventPublisher
         );

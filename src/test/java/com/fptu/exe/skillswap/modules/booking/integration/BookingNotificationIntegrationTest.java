@@ -30,9 +30,12 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
@@ -49,7 +52,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -104,6 +109,9 @@ class BookingNotificationIntegrationTest {
     private MentorServiceRepository mentorServiceRepository;
 
     @Autowired
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
+
+    @Autowired
     private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     private User mentee1;
@@ -148,6 +156,7 @@ class BookingNotificationIntegrationTest {
                 .email("mentor-noti@test.com")
                 .fullName("Mentor Noti")
                 .status(UserStatus.ACTIVE)
+                .roles(Set.of(RoleCode.MENTOR))
                 .build());
 
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
@@ -157,11 +166,20 @@ class BookingNotificationIntegrationTest {
                 .isAvailable(true)
                 .headline("Spring Boot Mentor")
                 .expertiseDescription("Support Java")
+                .phoneNumber("0900000000")
                 .foundationSupportLevel(3)
                 .outputReviewSupportLevel(3)
                 .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
+                .build());
+
+        mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                .mentorProfile(mentorProfile)
+                .subjectCode("SE1234")
+                .subjectName("Software Engineering")
+                .scoreValue(BigDecimal.valueOf(9.0))
+                .displayOrder(0)
                 .build());
 
         MentorAvailabilityRule availabilityRule = mentorAvailabilityRuleRepository.save(MentorAvailabilityRule.builder()

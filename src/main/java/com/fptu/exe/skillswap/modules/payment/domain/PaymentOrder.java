@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.domain;
 
+import com.fptu.exe.skillswap.modules.payment.port.PaymentStatusContract;
 import com.fptu.exe.skillswap.shared.persistence.GeneratedUuidV7;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import jakarta.persistence.Column;
@@ -109,6 +110,14 @@ public class PaymentOrder {
     @Column(nullable = false, length = 30)
     @Builder.Default
     private PaymentOrderStatus status = PaymentOrderStatus.PENDING;
+
+    /** Converts the payment state to the narrow value exposed to consuming modules. */
+    public PaymentStatusContract toStatusContract() {
+        return new PaymentStatusContract(
+                status == null ? null : status.name(),
+                settlementStatus == null ? null : settlementStatus.name()
+        );
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_provider", nullable = false, length = 30)

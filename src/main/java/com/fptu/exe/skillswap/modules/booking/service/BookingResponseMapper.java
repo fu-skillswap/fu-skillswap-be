@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.SessionAttendanceReposi
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
+import com.fptu.exe.skillswap.modules.payment.port.PaymentStatusContract;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -141,13 +142,14 @@ public class BookingResponseMapper {
         boolean canSubmitFeedback = false;
 
         PaymentOrder paymentOrder = resolvePaymentOrder(booking, paymentOrdersByBookingId);
+        PaymentStatusContract paymentStatus = paymentOrder == null ? null : paymentOrder.toStatusContract();
 
         BookingCompletionOutcome completionOutcome = booking.getCompletionOutcome();
         if (completionOutcome == null) {
             completionOutcome = BookingStateMapper.toCanonicalCompletionOutcome(booking);
         }
-        BookingLifecycleStatus bookingLifecycleStatus = BookingStateMapper.toLifecycleStatus(booking, paymentOrder);
-        BookingPaymentStatus bookingPaymentStatus = BookingStateMapper.toPaymentStatus(booking, paymentOrder);
+        BookingLifecycleStatus bookingLifecycleStatus = BookingStateMapper.toLifecycleStatus(booking, paymentStatus);
+        BookingPaymentStatus bookingPaymentStatus = BookingStateMapper.toPaymentStatus(booking, paymentStatus);
 
         if (currentUserId != null) {
             boolean beforeSession = startUtc != null && nowUtc.isBefore(startUtc);

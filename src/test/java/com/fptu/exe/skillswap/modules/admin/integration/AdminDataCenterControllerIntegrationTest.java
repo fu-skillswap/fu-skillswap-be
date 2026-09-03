@@ -129,7 +129,7 @@ class AdminDataCenterControllerIntegrationTest {
         var specialization = specializationRepository.findByCode("CNTT_TTNT").orElseThrow();
 
         studentProfileRepository.save(StudentProfile.builder()
-                .userId(targetUser.getId())
+                .user(targetUser)
                 .claimedStudentCode("HE173001")
                 .campus(campus)
                 .program(program)

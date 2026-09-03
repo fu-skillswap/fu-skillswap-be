@@ -31,9 +31,12 @@ import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.payment.dto.request.PaymentCheckoutRequest;
 import com.fptu.exe.skillswap.modules.payment.service.PaymentOrderService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -48,6 +51,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -86,6 +91,9 @@ class BookingOwnershipIntegrationTest {
 
     @Autowired
     private MentorServiceRepository mentorServiceRepository;
+
+    @Autowired
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
 
     @Autowired
     private BookingRepository bookingRepository;
@@ -135,6 +143,7 @@ class BookingOwnershipIntegrationTest {
                 .email("ownership-mentor@test.com")
                 .fullName("Ownership Mentor")
                 .status(UserStatus.ACTIVE)
+                .roles(Set.of(RoleCode.MENTOR))
                 .build());
         mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                 .userId(mentorUser.getId())
@@ -143,11 +152,19 @@ class BookingOwnershipIntegrationTest {
                 .isAvailable(true)
                 .headline("Ownership Mentor")
                 .expertiseDescription("Ownership test mentor")
+                .phoneNumber("0900000000")
                 .foundationSupportLevel(3)
                 .outputReviewSupportLevel(3)
                 .directionSupportLevel(2)
                 .teachingMode(TeachingMode.ONLINE)
                 .sessionDuration(60)
+                .build());
+        mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                .mentorProfile(mentorProfile)
+                .subjectCode("SE1234")
+                .subjectName("Software Engineering")
+                .scoreValue(BigDecimal.valueOf(9.0))
+                .displayOrder(0)
                 .build());
         mentorService = mentorServiceRepository.saveAndFlush(
                 com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
