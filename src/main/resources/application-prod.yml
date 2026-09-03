@@ -12,24 +12,55 @@ spring:
     enabled: ${FLYWAY_ENABLED:true}
     baseline-on-migrate: false
 
-springdoc:
-  api-docs:
-    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
-  swagger-ui:
-    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
-
-logging:
-  level:
-    root: INFO
-    # Reduce noise in production
-    org.hibernate.SQL: WARN
-    org.hibernate.orm.jdbc.bind: WARN
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp-relay.brevo.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
 
 application:
+  production-validation:
+    # Production defaults to strict validation. The official Compose overlay
+    # pins this marker to true; only explicit non-production tests may override it.
+    enabled: ${PRODUCTION_CONFIG_VALIDATION_ENABLED:true}
+  google:
+    client-id: ${GOOGLE_CLIENT_ID:}
+    client-secret: ${GOOGLE_CLIENT_SECRET:}
+    calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
+    token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}
+  bunny:
+    stream:
+      api-key: ${BUNNY_STREAM_API_KEY:}
+      library-id: ${BUNNY_STREAM_LIBRARY_ID:}
+      token-auth-key: ${BUNNY_STREAM_TOKEN_AUTH_KEY:}
+      webhook-secret: ${BUNNY_STREAM_WEBHOOK_SECRET:}
+  storage:
+    enabled: ${STORAGE_ENABLED:false}
+    endpoint: ${STORAGE_ENDPOINT:}
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    bucket: ${STORAGE_BUCKET:}
+    region: ${STORAGE_REGION:auto}
+  payment:
+    payos:
+      client-id: ${PAYOS_CLIENT_ID:}
+      api-key: ${PAYOS_API_KEY:}
+      checksum-key: ${PAYOS_CHECKSUM_KEY:}
+      webhook-url: ${PAYOS_WEBHOOK_URL:}
+      webhook-secret: ${PAYOS_WEBHOOK_SECRET:}
+  mail:
+    enabled: ${APPLICATION_MAIL_ENABLED:false}
+    from: ${APPLICATION_MAIL_FROM:no-reply@skillswap.asia}
+    from-name: ${APPLICATION_MAIL_FROM_NAME:SkillSwap}
   security:
     jwt:
+      secret-key: ${JWT_SECRET_KEY}
       issuer: ${JWT_ISSUER}
       audience: ${JWT_AUDIENCE}
+      refresh-token:
+        cookie:
+          secure: ${JWT_REFRESH_COOKIE_SECURE:true}
+          same-site: ${JWT_REFRESH_COOKIE_SAME_SITE:Lax}
   cors:
     # IMPORTANT: Replace with your actual frontend domain before deploying.
     # Defaults in base application.yaml include localhost — must be overridden for prod.
@@ -44,3 +75,16 @@ application:
       # Production must not start without explicit cursor crypto keys.
       aes-key: ${CURSOR_AES_KEY}
       hmac-key: ${CURSOR_HMAC_KEY}
+
+springdoc:
+  api-docs:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${APPLICATION_SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    root: INFO
+    # Reduce noise in production
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN

@@ -82,19 +82,26 @@ until docker exec "$RABBIT" rabbitmq-diagnostics -q ping >/dev/null 2>&1; do sle
 
 docker run -d --name "$BACKEND" --network "$NETWORK" -p "127.0.0.1:${PORT}:8080" \
   -e SPRING_PROFILES_ACTIVE=prod \
+  -e PRODUCTION_CONFIG_VALIDATION_ENABLED=true \
   -e DATABASE_URL="jdbc:postgresql://${DB}:5432/${POSTGRES_DB}" \
   -e DATABASE_USERNAME="$POSTGRES_USER" -e DATABASE_PASSWORD="$POSTGRES_PASSWORD" \
   -e FLYWAY_ENABLED=true -e HIBERNATE_DDL_AUTO=validate \
   -e JWT_SECRET_KEY -e JWT_ISSUER -e JWT_AUDIENCE -e CURSOR_AES_KEY -e CURSOR_HMAC_KEY \
   -e SPRING_RABBITMQ_HOST="$RABBIT" -e SPRING_RABBITMQ_PORT=5672 \
   -e SPRING_RABBITMQ_USERNAME="$RABBITMQ_DEFAULT_USER" -e SPRING_RABBITMQ_PASSWORD="$RABBITMQ_DEFAULT_PASS" \
-  -e APPLICATION_MAIL_ENABLED=false -e STORAGE_ENABLED=false -e APPLICATION_SWAGGER_ENABLED=false \
+  -e APPLICATION_MAIL_ENABLED=true -e APPLICATION_MAIL_FROM=rehearsal@invalid -e STORAGE_ENABLED=true -e APPLICATION_SWAGGER_ENABLED=false \
   -e APPLICATION_SCHEDULING_ENABLED=false \
-  -e GOOGLE_CLIENT_ID= -e GOOGLE_CLIENT_SECRET= -e GOOGLE_CALENDAR_REDIRECT_URI=http://localhost/rehearsal \
-  -e GOOGLE_TOKEN_ENCRYPTION_KEY= -e SYSTEM_ADMIN_EMAILS= \
-  -e CORS_ALLOWED_ORIGIN_PATTERNS="http://localhost" \
-  -e PAYOS_CLIENT_ID= -e PAYOS_API_KEY= -e PAYOS_CHECKSUM_KEY= -e PAYOS_WEBHOOK_URL= -e PAYOS_WEBHOOK_SECRET= \
-  -e PAYOS_RETURN_URL=http://localhost/rehearsal -e PAYOS_CANCEL_URL=http://localhost/rehearsal \
+  -e SPRING_MAIL_HOST=localhost -e SPRING_MAIL_USERNAME=rehearsal -e SPRING_MAIL_PASSWORD=rehearsal \
+  -e GOOGLE_CLIENT_ID=rehearsal-google-client -e GOOGLE_CLIENT_SECRET=rehearsal-google-secret -e GOOGLE_CALENDAR_REDIRECT_URI=https://rehearsal.invalid/callback \
+  -e GOOGLE_TOKEN_ENCRYPTION_KEY=rehearsal-google-token-key -e SYSTEM_ADMIN_EMAILS= \
+  -e BUNNY_STREAM_API_KEY=rehearsal-bunny-api-key -e BUNNY_STREAM_LIBRARY_ID=rehearsal-library \
+  -e BUNNY_STREAM_TOKEN_AUTH_KEY=rehearsal-bunny-token-key -e BUNNY_STREAM_WEBHOOK_SECRET=rehearsal-bunny-webhook-secret \
+  -e STORAGE_ENDPOINT=https://rehearsal.invalid/storage -e STORAGE_ACCESS_KEY=rehearsal-storage-access \
+  -e STORAGE_SECRET_KEY=rehearsal-storage-secret -e STORAGE_BUCKET=rehearsal-bucket \
+  -e CORS_ALLOWED_ORIGIN_PATTERNS="https://rehearsal.invalid" \
+  -e PAYOS_CLIENT_ID=rehearsal-payos-client -e PAYOS_API_KEY=rehearsal-payos-api-key -e PAYOS_CHECKSUM_KEY=rehearsal-payos-checksum \
+  -e PAYOS_WEBHOOK_URL=https://rehearsal.invalid/payos-webhook -e PAYOS_WEBHOOK_SECRET=rehearsal-payos-webhook-secret \
+  -e PAYOS_RETURN_URL=https://rehearsal.invalid/payment/return -e PAYOS_CANCEL_URL=https://rehearsal.invalid/payment/cancel \
   "$CANDIDATE_IMAGE" >/dev/null
 
 CANDIDATE_STARTED_SECONDS="$(date +%s)"

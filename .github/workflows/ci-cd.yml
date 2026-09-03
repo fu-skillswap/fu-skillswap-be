@@ -329,9 +329,9 @@ jobs:
         # would otherwise terminate on `docker compose up --wait` before the
         # diagnostic section can run.
         script_stop: false
-        debug: true
+        debug: false
         script: |
-          set -euxo pipefail
+          set -euo pipefail
 
           DEPLOY_DIR="/opt/fu-skillswap/backend"
           DEPLOY_LOG_DIR="/tmp/skillswap-deploy-${{ github.sha }}-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -428,7 +428,6 @@ jobs:
             set +x
             bash -lc "$actual_command" >"$stdout_file" 2>"$stderr_file"
             exit_code=$?
-            set -x
             set -e
             end_time="$(date -Is)"
             echo "ended_at=${end_time}"
@@ -488,7 +487,7 @@ jobs:
 
           run_required_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
           run_required_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
-          run_required_step "download ops scripts" "mkdir -p ops/rabbitmq && if [ -d ops/rabbitmq/enabled_plugins ]; then rm -rf ops/rabbitmq/enabled_plugins; fi && curl --fail --silent --show-error --location -o ops/rabbitmq/enabled_plugins https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/rabbitmq/enabled_plugins && test -f ops/rabbitmq/enabled_plugins && for script in backup-postgres.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
+          run_required_step "download ops scripts" "mkdir -p ops/rabbitmq && if [ -d ops/rabbitmq/enabled_plugins ]; then rm -rf ops/rabbitmq/enabled_plugins; fi && curl --fail --silent --show-error --location -o ops/rabbitmq/enabled_plugins https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/rabbitmq/enabled_plugins && test -f ops/rabbitmq/enabled_plugins && for script in backup-postgres.sh production-preflight.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
 
           run_required_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
           if [ "$DEPLOY_FAILED" -eq 0 ] && [ -f ".env" ]; then
@@ -502,7 +501,6 @@ jobs:
             set +a
             set -u
             set -e
-            set -x
             if [ "$source_exit" -ne 0 ]; then
               append_failure "source .env" "$source_exit" "The .env file exists but cannot be sourced. Verify shell syntax and file encoding."
               DEPLOY_FAILED=1
@@ -515,7 +513,7 @@ jobs:
           export RELEASE_CANDIDATE_IMAGE="$APP_IMAGE"
           export RELEASE_DIR="/opt/skillswap/releases"
 
-          run_required_step "preflight required environment variables" 'missing=0; for name in POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD RABBITMQ_DEFAULT_USER RABBITMQ_DEFAULT_PASS SPRING_PROFILES_ACTIVE JWT_SECRET_KEY JWT_ISSUER JWT_AUDIENCE CURSOR_AES_KEY CURSOR_HMAC_KEY CORS_ALLOWED_ORIGIN_PATTERNS; do if [ -z "${!name:-}" ]; then echo "::error::missing env ${name}"; missing=1; else echo "${name}=present"; fi; done; exit "$missing"'
+          run_required_step "preflight production environment" "bash ops/production-preflight.sh"
           run_required_step "preflight R2 backup configuration" 'if { [ -n "${BACKUP_BUCKET:-}" ] && [ -n "${R2_ENDPOINT:-}" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; } || { [ -n "${STORAGE_BUCKET:-}" ] && [ -n "${STORAGE_ENDPOINT:-}" ] && [ -n "${STORAGE_ACCESS_KEY:-}" ] && [ -n "${STORAGE_SECRET_KEY:-}" ]; }; then echo "backup R2 configuration=present"; else echo "::error::missing backup R2 configuration; set BACKUP_BUCKET/R2_ENDPOINT/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or reuse STORAGE_BUCKET/STORAGE_ENDPOINT/STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY"; exit 1; fi'
           run_required_step "docker compose config" "docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet"
 
@@ -551,10 +549,27 @@ jobs:
           run_diagnostic_step "diagnostic docker service" "systemctl status docker --no-pager || service docker status || true"
           echo "::endgroup::"
 
+          ROLLBACK_STATUS="not-attempted"
+          if [ "$DEPLOY_FAILED" -ne 0 ] && [ "${RELEASE_PREVIOUS_IMAGE:-none}" != "none" ]; then
+            echo "::group::automatic application rollback"
+            echo "candidate_image=${RELEASE_CANDIDATE_IMAGE}"
+            echo "rollback_image=${RELEASE_PREVIOUS_IMAGE}"
+            if APP_IMAGE="$RELEASE_PREVIOUS_IMAGE" docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --wait spring-backend \
+              && curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness; then
+              ROLLBACK_STATUS="passed"
+              echo "Rollback restored the previous image and readiness is healthy."
+            else
+              ROLLBACK_STATUS="failed"
+              echo "Rollback failed or the previous image did not become ready." >&2
+            fi
+            echo "::endgroup::"
+          fi
+
           if [ -n "$FAILED_STEPS" ]; then
             echo "::error::Deploy failed. Failure report:"
             cat "$FAILURE_REPORT"
             echo "Failed steps:${FAILED_STEPS}"
+            echo "Rollback status: ${ROLLBACK_STATUS}"
             echo "Diagnostic logs are in ${DEPLOY_LOG_DIR} on VPS."
             exit 1
           fi

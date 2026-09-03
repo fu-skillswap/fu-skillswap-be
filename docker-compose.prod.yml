@@ -15,5 +15,6 @@ services:
       # Production must migrate first, then let Hibernate detect any remaining drift.
       FLYWAY_ENABLED: "true"
       HIBERNATE_DDL_AUTO: validate
+      PRODUCTION_CONFIG_VALIDATION_ENABLED: "true"
     logging: *default-logging
 
