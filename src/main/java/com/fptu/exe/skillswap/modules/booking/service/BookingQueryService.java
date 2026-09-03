@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -169,7 +170,8 @@ public class BookingQueryService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         assertBookingAccess(booking, currentUserId);
-        return bookingResponseMapper.toBookingResponse(booking);
+        return bookingResponseMapper.toBookingResponse(booking, null, null,
+                paymentOrderMap(booking), null);
     }
 
     @Transactional(readOnly = true)
@@ -209,7 +211,20 @@ public class BookingQueryService {
         }
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
-        return bookingResponseMapper.toBookingResponse(booking);
+        return bookingResponseMapper.toBookingResponse(booking, null, null,
+                paymentOrderMap(booking), null);
+    }
+
+    private Map<UUID, PaymentOrder> paymentOrderMap(Booking booking) {
+        if (booking == null || booking.getId() == null || paymentOrderRepository == null) {
+            return Collections.emptyMap();
+        }
+        Optional<PaymentOrder> paymentOrder = paymentOrderRepository.findByTargetTypeAndTargetId(
+                PaymentTargetType.BOOKING, booking.getId());
+        return paymentOrder == null
+                ? Collections.emptyMap()
+                : paymentOrder.map(order -> Map.of(booking.getId(), order))
+                        .orElseGet(Collections::emptyMap);
     }
 
     private void assertBookingAccess(Booking booking, UUID currentUserId) {

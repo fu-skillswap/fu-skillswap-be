@@ -137,6 +137,17 @@ public class PaymentWebhookService {
             }
             if (terminalWebhook) {
                 if (isFinal(order.getStatus())) {
+                    if (attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED
+                            && attempt.getStatus() != PaymentAttemptStatus.SUCCEEDED_SURPLUS) {
+                        applyTerminalWebhookToAttemptOnly(attempt, verified, providerEventId);
+                    }
+                    return paymentResponseMapper.toResponse(order, attempt);
+                }
+                if (!isCurrentProviderAttempt(order, verified.providerOrderCode())) {
+                    // A retry reuses the payment order but replaces its current provider
+                    // order code. A late terminal callback for an older attempt must not
+                    // release the reservation belonging to the newer attempt.
+                    applyTerminalWebhookToAttemptOnly(attempt, verified, providerEventId);
                     return paymentResponseMapper.toResponse(order, attempt);
                 }
                 applyTerminalWebhook(order, attempt, verified, providerEventId);
@@ -589,6 +600,30 @@ public class PaymentWebhookService {
             return verified.providerPaymentLinkId() + ":" + verified.providerOrderCode();
         }
         return verified.providerOrderCode();
+    }
+
+    private boolean isCurrentProviderAttempt(PaymentOrder order, String providerOrderCode) {
+        return order != null
+                && StringUtils.hasText(order.getProviderOrderCode())
+                && StringUtils.hasText(providerOrderCode)
+                && order.getProviderOrderCode().equals(providerOrderCode);
+    }
+
+    private void applyTerminalWebhookToAttemptOnly(PaymentAttempt attempt,
+                                                    PaymentGatewayProvider.VerifiedWebhook verified,
+                                                    String providerEventId) {
+        String status = verified.providerStatus().trim().toUpperCase(Locale.ROOT);
+        attempt.setProviderOrderCode(verified.providerOrderCode());
+        attempt.setProviderPaymentLinkId(verified.providerPaymentLinkId());
+        markAttemptFinalState(attempt,
+                switch (status) {
+                    case "CANCELLED" -> PaymentAttemptStatus.CANCELLED;
+                    case "EXPIRED" -> PaymentAttemptStatus.EXPIRED;
+                    case "FAILED" -> PaymentAttemptStatus.FAILED;
+                    default -> throw new IllegalArgumentException("Unsupported terminal payment status: " + status);
+                },
+                verified.providerTransactionId(), providerEventId, status,
+                "PayOS payment attempt đã kết thúc trước khi retry mới hoàn tất");
     }
 
     private long parseProviderOrderCode(String providerOrderCode) {

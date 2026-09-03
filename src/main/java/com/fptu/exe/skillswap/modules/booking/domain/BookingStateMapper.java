@@ -49,11 +49,15 @@ public final class BookingStateMapper {
             if ("REFUNDED".equals(paymentStatus.settlementStatus())) {
                 return BookingPaymentStatus.REFUNDED;
             }
+            if (isCancelledBooking(booking)) {
+                // Cancellation does not prove that a captured payment was refunded.
+                return "PAID".equals(paymentStatus.orderStatus())
+                        ? BookingPaymentStatus.PAID
+                        : BookingPaymentStatus.CANCELLED;
+            }
             return switch (paymentStatus.orderStatus()) {
                 case "PENDING", "PARTIALLY_COVERED_BY_CREDIT", "AWAITING_PROVIDER_PAYMENT" -> BookingPaymentStatus.PENDING;
-                case "PAID" -> isTerminalCancelled(booking)
-                        ? BookingPaymentStatus.REFUNDED
-                        : BookingPaymentStatus.PAID;
+                case "PAID" -> BookingPaymentStatus.PAID;
                 case "FAILED" -> BookingPaymentStatus.FAILED;
                 case "CANCELLED", "EXPIRED" -> BookingPaymentStatus.EXPIRED;
                 default -> fallbackPaymentStatus(booking);
@@ -63,7 +67,7 @@ public final class BookingStateMapper {
             case PENDING -> BookingPaymentStatus.PENDING;
             case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;
             case REJECTED, EXPIRED -> BookingPaymentStatus.EXPIRED;
-            case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.REFUNDED;
+            case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.CANCELLED;
             case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
         };
     }
@@ -73,7 +77,7 @@ public final class BookingStateMapper {
             case PENDING -> BookingPaymentStatus.PENDING;
             case ACCEPTED_AWAITING_PAYMENT -> BookingPaymentStatus.PENDING;
             case REJECTED, EXPIRED -> BookingPaymentStatus.EXPIRED;
-            case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.REFUNDED;
+            case CANCELLED_BY_MENTEE, CANCELLED_BY_MENTOR -> BookingPaymentStatus.CANCELLED;
             case AWAITING_MENTOR_COMPLETION, AWAITING_MENTEE_CONFIRMATION, COMPLETED, UNDER_REVIEW, PAID -> BookingPaymentStatus.PAID;
         };
     }
@@ -115,10 +119,8 @@ public final class BookingStateMapper {
                 || (booking.getServicePriceScoinSnapshot() != null && booking.getServicePriceScoinSnapshot() == 0));
     }
 
-    private static boolean isTerminalCancelled(Booking booking) {
+    private static boolean isCancelledBooking(Booking booking) {
         return booking != null && (booking.getStatus() == BookingStatus.CANCELLED_BY_MENTEE
-                || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR
-                || booking.getStatus() == BookingStatus.REJECTED
-                || booking.getStatus() == BookingStatus.EXPIRED);
+                || booking.getStatus() == BookingStatus.CANCELLED_BY_MENTOR);
     }
 }

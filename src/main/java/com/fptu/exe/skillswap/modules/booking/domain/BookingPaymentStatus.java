@@ -9,5 +9,6 @@ public enum BookingPaymentStatus {
     PAID,
     FAILED,
     EXPIRED,
+    CANCELLED,
     REFUNDED
 }

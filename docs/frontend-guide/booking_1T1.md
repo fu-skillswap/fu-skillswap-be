@@ -84,7 +84,7 @@ Khi mentor bấm **Complete Session**, đó mới là khai báo của mentor và
 | `bookingStatus` | `CANCELED_BY_MENTEE`, `CANCELED_BY_MENTOR`, `REQUEST_EXPIRED` | Booking đã bị hủy hoặc hết hạn phản hồi. |
 | `bookingStatus` | `UNDER_REVIEW` | Đang có khiếu nại/sự cố cần xem xét giải quyết. |
 | `bookingStatus` | `COMPLETED` | Buổi học đã hoàn tất thành công. |
-| `paymentStatus` | `NOT_REQUIRED`, `PENDING`, `PAID`, `FAILED`, `EXPIRED`, `REFUNDED` | Trạng thái thanh toán độc lập với trạng thái buổi học. |
+| `paymentStatus` | `NOT_REQUIRED`, `PENDING`, `PAID`, `FAILED`, `EXPIRED`, `CANCELLED`, `REFUNDED` | Trạng thái thanh toán độc lập với trạng thái buổi học; `CANCELLED` nghĩa là booking bị hủy nhưng chưa có refund thành công. |
 | `displayState` | `PAYMENT_REQUIRED`, `MENTOR_ACTION_REQUIRED`, `WAITING_CONFIRMATION`, `FEEDBACK_REQUIRED`,... | Trạng thái tổng hợp backend đã tính sẵn theo vai trò (Role) và mốc thời gian. |
 | `nextAction` | `PAY_NOW`, `ACCEPT_OR_REJECT`, `JOIN_SESSION`, `COMPLETE_SESSION`, `CONFIRM_SESSION`, `LEAVE_FEEDBACK`, `VIEW_ISSUE`, `NONE` | Hành động ưu tiên cao nhất (Call-to-Action) trên màn hình. |
 

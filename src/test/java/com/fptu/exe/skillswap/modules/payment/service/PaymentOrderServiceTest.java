@@ -293,6 +293,60 @@ class PaymentOrderServiceTest {
     }
 
     @Test
+    void checkout_afterFailedProviderAttempt_shouldCreateRetryWithoutChangingBookingState() {
+        PaymentOrder existingOrder = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .orderCode("PAY-RETRY-1")
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(72_000)
+                .remainingPayableScoin(72_000)
+                .status(PaymentOrderStatus.FAILED)
+                .build();
+        PaymentAttempt previousAttempt = PaymentAttempt.builder()
+                .id(UUID.randomUUID())
+                .paymentOrderId(existingOrder.getId())
+                .attemptNo(1)
+                .status(PaymentAttemptStatus.FAILED)
+                .build();
+        AtomicReference<PaymentAttempt> retryAttempt = new AtomicReference<>();
+
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId))
+                .thenReturn(Optional.of(existingOrder));
+        when(paymentAttemptRepository.findFirstByPaymentOrderIdOrderByAttemptNoDesc(existingOrder.getId()))
+                .thenReturn(Optional.of(previousAttempt));
+        when(couponService.resolveCoupon(null)).thenReturn(null);
+        when(campaignService.resolveCampaignCredit(eq(menteeId), any(BookingCheckoutSnapshot.class), eq(72_000)))
+                .thenReturn(CampaignService.CampaignCreditApplication.none());
+        when(creditLedgerService.getAvailableBalanceByOrigin(menteeId))
+                .thenReturn(new java.util.EnumMap<>(CreditOriginType.class));
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentAttemptRepository.countByPaymentOrderId(existingOrder.getId())).thenReturn(1L);
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> {
+            PaymentAttempt attempt = invocation.getArgument(0);
+            if (attempt.getId() == null) {
+                attempt.setId(UUID.randomUUID());
+            }
+            retryAttempt.set(attempt);
+            return attempt;
+        });
+        when(payOsGateway.createPaymentLink(any())).thenReturn(new PayOsGateway.CreatePaymentLinkResult(
+                "987654321", "pl-retry", "PENDING", "https://pay.example/retry", LocalDateTime.now().plusMinutes(15)));
+        when(paymentOrderRepository.findByIdForUpdate(existingOrder.getId())).thenReturn(Optional.of(existingOrder));
+        when(paymentAttemptRepository.findByIdForUpdate(any())).thenAnswer(invocation -> Optional.of(retryAttempt.get()));
+
+        PaymentCheckoutResponse response = paymentOrderService.checkout(
+                menteeId, new PaymentCheckoutRequest(bookingId, null));
+
+        assertEquals(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, response.status());
+        assertEquals(2, retryAttempt.get().getAttemptNo());
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, booking.getStatus());
+        assertEquals("https://pay.example/retry", response.paymentLink());
+    }
+
+    @Test
     void handleMenteeCancellation_awaitingPayment_shouldRollbackReservedCreditAndVoidCoupon() {
         PaymentOrder order = PaymentOrder.builder()
                 .id(UUID.randomUUID())
@@ -518,6 +572,91 @@ class PaymentOrderServiceTest {
         assertEquals(PaymentAttemptStatus.CANCELLED, attempt.getStatus());
         verify(creditLedgerService, never()).consumeReservedCredit(any(), any(), any(), any());
         verify(paymentOrderRepository).save(order);
+    }
+
+    @Test
+    void handleWebhook_lateFailureFromOlderRetry_shouldNotCancelCurrentPaymentOrder() {
+        Long oldOrderCode = 111L;
+        Long currentOrderCode = 222L;
+        PaymentWebhookRequest request = buildWebhookRequest(oldOrderCode, "valid-sig");
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
+                .providerOrderCode(String.valueOf(currentOrderCode))
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(100)
+                .remainingPayableScoin(100)
+                .status(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT)
+                .build();
+        PaymentAttempt oldAttempt = PaymentAttempt.builder()
+                .id(UUID.randomUUID())
+                .paymentOrderId(order.getId())
+                .attemptNo(1)
+                .status(PaymentAttemptStatus.REDIRECTED)
+                .providerOrderCode(String.valueOf(oldOrderCode))
+                .build();
+
+        PayOsGateway.VerifiedWebhook failed = new PayOsGateway.VerifiedWebhook(
+                String.valueOf(oldOrderCode), "pl-old", "evt-old", "txn-old",
+                "FAILED", false, (java.time.Instant) null, 0L);
+        when(payOsGateway.verifyWebhook(request)).thenReturn(failed);
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(oldOrderCode))).thenReturn(Optional.of(oldAttempt));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
+        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(paymentAttemptRepository.findByIdForUpdate(oldAttempt.getId())).thenReturn(Optional.of(oldAttempt));
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentOrderRepository.existsByProviderEventId("evt-old")).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId("evt-old")).thenReturn(false);
+
+        paymentOrderService.handleWebhook(request);
+
+        assertEquals(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT, order.getStatus());
+        assertEquals(PaymentAttemptStatus.FAILED, oldAttempt.getStatus());
+        verify(creditLedgerService, never()).releaseReservedCredit(any(), any(), any(), any());
+        verify(couponService, never()).voidRedemption(any());
+        verify(paymentOrderRepository, never()).save(any(PaymentOrder.class));
+    }
+
+    @Test
+    void handleWebhook_failureAfterOrderAlreadyPaid_shouldKeepPaidFinancialState() {
+        Long orderCode = 333L;
+        PaymentWebhookRequest request = buildWebhookRequest(orderCode, "valid-sig");
+        PaymentOrder order = PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .targetType(PaymentTargetType.BOOKING).targetId(bookingId)
+                .providerOrderCode(String.valueOf(orderCode))
+                .payerUserId(menteeId)
+                .mentorUserId(mentorId)
+                .grossScoin(100)
+                .remainingPayableScoin(0)
+                .status(PaymentOrderStatus.PAID)
+                .build();
+        PaymentAttempt attempt = PaymentAttempt.builder()
+                .id(UUID.randomUUID())
+                .paymentOrderId(order.getId())
+                .attemptNo(1)
+                .status(PaymentAttemptStatus.REDIRECTED)
+                .providerOrderCode(String.valueOf(orderCode))
+                .build();
+        PayOsGateway.VerifiedWebhook failed = new PayOsGateway.VerifiedWebhook(
+                String.valueOf(orderCode), "pl-paid", "evt-failed", "txn-failed",
+                "FAILED", false, (java.time.Instant) null, 0L);
+        when(payOsGateway.verifyWebhook(request)).thenReturn(failed);
+        when(paymentAttemptRepository.findByProviderOrderCode(String.valueOf(orderCode))).thenReturn(Optional.of(attempt));
+        when(paymentOrderRepository.findTargetIdById(order.getId())).thenReturn(Optional.of(bookingId));
+        when(paymentOrderRepository.findByIdForUpdate(order.getId())).thenReturn(Optional.of(order));
+        when(paymentAttemptRepository.findByIdForUpdate(attempt.getId())).thenReturn(Optional.of(attempt));
+        when(paymentAttemptRepository.save(any(PaymentAttempt.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(paymentOrderRepository.existsByProviderEventId("evt-failed")).thenReturn(false);
+        when(paymentAttemptRepository.existsByProviderEventId("evt-failed")).thenReturn(false);
+
+        paymentOrderService.handleWebhook(request);
+
+        assertEquals(PaymentOrderStatus.PAID, order.getStatus());
+        assertEquals(PaymentAttemptStatus.FAILED, attempt.getStatus());
+        verify(creditLedgerService, never()).releaseReservedCredit(any(), any(), any(), any());
+        verify(paymentOrderRepository, never()).save(any(PaymentOrder.class));
     }
 
     // ─── Webhook idempotency: duplicate eventId ───────────────────────────────────

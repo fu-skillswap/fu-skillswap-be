@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.booking.port.BookingPaymentSettlementPort;
 import com.fptu.exe.skillswap.modules.booking.port.BookingSettlementSnapshot;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerAccount;
+import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerAccountType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerEntryType;
@@ -204,6 +205,37 @@ class SettlementServiceTest {
                 any()
         );
         verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
+    }
+
+    @Test
+    void handlePaidBookingCancelledByMentor_duplicate_shouldRefundOnlyOnce() {
+        CreditLedgerEntry existingRefund = CreditLedgerEntry.builder().id(UUID.randomUUID()).build();
+        when(creditLedgerEntryRepository.findFirstByAccountIdAndSourceTypeAndSourceIdAndEntryTypeOrderByCreatedAtDesc(
+                eq(creditAccount.getId()), eq(LedgerSourceType.BOOKING), eq(bookingId), eq(LedgerEntryType.REFUND)
+        )).thenReturn(Optional.empty(), Optional.of(existingRefund));
+
+        settlementService.handlePaidBookingCancelledByMentor(booking, paymentOrder);
+        settlementService.handlePaidBookingCancelledByMentor(booking, paymentOrder);
+
+        verify(creditLedgerService, times(1)).refundCredit(
+                eq(menteeId), eq(CreditOriginType.REFUND), eq(LedgerSourceType.BOOKING), eq(bookingId), eq(100), any());
+        verify(paymentOrderRepository, times(1)).save(paymentOrder);
+    }
+
+    @Test
+    void releaseForBooking_unpaidOrder_shouldNotCreateSettlementEntries() {
+        paymentOrder.setStatus(PaymentOrderStatus.AWAITING_PROVIDER_PAYMENT);
+        when(bookingPaymentQueryPort.findSettlementSnapshot(bookingId))
+                .thenReturn(Optional.of(settlementSnapshot()));
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
+                com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId))
+                .thenReturn(Optional.of(paymentOrder));
+
+        settlementService.releaseForBooking(bookingId);
+
+        verify(settlementAccountRepository, never()).addBalance(any(), any(BigDecimal.class));
+        verify(settlementEntryRepository, never()).save(any(SettlementEntry.class));
+        verify(paymentOrderRepository, never()).save(any(PaymentOrder.class));
     }
 
     @Test

@@ -6,10 +6,14 @@ import com.fptu.exe.skillswap.modules.booking.domain.Booking;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisplayState;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingDisputeSlaStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingNextAction;
+import com.fptu.exe.skillswap.modules.booking.domain.BookingPaymentStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrder;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus;
+import com.fptu.exe.skillswap.modules.payment.domain.PaymentSettlementStatus;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -22,6 +26,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -109,6 +114,53 @@ class BookingResponseMapperTest {
         assertTrue(response.canPay());
         assertEquals(BookingNextAction.PAY_NOW, response.nextAction());
         assertEquals(BookingTime.toOffsetDateTime(now.plusMinutes(240)), response.actionDeadlineAt());
+    }
+
+    @Test
+    void cancelledBeforePayment_exposesCancelledInsteadOfRefunded() {
+        Booking booking = booking(BookingStatus.CANCELLED_BY_MENTEE,
+                timeProvider.nowBusiness().plusDays(1), timeProvider.nowBusiness().plusDays(1).plusHours(1));
+
+        BookingResponse response = mapper.toBookingResponse(booking);
+
+        assertEquals(BookingPaymentStatus.CANCELLED, response.paymentStatus());
+    }
+
+    @Test
+    void cancelledAfterPaymentBeforeRefund_remainsPaid() {
+        Booking booking = booking(BookingStatus.CANCELLED_BY_MENTEE,
+                timeProvider.nowBusiness().plusDays(1), timeProvider.nowBusiness().plusDays(1).plusHours(1));
+        PaymentOrder order = paymentOrder(PaymentSettlementStatus.HELD);
+
+        BookingResponse response = mapper.toBookingResponse(booking, null, null,
+                Map.of(booking.getId(), order), null);
+
+        assertEquals(BookingPaymentStatus.PAID, response.paymentStatus());
+    }
+
+    @Test
+    void cancelledAfterPaymentAndRefund_exposesRefunded() {
+        Booking booking = booking(BookingStatus.CANCELLED_BY_MENTEE,
+                timeProvider.nowBusiness().plusDays(1), timeProvider.nowBusiness().plusDays(1).plusHours(1));
+        PaymentOrder order = paymentOrder(PaymentSettlementStatus.REFUNDED);
+
+        BookingResponse response = mapper.toBookingResponse(booking, null, null,
+                Map.of(booking.getId(), order), null);
+
+        assertEquals(BookingPaymentStatus.REFUNDED, response.paymentStatus());
+    }
+
+    @Test
+    void failedPaymentOrder_isExposedWhileBookingRemainsAwaitingPayment() {
+        Booking booking = booking(BookingStatus.ACCEPTED_AWAITING_PAYMENT,
+                timeProvider.nowBusiness().plusDays(1), timeProvider.nowBusiness().plusDays(1).plusHours(1));
+        PaymentOrder order = paymentOrder(null);
+        order.setStatus(PaymentOrderStatus.FAILED);
+
+        BookingResponse response = mapper.toBookingResponse(booking, null, null,
+                Map.of(booking.getId(), order), null);
+
+        assertEquals(BookingPaymentStatus.FAILED, response.paymentStatus());
     }
 
     @Test
@@ -227,6 +279,15 @@ class BookingResponseMapperTest {
                 .learningGoalTitle("Production booking flow")
                 .createdAt(timeProvider.nowBusiness())
                 .updatedAt(timeProvider.nowBusiness())
+                .build();
+    }
+
+    private PaymentOrder paymentOrder(PaymentSettlementStatus settlementStatus) {
+        return PaymentOrder.builder()
+                .id(UUID.randomUUID())
+                .targetId(UUID.randomUUID())
+                .status(PaymentOrderStatus.PAID)
+                .settlementStatus(settlementStatus)
                 .build();
     }
 
