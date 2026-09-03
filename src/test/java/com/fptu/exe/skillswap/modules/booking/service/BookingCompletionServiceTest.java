@@ -210,6 +210,19 @@ class BookingCompletionServiceTest {
     }
 
     @Test
+    void completeBookingByMentor_duplicateAfterMentorCompletion_shouldRejectWithoutSideEffects() {
+        Booking booking = eligibleBooking(BookingStatus.AWAITING_MENTEE_CONFIRMATION);
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.completeBookingByMentor(
+                mentorId, bookingId, new CompleteBookingRequest("Retry completion")));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        verify(sessionFinalizationService, never()).recordMentorReportedCompletion(any(Booking.class), any(Instant.class));
+        verify(bookingRepository, never()).save(any(Booking.class));
+    }
+
+    @Test
     void confirmBookingByParticipant_shouldDelegateFinalizationBeforeSettlementRelease() {
         Booking booking = eligibleBooking();
         when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
@@ -220,6 +233,39 @@ class BookingCompletionServiceTest {
         verify(sessionFinalizationService).finalizeDeliveredSession(
                 org.mockito.ArgumentMatchers.eq(booking), any(Instant.class));
         verify(settlementCommandPort).requestBookingRelease(booking.getId());
+    }
+
+    @Test
+    void confirmBookingByParticipant_duplicateAfterUserConfirmation_shouldBeIdempotent() {
+        Booking booking = eligibleBooking(BookingStatus.COMPLETED);
+        booking.setCompletionOutcome(com.fptu.exe.skillswap.modules.booking.domain.BookingCompletionOutcome.USER_CONFIRMED);
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        assertNull(service.confirmBookingByParticipant(
+                menteeId, bookingId, new ConfirmBookingRequest("Retry confirmation")));
+
+        verify(sessionFinalizationService, never()).finalizeDeliveredSession(any(Booking.class), any(Instant.class));
+        verify(settlementCommandPort, never()).requestBookingRelease(any());
+        verify(bookingRepository, never()).save(any(Booking.class));
+    }
+
+    @Test
+    void resolveBookingIssue_whenDecisionAlreadyApplied_shouldRejectWithoutFinancialSideEffects() {
+        Booking booking = eligibleBooking(BookingStatus.UNDER_REVIEW);
+        booking.setIssueType(BookingIssueType.QUALITY_ISSUE);
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingIssueResolutionRepository.findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
+                any(), any(), any())).thenReturn(Optional.of(new com.fptu.exe.skillswap.modules.booking.domain.BookingIssueResolution()));
+
+        BaseException exception = assertThrows(BaseException.class, () -> service.resolveBookingIssue(
+                UUID.randomUUID(), bookingId, new AdminResolveBookingIssueRequest(
+                        AdminBookingIssueResolutionAction.CONFIRM_SESSION,
+                        AdminBookingIssueResolutionReasonCode.SESSION_CONFIRMED,
+                        "Duplicate resolution attempt", null, null, null)));
+
+        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        verify(settlementCommandPort, never()).requestAdminIssueResolution(any(), any());
+        verify(bookingRepository, never()).save(any(Booking.class));
     }
 
     @Test

@@ -230,6 +230,34 @@ class BookingLifecycleMaintenanceServiceTest {
     }
 
     @Test
+    void processPostSessionLifecycle_awaitingMentorCompletion_afterReviewDeadline_shouldAutoCloseAndReleaseSettlement() {
+        LocalDateTime now = LocalDateTime.now();
+        Booking booking = Booking.builder()
+                .id(UUID.randomUUID())
+                .menteeUserId(mentee.getId())
+                .mentorUserId(mentorProfile.getUserId())
+                .slot(slot)
+                .status(BookingStatus.AWAITING_MENTOR_COMPLETION)
+                .selectedStartTime(now.minusHours(26))
+                .selectedEndTime(now.minusHours(24).minusMinutes(5))
+                .build();
+
+        when(bookingRepository.findTop100ByStatusAndSelectedEndTimeUtcBeforeOrderBySelectedEndTimeUtcAsc(
+                eq(BookingStatus.AWAITING_MENTOR_COMPLETION), any(Instant.class)))
+                .thenReturn(List.of(booking));
+        when(bookingRepository.findByIdForSessionUpdate(booking.getId())).thenReturn(Optional.of(booking));
+
+        int changed = maintenanceService.processPostSessionLifecycle();
+
+        assertEquals(1, changed);
+        assertEquals(BookingStatus.COMPLETED, booking.getStatus());
+        assertEquals(BookingCompletionOutcome.AUTO_CLOSED, booking.getCompletionOutcome());
+        assertNotNull(booking.getMentorCompletionOverdueAtUtc());
+        verify(sessionFinalizationService).finalizeDeliveredSession(eq(booking), any(Instant.class));
+        verify(settlementCommandPort).requestBookingRelease(eq(booking.getId()));
+    }
+
+    @Test
     void processPostSessionLifecycle_underReview_overdueFortyEightHours_shouldAlertAdmins() {
         Instant nowUtc = Instant.parse("2026-09-10T10:00:00Z");
         maintenanceService.setTimeProvider(TimeProvider.from(Clock.fixed(nowUtc, ZoneOffset.UTC)));
