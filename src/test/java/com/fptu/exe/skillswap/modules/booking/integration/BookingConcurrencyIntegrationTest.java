@@ -25,10 +25,12 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
+import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.Test;
@@ -90,6 +92,9 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
     private MentorServiceRepository mentorServiceRepository;
 
     @Autowired
+    private MentorSubjectResultRepository mentorSubjectResultRepository;
+
+    @Autowired
     private AvailabilitySlotServiceRepository availabilitySlotServiceRepository;
 
     @Autowired
@@ -131,11 +136,20 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isAvailable(true)
                     .headline("Spring Boot Mentor")
                     .expertiseDescription("Hỗ trợ Java backend và thiết kế REST API.")
+                    .phoneNumber("0900000000")
                     .foundationSupportLevel(3)
                     .outputReviewSupportLevel(3)
                     .directionSupportLevel(2)
                     .teachingMode(TeachingMode.ONLINE)
                     .sessionDuration(60)
+                    .build());
+
+            mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                    .mentorProfile(mentorProfile)
+                    .subjectCode("SE1234")
+                    .subjectName("Software Engineering")
+                    .scoreValue(BigDecimal.valueOf(9.0))
+                    .displayOrder(0)
                     .build());
 
             LocalDateTime slotStart = DateTimeUtil.now().plusDays(2)
@@ -256,11 +270,20 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isAvailable(true)
                     .headline("Quota concurrency mentor")
                     .expertiseDescription("Kiểm tra giới hạn booking pending")
+                    .phoneNumber("0900000000")
                     .foundationSupportLevel(3)
                     .outputReviewSupportLevel(3)
                     .directionSupportLevel(3)
                     .teachingMode(TeachingMode.ONLINE)
                     .sessionDuration(60)
+                    .build());
+
+            mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                    .mentorProfile(mentorProfile)
+                    .subjectCode("SE1234")
+                    .subjectName("Software Engineering")
+                    .scoreValue(BigDecimal.valueOf(9.0))
+                    .displayOrder(0)
                     .build());
 
             LocalDateTime base = DateTimeUtil.now().plusDays(5)
@@ -379,11 +402,20 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isAvailable(true)
                     .headline("Spring Boot Mentor 1")
                     .expertiseDescription("Backend 1")
+                    .phoneNumber("0900000000")
                     .foundationSupportLevel(3)
                     .outputReviewSupportLevel(3)
                     .directionSupportLevel(2)
                     .teachingMode(TeachingMode.ONLINE)
                     .sessionDuration(60)
+                    .build());
+
+            mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                    .mentorProfile(mentorProfile1)
+                    .subjectCode("SE1234")
+                    .subjectName("Software Engineering")
+                    .scoreValue(BigDecimal.valueOf(9.0))
+                    .displayOrder(0)
                     .build());
 
             MentorProfile mentorProfile2 = mentorProfileRepository.save(MentorProfile.builder()
@@ -393,11 +425,20 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .isAvailable(true)
                     .headline("Spring Boot Mentor 2")
                     .expertiseDescription("Backend 2")
+                    .phoneNumber("0900000000")
                     .foundationSupportLevel(3)
                     .outputReviewSupportLevel(3)
                     .directionSupportLevel(2)
                     .teachingMode(TeachingMode.ONLINE)
                     .sessionDuration(60)
+                    .build());
+
+            mentorSubjectResultRepository.save(MentorSubjectResult.builder()
+                    .mentorProfile(mentorProfile2)
+                    .subjectCode("SE1234")
+                    .subjectName("Software Engineering")
+                    .scoreValue(BigDecimal.valueOf(9.0))
+                    .displayOrder(0)
                     .build());
 
             LocalDateTime slotStart = DateTimeUtil.now().plusDays(2)
