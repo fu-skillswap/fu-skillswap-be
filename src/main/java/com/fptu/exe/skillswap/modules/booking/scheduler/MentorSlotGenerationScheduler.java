@@ -24,7 +24,7 @@ public class MentorSlotGenerationScheduler {
     private final MentorBookingQueryPort mentorBookingQueryPort;
     private final AvailabilityCalendarWindowCalculator calendarWindowCalculator;
 
-    @Scheduled(cron = "0 0 0 * * *") // Chạy vào 00:00 hàng ngày
+    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Ho_Chi_Minh") // Chạy vào 00:00 hàng ngày
     public void generateWeeklySlots() {
         log.info("Starting scheduled mentor availability window generation...");
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));

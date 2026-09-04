@@ -31,7 +31,7 @@ public class TelemetryArchiveScheduler {
     private final ObjectMapper objectMapper;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    @Scheduled(cron = "${application.storage.lifecycle.telemetry-archive-cron:0 0 3 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.telemetry-archive-cron:0 0 3 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void executeArchiveJob() {
         int retentionDays = properties.getInternalTelemetryRetentionDays();
         if (retentionDays <= 0) {

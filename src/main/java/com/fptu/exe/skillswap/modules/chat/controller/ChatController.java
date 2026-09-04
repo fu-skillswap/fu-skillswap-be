@@ -37,15 +37,16 @@ public class ChatController {
     @GetMapping
     @Operation(
             summary = "Lấy danh sách conversation của tôi",
-        description = "Trả về danh sách direct conversation của user hiện tại. Conversation được tạo tự động khi booking trở thành effective; FE dùng inbox thay vì tạo conversation thủ công."
+        description = "Trả về inbox của user hiện tại. Conversation có thể gắn với booking đã effective, course chat trực tiếp hoặc context course cũ; FE chỉ đọc conversation do backend cấp, không tự tạo conversation."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Conversations loaded successfully",
+                    description = "Lấy danh sách conversation thành công",
                     content = @Content(
                             mediaType = "application/json",
-                            examples = @ExampleObject(
+                            examples = {
+                                    @ExampleObject(
                                     name = "ConversationCursorPage",
                                     value = """
                                             {
@@ -76,10 +77,78 @@ public class ChatController {
                                               }
                                             }
                                             """
-                            )
+                                    ),
+                                    @ExampleObject(
+                                            name = "CourseDirectConversation",
+                                            value = """
+                                                    {
+                                                      "timestamp": "2026-09-04T03:20:00Z",
+                                                      "status": 200,
+                                                      "code": "SUCCESS_0200",
+                                                      "message": "Thành công",
+                                                      "data": {
+                                                        "items": [
+                                                          {
+                                                            "id": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+                                                            "type": "DIRECT",
+                                                            "status": "ACTIVE",
+                                                            "otherUserId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
+                                                            "otherUserName": "Nguyen Van B",
+                                                            "lastMessageContent": "Em có thể hỏi anh trong khung chat khóa học này.",
+                                                            "lastMessageAt": "2026-09-04T03:15:00Z",
+                                                            "createdAt": "2026-09-01T08:00:00Z",
+                                                            "unreadCount": 0,
+                                                            "contextType": "COURSE_DIRECT",
+                                                            "courseId": "019f4234-aaaa-bbbb-cccc-1234567890ab",
+                                                            "courseTitle": "Spring Boot cho người mới"
+                                                          }
+                                                        ],
+                                                        "nextCursor": null,
+                                                        "prevCursor": null,
+                                                        "hasNext": false,
+                                                        "hasPrev": false,
+                                                        "limit": 20
+                                                      }
+                                                    }
+                                                    """
+                                    ),
+                                    @ExampleObject(
+                                            name = "LegacyCourseConversation",
+                                            value = """
+                                                    {
+                                                      "timestamp": "2026-09-04T03:20:00Z",
+                                                      "status": 200,
+                                                      "code": "SUCCESS_0200",
+                                                      "message": "Thành công",
+                                                      "data": {
+                                                        "items": [
+                                                          {
+                                                            "id": "019f7234-aaaa-bbbb-cccc-1234567890ab",
+                                                            "type": "GROUP",
+                                                            "status": "ACTIVE",
+                                                            "lastMessageContent": "Chào mừng bạn vào nhóm khóa học.",
+                                                            "lastMessageAt": "2026-09-03T10:00:00Z",
+                                                            "createdAt": "2026-08-20T08:00:00Z",
+                                                            "unreadCount": 1,
+                                                            "contextType": "COURSE_GROUP",
+                                                            "courseId": "019f4234-aaaa-bbbb-cccc-1234567890ab",
+                                                            "courseTitle": "Spring Boot cho người mới",
+                                                            "participantCount": 12
+                                                          }
+                                                        ],
+                                                        "nextCursor": null,
+                                                        "prevCursor": null,
+                                                        "hasNext": false,
+                                                        "hasPrev": false,
+                                                        "limit": 20
+                                                      }
+                                                    }
+                                                    """
+                                    )
+                            }
                     )
             ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ")
     })
     public ApiResponse<CursorPageResponse<ConversationResponse>> getMyConversations(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -96,15 +165,16 @@ public class ChatController {
     @GetMapping("/{conversationId}/messages")
     @Operation(
             summary = "Lấy danh sách tin nhắn của conversation",
-            description = "Trả về initial newest-first page hoặc sequence window. `beforeSequence` lấy cũ hơn; `afterSequence` dùng để repair reconnect. FE render oldest-to-newest sau khi sort nghiêm ngặt theo sequence."
+            description = "Trả về trang tin nhắn gần nhất hoặc một sequence window. `beforeSequence` lấy tin cũ hơn; `afterSequence` dùng để repair khi reconnect. FE render từ cũ đến mới sau khi sort theo sequence; không có tin nhắn là response 200 với mảng rỗng."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Messages loaded successfully",
+                    description = "Lấy danh sách tin nhắn thành công",
                     content = @Content(
                             mediaType = "application/json",
-                            examples = @ExampleObject(
+                            examples = {
+                                    @ExampleObject(
                                     name = "MessageCursorPage",
                                     value = """
                                             {
@@ -129,12 +199,26 @@ public class ChatController {
                                                 ]
                                             }
                                             """
-                            )
+                                    ),
+                                    @ExampleObject(
+                                            name = "EmptyMessageHistory",
+                                            value = """
+                                                    {
+                                                      "timestamp": "2026-09-04T03:20:00Z",
+                                                      "status": 200,
+                                                      "code": "SUCCESS_0200",
+                                                      "message": "Thành công",
+                                                      "data": []
+                                                    }
+                                                    """
+                                    )
+                            }
                     )
             ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User hiện tại không phải participant hoặc conversation đang READ_ONLY"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Khoảng sequence không hợp lệ; tải lại message history và dùng sequence mới")
     })
     public ApiResponse<java.util.List<MessageResponse>> getMessages(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -152,11 +236,93 @@ public class ChatController {
         description = "Gửi một tin nhắn text vào conversation hiện có mà user hiện tại đang tham gia. FE chỉ dùng API này sau khi booking effective đã tạo conversation."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "Message sent successfully"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "Gửi tin nhắn thành công. FE lưu message id và sequence từ response; khi realtime gửi lại cùng message, deduplicate theo messageId.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = @ExampleObject(
+                                    name = "TextMessageCreated",
+                                    value = """
+                                            {
+                                              "timestamp": "2026-09-04T03:21:00Z",
+                                              "status": 201,
+                                              "code": "CREATED_0201",
+                                              "message": "Tạo mới thành công",
+                                              "data": {
+                                                "id": "019f8234-aaaa-bbbb-cccc-1234567890ab",
+                                                "sequence": 129,
+                                                "conversationId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+                                                "senderId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
+                                                "senderName": "Nguyen Van A",
+                                                "messageType": "TEXT",
+                                                "content": "Chào anh, em đã xem meeting link.",
+                                                "state": "ACTIVE",
+                                                "version": 0,
+                                                "editedAt": null,
+                                                "deletedAt": null,
+                                                "isReadByOther": false,
+                                                "attachments": [],
+                                                "createdAt": "2026-09-04T03:21:00Z",
+                                                "isMine": true
+                                              }
+                                            }
+                                            """
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người dùng hiện tại không tham gia conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "Conflict: clientMessageId đã được dùng cho nội dung khác hoặc trạng thái conversation không cho phép gửi lại.",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "ClientMessageConflict",
+                            value = """
+                                    {
+                                      "timestamp": "2026-09-04T03:21:02Z",
+                                      "status": 409,
+                                      "code": "CHAT_4101",
+                                      "message": "Client message ID đã được dùng cho nội dung khác"
+                                    }
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "Validation: clientMessageId bị thiếu, nội dung vượt quá 2000 ký tự hoặc attachment intent không hợp lệ.",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "InvalidMessage",
+                            value = """
+                                    {
+                                      "timestamp": "2026-09-04T03:21:02Z",
+                                      "status": 400,
+                                      "code": "VAL_3001",
+                                      "message": "Nội dung tin nhắn không hợp lệ"
+                                    }
+                                    """
+                    ))
+            )
     })
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            description = "clientMessageId là UUID do FE tạo và giữ ổn định trong một lần gửi; nếu request timeout, retry cùng body để tránh tạo tin nhắn trùng. Người gửi lấy từ JWT, FE không gửi senderId.",
+            required = true,
+            content = @Content(
+                    mediaType = "application/json",
+                    examples = @ExampleObject(
+                            name = "SendTextMessage",
+                            value = """
+                                    {
+                                      "clientMessageId": "019f7234-aaaa-bbbb-cccc-1234567890ab",
+                                      "content": "Chào anh, em đã xem meeting link.",
+                                      "replyToMessageId": null,
+                                      "attachmentIntentIds": []
+                                    }
+                                    """
+                    )
+            )
+    )
     public ApiResponse<MessageResponse> sendMessage(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
             @PathVariable UUID conversationId,
@@ -172,13 +338,13 @@ public class ChatController {
     }
 
     @DeleteMapping("/{conversationId}/messages/{messageId}")
-    @Operation(summary = "Delete my chat message", description = "Creates a tombstone and immediately revokes its attachment access; retention holds still control physical deletion.")
+    @Operation(summary = "Xóa tin nhắn của tôi", description = "Ẩn tin nhắn khỏi conversation và thu hồi quyền tải file đính kèm. Việc xóa dữ liệu vật lý thực tế tuân theo chính sách lưu trữ của hệ thống.")
     public ApiResponse<MessageResponse> deleteMessage(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @PathVariable UUID messageId, @Valid @RequestBody com.fptu.exe.skillswap.modules.chat.dto.request.DeleteMessageRequest request) {
         return ApiResponse.success(conversationService.deleteMessage(conversationId, messageId, userPrincipal.getId(), request));
     }
 
     @PostMapping("/{conversationId}/attachment-upload-intents")
-    @Operation(summary = "Create chat attachment upload intent", description = "Creates a private, short-lived upload intent. Attach the returned intent ID when sending a message; the client never provides an object key.")
+    @Operation(summary = "Tạo upload intent cho file chat", description = "Tạo quyền upload private có thời hạn ngắn. FE gửi intent ID nhận được khi tạo tin nhắn; không tự gửi object key.")
     public ApiResponse<com.fptu.exe.skillswap.modules.chat.dto.response.ChatAttachmentUploadIntentResponse> createAttachmentUploadIntent(@AuthenticationPrincipal UserPrincipal userPrincipal, @PathVariable UUID conversationId, @Valid @RequestBody com.fptu.exe.skillswap.modules.chat.dto.request.ChatAttachmentUploadIntentRequest request) {
         return ApiResponse.created(conversationService.createAttachmentUploadIntent(conversationId, userPrincipal.getId(), request));
     }
@@ -189,10 +355,10 @@ public class ChatController {
             description = "Trả về thông tin chi tiết (metadata) của một cuộc hội thoại mà user hiện tại đang tham gia."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversation detail loaded successfully"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Conversation not found")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy chi tiết conversation thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người dùng hiện tại không tham gia conversation"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy conversation")
     })
     public ApiResponse<ConversationResponse> getConversationDetail(
             @AuthenticationPrincipal UserPrincipal userPrincipal,
@@ -208,8 +374,8 @@ public class ChatController {
             description = "Trả về tổng số tin nhắn chưa đọc trên toàn bộ các active conversations của user hiện tại."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Unread count loaded successfully"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy tổng số tin chưa đọc thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ")
     })
     public ApiResponse<java.util.Map<String, Long>> getTotalUnreadCount(
             @AuthenticationPrincipal UserPrincipal userPrincipal) {
@@ -224,9 +390,9 @@ public class ChatController {
             description = "Chỉ advance `lastReadSequence` của caller. Response tra ve canonical read cursor cua hai participant va unread count."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Conversation marked as read successfully"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "User is not authenticated"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Current user is not a participant of the conversation")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đánh dấu conversation đã đọc thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Người dùng hiện tại không tham gia conversation")
     })
     public ApiResponse<com.fptu.exe.skillswap.modules.chat.dto.response.ConversationReadResponse> markConversationAsRead(
             @AuthenticationPrincipal UserPrincipal userPrincipal,

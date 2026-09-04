@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
 
 import java.util.List;
 
-@Schema(description = "Thong tin ho so mentor dung de onboarding va hien thi discovery")
+@Schema(description = "Thông tin hồ sơ mentor dùng cho onboarding và hiển thị khi tìm mentor. Các trường đánh dấu bắt buộc phải được gửi; GitHub, portfolio và chính sách đặt lịch là tùy chọn.")
 public record MentorProfileUpsertRequest(
         @Schema(example = "Backend Developer | Spring Boot Mentor", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank(message = "Tiêu đề hồ sơ mentor không được để trống")
@@ -24,7 +24,7 @@ public record MentorProfileUpsertRequest(
         @Size(max = 1000, message = "Mô tả chuyên môn không được quá 1000 ký tự")
         String expertiseDescription,
 
-        @Schema(description = "Mentor co dang san sang nhan mentee khong. Neu null khi tao moi se mac dinh true.")
+        @Schema(description = "Mentor có đang nhận mentee không. Không bắt buộc; khi tạo mới và không gửi thì mặc định là true.", example = "true")
         Boolean isAvailable,
 
         @Schema(description = "Danh sách môn - điểm mentor dùng làm tín hiệu matching", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -50,13 +50,13 @@ public record MentorProfileUpsertRequest(
         @Max(value = 4, message = "Mức hỗ trợ định hướng phải từ 1 đến 4")
         Integer directionSupportLevel,
 
-        @Schema(example = "https://github.com/example")
+        @Schema(description = "Đường dẫn GitHub công khai của mentor, không bắt buộc.", example = "https://github.com/example")
         String githubUrl,
 
-        @Schema(example = "https://example.dev")
+        @Schema(description = "Đường dẫn portfolio công khai của mentor, không bắt buộc.", example = "https://example.dev")
         String portfolioUrl,
 
-        @Schema(example = "0912345678", requiredMode = Schema.RequiredMode.REQUIRED)
+        @Schema(description = "Số điện thoại Việt Nam để liên hệ, bắt buộc.", example = "0912345678", requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank(message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
         @Pattern(regexp = "^(0)(3|5|7|8|9)[0-9]{8}$", message = "Vui lòng nhập số điện thoại Việt Nam hợp lệ.")
         String phoneNumber,

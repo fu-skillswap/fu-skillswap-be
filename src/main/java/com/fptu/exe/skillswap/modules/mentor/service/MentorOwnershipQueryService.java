@@ -23,4 +23,15 @@ public class MentorOwnershipQueryService implements MentorOwnershipQueryPort {
                 .map(profile -> userId.equals(profile.getUserId()))
                 .orElse(false);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isActiveOwner(UUID mentorProfileId, UUID userId) {
+        return mentorProfileId != null
+                && userId != null
+                && mentorProfileRepository.findById(mentorProfileId)
+                .map(profile -> userId.equals(profile.getUserId())
+                        && profile.getStatus() == com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus.ACTIVE)
+                .orElse(false);
+    }
 }

@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/me/mentor-booking-policy")
 @RequiredArgsConstructor
-@Tag(name = "Mentor Booking Policy")
+@Tag(name = "Mentor Booking Policy", description = "Mentor xem và cập nhật quy định nhận booking trong tương lai.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasRole('MENTOR')")
 public class MentorBookingPolicyController {
@@ -31,7 +31,7 @@ public class MentorBookingPolicyController {
     private final MentorBookingPolicyService mentorBookingPolicyService;
 
     @GetMapping
-    @Operation(summary = "Get my mentor booking policy")
+    @Operation(summary = "Xem quy định nhận booking của tôi", description = "Trả về quy định hiện tại mà mentor đã cấu hình cho các booking trong tương lai.")
     public ApiResponse<MentorBookingPolicyResponse> getPolicy(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
@@ -39,7 +39,7 @@ public class MentorBookingPolicyController {
     }
 
     @PatchMapping
-    @Operation(summary = "Update my mentor booking policy", description = "Updates future-booking policy using optimistic versioning; existing bookings keep their snapshots.")
+    @Operation(summary = "Cập nhật quy định nhận booking", description = "Cập nhật quy định áp dụng cho booking trong tương lai. Booking đã tạo giữ nguyên thông tin tại thời điểm tạo; nếu version không còn mới, FE nên tải lại dữ liệu rồi thử lại.")
     public ApiResponse<MentorBookingPolicyResponse> updatePolicy(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody UpdateMentorBookingPolicyRequest request

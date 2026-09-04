@@ -10,6 +10,7 @@ public final class DomainEventOutboxEventTypes {
 
     public static final String COURSE_MATERIAL_DELETE_REQUESTED = "course.material.delete_requested";
     public static final String COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED = "course.material.upload_initialization_requested";
+    public static final String COURSE_ANNOUNCEMENT_CREATED = "course.announcement.created";
 
     private DomainEventOutboxEventTypes() {
     }

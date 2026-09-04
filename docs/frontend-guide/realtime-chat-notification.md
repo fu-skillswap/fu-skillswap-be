@@ -205,6 +205,119 @@ export const realtimeService = new RealtimeService();
 
 ---
 
+### 3.1 Ví dụ payload realtime và cách FE xử lý
+
+Các ví dụ dưới đây mô tả payload đang được backend phát. Destination là contract hiện tại,
+không thay đổi theo màn hình.
+
+#### Chat: tin nhắn mới
+
+Subscribe `/user/queue/chat/messages`. Event có `messageId` ổn định và `sequence` tăng dần
+theo conversation:
+
+```json
+{
+  "conversationId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+  "messageId": "019f8234-aaaa-bbbb-cccc-1234567890ab",
+  "sequence": 129,
+  "senderId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
+  "senderName": "Nguyen Van B",
+  "messageType": "TEXT",
+  "content": "Chào bạn, mình đã xem tài liệu.",
+  "createdAt": "2026-09-04T03:21:00Z",
+  "conversationType": "DIRECT",
+  "isSelf": false,
+  "unreadCount": 3
+}
+```
+
+FE đối chiếu event này với message REST theo `messageId` (không dùng nội dung làm khóa).
+Nếu `messageId` đã có trong state thì bỏ qua lần nhận trùng; nếu sequence bị hở, gọi REST
+với `afterSequence=<sequence-cuối-đã-biết>` để bù tin.
+
+#### Chat: inbox, unread và typing
+
+`/user/queue/chat/inbox` gửi lại summary conversation để cập nhật preview/sidebar. Ví dụ:
+
+```json
+{
+  "id": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+  "type": "DIRECT",
+  "status": "ACTIVE",
+  "otherUserId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
+  "otherUserName": "Nguyen Van B",
+  "lastMessageContent": "Chào bạn, mình đã xem tài liệu.",
+  "lastMessageAt": "2026-09-04T03:21:00Z",
+  "unreadCount": 3,
+  "contextType": "BOOKING"
+}
+```
+
+`/user/queue/chat/unread` có payload `{ "totalUnreadCount": 3 }` để cập nhật badge Chat.
+`/user/queue/chat/typing` có payload:
+
+```json
+{
+  "conversationId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+  "senderId": "019f6234-aaaa-bbbb-cccc-1234567890ab",
+  "typing": true
+}
+```
+
+FE nên debounce typing (ví dụ khoảng 1–1,5 giây), gửi `typing: false` khi dừng gõ và không
+hiển thị typing event như một message.
+
+#### Notification: lịch sử REST và event realtime là hai mục đích khác nhau
+
+REST `GET /api/me/notifications` dùng để tải lịch sử; WebSocket chỉ giúp UI phản hồi ngay.
+Subscribe `/user/queue/notifications/items` để nhận notification mới:
+
+```json
+{
+  "notificationId": "019f9234-aaaa-bbbb-cccc-1234567890ab",
+  "type": "BOOKING_ACCEPTED",
+  "title": "Mentor đã nhận lịch",
+  "message": "Nguyen Van B đã chấp nhận lịch mentoring của bạn.",
+  "relatedEntityType": "BOOKING",
+  "relatedEntityId": "019f4234-aaaa-bbbb-cccc-1234567890ab",
+  "deepLink": "/bookings/019f4234-aaaa-bbbb-cccc-1234567890ab",
+  "actionType": "VIEW_BOOKING",
+  "read": false,
+  "readAt": null,
+  "createdAt": "2026-09-04T03:22:00Z",
+  "unreadCount": 4,
+  "realtimeEventKind": "CREATED"
+}
+```
+
+Subscribe `/user/queue/notifications/badge` để cập nhật số badge:
+
+```json
+{
+  "unreadCount": 4,
+  "eventKind": "CREATED"
+}
+```
+
+Khi nhận event mới, FE có thể hiện popup, cập nhật badge và chèn event vào đầu danh sách
+tạm thời. Khi mở notification center hoặc sau reconnect, gọi lại REST để lấy snapshot chính
+thức. `READ` và `READ_ALL` cũng có thể tạo badge event; không dùng event badge làm lịch sử.
+
+#### Reconnect và at-least-once delivery
+
+Mô hình realtime là at-least-once, không phải exactly-once. Sau disconnect:
+
+1. Reconnect STOMP bằng access token còn hiệu lực.
+2. Subscribe lại toàn bộ queue cần dùng.
+3. Gọi REST notification history và chat history/snapshot.
+4. Với từng conversation đang mở, gọi `afterSequence` từ sequence cuối đã lưu.
+5. Merge theo `messageId`, sort theo `sequence` và bỏ qua event trùng.
+
+Vì vậy FE không được tăng badge hoặc thêm message mù quáng mỗi lần nhận frame; cần áp dụng
+deduplication theo khóa ổn định rồi mới cập nhật UI.
+
+---
+
 ## 4. Chi Tiết Từng Luồng Nghiệp Vụ & Tích Hợp REST API
 
 ---
@@ -283,9 +396,10 @@ export interface ChatMessageEvent {
   senderName: string;
   messageType: "TEXT" | "IMAGE" | "FILE" | "SYSTEM";
   content: string;
-  state: "ACTIVE" | "DELETED";
-  version: number;
   createdAt: string;
+  conversationType: "DIRECT" | "GROUP";
+  isSelf: boolean | null;
+  unreadCount?: number | null;
 }
 
 export interface ConversationResponse {
@@ -308,6 +422,10 @@ export interface TypingPayload {
 }
 ```
 
+`messageId` là khóa deduplication ổn định. Rabbit và WebSocket dùng mô hình at-least-once:
+nếu server dừng sau khi ghi vào socket nhưng trước khi ghi nhận delivery, event có thể được
+phát lại. FE bỏ qua `messageId` đã render và dùng sequence window để bù gap sau reconnect.
+
 #### B. Các REST API Phối Hợp
 
 1. **Lấy danh sách cuộc hội thoại của tôi**:
@@ -319,13 +437,16 @@ export interface TypingPayload {
 3. **Gửi tin nhắn**:
    - `POST /api/me/conversations/{conversationId}/messages`
    - Request Body:
-     ```json
-     {
-       "content": "Chào bạn, mình đã xem qua tài liệu.",
-       "messageType": "TEXT",
-       "attachmentIntentId": null
-     }
-     ```
+      ```json
+      {
+        "clientMessageId": "019f7234-aaaa-bbbb-cccc-1234567890ab",
+        "content": "Chào bạn, mình đã xem qua tài liệu.",
+        "replyToMessageId": null,
+        "attachmentIntentIds": []
+      }
+      ```
+      `clientMessageId` do FE tạo và giữ nguyên khi retry. Người gửi, message type và sequence
+      do backend xác định; FE không gửi `senderId` hoặc tự tạo sequence.
 4. **Đánh dấu cuộc hội thoại đã đọc (Read Receipt)**:
    - `PATCH /api/me/conversations/{conversationId}/read`
    - Request Body:
@@ -346,7 +467,8 @@ export interface TypingPayload {
 6. **Upload File / Ảnh Đính Kèm Trong Chat**:
    - **Bước 1**: Gọi `POST /api/me/conversations/{conversationId}/attachment-upload-intents` để lấy intent ID và URL upload tạm thời.
    - **Bước 2**: Upload binary file lên URL nhận được.
-   - **Bước 3**: Gọi `POST /api/me/conversations/{conversationId}/messages` với `attachmentIntentId: "<INTENT_ID>"`.
+   - **Bước 3**: Gọi `POST /api/me/conversations/{conversationId}/messages` với
+     `attachmentIntentIds: ["<UPLOAD_INTENT_ID>"]` và một `clientMessageId` mới.
    - `uploadUrl` chỉ dùng để upload, không dùng để mở file hoặc render ảnh. URL này tạm thời; không lưu vào local storage và không tự dùng lại khi đã hết hạn.
    - Attachment chat là private. Khi user bấm xem/tải, gọi `POST /api/me/chat-attachments/{attachmentId}/download-url`, rồi dùng `downloadUrl` trước `expiresAt`. Không tự ghép CDN URL từ tên file, `storageKey` hoặc `objectKey`; không lưu `downloadUrl` lâu dài.
 

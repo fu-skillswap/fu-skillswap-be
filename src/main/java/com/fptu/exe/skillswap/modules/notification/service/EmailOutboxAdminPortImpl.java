@@ -54,6 +54,9 @@ class EmailOutboxAdminPortImpl implements EmailOutboxAdminPort {
     public EmailOutboxRetryResult retryFailed(UUID id) {
         EmailOutbox email = repository.findByIdForUpdate(id).orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy email outbox"));
         if (email.getStatus() != NotificationStatus.FAILED) throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể retry email đang FAILED");
+        if (email.getRetryCount() != null && email.getRetryCount() >= EmailDispatchService.MAX_SEND_ATTEMPTS) {
+            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Email đã vượt quá số lần retry tự động");
+        }
         String previousStatus = email.getStatus().name(); Integer previousRetryCount = email.getRetryCount(); String previousLastError = email.getLastError();
         email.setStatus(NotificationStatus.PENDING); email.setRetryCount((email.getRetryCount() == null ? 0 : email.getRetryCount()) + 1);
         email.setLastError(null); email.setSentAt(null);

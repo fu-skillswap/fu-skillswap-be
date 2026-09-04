@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentReposito
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentSettlementRepository;
 import com.fptu.exe.skillswap.modules.course.service.CourseSettlementService;
 import com.fptu.exe.skillswap.modules.payment.port.CoursePaymentPort;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,11 +19,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class CourseSettlementServiceTest {
@@ -39,6 +42,9 @@ class CourseSettlementServiceTest {
     @Mock
     private org.springframework.context.ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private TimeProvider timeProvider;
+
     @InjectMocks
     private CourseSettlementService courseSettlementService;
 
@@ -51,6 +57,7 @@ class CourseSettlementServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(timeProvider.instant()).thenReturn(Instant.parse("2026-01-01T00:00:00Z"));
         enrollmentId = UUID.randomUUID();
         courseId = UUID.randomUUID();
         studentUserId = UUID.randomUUID();

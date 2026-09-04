@@ -30,7 +30,7 @@ public class UserSessionCleanupScheduler {
         }
     }
 
-    @Scheduled(cron = "${application.storage.lifecycle.user-session-cleanup-cron:0 5 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.user-session-cleanup-cron:0 5 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void cleanupExpiredOrRevokedSessions() {
         int retentionDays = properties.getUserSessionRetentionDays();

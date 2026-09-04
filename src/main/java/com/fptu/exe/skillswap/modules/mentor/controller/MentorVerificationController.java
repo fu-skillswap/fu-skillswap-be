@@ -20,6 +20,7 @@ import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -82,7 +83,25 @@ public class MentorVerificationController {
                 : ResponseEntity.ok(ApiResponse.success(result.data()));
     }
 
-    @Operation(summary = "Lấy hồ sơ đăng ký mentor", description = "Dùng khi mở lại màn đăng ký hoặc xem kết quả duyệt.")
+    @Operation(summary = "Lấy hồ sơ đăng ký mentor", description = "Dùng khi mở lại màn đăng ký hoặc xem kết quả duyệt. FE hiển thị trạng thái theo `status`: PENDING_REVIEW là đang chờ, NEEDS_REVISION là cần sửa, APPROVED là đã được duyệt và REJECTED là bị từ chối.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Hồ sơ và trạng thái hiện tại",
+                    content = @Content(mediaType = "application/json", examples = {
+                            @ExampleObject(name = "PendingReview", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"requestId":"019f5234-aaaa-bbbb-cccc-1234567890ab","status":"PENDING_REVIEW","reviewNote":null,"rejectionReason":null,"documents":[],"allowedActions":{"canEdit":false,"canSubmit":false}}}
+                                    """),
+                            @ExampleObject(name = "Approved", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"requestId":"019f5234-aaaa-bbbb-cccc-1234567890ab","status":"APPROVED","reviewNote":"Hồ sơ hợp lệ.","rejectionReason":null,"documents":[],"allowedActions":{"canEdit":false,"canSubmit":false}}}
+                                    """),
+                            @ExampleObject(name = "Rejected", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"requestId":"019f5234-aaaa-bbbb-cccc-1234567890ab","status":"REJECTED","reviewNote":null,"rejectionReason":"Vui lòng bổ sung minh chứng chuyên môn.","documents":[],"allowedActions":{"canEdit":true,"canSubmit":true}}}
+                                    """)
+                    })
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
     @GetMapping
     public ApiResponse<MentorVerificationRequestResponse> getMyRequest(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal
@@ -158,7 +177,24 @@ public class MentorVerificationController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
     }
 
-    @Operation(summary = "Bước 2 - Tạo URL tải minh chứng")
+    @Operation(
+            summary = "Bước 2 - Tạo URL tải minh chứng",
+            description = "FE gửi tên file, MIME type và kích thước. Backend trả uploadUrl tạm thời; FE upload binary lên URL này trước khi hết hạn, không lưu URL lâu dài và không tự sửa requiredHeaders."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "Đã tạo upload intent",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "VerificationUploadIntent",
+                            value = """
+                                    {"status":201,"code":"CREATED_0201","message":"Tạo mới thành công","data":{"uploadIntentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","uploadUrl":"https://storage.example/upload/temporary-token","expiresAt":"2026-09-04T03:35:00Z","requiredHeaders":{"Content-Type":"application/pdf"},"status":"PENDING_UPLOAD"}}
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Tên file, MIME type hoặc kích thước không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+    })
     @PostMapping("/documents/upload-intents")
     public ResponseEntity<ApiResponse<MentorVerificationDocumentUploadIntentResponse>> createDocumentUploadIntent(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -197,12 +233,22 @@ public class MentorVerificationController {
 
     @Operation(
             summary = "Bước 4 - Nộp hồ sơ để admin duyệt",
-            description = "Chỉ nộp được khi hồ sơ, minh chứng và điều khoản đã đầy đủ."
+            description = "Chỉ nộp được khi hồ sơ, minh chứng và điều khoản đã đầy đủ. Request hợp lệ dùng `termsAccepted: true`; sau khi nộp FE chuyển sang màn hình chờ và đọc lại status bằng GET request/progress."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Nộp hồ sơ thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Nộp hồ sơ thành công, trạng thái chuyển sang PENDING_REVIEW",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "SubmitVerification",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"requestId":"019f5234-aaaa-bbbb-cccc-1234567890ab","status":"PENDING_REVIEW","submitNote":"Em đã bổ sung đầy đủ minh chứng.","estimatedReviewBy":"2026-09-05T03:21:00","reviewTargetHours":24}}
+                                    """
+                    ))
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Hồ sơ chưa đủ điều kiện để nộp"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Hồ sơ đang ở trạng thái không cho phép nộp lại")
     })
     @PostMapping("/submit")
     public ApiResponse<MentorVerificationRequestResponse> submit(

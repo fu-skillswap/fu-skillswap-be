@@ -83,12 +83,6 @@ public class BookingQuoteService {
 
         Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
         Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc() : BookingTime.toInstant(slot.getEndTime());
-        Instant vnAsUtc = normalizedStartAt.minus(Duration.ofHours(7));
-        if ((normalizedStartAt.isBefore(slotStartUtc) || normalizedStartAt.isAfter(slotEndUtc))
-                && !vnAsUtc.isBefore(slotStartUtc) && !vnAsUtc.isAfter(slotEndUtc)) {
-            normalizedStartAt = vnAsUtc;
-        }
-
         Instant normalizedEndAt = normalizedStartAt.plus(Duration.ofMinutes(serviceCandidate.durationMinutes()));
         LocalDateTime start = BookingTime.fromInstant(normalizedStartAt);
         LocalDateTime end = BookingTime.fromInstant(normalizedEndAt);

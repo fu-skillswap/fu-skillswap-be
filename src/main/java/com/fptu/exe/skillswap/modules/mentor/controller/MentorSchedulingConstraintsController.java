@@ -20,14 +20,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/me/mentor-scheduling-constraints")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Mentor Availability Slot")
+@Tag(name = "Mentor Availability Slot", description = "Xem slot rảnh và các giới hạn thời gian áp dụng khi mentor tạo lịch.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorSchedulingConstraintsController {
 
     private final MentorBookingPolicyService mentorBookingPolicyService;
 
     @GetMapping
-    @Operation(summary = "Get platform scheduling constraints")
+    @Operation(summary = "Xem giới hạn thời gian đặt lịch", description = "Trả về các giới hạn chung của hệ thống để FE hiển thị đúng khi mentor tạo hoặc cập nhật slot rảnh.")
     public ApiResponse<MentorSchedulingConstraintsResponse> getConstraints(
             @AuthenticationPrincipal UserPrincipal principal
     ) {

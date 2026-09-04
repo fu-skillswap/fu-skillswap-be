@@ -16,6 +16,8 @@ import com.fptu.exe.skillswap.modules.notification.NotificationType;
 
 public interface NotificationRepository extends JpaRepository<Notification, UUID>, NotificationRepositoryCustom {
 
+    Optional<Notification> findByDedupeKey(String dedupeKey);
+
     @Query("SELECT n FROM Notification n WHERE n.recipientUserId = :recipientUserId AND n.type <> com.fptu.exe.skillswap.modules.notification.NotificationType.CHAT_UNREAD")
     Page<Notification> findByRecipientUserId(@Param("recipientUserId") UUID recipientUserId, Pageable pageable);
 
@@ -28,6 +30,9 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     Optional<Notification> findByIdAndRecipientUserId(UUID id, UUID recipientUserId);
 
     Optional<Notification> findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityIdAndReadAtIsNull(UUID recipientUserId, NotificationType type, String relatedEntityType, UUID relatedEntityId);
+
+    Optional<Notification> findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityId(
+            UUID recipientUserId, NotificationType type, String relatedEntityType, UUID relatedEntityId);
 
     @Modifying
     @Query("UPDATE Notification n SET n.readAt = :now WHERE n.recipientUserId = :recipientUserId AND n.readAt IS NULL")

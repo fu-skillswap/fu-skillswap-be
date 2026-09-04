@@ -7,6 +7,10 @@ import com.fptu.exe.skillswap.modules.course.service.CourseProgressService;
 import com.fptu.exe.skillswap.modules.course.service.CourseVaultService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -20,37 +24,91 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-@Tag(name = "Course curriculum", description = "Course chapters and their video or PDF learning materials")
+@Tag(name = "Course curriculum", description = "Quản lý chương và tài liệu học tập dạng video hoặc PDF trong khóa học.")
+@SecurityRequirement(name = "bearerAuth")
 public class CourseVaultController {
     private final CourseVaultService courseVaultService;
     private final CourseProgressService courseProgressService;
 
-    @Operation(summary = "Initialize video upload in a chapter")
+    @Operation(summary = "Mentor khởi tạo upload video", description = "Mentor sở hữu khóa học gọi trước khi upload video. Backend trả upload intent có thời hạn; FE upload theo URL được cấp rồi chờ material chuyển sang `READY`. Không lưu hoặc tự sửa thông tin provider.")
     @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/video/upload-intent")
     public ApiResponse<CourseVideoUploadInitResponse> createVideoUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID chapterId, @Valid @RequestBody CreateVideoMaterialRequest request) {
         return ApiResponse.success(courseVaultService.createVideoUpload(principal.getId(), courseId, chapterId, request));
     }
 
-    @Operation(summary = "Initialize PDF upload in a chapter")
+    @Operation(summary = "Mentor khởi tạo upload PDF", description = "Mentor sở hữu khóa học gọi trước khi upload PDF. Upload URL có thời hạn; nếu hết hạn, khởi tạo intent mới. Sau khi upload thành công, gọi confirm với đúng giá trị backend đã cấp.")
     @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/pdf/upload-intent")
     public ApiResponse<CoursePdfUploadInitResponse> createPdfUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID chapterId, @Valid @RequestBody CreatePdfMaterialUploadRequest request) {
         return ApiResponse.success(courseVaultService.createPdfUpload(principal.getId(), courseId, chapterId, request));
     }
 
-    @Operation(summary = "Confirm PDF upload")
+    @Operation(summary = "Mentor xác nhận upload PDF", description = "Gọi sau khi upload PDF thành công bằng intent trước đó. FE gửi đúng `objectKey` được trả về trong intent; không tự tạo object key. Sau khi xác nhận, material được backend kiểm tra và xử lý.")
     @PostMapping("/me/mentor/courses/{courseId}/materials/{materialId}/confirm-pdf-upload")
     public ApiResponse<Void> confirmPdfUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, @Valid @RequestBody ConfirmCoursePdfUploadRequest request) {
         courseVaultService.confirmPdfUpload(principal.getId(), courseId, materialId, request.objectKey());
         return ApiResponse.success(null);
     }
 
-    @Operation(summary = "List materials in course order")
+    @Operation(summary = "Lấy danh sách tài liệu khóa học", description = "User đã đăng nhập gọi sau khi mở course detail. Mentor xem toàn bộ tài liệu; người học xem các material đã công bố. `available=true` mới cho phép gọi playback/download; nếu false, hiển thị `lockedReason` hoặc `userActionMessage`. User chưa enrollment vẫn nhận được danh sách và trạng thái khóa, không phải lỗi.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách tài liệu theo thứ tự chương", content = @Content(examples = @ExampleObject(
+                    name = "Tài liệu đã mở và bị khóa",
+                    value = """
+                            {
+                              "status": 200,
+                              "code": "SUCCESS_0200",
+                              "message": "Thành công",
+                              "data": [
+                                {
+                                  "materialId": "019f3234-aaaa-bbbb-cccc-1234567890ab",
+                                  "chapterId": "019f2234-aaaa-bbbb-cccc-1234567890ab",
+                                  "title": "Dependency Injection",
+                                  "materialType": "VIDEO",
+                                  "storageProviderType": "BUNNY_VIDEO",
+                                  "status": "READY",
+                                  "durationSeconds": 420,
+                                  "thumbnailUrl": "https://cdn.example/thumbnail.jpg",
+                                  "uploadedAt": "2026-09-04T03:15:30Z",
+                                  "available": true,
+                                  "lockedReason": null,
+                                  "userActionMessage": null,
+                                  "retryable": false
+                                },
+                                {
+                                  "materialId": "019f4234-aaaa-bbbb-cccc-1234567890ab",
+                                  "chapterId": "019f2234-aaaa-bbbb-cccc-1234567890ab",
+                                  "title": "Bài tập thực hành",
+                                  "materialType": "PDF",
+                                  "storageProviderType": "LOCAL",
+                                  "status": "READY",
+                                  "durationSeconds": null,
+                                  "thumbnailUrl": null,
+                                  "uploadedAt": "2026-09-04T03:16:00Z",
+                                  "available": false,
+                                  "lockedReason": "NOT_ENROLLED",
+                                  "userActionMessage": "Bạn chưa có quyền truy cập tài liệu này.",
+                                  "retryable": false
+                                }
+                              ]
+                            }
+                            """))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Chưa có quyền truy cập khóa học"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học")
+    })
     @GetMapping("/me/courses/{courseId}/materials")
     public ApiResponse<List<CourseMaterialSummaryResponse>> getCourseMaterials(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId) {
         return ApiResponse.success(courseVaultService.getCourseMaterials(principal.getId(), courseId));
     }
 
-    @Operation(summary = "Get playback URL for a course video")
+    @Operation(summary = "Lấy URL xem video khóa học", description = "Gọi khi material là video, đã công bố và `status=READY`. Material previewable hoặc user có enrollment ACTIVE/COMPLETED mới được cấp URL. URL dùng trong thời gian ngắn; nếu chưa có quyền, trả 403.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Trả URL playback tạm thời cho video đã sẵn sàng"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Material không phải video hoặc video chưa ở trạng thái READY"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User chưa có quyền xem material này"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học hoặc material")
+    })
     @GetMapping("/me/courses/{courseId}/materials/{materialId}/playback")
     public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
@@ -58,13 +116,27 @@ public class CourseVaultController {
         return ApiResponse.success(courseVaultService.getPlaybackAuthorization(principal.getId(), courseId, materialId, clientIp));
     }
 
-    @Operation(summary = "Get signed download URL for a course PDF")
+    @Operation(summary = "Lấy URL tải PDF khóa học", description = "Gọi khi material là PDF, đã công bố và `status=READY`. Material previewable hoặc user có enrollment ACTIVE/COMPLETED mới được cấp URL tải tạm thời. Nếu URL hết hạn, gọi lại API khi user vẫn còn quyền.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Trả URL download tạm thời cho PDF đã sẵn sàng"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Material không phải PDF hoặc PDF chưa ở trạng thái READY"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User chưa có quyền tải material này"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học hoặc material")
+    })
     @GetMapping("/me/courses/{courseId}/materials/{materialId}/download")
     public ApiResponse<CourseMaterialDownloadResponse> getPdfDownload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId) {
         return ApiResponse.success(courseVaultService.getPdfDownload(principal.getId(), courseId, materialId));
     }
 
-    @Operation(summary = "Update video learning progress")
+    @Operation(summary = "Cập nhật tiến độ xem video", description = "User có quyền học gửi số giây đã xem. Backend tự xác định user từ JWT; FE không gửi studentId. Khi video đạt ngưỡng hoàn thành, curriculum sẽ phản ánh progress mới. Nếu user không có enrollment ACTIVE/COMPLETED, trả 403.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đã lưu tiến độ video"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Số giây xem không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User chưa có quyền học khóa học"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học hoặc material")
+    })
     @PutMapping("/me/courses/{courseId}/materials/{materialId}/progress")
     public ApiResponse<Void> updateProgress(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, @Valid @RequestBody UpdateCourseMaterialProgressRequest request) {
         courseProgressService.updateMaterialProgress(principal.getId(), courseId, materialId, request.watchedSeconds());

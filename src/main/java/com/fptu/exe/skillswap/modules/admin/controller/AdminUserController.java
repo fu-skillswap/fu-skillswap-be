@@ -15,6 +15,8 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,7 +32,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Users", description = "Nhóm API vận hành nội bộ để xem danh sách user visible và thay đổi trạng thái tài khoản như ban hoặc unban. FE admin dùng trong các màn moderation user.")
+@Tag(name = "Admin - Users", description = "Admin - dành cho quản trị viên. Xem user visible và ban/unban trong màn moderation; không dùng cho FE người dùng.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN','SYSTEM_ADMIN')")
 public class AdminUserController {
@@ -71,7 +73,16 @@ public class AdminUserController {
 
     @Operation(summary = "Khóa user", description = "Chuyển trạng thái tài khoản của một visible user sang banned. FE admin dùng trong flow moderation khi cần chặn user sử dụng hệ thống và phải lưu lại lý do thao tác.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Cấm người dùng thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Cấm người dùng thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "UserBanned",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"userId":"019f5234-aaaa-bbbb-cccc-1234567890ab","email":"student@example.com","fullName":"Nguyen Van A","status":"BANNED","roles":["MENTEE"],"createdAt":"2026-08-01T08:00:00"}}
+                                    """
+                    ))
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy người dùng")

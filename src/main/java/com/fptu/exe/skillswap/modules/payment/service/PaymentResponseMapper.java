@@ -46,7 +46,26 @@ public class PaymentResponseMapper {
                 .expiresAt(order.getExpiresAtUtc() != null
                         ? BusinessTime.toOffsetDateTime(order.getExpiresAtUtc())
                         : (order.getExpiresAt() != null ? BusinessTime.toOffsetDateTime(order.getExpiresAt()) : null))
+                .userActionMessage(userActionMessage(order.getStatus()))
+                .retryable(retryable(order.getStatus()))
                 .build();
+    }
+
+    private String userActionMessage(com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus status) {
+        if (status == null) return null;
+        return switch (status) {
+            case PENDING, AWAITING_PROVIDER_PAYMENT -> "Vui lòng hoàn tất thanh toán trước thời hạn.";
+            case PARTIALLY_COVERED_BY_CREDIT -> "Một phần số dư đã được áp dụng; vui lòng hoàn tất phần còn lại.";
+            case PAID -> "Thanh toán đã được ghi nhận.";
+            case FAILED -> "Thanh toán chưa thành công. Bạn có thể bắt đầu lại theo hướng dẫn.";
+            case CANCELLED -> "Phiên thanh toán đã bị hủy. Vui lòng tạo phiên mới nếu cần.";
+            case EXPIRED -> "Phiên thanh toán đã hết hạn. Vui lòng tạo phiên mới.";
+        };
+    }
+
+    private boolean retryable(com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus status) {
+        return status == com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus.FAILED
+                || status == com.fptu.exe.skillswap.modules.payment.domain.PaymentOrderStatus.EXPIRED;
     }
 
     private Integer safeVnd(Integer scoin) {

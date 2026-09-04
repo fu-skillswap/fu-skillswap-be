@@ -37,7 +37,7 @@ import java.util.UUID;
 @RequestMapping("/api/me/availability-slots")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('MENTOR')")
-@Tag(name = "Mentor Availability Slot", description = "API quản lý trực tiếp các slot rảnh của Mentor (CRUD).")
+@Tag(name = "Mentor Availability Slot", description = "Mentor quản lý các slot rảnh cụ thể theo ngày và giờ. Dùng nhóm này khi cần chỉnh từng slot đã tạo.")
 @SecurityRequirement(name = "bearerAuth")
 public class MentorAvailabilitySlotController {
 
@@ -45,7 +45,7 @@ public class MentorAvailabilitySlotController {
 
     @Operation(
             summary = "Tạo trực tiếp một slot rảnh cho mentor",
-            description = "Mentor tạo slot rảnh cụ thể theo ngày giờ. Hệ thống tự động tạo liên kết ngầm với availability-rule ẩn."
+            description = "Mentor tạo một slot rảnh cụ thể theo ngày và giờ để người học có thể chọn khi booking."
     )
     @PostMapping
     public ApiResponse<MentorManagedAvailabilitySlotResponse> createSlot(
@@ -85,7 +85,7 @@ public class MentorAvailabilitySlotController {
         return ApiResponse.success(mentorAvailabilityService.updateSlotDirectly(principal.getPublicId(), slotId, request));
     }
 
-    @Operation(summary = "Deactivate slot rảnh", description = "Deactivate là terminal. Pending booking bị ảnh hưởng cần confirmation token.")
+    @Operation(summary = "Ngừng nhận booking cho slot", description = "Ngừng sử dụng slot rảnh này cho booking mới. Đây là thao tác kết thúc của slot; nếu slot đang liên quan đến booking chờ xử lý, backend có thể yêu cầu confirmation token.")
     @PostMapping("/{slotId}/deactivate")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
     public ResponseEntity<ApiResponse<MentorManagedAvailabilitySlotResponse>> deactivateSlot(

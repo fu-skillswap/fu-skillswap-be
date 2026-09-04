@@ -11,6 +11,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseProgressRepository
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +29,7 @@ public class CourseProgressService {
     private final CourseMaterialRepository materialRepository;
     private final CourseEnrollmentRepository enrollmentRepository;
     private final CourseRepository courseRepository;
+    private final TimeProvider timeProvider;
 
     @Transactional
     public CourseMaterialProgress updateMaterialProgress(UUID studentUserId, UUID courseId, UUID materialId, int watchedSeconds) {
@@ -50,12 +52,12 @@ public class CourseProgressService {
                 .orElseGet(() -> CourseMaterialProgress.builder().studentUserId(studentUserId).material(material).build());
         int safeWatchedSeconds = Math.max(0, watchedSeconds);
         progress.setWatchedSeconds(safeWatchedSeconds);
-        progress.setLastAccessedAt(Instant.now());
+        progress.setLastAccessedAt(timeProvider.instant());
         int percentage = Math.min(100, (int) Math.round((double) safeWatchedSeconds * 100 / material.getDurationSeconds()));
         progress.setCompletionPercentage(percentage);
         if (percentage >= COMPLETION_THRESHOLD_PERCENT && !progress.isCompleted()) {
             progress.setCompleted(true);
-            progress.setCompletedAt(Instant.now());
+            progress.setCompletedAt(timeProvider.instant());
         }
         progress = materialProgressRepository.save(progress);
         updateCourseProgress(studentUserId, courseId, material);
@@ -76,7 +78,7 @@ public class CourseProgressService {
         int overall = total == 0 ? 0 : (int) Math.round((double) completed * 100 / total);
         progress.setOverallPercentage(overall);
         if (overall == 100 && progress.getCompletedAt() == null) {
-            progress.setCompletedAt(Instant.now());
+            progress.setCompletedAt(timeProvider.instant());
         }
         return courseProgressRepository.save(progress);
     }

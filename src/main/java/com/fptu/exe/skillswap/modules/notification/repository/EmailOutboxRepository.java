@@ -78,10 +78,33 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
             Pageable pageable
     );
 
+    /**
+     * Claims the send in its own short database transaction. The conditional update is
+     * the cross-instance guard; a scheduler row lock alone is insufficient because the
+     * actual provider call happens asynchronously after that lock is released.
+     */
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("""
+            update EmailOutbox e
+               set e.status = 'SENDING',
+                   e.sendingStartedAt = :startedAt,
+                   e.retryCount = e.retryCount + 1
+             where e.id = :id
+               and e.status = 'PENDING'
+               and e.retryCount < :maxAttempts
+            """)
+    int claimForSending(@Param("id") UUID id,
+                        @Param("startedAt") LocalDateTime startedAt,
+                        @Param("maxAttempts") int maxAttempts);
+
     @org.springframework.data.jpa.repository.Modifying
     @Query("""
-        update EmailOutbox e 
-        set e.status = :status, e.lastError = :errorLog, e.retryCount = e.retryCount + 1, e.sentAt = case when :status = 'SENT' then current_timestamp else e.sentAt end
+        update EmailOutbox e
+        set e.status = :status,
+            e.lastError = :errorLog,
+            e.sendingStartedAt = null,
+            e.sentAt = case when :status = 'SENT' then current_timestamp else e.sentAt end
         where e.id = :id
     """)
     void updateStatus(@Param("id") UUID id, @Param("status") NotificationStatus status, @Param("errorLog") String errorLog);
@@ -93,4 +116,15 @@ public interface EmailOutboxRepository extends JpaRepository<EmailOutbox, UUID> 
         where e.status = 'FAILED' and e.retryCount >= :maxRetries
     """)
     int updateFailedToFatalError(@Param("maxRetries") int maxRetries);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("""
+        update EmailOutbox e
+           set e.status = 'FATAL_ERROR',
+               e.lastError = 'Delivery outcome unknown after stale in-flight send',
+               e.sendingStartedAt = null
+         where e.status = 'SENDING'
+           and e.sendingStartedAt < :staleBefore
+    """)
+    int quarantineStaleSending(@Param("staleBefore") LocalDateTime staleBefore);
 }

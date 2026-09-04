@@ -17,7 +17,7 @@ public class CourseOutboxCleanupScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final StorageLifecycleProperties properties;
 
-    @Scheduled(cron = "${application.storage.lifecycle.course-outbox-cleanup-cron:0 30 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.course-outbox-cleanup-cron:0 30 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void executeCleanupJob() {
         int retentionDays = properties.getCourseOutboxRetentionDays();
         if (retentionDays <= 0) {

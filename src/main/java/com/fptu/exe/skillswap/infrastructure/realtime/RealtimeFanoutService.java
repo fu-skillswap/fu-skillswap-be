@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.realtime;
 
 import lombok.RequiredArgsConstructor;
+import com.fptu.exe.skillswap.modules.notification.dto.event.NotificationBadgeRealtimeEvent;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,11 @@ public class RealtimeFanoutService {
 
     private final ObjectProvider<SimpMessagingTemplate> simpMessagingTemplateProvider;
 
-    /** Payload must be an immutable event/projection produced by the owner module. */
+    /**
+     * Payload must be an immutable event/projection produced by the owner module. Chat
+     * payloads carry the durable messageId, which is the client deduplication key because
+     * Rabbit/WebSocket delivery is intentionally at-least-once.
+     */
     public void pushChatMessage(UUID recipientUserId, Object payload) {
         sendStomp(recipientUserId, USER_QUEUE_CHAT_MESSAGES, payload);
     }
@@ -51,6 +56,11 @@ public class RealtimeFanoutService {
                 "unreadCount", unreadCount,
                 "eventKind", eventKind
         );
+        sendStomp(recipientUserId, USER_QUEUE_NOTIFICATION_BADGE, payload);
+    }
+
+    /** Dedicated DTO overload; the legacy map overload remains source compatible. */
+    public void pushNotificationBadge(UUID recipientUserId, NotificationBadgeRealtimeEvent payload) {
         sendStomp(recipientUserId, USER_QUEUE_NOTIFICATION_BADGE, payload);
     }
 

@@ -152,7 +152,7 @@ public class MyBookingController {
 
     @Operation(
             summary = "Participant xác nhận buổi mentoring",
-            description = "Mentee xác nhận buổi mentoring đã diễn ra, kể cả khi mentor chưa bấm complete. Deadline luôn tính từ selectedEndTime + 24 giờ."
+            description = "Người học xác nhận buổi mentoring đã diễn ra, kể cả khi mentor chưa xác nhận hoàn tất. Có thể gọi trong vòng 24 giờ sau thời điểm kết thúc đã chọn. Nếu booking đã hoàn tất trước đó, FE hiển thị trạng thái hiện tại thay vì tạo thao tác mới."
     )
     @PostMapping("/{bookingId}/confirm")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
@@ -167,7 +167,7 @@ public class MyBookingController {
 
     @Operation(
             summary = "Check-in buổi mentoring",
-            description = "Mentor hoặc mentee tự xác nhận có mặt từ đúng giờ bắt đầu đến trước giờ kết thúc. Backend tự nhận diện vai trò và ghi thời gian server; check-in chỉ là evidence hỗ trợ khi xử lý no-show, không tự release tiền. Gửi Idempotency-Key để retry an toàn khi mạng lỗi."
+            description = "Mentor hoặc mentee xác nhận mình đã tham gia trong khoảng thời gian của buổi học. Check-in chỉ ghi nhận việc tham gia, không tự giải ngân hoặc thay đổi kết quả booking. Khi mạng lỗi, FE có thể gửi lại cùng `Idempotency-Key`."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Check-in thành công hoặc replay lần check-in trước"),
@@ -187,7 +187,7 @@ public class MyBookingController {
 
     @Operation(
             summary = "Participant báo vấn đề sau buổi mentoring",
-            description = "Participant hợp lệ báo vấn đề trong cửa sổ 24 giờ tính từ selectedEndTime, không phụ thuộc lúc mentor bấm complete."
+            description = "Người tham gia báo vấn đề trong vòng 24 giờ sau thời điểm kết thúc đã chọn, không phụ thuộc việc mentor đã xác nhận hoàn tất hay chưa. FE nên gửi loại vấn đề, mô tả và các file minh chứng đã xác nhận."
     )
     @PostMapping("/{bookingId}/issue")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
@@ -202,7 +202,7 @@ public class MyBookingController {
 
     @PostMapping("/{bookingId}/issue/respond")
     @com.fptu.exe.skillswap.shared.idempotency.Idempotent
-    @Operation(summary = "Phản hồi booking issue", description = "Chỉ counterparty của người đã report được phản hồi một lần trong 24 giờ. Phản hồi không tự giải quyết dispute.")
+    @Operation(summary = "Phản hồi vấn đề booking", description = "Chỉ người tham gia còn lại mới được phản hồi vấn đề một lần trong 24 giờ. Phản hồi được lưu để admin xem xét và không tự đóng vụ việc.")
     public ApiResponse<BookingIssueResponse> respondToIssue(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,

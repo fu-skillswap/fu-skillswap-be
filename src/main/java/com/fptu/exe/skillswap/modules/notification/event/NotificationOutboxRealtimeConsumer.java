@@ -2,7 +2,8 @@ package com.fptu.exe.skillswap.modules.notification.event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.realtime.RealtimeFanoutService;
-import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
+import com.fptu.exe.skillswap.modules.notification.dto.event.NotificationBadgeRealtimeEvent;
+import com.fptu.exe.skillswap.modules.notification.dto.event.NotificationRealtimeEvent;
 import com.fptu.exe.skillswap.modules.notification.service.NotificationService;
 import com.fptu.exe.skillswap.shared.util.TraceContext;
 import lombok.RequiredArgsConstructor;
@@ -47,13 +48,15 @@ public class NotificationOutboxRealtimeConsumer {
 
     private void handleNotificationCreated(String payloadJson) throws java.io.IOException {
         Payloads.NotificationCreatedPayload payload = objectMapper.readValue(payloadJson, Payloads.NotificationCreatedPayload.class);
-        NotificationResponse response = notificationService.getRealtimeNotification(payload.recipientUserId(), payload.notificationId(), payload.eventKind());
+        NotificationRealtimeEvent response = notificationService.getRealtimeNotificationEvent(
+                payload.recipientUserId(), payload.notificationId(), payload.eventKind());
         realtimeFanoutService.pushNotificationItem(payload.recipientUserId(), response);
     }
 
     private void handleNotificationBadgeUpdated(String payloadJson) throws java.io.IOException {
         Payloads.NotificationBadgePayload payload = objectMapper.readValue(payloadJson, Payloads.NotificationBadgePayload.class);
-        realtimeFanoutService.pushNotificationBadge(payload.recipientUserId(), payload.unreadCount(), payload.eventKind());
+        realtimeFanoutService.pushNotificationBadge(payload.recipientUserId(),
+                new NotificationBadgeRealtimeEvent(payload.unreadCount(), payload.eventKind()));
     }
 
     private static final class Payloads {

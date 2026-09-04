@@ -3,11 +3,8 @@ package com.fptu.exe.skillswap.modules.chat.service;
 import com.fptu.exe.skillswap.infrastructure.realtime.RealtimeFanoutService;
 import com.fptu.exe.skillswap.modules.chat.dto.event.ChatMessageEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -18,17 +15,28 @@ public class GroupChatFanoutDispatcher {
 
     private final RealtimeFanoutService realtimeFanoutService;
     private final GroupChatProperties properties;
-    private final TaskScheduler taskScheduler;
+    private final ChatRealtimeDeliveryDeduplicationService deduplicationService;
 
     public GroupChatFanoutDispatcher(RealtimeFanoutService realtimeFanoutService,
                                      GroupChatProperties properties,
-                                     @Qualifier("applicationTaskScheduler") TaskScheduler taskScheduler) {
+                                     ChatRealtimeDeliveryDeduplicationService deduplicationService) {
         this.realtimeFanoutService = realtimeFanoutService;
         this.properties = properties;
-        this.taskScheduler = taskScheduler;
+        this.deduplicationService = deduplicationService;
     }
 
     public void dispatchGroupMessage(UUID conversationId,
+                                     ChatMessageEvent event,
+                                     List<UUID> recipientUserIds) {
+        dispatchGroupMessage(null, conversationId, event, recipientUserIds);
+    }
+
+    /**
+     * Delivers all chunks before returning so the Rabbit listener can acknowledge
+     * only after the durable event has been fully handled.
+     */
+    public void dispatchGroupMessage(UUID outboxEventId,
+                                     UUID conversationId,
                                      ChatMessageEvent event,
                                      List<UUID> recipientUserIds) {
         if (recipientUserIds == null || recipientUserIds.isEmpty()) {
@@ -36,32 +44,30 @@ public class GroupChatFanoutDispatcher {
         }
 
         int batchSize = Math.max(1, properties.getBatchSize());
-        long delayMs = Math.max(0, properties.getBatchDelayMs());
-
         List<List<UUID>> chunks = partition(recipientUserIds, batchSize);
-        log.debug("Dispatching group message id={} in conversationId={} to {} recipients across {} chunks (batchSize={}, delayMs={})",
-                event.messageId(), conversationId, recipientUserIds.size(), chunks.size(), batchSize, delayMs);
+        log.debug("Dispatching group message id={} in conversationId={} to {} recipients across {} chunks (batchSize={})",
+                event.messageId(), conversationId, recipientUserIds.size(), chunks.size(), batchSize);
 
-        for (int i = 0; i < chunks.size(); i++) {
-            List<UUID> chunk = chunks.get(i);
-            long executionDelay = i * delayMs;
-
-            if (executionDelay == 0) {
-                processChunk(conversationId, event, chunk);
-            } else {
-                taskScheduler.schedule(() -> processChunk(conversationId, event, chunk),
-                        Instant.now().plusMillis(executionDelay));
-            }
+        for (List<UUID> chunk : chunks) {
+            processChunk(outboxEventId, conversationId, event, chunk);
         }
     }
 
-    private void processChunk(UUID conversationId, ChatMessageEvent event, List<UUID> chunkRecipientIds) {
+    private void processChunk(UUID outboxEventId,
+                              UUID conversationId,
+                              ChatMessageEvent event,
+                              List<UUID> chunkRecipientIds) {
         for (UUID recipientId : chunkRecipientIds) {
+            if (!deduplicationService.claim(outboxEventId, recipientId)) {
+                continue;
+            }
             try {
                 realtimeFanoutService.pushChatMessage(recipientId, event);
+                deduplicationService.markDelivered(outboxEventId, recipientId);
             } catch (Exception ex) {
                 log.warn("Failed to push group chat message to recipientId={} in conversationId={}: {}",
                         recipientId, conversationId, ex.getMessage());
+                throw ex;
             }
         }
     }

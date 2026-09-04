@@ -88,7 +88,6 @@ public class ForumPostController {
                                                     "status": "PUBLISHED",
                                                     "commentCount": 3,
                                                     "reactionCount": 5,
-                                                    "reportCount": 0,
                                                     "lastActivityAt": "2026-07-08T14:30:00",
                                                     "reactedByCurrentUser": false,
                                                     "myReactionType": null,
@@ -151,7 +150,24 @@ public class ForumPostController {
 
     @PostMapping("/posts")
     @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
-    @Operation(summary = "Tạo bài viết forum")
+    @Operation(
+            summary = "Tạo bài viết forum",
+            description = "Người dùng đã đăng nhập tạo bài viết mới. Backend tự xác định tác giả; FE chỉ gửi tiêu đề, nội dung, topic và các URL ảnh đã upload. Nội dung không hợp lệ sẽ bị từ chối."
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Tạo bài viết thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "ForumPostCreated",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","title":"Làm thế nào để chuẩn bị phỏng vấn backend?","content":"Mọi người chia sẻ giúp mình checklist ôn tập.","status":"PUBLISHED","commentCount":0,"reactionCount":0,"reactedByCurrentUser":false,"myReactionType":null,"imageUrls":[]}}
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Tiêu đề, nội dung hoặc forumTopicId không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Tài khoản không được phép đăng bài")
+    })
     public ApiResponse<ForumPostResponse> createPost(
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody ForumPostUpsertRequest request
@@ -184,7 +200,22 @@ public class ForumPostController {
     }
 
     @GetMapping("/posts/{postId}/comments")
-    @Operation(summary = "Lấy comment của bài viết forum", description = "Danh sách comment theo thứ tự cũ nhất trước.")
+    @Operation(summary = "Lấy comment của bài viết forum", description = "Danh sách comment theo thứ tự cũ nhất trước. Nếu bài viết chưa có comment, `data.items` là mảng rỗng và không phải lỗi.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Danh sách comment",
+                    content = @Content(mediaType = "application/json", examples = {
+                            @ExampleObject(name = "Comments", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[{"commentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","authorUserId":"019f7234-aaaa-bbbb-cccc-1234567890ab","authorFullName":"Nguyen Van A","content":"Mình cũng đang ôn phần này.","status":"VISIBLE","reactionCount":1,"reactedByCurrentUser":false,"createdAt":"2026-09-04T03:25:00","updatedAt":"2026-09-04T03:25:00","imageUrls":[]}],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    """),
+                            @ExampleObject(name = "EmptyComments", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    """)
+                    })
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy bài viết")
+    })
     public ApiResponse<CursorPageResponse<ForumCommentResponse>> getComments(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
@@ -201,7 +232,18 @@ public class ForumPostController {
 
     @PostMapping("/posts/{postId}/comments")
     @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
-    @Operation(summary = "Tạo comment mới cho bài viết forum")
+    @Operation(summary = "Tạo comment mới cho bài viết forum", description = "FE gửi nội dung comment và tùy chọn replyToCommentId. Backend tự xác định tác giả và chỉ trả dữ liệu public cần render.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Tạo comment thành công", content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                    name = "CommentCreated",
+                    value = """
+                            {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"commentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","content":"Mình cũng đang ôn phần này.","status":"VISIBLE","reactionCount":0,"reactedByCurrentUser":false,"imageUrls":[]}}
+                            """
+            ))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Nội dung comment không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không được phép bình luận bài viết này"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy bài viết")
+    })
     public ApiResponse<ForumCommentResponse> createComment(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
@@ -236,7 +278,7 @@ public class ForumPostController {
 
     @PutMapping("/posts/{postId}/reaction")
     @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
-    @Operation(summary = "Thả reaction cho bài viết forum")
+    @Operation(summary = "Thả reaction cho bài viết forum", description = "Gửi `reactionType` để thêm hoặc đổi reaction của user hiện tại. Gọi lại cùng reaction là thao tác an toàn/idempotent theo trạng thái hiện tại.")
     public ApiResponse<ForumPostResponse> upsertReaction(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId,
@@ -248,7 +290,7 @@ public class ForumPostController {
 
     @DeleteMapping("/posts/{postId}/reaction")
     @PreAuthorize("hasAnyRole('MENTEE','MENTOR') and !hasRole('ADMIN') and !hasRole('SYSTEM_ADMIN')")
-    @Operation(summary = "Bỏ reaction của tôi khỏi bài viết forum")
+    @Operation(summary = "Bỏ reaction của tôi khỏi bài viết forum", description = "Xóa reaction của user hiện tại khỏi bài viết. Nếu đã bỏ trước đó, FE có thể giữ UI ở trạng thái chưa reaction.")
     public ApiResponse<ForumPostResponse> removeReaction(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId

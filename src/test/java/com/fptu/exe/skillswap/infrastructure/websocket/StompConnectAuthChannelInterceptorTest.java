@@ -3,6 +3,7 @@ package com.fptu.exe.skillswap.infrastructure.websocket;
 import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.infrastructure.security.UserAuthLookupPort;
 import com.fptu.exe.skillswap.infrastructure.security.UserAuthSnapshot;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.infrastructure.security.UserBanStatusPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import io.jsonwebtoken.Claims;
@@ -76,5 +77,55 @@ class StompConnectAuthChannelInterceptorTest {
         when(jwtTokenProvider.validateAccessToken("invalid")).thenReturn(false);
 
         assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+    }
+
+    @Test
+    void shouldRejectConnectFrameForInactiveUser() {
+        UUID userId = UUID.randomUUID();
+        Claims claims = new DefaultClaims();
+        claims.put("userId", userId.toString());
+        when(jwtTokenProvider.validateAccessToken("inactive-token")).thenReturn(true);
+        when(jwtTokenProvider.getClaimsFromToken("inactive-token")).thenReturn(claims);
+        when(userBanStatusPort.isBanned(userId)).thenReturn(false);
+        when(userAuthLookupPort.findSnapshotByUserId(userId))
+                .thenReturn(Optional.of(new UserAuthSnapshot(userId, "inactive@fpt.edu.vn", List.of(RoleCode.MENTEE), UserStatus.INACTIVE)));
+
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
+        accessor.addNativeHeader("Authorization", "Bearer inactive-token");
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+    }
+
+    @Test
+    void shouldRejectSubscriptionToAnotherUsersPrivateDestination() {
+        UUID userA = UUID.randomUUID();
+        UUID userB = UUID.randomUUID();
+        when(userAuthLookupPort.findSnapshotByUserId(userA))
+                .thenReturn(Optional.of(new UserAuthSnapshot(userA, "a@fpt.edu.vn", List.of(RoleCode.MENTEE), UserStatus.ACTIVE)));
+
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        accessor.setLeaveMutable(true);
+        accessor.setUser(() -> userA.toString());
+        accessor.setDestination("/user/" + userB + "/queue/chat/messages");
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+    }
+
+    @Test
+    void shouldAllowCanonicalPrivateQueueSubscriptionForActiveUser() {
+        UUID userId = UUID.randomUUID();
+        when(userAuthLookupPort.findSnapshotByUserId(userId))
+                .thenReturn(Optional.of(new UserAuthSnapshot(userId, "active@fpt.edu.vn", List.of(RoleCode.MENTEE), UserStatus.ACTIVE)));
+
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
+        accessor.setLeaveMutable(true);
+        accessor.setUser(() -> userId.toString());
+        accessor.setDestination("/user/queue/chat/messages");
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        assertEquals(message, interceptor.preSend(message, null));
     }
 }

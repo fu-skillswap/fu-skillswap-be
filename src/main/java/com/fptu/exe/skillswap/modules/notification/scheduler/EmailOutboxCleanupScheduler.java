@@ -17,7 +17,7 @@ public class EmailOutboxCleanupScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final StorageLifecycleProperties properties;
 
-    @Scheduled(cron = "${application.storage.lifecycle.email-outbox-cleanup-cron:0 15 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.email-outbox-cleanup-cron:0 15 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void executeCleanupJob() {
         int retentionDays = properties.getEmailOutboxRetentionDays();
         if (retentionDays <= 0) {

@@ -12,7 +12,7 @@ public class BookingIssueEvidenceCleanupScheduler {
     private final BookingIssueEvidenceService evidenceService;
     private final StorageLifecycleProperties storageLifecycleProperties;
 
-    @Scheduled(cron = "${booking.dispute-evidence.cleanup-cron:0 10 3 * * *}")
+    @Scheduled(cron = "${booking.dispute-evidence.cleanup-cron:0 10 3 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void clean() {
         if (!storageLifecycleProperties.isCleanupEnabled()) return;
         evidenceService.cleanExpiredUploadIntents();

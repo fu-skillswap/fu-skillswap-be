@@ -18,7 +18,7 @@ import java.util.UUID;
 public class ChatAttachmentController {
     private final ConversationService conversationService;
     @PostMapping("/{attachmentId}/download-url")
-    @Operation(summary = "Create private chat attachment download URL", description = "Re-authorizes the current conversation participant before issuing a short-lived private credential. PDF and DOCX are download-only.")
+    @Operation(summary = "Tạo URL tải file chat riêng tư", description = "Kiểm tra lại quyền tham gia conversation trước khi cấp URL tải file có thời hạn ngắn. PDF và DOCX chỉ hỗ trợ tải xuống.")
     public ApiResponse<ChatAttachmentDownloadResponse> download(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID attachmentId) {
         return ApiResponse.success(conversationService.downloadAttachment(attachmentId, principal.getId()));
     }

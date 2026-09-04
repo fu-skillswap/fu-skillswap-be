@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/me/notifications")
 @RequiredArgsConstructor
-@Tag(name = "Notification", description = "Nhóm API đọc danh sách thông báo, unread count và cập nhật trạng thái đã đọc của user hiện tại. FE dùng để dựng badge, dropdown và trang notification history.")
+@Tag(name = "Notification", description = "Đọc thông báo, xem số chưa đọc và đánh dấu đã đọc cho người dùng hiện tại.")
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 
@@ -32,14 +33,16 @@ public class NotificationController {
 
     @Operation(
             summary = "Lấy danh sách notification của tôi",
-            description = "Trả về danh sách thông báo của user hiện tại. FE dùng cho trang notifications hoặc dropdown thông báo, và có thể bật filter unreadOnly khi chỉ muốn lấy các item chưa đọc."
+            description = "REST trả về danh sách thông báo của tài khoản hiện tại cho trang notification hoặc dropdown. Các trường realtimeEventKind và unreadCount chỉ có ý nghĩa trong event realtime; khi dùng REST, FE dựa vào read/readAt và dùng API unread-count cho badge."
     )
-    @io.swagger.v3.oas.annotations.responses.ApiResponse(
-            responseCode = "200",
-            description = "Lấy danh sách notification thành công",
-            content = @Content(
-                    mediaType = "application/json",
-                    examples = @ExampleObject(
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Lấy danh sách notification thành công. Đây là lịch sử để render notification center; event WebSocket chỉ dùng để cập nhật ngay trên UI.",
+                    content = @Content(
+                            mediaType = "application/json",
+                            examples = {
+                                    @ExampleObject(
                             name = "NotificationCursorPage",
                             value = """
                                     {
@@ -73,9 +76,35 @@ public class NotificationController {
                                       }
                                     }
                                     """
+                                    ),
+                                    @ExampleObject(
+                                            name = "EmptyNotificationPage",
+                                            value = """
+                                                    {
+                                                      "timestamp": "2026-09-04T03:20:00Z",
+                                                      "status": 200,
+                                                      "code": "SUCCESS_0200",
+                                                      "message": "Thành công",
+                                                      "data": {
+                                                        "items": [],
+                                                        "nextCursor": null,
+                                                        "prevCursor": null,
+                                                        "hasNext": false,
+                                                        "hasPrev": false,
+                                                        "limit": 20
+                                                      }
+                                                    }
+                                                    """
+                                    )
+                            }
                     )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "429",
+                    description = "Quá nhiều request trong thời gian ngắn. Chờ theo retryAfterSeconds rồi gọi lại."
             )
-    )
+    })
     @GetMapping
     public ResponseEntity<ApiResponse<CursorPageResponse<NotificationResponse>>> getMyNotifications(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -94,8 +123,27 @@ public class NotificationController {
 
     @Operation(
             summary = "Lấy số lượng notification chưa đọc",
-            description = "Trả về số lượng thông báo chưa đọc của user hiện tại. FE dùng để hiển thị badge mà không cần load toàn bộ danh sách notification."
+            description = "REST snapshot dùng để khởi tạo hoặc đồng bộ badge. Khi đã kết nối WebSocket, FE có thể cập nhật badge từ `/user/queue/notifications/badge`; không coi realtime event là lịch sử notification."
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Lấy số lượng notification chưa đọc thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "UnreadNotificationCount",
+                            value = """
+                                    {
+                                      "timestamp": "2026-09-04T03:20:00Z",
+                                      "status": 200,
+                                      "code": "SUCCESS_0200",
+                                      "message": "Thành công",
+                                      "data": { "unreadCount": 3 }
+                                    }
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ")
+    })
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<UnreadCountResponse>> getMyUnreadCount(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {
@@ -106,27 +154,65 @@ public class NotificationController {
 
     @Operation(
             summary = "Đánh dấu notification đã đọc",
-            description = "Đánh dấu một notification là đã đọc cho user hiện tại. FE dùng sau khi user mở hoặc xác nhận một thông báo cụ thể."
+            description = "Đánh dấu một notification là đã đọc cho user hiện tại. FE gọi sau khi mở notification hoặc hoàn tất action của notification; sau đó có thể nhận badge update realtime."
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Đánh dấu đã đọc thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "NotificationMarkedRead",
+                            value = """
+                                    {
+                                      "timestamp": "2026-09-04T03:21:00Z",
+                                      "status": 200,
+                                      "code": "SUCCESS",
+                                      "message": "Đánh dấu đã đọc thành công"
+                                    }
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Notification không thuộc tài khoản hiện tại"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy notification")
+    })
     @PatchMapping("/{id}/read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID id) {
         ensureAuthenticated(principal);
         notificationService.markAsRead(principal.getPublicId(), id);
-        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now()).status(200).code("SUCCESS").message("Đánh dấu đã đọc thành công").build());
+        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow()).status(200).code("SUCCESS").message("Đánh dấu đã đọc thành công").build());
     }
 
     @Operation(
             summary = "Đánh dấu tất cả notification đã đọc",
-            description = "Đánh dấu tất cả notification là đã đọc cho user hiện tại. FE dùng khi có action đọc hết trong notification center. Endpoint này chỉ hỗ trợ HTTP PATCH."
+            description = "Đánh dấu tất cả notification là đã đọc cho user hiện tại. FE dùng cho nút Đọc tất cả trong notification center; endpoint chỉ hỗ trợ HTTP PATCH."
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Đánh dấu tất cả đã đọc thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "AllNotificationsMarkedRead",
+                            value = """
+                                    {
+                                      "timestamp": "2026-09-04T03:21:00Z",
+                                      "status": 200,
+                                      "code": "SUCCESS",
+                                      "message": "Đánh dấu tất cả đã đọc thành công"
+                                    }
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ")
+    })
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllAsRead(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal) {
         ensureAuthenticated(principal);
         notificationService.markAllAsRead(principal.getPublicId());
-        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.now()).status(200).code("SUCCESS").message("Đánh dấu tất cả đã đọc thành công").build());
+        return ResponseEntity.ok(ApiResponse.<Void>builder().timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow()).status(200).code("SUCCESS").message("Đánh dấu tất cả đã đọc thành công").build());
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

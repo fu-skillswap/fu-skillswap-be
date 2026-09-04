@@ -42,13 +42,13 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .addServersItem(new Server()
                         .url("/")
-                        .description("Default Server (Current Environment)"))
+                        .description("Môi trường đang chạy hiện tại"))
                 .addServersItem(new Server()
                         .url("http://localhost:8080")
-                        .description("🖥️ Local Development Server"))
+                        .description("🖥️ Máy local cho phát triển"))
                 .addServersItem(new Server()
                         .url("https://api.skillswap.asia")
-                        .description("🌐 Production API Server"))
+                        .description("🌐 API production"))
                 .info(new Info()
                         .title("SkillSwap API")
                         .description("""
@@ -69,9 +69,16 @@ public class OpenApiConfig {
                             - Với phân trang bằng `cursor`, FE truyền lại nguyên `nextCursor` từ lần gọi trước.
                             - Khi tải file, FE tạo URL tải lên trước rồi mới xác nhận file với backend.
                             - Thời gian trả về theo ISO-8601.
+                            - `400/422`: sửa input; `401/403`: đăng nhập hoặc kiểm tra quyền; `409`: tải lại dữ liệu; `429`: chờ theo `retryAfterSeconds`.
+                            - API có nhãn **Internal/System - không dùng cho FE** chỉ dành cho vận hành hoặc provider callback.
 
                             ### Dùng token trên Swagger
                             Bấm **Authorize** và dán access token, không cần thêm chữ `Bearer`.
+
+                            ### Phân biệt nhóm API
+                            - **API nghiệp vụ:** dùng cho màn hình người dùng hoặc admin đã tích hợp.
+                            - **Internal/System - không dùng cho FE:** health check, provider webhook, storage simulator và công cụ vận hành.
+                            - **Kết nối bên ngoài:** provider gọi vào hoặc trình duyệt dùng cho link chia sẻ; FE không dùng để thay thế API nghiệp vụ.
                             """)
                         .version(apiVersion)
                         .contact(new Contact()
@@ -87,7 +94,7 @@ public class OpenApiConfig {
                                         .scheme("bearer")
                                         .in(SecurityScheme.In.HEADER)
                                         .bearerFormat("JWT")
-                                        .description("Nhập JWT Access Token vào đây (không cần tiền tố 'Bearer '). Ví dụ: `eyJhbGci...`"))
+                                        .description("Dán JWT Access Token vào đây, không cần thêm tiền tố `Bearer`. Ví dụ: `eyJhbGci...`"))
                         .addSchemas(API_RESPONSE_OBJECT_SCHEMA, apiResponseObjectSchema())
                         .addSchemas(VALIDATION_ERROR_SCHEMA, validationErrorSchema())
                         .addResponses("BadRequest", errorResponse("Request body, parameter hoặc field không hợp lệ.", true))
@@ -102,35 +109,35 @@ public class OpenApiConfig {
                         .addResponses("InternalServerError", errorResponse("Lỗi hệ thống không mong muốn.", false)))
                 .tags(List.of(
                         new Tag().name("Authentication").description("Nhóm API dùng cho đăng nhập Google, làm mới token, đăng xuất và lấy thông tin user hiện tại. FE dùng nhóm này ở đầu luồng onboarding và khi cần khôi phục phiên đăng nhập."),
-                        new Tag().name("Google Calendar").description("Nhóm API kết nối, kiểm tra trạng thái và ngắt kết nối Google Calendar để backend tự tạo Google Meet và đồng bộ lịch cho booking."),
-                        new Tag().name("Academic Catalog").description("Nhóm API trả dữ liệu danh mục campus, program và specialization để điền form onboarding hoặc form cập nhật hồ sơ học thuật. Các endpoint master data này được cache 24h bằng HTTP Cache-Control và cache backend."),
-                        new Tag().name("Onboarding").description("Nhóm API tổng hợp trạng thái onboarding hiện tại của user để FE quyết định điều hướng tiếp theo như điền profile, hoàn thành nhu cầu mentoring hoặc nộp verification."),
-                        new Tag().name("Academic Profile").description("Nhóm API tạo và cập nhật hồ sơ học thuật của user hiện tại. FE dùng ở bước onboarding và ở những luồng mà việc hoàn thành profile ảnh hưởng đến quyền sử dụng tính năng."),
+                        new Tag().name("Google Calendar").description("Kết nối hoặc ngắt kết nối Google Calendar. FE dùng để cấp quyền trước khi hệ thống đồng bộ lịch booking và tạo Google Meet."),
+                        new Tag().name("Academic Catalog").description("Danh sách campus, program và specialization để điền form hồ sơ. FE chỉ cần đọc và hiển thị lựa chọn phù hợp."),
+                        new Tag().name("Onboarding").description("Cho biết người dùng đã hoàn thành bước nào và nên làm gì tiếp theo trong onboarding."),
+                        new Tag().name("Academic Profile").description("Xem và lưu hồ sơ học tập của người dùng hiện tại."),
                         new Tag().name("Mentee Matching Profile").description("Nhóm API lấy 5 câu hỏi nhu cầu mentoring và lưu câu trả lời flat của mentee để phục vụ Smart Matching."),
-                        new Tag().name("Mentor Profile").description("Nhóm API tạo và duy trì hồ sơ peer mentor: headline, mô tả, môn - điểm, 3 mức support, GitHub/portfolio và các mục project/achievement optional."),
-                        new Tag().name("Mentor Services").description("Nhóm API để mentor tạo, cập nhật, bật tắt hoặc lưu trữ các dịch vụ mentoring cụ thể. FE dùng nhóm này để quản lý các gói/dịch vụ mà mentee có thể chọn khi booking."),
+                        new Tag().name("Mentor Profile").description("Tạo và cập nhật hồ sơ mentor, dự án, thành tích và thông tin hiển thị trên trang tìm mentor. Trường bắt buộc được ghi trong schema."),
+                        new Tag().name("Mentor Services").description("Mentor tạo và quản lý các dịch vụ mà mentee có thể chọn khi đặt lịch."),
                         new Tag().name("Group Sessions").description("Nhóm API mentor quản lý supply/capacity và learner khám phá, giữ seat cho group session. Checkout, payment và refund vẫn tái sử dụng booking ID hiện có."),
-                        new Tag().name("Mentor Verification").description("Nhóm API mở, chỉnh sửa, nộp và theo dõi hồ sơ mentor verification cùng các minh chứng liên quan. FE dùng trong wizard xác thực mentor trước khi admin review."),
-                        new Tag().name("Mentor Discovery").description("Nhóm API để khám phá mentor, tìm kiếm/lọc kết quả discovery và xem thông tin public cùng review của mentor. FE dùng khi mentee đang tìm mentor trước khi tạo booking."),
+                        new Tag().name("Mentor Verification").description("Mở hồ sơ đăng ký mentor, tải minh chứng, nộp hồ sơ và theo dõi kết quả duyệt."),
+                        new Tag().name("Mentor Discovery").description("Tìm mentor, lọc kết quả, xem hồ sơ công khai và xem lịch trống trước khi đặt lịch."),
                         new Tag().name("Mentor Availability Slot").description("Nhóm API để mentor quản lý trực tiếp các slot rảnh (CRUD) và gắn các service có thể nhận mentoring trên từng slot."),
-                        new Tag().name("Availability Templates").description("Nhóm API để mentor cấu hình lịch lặp tuần, materialize concrete slots trong rolling horizon và quản lý exception theo ngày."),
-                        new Tag().name("Mentor Booking Policy").description("Nhóm API để mentor xem và cập nhật booking lead time, horizon và timezone cho các booking tương lai."),
+                        new Tag().name("Availability Templates").description("Tạo lịch rảnh lặp theo tuần và xử lý ngày ngoại lệ."),
+                        new Tag().name("Mentor Booking Policy").description("Xem và cập nhật thời gian báo trước, khoảng ngày được đặt và timezone của mentor."),
                         new Tag().name("Mentor Booking").description("Nhóm API cho toàn bộ vòng đời booking: mentee tạo request, hai bên xem chi tiết, mentor accept/reject, hai bên cancel/complete và mentor cập nhật meeting info. FE dùng nhóm này sau khi mentee đã chọn mentor, service và slot."),
-                        new Tag().name("Conversation").description("Nhóm API lấy direct conversation và đồng bộ tin nhắn theo sequence. Conversation được tạo khi booking trở thành effective; REST/DB là source of truth, STOMP chỉ là delivery hint."),
-                        new Tag().name("Notification").description("Nhóm API đọc danh sách thông báo, unread count và cập nhật trạng thái đã đọc của user hiện tại. FE dùng để dựng badge, dropdown và trang notification history."),
+                        new Tag().name("Conversation").description("Đọc, gửi và đồng bộ tin nhắn theo sequence. REST là nơi lấy lại lịch sử chính; realtime chỉ giúp cập nhật nhanh hơn."),
+                        new Tag().name("Notification").description("Đọc thông báo, xem số chưa đọc và đánh dấu đã đọc cho người dùng hiện tại."),
                         new Tag().name("Wallet").description("Nhóm API xem ví SCoin của mentee và ví settlement của mentor. FE dùng cho màn số dư, giao dịch gần nhất và trạng thái earnings."),
-                        new Tag().name("Payment Orders").description("Nhóm API tạo checkout, poll trạng thái payment theo booking và nhận webhook PayOS. FE chỉ gọi các endpoint /api/me, webhook dành cho provider."),
+                        new Tag().name("Payment Orders").description("Xem trước chi phí, tạo checkout và kiểm tra trạng thái thanh toán. Webhook chỉ dành cho PayOS, không gọi từ FE."),
                         new Tag().name("Payout Requests").description("Nhóm API mentor tạo payout request và admin duyệt/từ chối/mark-paid. FE mentor và FE admin dùng ở các màn tài chính beta."),
                         new Tag().name("Mentor Payout Profiles").description("Nhóm API mentor quản lý tài khoản nhận tiền payout. FE dùng để tạo, cập nhật và chọn payout profile trước khi tạo payout request."),
                         new Tag().name("Forum").description("Nhóm API forum nội bộ cho người dùng đăng bài, bình luận, thả reaction và report nội dung theo 4 chủ đề Hỏi đáp, Chia sẻ, Tìm kiếm và Review."),
                         new Tag().name("Blog").description("Nhóm API public blog cho bài viết SEO, kiến thức dev/non-tech, featured articles, view tracking nhẹ và author CTA tracking."),
-                        new Tag().name("File Storage").description("Khả năng storage và local-only upload simulator. Production upload phải dùng purpose-scoped upload intent của từng domain."),
-                        new Tag().name("SEO & Social Sharing").description("Public endpoints cho sitemap, robots và Open Graph share pages."),
+                        new Tag().name("File Storage").description("Internal/System - không dùng cho FE. FE nên dùng API upload của đúng module, không tự chọn object key."),
+                        new Tag().name("SEO & Social Sharing").description("Internal/System - không dùng cho màn hình nghiệp vụ. Dùng cho sitemap, robots và link chia sẻ công khai."),
                         new Tag().name("Review & Rating").description("Nhóm API để mentee gửi feedback sau buổi mentoring và để hệ thống hiển thị dữ liệu review của mentor. FE dùng sau khi booking đã hoàn thành."),
                         new Tag().name("Admin - Dashboard").description("Nhóm API snapshot, queue cards, queue drill-down và timeseries dành cho admin dashboard/workbench. FE admin dùng để hiển thị tổng quan vận hành, backlog cần xử lý và mở từng queue case cụ thể."),
-                        new Tag().name("Admin - Audit Logs").description("Nhóm API read-only để admin duyệt audit logs nội bộ theo actor, entity và action mà không cần truy vấn trực tiếp database."),
+                        new Tag().name("Admin - Audit Logs").description("Internal/System - không dùng cho FE người dùng. Tra cứu lịch sử thao tác khi vận hành."),
                         new Tag().name("Admin - Notes").description("Nhóm API nội bộ để admin ghi chú vận hành lên user, booking, report, payout và các target moderation khác."),
-                        new Tag().name("Admin - Email Outbox").description("Nhóm API để admin xem email outbox nội bộ, chẩn đoán delivery issue và retry lại các email đang FAILED."),
+                        new Tag().name("Admin - Email Outbox").description("Internal/System - không dùng cho FE người dùng. Chỉ vận hành dùng để kiểm tra và xử lý email lỗi."),
                         new Tag().name("Admin - Cases").description("Nhóm API workbench để admin nhận ownership case, gỡ ownership và xem operator activity nội bộ trên từng case vận hành."),
                         new Tag().name("Admin - Mentor Verification").description("Nhóm API cho admin review hồ sơ mentor verification, xem chi tiết request và xử lý quyết định theo cơ chế soft lock. FE admin dùng trong queue review và màn hình xử lý hồ sơ."),
                         new Tag().name("Admin - Mentoring Questionnaire").description("Nhóm API admin tạo version mới và activate bộ 5 câu hỏi nhu cầu mentoring."),

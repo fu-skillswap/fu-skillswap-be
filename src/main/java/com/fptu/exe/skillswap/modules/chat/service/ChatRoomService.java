@@ -23,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -226,26 +228,41 @@ public class ChatRoomService {
 
     @Transactional(readOnly = true)
     public List<UUID> getActiveRecipientUserIds(UUID conversationId, UUID senderId) {
-        return participantRepository.findByConversationId(conversationId).stream()
+        List<UUID> participantIds = participantRepository.findByConversationId(conversationId).stream()
                 .filter(p -> p.getAccessState() != ConversationParticipantAccess.REVOKED)
                 .map(p -> p.getUser().getId())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        Set<UUID> activeUserIds = activeUserIds(participantIds);
+        return participantIds.stream()
+                .filter(activeUserIds::contains)
                 .filter(id -> senderId == null || !id.equals(senderId))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<UUID> getConversationParticipantUserIds(UUID conversationId) {
-        return participantRepository.findByConversationId(conversationId).stream()
+        List<UUID> participantIds = participantRepository.findByConversationId(conversationId).stream()
+                .filter(p -> p.getAccessState() != ConversationParticipantAccess.REVOKED)
                 .map(p -> p.getUser().getId())
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        Set<UUID> activeUserIds = activeUserIds(participantIds);
+        return participantIds.stream()
+                .filter(activeUserIds::contains)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public boolean isParticipant(UUID conversationId, UUID userId) {
-        return participantRepository.existsByConversationIdAndUserId(conversationId, userId);
+        return userQueryPort.isUserActive(userId)
+                && participantRepository.existsByConversationIdAndUserId(conversationId, userId);
     }
 
     public void ensureParticipant(UUID conversationId, UUID userId) {
+        if (!userQueryPort.isUserActive(userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
+        }
         var participant = participantRepository.findByConversationIdAndUserId(conversationId, userId);
         if (participant.isEmpty() || participant.get().getAccessState() == ConversationParticipantAccess.REVOKED) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
@@ -255,5 +272,12 @@ public class ChatRoomService {
     private User resolveUser(UUID userId) {
         if (userId == null) return null;
         return userQueryPort.findUserById(userId).orElse(null);
+    }
+
+    private Set<UUID> activeUserIds(List<UUID> userIds) {
+        return userQueryPort.findUsersByIdIn(userIds).stream()
+                .filter(user -> user.getStatus() == com.fptu.exe.skillswap.modules.identity.domain.UserStatus.ACTIVE)
+                .map(User::getId)
+                .collect(Collectors.toSet());
     }
 }

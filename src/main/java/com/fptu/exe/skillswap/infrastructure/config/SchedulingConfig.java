@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.fptu.exe.skillswap.infrastructure.realtime.DomainEventOutboxPublisherScheduler;
 import com.fptu.exe.skillswap.shared.outbox.DynamicPeriodicTrigger;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -39,6 +40,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setThreadNamePrefix("sched-");
         scheduler.setPoolSize(5);
+        scheduler.setClock(Clock.system(TimeProvider.BUSINESS_ZONE));
         scheduler.setWaitForTasksToCompleteOnShutdown(true);
         scheduler.setAwaitTerminationSeconds(30);
         scheduler.initialize();

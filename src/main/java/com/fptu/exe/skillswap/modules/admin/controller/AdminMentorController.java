@@ -19,7 +19,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/mentors")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Mentors", description = "Admin list and details view for system mentors")
+@Tag(name = "Admin - Mentors", description = "Admin xem danh sách và thông tin chi tiết mentor trong hệ thống.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminMentorController {

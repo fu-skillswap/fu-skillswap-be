@@ -21,12 +21,14 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 
 /** Owns self-paced course escrow allocations and their hold-period settlement transitions. */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class CourseSettlementService {
+    private final TimeProvider timeProvider;
 
     private static final int HOLD_PERIOD_DAYS = 7;
 
@@ -51,7 +53,7 @@ public class CourseSettlementService {
         int mentorPayout = lockedEnrollment.getMentorPayoutScoin();
         int platformRevenue = Math.addExact(buyerFee, mentorCommission);
 
-        Instant eligibleAt = Instant.now().plus(HOLD_PERIOD_DAYS, ChronoUnit.DAYS);
+        Instant eligibleAt = timeProvider.instant().plus(HOLD_PERIOD_DAYS, ChronoUnit.DAYS);
 
         CourseEnrollmentSettlement settlement = CourseEnrollmentSettlement.builder()
                 .enrollment(lockedEnrollment)
@@ -70,7 +72,7 @@ public class CourseSettlementService {
 
     @Transactional
     public int markEligibleSettlements() {
-        Instant now = Instant.now();
+        Instant now = timeProvider.instant();
         List<CourseEnrollmentSettlement> heldSettlements = settlementRepository.findByStatus(CourseSettlementStatus.HELD);
         int changed = 0;
         for (CourseEnrollmentSettlement settlement : heldSettlements) {
@@ -126,7 +128,7 @@ public class CourseSettlementService {
                 "Course refund: " + enrollmentId, operationKey));
 
         allocation.setStatus(CourseSettlementStatus.REFUNDED);
-        allocation.setRefundedAt(Instant.now());
+        allocation.setRefundedAt(timeProvider.instant());
         allocation.setRefundReason(reason == null ? "LEARNER_REFUND" : reason);
         allocation.setRefundOperationKey(operationKey + ":" + allocation.getId());
 

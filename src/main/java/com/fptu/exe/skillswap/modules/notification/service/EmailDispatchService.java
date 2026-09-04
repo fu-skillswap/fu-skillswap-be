@@ -15,10 +15,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmailDispatchService implements EmailDispatchPort {
+
+    public static final int MAX_SEND_ATTEMPTS = 3;
 
     private final EmailService emailService;
     private final EmailOutboxRepository emailOutboxRepository;
@@ -106,21 +110,41 @@ public class EmailDispatchService implements EmailDispatchPort {
     @org.springframework.scheduling.annotation.Async("emailTaskExecutor")
     @Override
     public void dispatchEmailAsync(java.util.UUID outboxId) {
-        EmailOutbox outbox = emailOutboxRepository.findById(outboxId).orElse(null);
-        if (outbox == null || outbox.getStatus() != NotificationStatus.PENDING) {
+        int claimed = emailOutboxRepository.claimForSending(outboxId, LocalDateTime.now(), MAX_SEND_ATTEMPTS);
+        if (claimed != 1) {
+            log.debug("Email dispatch claim skipped eventId={}; it is already claimed, terminal, or exhausted",
+                    outboxId);
             return;
         }
+        EmailOutbox outbox = emailOutboxRepository.findById(outboxId).orElse(null);
+        if (outbox == null) {
+            log.error("Email dispatch claim has no outbox row eventId={}", outboxId);
+            return;
+        }
+        log.info("Email dispatch started eventId={} aggregateId={} retryCount={}",
+                outboxId, outbox.getDedupeKey(), outbox.getRetryCount());
         try {
             EmailPayload payload = deserializePayload(outbox);
             boolean sent = emailService.sendHtmlEmail(
                     payload.toEmail(),
                     payload.subject(),
                     payload.htmlBody(),
-                    payload.plainTextFallback()
+                    payload.plainTextFallback(),
+                    outboxId.toString()
             );
             self.updateOutboxStatus(outboxId, sent ? NotificationStatus.SENT : NotificationStatus.FAILED, sent ? null : "EmailService returned false");
+            log.info("Email dispatch finished eventId={} aggregateId={} retryCount={} status={}",
+                    outboxId, outbox.getDedupeKey(), outbox.getRetryCount(), sent ? NotificationStatus.SENT : NotificationStatus.FAILED);
+        } catch (EmailService.DeliveryOutcomeUnknownException e) {
+            log.error("Email dispatch outcome unknown eventId={} aggregateId={} retryCount={} reason={}",
+                    outboxId, outbox.getDedupeKey(), outbox.getRetryCount(), e.getMessage(), e);
+            // Retrying an SMTP timeout can duplicate a message that the provider accepted.
+            // Leave this terminal for manual reconciliation instead of automatic resend.
+            self.updateOutboxStatus(outboxId, NotificationStatus.FATAL_ERROR,
+                    "Provider outcome unknown: " + e.getMessage());
         } catch (Exception e) {
-            log.error("Error dispatching email outbox {}", outboxId, e);
+            log.error("Email dispatch failed eventId={} aggregateId={} retryCount={} reason={}",
+                    outboxId, outbox.getDedupeKey(), outbox.getRetryCount(), e.getMessage(), e);
             self.updateOutboxStatus(outboxId, NotificationStatus.FAILED, e.getMessage());
         }
     }

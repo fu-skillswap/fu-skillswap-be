@@ -23,14 +23,14 @@ import java.util.UUID;
 @RequestMapping("/api/mentor-services")
 @RequiredArgsConstructor
 @SecurityRequirement(name = "bearerAuth")
-@Tag(name = "Payment Orders")
+@Tag(name = "Payment Orders", description = "Xem trước chi phí dịch vụ và các ưu đãi có thể áp dụng.")
 public class PricingPreviewController {
 
     private final BookingPricingPreviewService pricingPreviewService;
 
     @GetMapping("/{serviceId}/pricing-preview")
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Preview personalized service price", description = "Returns a non-binding campaign estimate for the current user.")
+    @Operation(summary = "Xem trước giá dịch vụ cá nhân hóa", description = "Trả về ước tính giá và ưu đãi có thể áp dụng cho người dùng hiện tại. Kết quả chỉ để tham khảo và không tạo giao dịch.")
     public ApiResponse<ServicePricingPreviewResponse> preview(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID serviceId

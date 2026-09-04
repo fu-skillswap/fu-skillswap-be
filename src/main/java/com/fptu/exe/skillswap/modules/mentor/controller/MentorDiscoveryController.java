@@ -19,7 +19,10 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
@@ -45,6 +48,7 @@ public class MentorDiscoveryController {
             summary = "Lấy danh sách mentor gợi ý",
             description = "Trả về danh sách mentor gợi ý ngắn cho user hiện tại. FE dùng ở dashboard khi cần hiển thị nhanh các mentor phù hợp trước khi user mở trang discovery đầy đủ."
     )
+    @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách gợi ý mentor"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập")
@@ -60,11 +64,22 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Tìm kiếm mentor",
-            description = "Trả về danh sách mentor discoverable theo phân trang cho trang discovery. FE dùng keyword, campus, specialization và các sort/filter options đúng theo request schema hiện tại để dựng trải nghiệm browse/filter mentor."
+            description = "Trả về danh sách mentor phù hợp theo bộ lọc. Người chưa đăng nhập có thể xem kết quả công khai; một số luồng gợi ý cần đăng nhập. FE truyền `page` bắt đầu từ 0 và `size` tối đa 50. Kết quả không có dữ liệu vẫn trả danh sách rỗng, không phải lỗi. Có thể lọc theo keyword, campus và specialization."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Kết quả tìm kiếm mentor"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chỉ áp dụng cho các luồng yêu cầu đăng nhập")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Kết quả tìm kiếm mentor. Không có kết quả là trạng thái bình thường, FE hiển thị empty state thay vì báo lỗi.",
+                    content = @Content(mediaType = "application/json", examples = {
+                            @ExampleObject(name = "KeywordAndFilterMatch", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"content":[{"identity":{"mentorUserId":"019f5234-aaaa-bbbb-cccc-1234567890ab","displayName":"Nguyen Van B","avatarUrl":"https://cdn.skillswap.asia/avatar/b.jpg","headline":"Backend Developer | Spring Boot Mentor","isVerified":true},"mentoring":{"expertiseDescription":"Spring Boot và REST API","foundationSupportLevel":3,"outputReviewSupportLevel":3,"directionSupportLevel":2},"reputation":{"ratingState":"RATED","ratingAverage":4.8,"reviewCount":12,"completedSessions":18},"availability":{"isAvailable":true},"match":{"score":95.5}}],"page":0,"size":12,"totalElements":1,"totalPages":1,"last":true}}
+                                    """),
+                            @ExampleObject(name = "NoMentorFound", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"content":[],"page":0,"size":12,"totalElements":0,"totalPages":0,"last":true}}
+                                    """)
+                    })
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Bộ lọc không hợp lệ; kiểm tra page, size, sortBy hoặc ID filter")
     })
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
@@ -103,8 +118,13 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Xem trước lịch rảnh công khai của mentor",
-            description = "Cho phép người chưa đăng nhập xem lịch rảnh sơ bộ trong tối đa hai tuần trước khi quyết định đăng nhập. Response không trả quota, request, booking state hoặc candidate segments."
+            description = "Cho phép cả người chưa đăng nhập xem lịch rảnh sơ bộ trong tối đa hai tuần. API chỉ giúp chọn ngày/slot; không giữ chỗ, không trả booking state và chưa trả candidate segment. Sau khi đăng nhập, FE gọi API availability slots và candidates để tiếp tục đặt lịch."
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lịch rảnh công khai; không có slot là kết quả hợp lệ để hiển thị empty state."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Khoảng ngày hoặc timezone filter không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")
+    })
     @GetMapping("/{mentorUserId}/availability-preview")
     public ApiResponse<MentorPublicAvailabilityPreviewResponse> getPublicAvailabilityPreview(
             @PathVariable UUID mentorUserId,
@@ -125,6 +145,39 @@ public class MentorDiscoveryController {
                     để lấy exact candidate segments của đúng service đã chọn.
                     """
     )
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách slot cha còn hiển thị; không có slot là kết quả hợp lệ để FE hiển thị empty state.", content = @Content(examples = @ExampleObject(
+            name = "Slot và service có thể chọn",
+            value = """
+                    {
+                      "status": 200,
+                      "code": "SUCCESS_0200",
+                      "message": "Thành công",
+                      "data": [
+                        {
+                          "slotId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+                          "startTime": "2026-08-30T18:00:00",
+                          "endTime": "2026-08-30T20:00:00",
+                          "timezone": "Asia/Ho_Chi_Minh",
+                          "pendingRequestCount": 0,
+                          "acceptedSlotCount": 0,
+                          "services": [
+                            {
+                              "serviceId": "019f4234-bbbb-cccc-dddd-1234567890ab",
+                              "title": "Review Spring Boot",
+                              "durationMinutes": 60
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                    """))),
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Bộ lọc ngày, timezone hoặc phân trang không hợp lệ"),
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor"),
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Lịch mentor vừa thay đổi; tải lại availability trước khi chọn tiếp")
+    })
     @GetMapping("/{mentorUserId}/availability-slots")
     public ApiResponse<List<MentorAvailabilitySlotResponse>> getMentorAvailabilitySlots(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
@@ -139,8 +192,39 @@ public class MentorDiscoveryController {
             summary = "Lấy candidate segments của một service trong một availability slot",
             description = "FE gọi sau khi user đã chọn parent slot và selected service. Backend chỉ trả về exact candidate segments của đúng service được yêu cầu, đồng thời note rõ segment nào bị block bởi booking đã được chốt của cùng service hoặc service khác."
     )
+    @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment của service đã chọn"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách candidate segment của service đã chọn", content = @Content(examples = @ExampleObject(
+                    name = "Candidate có thể chọn",
+                    value = """
+                            {
+                              "status": 200,
+                              "code": "SUCCESS_0200",
+                              "message": "Thành công",
+                              "data": {
+                                "slotId": "019f5234-aaaa-bbbb-cccc-1234567890ab",
+                                "serviceId": "019f4234-bbbb-cccc-dddd-1234567890ab",
+                                "serviceDurationMinutes": 60,
+                                "candidateServiceSlots": [
+                                  {
+                                    "startTime": "2026-08-30T19:00:00",
+                                    "endTime": "2026-08-30T20:00:00",
+                                    "startAt": "2026-08-30T12:00:00Z",
+                                    "endAt": "2026-08-30T13:00:00Z",
+                                    "pendingCount": 0,
+                                    "remainingPendingQuota": 3,
+                                    "isSelectable": true,
+                                    "reasonIfBlocked": null,
+                                    "blockedByAcceptedBooking": false,
+                                    "blockingBookingId": null,
+                                    "blockedBySameService": false,
+                                    "blockedByDifferentService": false,
+                                    "bookingConflictNote": null
+                                  }
+                                ]
+                              }
+                            }
+                            """))),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor, slot hoặc service gắn với slot"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Slot hoặc service không còn khả dụng")
@@ -158,7 +242,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Lấy danh sách review của mentor",
-            description = "Trả về các review công khai của một mentor đang discoverable. FE dùng ở màn mentor detail khi user cần thêm tín hiệu đánh giá trước khi tạo booking request."
+            description = "Trả về review công khai của mentor. FE dùng ở màn chi tiết mentor trước khi tạo booking request. Danh sách dùng phân trang; không có review thì trả danh sách rỗng."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Danh sách review của mentor"),

@@ -31,18 +31,20 @@ public class GoogleCalendarController {
     private final GoogleCalendarConnectionService googleCalendarConnectionService;
 
     @GetMapping("/status")
-    @Operation(summary = "Lấy trạng thái kết nối Google Calendar")
+    @Operation(summary = "Xem trạng thái kết nối Google Calendar",
+            description = "FE gọi khi mở phần cài đặt lịch. Kết quả cho biết người dùng đã kết nối hay chưa; API không yêu cầu người dùng đăng nhập lại với Google.")
     public ApiResponse<GoogleCalendarStatusResponse> getStatus(@AuthenticationPrincipal UserPrincipal principal) {
         ensurePrincipal(principal);
         return ApiResponse.success(googleCalendarConnectionService.getStatus(principal.getPublicId()));
     }
 
     @GetMapping("/authorization-context")
-    @Operation(summary = "Tạo state và PKCE context để mentor kết nối Google Calendar")
+    @Operation(summary = "Chuẩn bị kết nối Google Calendar",
+            description = "FE gọi trước khi mở màn hình cấp quyền Google. Backend trả context dùng một lần cho OAuth/PKCE; FE không tự tạo state hoặc lưu Google secret.")
     public ApiResponse<GoogleAuthorizationContextResponse> issueAuthorizationContext(
             @AuthenticationPrincipal UserPrincipal principal,
-            @RequestParam String redirectUri,
-            @RequestParam String codeChallenge
+            @io.swagger.v3.oas.annotations.Parameter(description = "URL FE sẽ nhận kết quả OAuth", example = "https://app.skillswap.asia/settings/calendar/callback") @RequestParam String redirectUri,
+            @io.swagger.v3.oas.annotations.Parameter(description = "PKCE code challenge do FE tạo theo chuẩn OAuth", example = "S256-example-code-challenge") @RequestParam String codeChallenge
     ) {
         ensurePrincipal(principal);
         return ApiResponse.success(googleCalendarConnectionService.issueAuthorizationContext(
@@ -53,7 +55,8 @@ public class GoogleCalendarController {
     }
 
     @PostMapping("/connect")
-    @Operation(summary = "Kết nối Google Calendar bằng authorization code flow")
+    @Operation(summary = "Hoàn tất kết nối Google Calendar",
+            description = "FE gửi authorization code nhận được từ Google cùng context tương ứng. Lỗi 400 thường có nghĩa code hết hạn, redirect URL không khớp hoặc context đã dùng.")
     public ApiResponse<GoogleCalendarStatusResponse> connect(@AuthenticationPrincipal UserPrincipal principal,
                                                              @Valid @RequestBody GoogleCalendarConnectRequest request) {
         ensurePrincipal(principal);
@@ -61,7 +64,8 @@ public class GoogleCalendarController {
     }
 
     @PostMapping("/disconnect")
-    @Operation(summary = "Ngắt kết nối Google Calendar hiện tại", description = "Không thể ngắt khi mentor còn service active hoặc còn booking PAID trong tương lai.")
+    @Operation(summary = "Ngắt kết nối Google Calendar",
+            description = "Xóa kết nối hiện tại. Không thể ngắt khi mentor còn service đang hoạt động hoặc còn booking đã thanh toán trong tương lai.")
     public ApiResponse<GoogleCalendarStatusResponse> disconnect(@AuthenticationPrincipal UserPrincipal principal) {
         ensurePrincipal(principal);
         return ApiResponse.success(googleCalendarConnectionService.disconnect(principal.getPublicId()));

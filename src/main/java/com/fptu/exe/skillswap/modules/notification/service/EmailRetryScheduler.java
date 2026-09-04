@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 @Component
 @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(prefix = "application.scheduling", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -21,14 +22,20 @@ public class EmailRetryScheduler {
     private final EmailOutboxRepository emailOutboxRepository;
     private final EmailDispatchService emailDispatchService;
 
-    @Scheduled(cron = "0 */5 * * * *")
+    @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void retryFailedEmails() {
         String threadName = Thread.currentThread().getName();
         log.info("[{}] Bắt đầu tiến trình retry gửi email FAILED...", threadName);
-        int fatalCount = emailOutboxRepository.updateFailedToFatalError(3);
+        int fatalCount = emailOutboxRepository.updateFailedToFatalError(EmailDispatchService.MAX_SEND_ATTEMPTS);
         if (fatalCount > 0) {
             log.warn("[{}] Đã chuyển {} email FAILED sang FATAL_ERROR do vượt quá số lần retry.", threadName, fatalCount);
+        }
+
+        int uncertainCount = emailOutboxRepository.quarantineStaleSending(LocalDateTime.now().minusMinutes(15));
+        if (uncertainCount > 0) {
+            log.error("[{}] Đã chuyển {} email SENDING stale sang FATAL_ERROR; delivery outcome is unknown and requires manual review.",
+                    threadName, uncertainCount);
         }
         
         List<EmailOutbox> pendingEmails = emailOutboxRepository.findBatchByStatusForUpdate(
@@ -41,7 +48,7 @@ public class EmailRetryScheduler {
 
         List<EmailOutbox> failedEmails = emailOutboxRepository.findRetryBatchForUpdate(
                 NotificationStatus.FAILED,
-                3,
+                EmailDispatchService.MAX_SEND_ATTEMPTS,
                 PageRequest.of(0, 10)
         );
         if (failedEmails.isEmpty()) {
@@ -52,6 +59,8 @@ public class EmailRetryScheduler {
         log.info("[{}] Tìm thấy {} email FAILED cần retry.", threadName, failedEmails.size());
         for (EmailOutbox outbox : failedEmails) {
             log.info("[{}] Đang retry gửi email ID: {}", threadName, outbox.getId());
+            // Reset to PENDING in this transaction; the worker atomically claims it as
+            // SENDING before invoking the provider.
             emailOutboxRepository.updateStatus(outbox.getId(), NotificationStatus.PENDING, null);
             emailDispatchService.dispatchEmailAsync(outbox.getId());
         }

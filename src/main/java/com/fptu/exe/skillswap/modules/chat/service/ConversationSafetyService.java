@@ -15,9 +15,11 @@ import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRep
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationUserBlockRepository;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorViolationCommandPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.event.OperatorAuditIntent;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,6 +43,7 @@ public class ConversationSafetyService {
     private final ConversationUserBlockRepository conversationUserBlockRepository;
     private final ChatReportRepository chatReportRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserQueryPort userQueryPort;
     private MentorViolationCommandPort mentorViolationCommandPort;
 
     @Autowired(required = false)
@@ -59,7 +62,8 @@ public class ConversationSafetyService {
                         .blockerUserId(blockerUserId)
                         .blockedUserId(blockedUserId)
                         .build()));
-        return new ConversationBlockResponse(conversationId, blockerUserId, block.getBlockedUserId(), true, block.getCreatedAt());
+        return new ConversationBlockResponse(conversationId, blockerUserId, block.getBlockedUserId(), true,
+                BusinessTime.toInstant(block.getCreatedAt()));
     }
 
     @Transactional
@@ -160,6 +164,9 @@ public class ConversationSafetyService {
     }
 
     private Conversation requireParticipantConversation(UUID conversationId, UUID userId, boolean lock) {
+        if (!userQueryPort.isUserActive(userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
+        }
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này");
         }
@@ -190,6 +197,7 @@ public class ConversationSafetyService {
         return new ChatReportResponse(
                 report.getId(), report.getConversation().getId(), report.getReporterUserId(), report.getReportedUserId(),
                 report.getReasonType(), report.getDescription(), report.getStatus(), report.getReviewedByUserId(),
-                report.getReviewNote(), report.getResolvedAt(), report.getCreatedAt());
+                report.getReviewNote(), BusinessTime.toInstant(report.getResolvedAt()),
+                BusinessTime.toInstant(report.getCreatedAt()));
     }
 }

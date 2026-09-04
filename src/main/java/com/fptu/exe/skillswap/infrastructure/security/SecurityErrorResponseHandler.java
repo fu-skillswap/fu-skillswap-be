@@ -36,7 +36,7 @@ public class SecurityErrorResponseHandler implements AuthenticationEntryPoint, A
 
     private void writeError(HttpServletResponse response, ErrorCode errorCode, String message) throws IOException {
         ApiResponse<Object> body = ApiResponse.builder()
-                .timestamp(DateTimeUtil.now())
+                .timestamp(DateTimeUtil.instantNow())
                 .status(errorCode.getStatus())
                 .code(errorCode.getCode())
                 .message(message)

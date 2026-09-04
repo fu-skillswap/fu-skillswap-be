@@ -6,9 +6,9 @@ import lombok.Builder;
 import java.util.List;
 
 @Builder
-@Schema(description = "Cursor-based pagination response wrapper for infinite scroll and keyset pagination.")
+@Schema(description = "Response phân trang bằng cursor, phù hợp với infinite scroll. FE phải giữ nguyên cursor do server trả về.")
 public record CursorPageResponse<T>(
-        @Schema(description = "List of items in the current cursor window")
+        @Schema(description = "Danh sách phần tử trong lượt lấy dữ liệu hiện tại")
         List<T> items,
         @Schema(
                 description = "Opaque cursor to fetch the next window. Client phải truyền lại nguyên giá trị này và không được decode, sửa hoặc tự tạo cursor.",
@@ -21,11 +21,11 @@ public record CursorPageResponse<T>(
                 nullable = true
         )
         String prevCursor,
-        @Schema(description = "True if a next window exists", example = "true")
+        @Schema(description = "Cho biết còn lượt dữ liệu tiếp theo hay không", example = "true")
         boolean hasNext,
-        @Schema(description = "True if a previous window exists", example = "false")
+        @Schema(description = "Cho biết còn lượt dữ liệu phía trước hay không", example = "false")
         boolean hasPrev,
-        @Schema(description = "Resolved limit for this cursor window", example = "20")
+        @Schema(description = "Số phần tử thực tế tối đa trong lượt hiện tại", example = "20")
         int limit
 ) {
 }

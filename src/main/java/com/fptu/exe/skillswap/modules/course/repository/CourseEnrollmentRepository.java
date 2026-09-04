@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.course.repository;
 
 import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollment;
 import com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -23,6 +25,8 @@ public interface CourseEnrollmentRepository extends JpaRepository<CourseEnrollme
     List<CourseEnrollment> findByCourseId(UUID courseId);
     
     boolean existsByCourseIdAndStudentUserIdAndStatusIn(UUID courseId, UUID studentUserId, List<EnrollmentStatus> statuses);
+
+    Slice<CourseEnrollment> findByCourseIdAndStatusIn(UUID courseId, List<EnrollmentStatus> statuses, Pageable pageable);
     
     
     Optional<CourseEnrollment> findByPaymentOrderId(UUID paymentOrderId);

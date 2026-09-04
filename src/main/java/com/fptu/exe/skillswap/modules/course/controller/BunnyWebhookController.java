@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 
@@ -23,14 +24,19 @@ import java.util.UUID;
 @RequestMapping("/api/webhooks/bunny")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Webhooks", description = "Endpoints for external webhooks")
+@Tag(name = "Internal/System", description = "Không dùng cho FE. Provider gọi callback vào các endpoint này.")
 public class BunnyWebhookController {
 
     private final CourseVaultService courseVaultService;
     private final BunnyWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
 
-    @Operation(summary = "Handle Bunny webhook events for video encoding")
+    @Operation(summary = "Nhận callback Bunny cho trạng thái xử lý video", description = "Internal/System - không dùng cho FE. Bunny gọi callback này; FE chỉ xem trạng thái video qua API Course. Signature sai trả 401, payload không đọc được trả 400.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Callback đã được tiếp nhận"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Payload provider không hợp lệ"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Signature callback không hợp lệ")
+    })
     @PostMapping("/video-events")
     public ResponseEntity<Void> handleBunnyWebhook(
             @RequestHeader(value = "Signature", required = false) String signatureHeader,

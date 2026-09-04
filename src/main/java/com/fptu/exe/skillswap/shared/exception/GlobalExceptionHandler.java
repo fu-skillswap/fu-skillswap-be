@@ -241,7 +241,7 @@ public class GlobalExceptionHandler {
     ) {
         applyTraceIdHeader();
         ApiResponse<Object> response = ApiResponse.builder()
-                .timestamp(DateTimeUtil.now())
+                .timestamp(DateTimeUtil.instantNow())
                 .status(errorCode.getStatus())
                 .code(errorCode.getCode())
                 .message(message != null ? message : errorCode.getMessage())

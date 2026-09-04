@@ -228,7 +228,7 @@ class BookingFlowIntegrationTest {
         CreateBookingRequest createRequest = new CreateBookingRequest(
                 slotToBook.getId(),
                 mentorService.getId(),
-                slotToBook.getStartTime().toInstant(java.time.ZoneOffset.UTC),
+                slotToBook.getStartTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 "Need help with Java generics",
                 "Wildcard boundaries explain"
         );

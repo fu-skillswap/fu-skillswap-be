@@ -10,12 +10,14 @@ import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.dto.response.ProviderNeutralUploadMetadata;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -44,7 +46,10 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
                 .expectedContentType(contentType)
                 .expiresAt(expiresAt)
                 .build());
-        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt, Map.of("Content-Type", contentType));
+        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt,
+                Map.of("Content-Type", contentType),
+                new ProviderNeutralUploadMetadata(null, intent.getId(), upload.uploadUrl(),
+                        expiresAt.toInstant(ZoneOffset.UTC), "BLOG_IMAGE", Map.of("Content-Type", contentType)));
     }
 
     @Transactional
@@ -96,7 +101,10 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
                 .expectedContentType(contentType)
                 .expiresAt(expiresAt)
                 .build());
-        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt, Map.of("Content-Type", contentType));
+        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt,
+                Map.of("Content-Type", contentType),
+                new ProviderNeutralUploadMetadata(null, intent.getId(), upload.uploadUrl(),
+                        expiresAt.toInstant(ZoneOffset.UTC), "PORTFOLIO_IMAGE", Map.of("Content-Type", contentType)));
     }
 
     @Transactional
@@ -159,7 +167,10 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
     }
 
     private PublicAssetUploadPort.FileAssetMetadata toResponse(StoredFile file) {
-        return new PublicAssetUploadPort.FileAssetMetadata(file.getId(), file.getPublicUrl(), file.getMimeType(), file.getSizeBytes() == null ? 0L : file.getSizeBytes());
+        String assetType = file.getPurpose() == FilePurpose.BLOG_IMAGE ? "BLOG_IMAGE" : "PORTFOLIO_IMAGE";
+        return new PublicAssetUploadPort.FileAssetMetadata(file.getId(), file.getPublicUrl(), file.getMimeType(),
+                file.getSizeBytes() == null ? 0L : file.getSizeBytes(),
+                new ProviderNeutralUploadMetadata(file.getId(), null, file.getPublicUrl(), null, assetType, Map.of()));
     }
 
     private StorageGateway storageGateway() {

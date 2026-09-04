@@ -1,11 +1,12 @@
 package com.fptu.exe.skillswap.modules.filestorage.controller;
 
-import com.fptu.exe.skillswap.modules.filestorage.dto.response.PresignedUploadResponse;
+import com.fptu.exe.skillswap.modules.filestorage.dto.response.InternalStorageUploadResponse;
 import com.fptu.exe.skillswap.modules.filestorage.dto.response.FileStorageCapabilityResponse;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
+import com.fptu.exe.skillswap.shared.dto.response.ProviderNeutralUploadMetadata;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,11 +37,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/files")
 @RequiredArgsConstructor
-@Tag(name = "File Storage", description = "API liên quan đến lưu trữ file và Cloudflare R2")
+@Tag(name = "File Upload", description = "API upload file cho các luồng được cấp quyền. FE dùng uploadUrl/asset ID; không cần biết bucket, provider hoặc object key.")
 public class FileStorageController {
 
     private final ObjectProvider<StorageGateway> storageGatewayProvider;
@@ -59,11 +63,11 @@ public class FileStorageController {
         return ApiResponse.success(new FileStorageCapabilityResponse(available, available, available, available));
     }
 
-    @Operation(summary = "Lấy Presigned URL để upload file", description = "Trả về một URL tạm thời (sống trong 15 phút) để client upload file trực tiếp lên Cloudflare R2 bằng HTTP PUT. Sau khi upload thành công, client sử dụng publicUrl để lưu vào database.")
+    @Operation(tags = {"Internal/System"}, summary = "Lấy URL tạm thời để upload file", description = "Internal/System - không dùng cho FE production. Endpoint local trả về objectKey để công cụ kiểm thử hoàn tất upload; các flow nghiệp vụ production phải dùng upload intent của module tương ứng.")
     @SecurityRequirement(name = "bearerAuth")
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/upload-url")
-    public ApiResponse<PresignedUploadResponse> getUploadUrl(
+    public ApiResponse<InternalStorageUploadResponse> getUploadUrl(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam(required = false) String filename,
             @RequestParam(required = false, defaultValue = "application/octet-stream") String contentType
@@ -77,18 +81,20 @@ public class FileStorageController {
         }
         StorageGateway storageGateway = requireStorageGateway();
         var presigned = storageGateway.generatePresignedUploadUrl(filename, contentType, verificationPrefix(principal));
-        return ApiResponse.success(PresignedUploadResponse.builder()
-                .uploadUrl(presigned.uploadUrl())
-                .publicUrl(null)
-                .objectKey(presigned.objectKey())
-                .build());
+        return ApiResponse.success(new InternalStorageUploadResponse(
+                presigned.uploadUrl(),
+                null,
+                presigned.objectKey(),
+                new ProviderNeutralUploadMetadata(null, null, presigned.uploadUrl(),
+                        Instant.now().plus(Math.max(storageProperties.getPresignedTtlMinutes(), 1), ChronoUnit.MINUTES),
+                        "VERIFICATION_DOCUMENT", Map.of())));
     }
 
-    @Operation(summary = "Local-only upload endpoint", description = "Chỉ bật ở profile local để FE có thể upload file thật vào local storage khi giả lập presigned upload flow.")
+    @Operation(tags = {"Internal/System"}, summary = "Local-only upload endpoint", description = "Internal/System - không dùng cho FE production. Chỉ bật ở profile local để kiểm thử upload.")
     @SecurityRequirement(name = "bearerAuth")
     @PreAuthorize("isAuthenticated()")
     @PostMapping(path = "/local-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ApiResponse<PresignedUploadResponse> localUpload(
+    public ApiResponse<InternalStorageUploadResponse> localUpload(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam String objectKey,
             @RequestPart("file") MultipartFile file
@@ -100,18 +106,14 @@ public class FileStorageController {
         }
         validateOwnedObjectKey(principal, objectKey);
         writeLocalObject(objectKey, file);
-        return ApiResponse.created(PresignedUploadResponse.builder()
-                .uploadUrl(null)
-                .publicUrl(null)
-                .objectKey(objectKey)
-                .build());
+        return ApiResponse.created(new InternalStorageUploadResponse(null, null, objectKey, null));
     }
 
-    @Operation(summary = "Local-only raw upload endpoint", description = "Chỉ bật ở profile local để mô phỏng direct PUT presigned upload.")
+    @Operation(tags = {"Internal/System"}, summary = "Local-only raw upload endpoint", description = "Internal/System - không dùng cho FE production. Chỉ bật ở profile local để kiểm thử direct upload.")
     @SecurityRequirement(name = "bearerAuth")
     @PreAuthorize("isAuthenticated()")
     @PutMapping(path = "/local-upload")
-    public ApiResponse<PresignedUploadResponse> localUploadRaw(
+    public ApiResponse<InternalStorageUploadResponse> localUploadRaw(
             @AuthenticationPrincipal UserPrincipal principal,
             @RequestParam String objectKey,
             @RequestBody byte[] body
@@ -123,11 +125,7 @@ public class FileStorageController {
         }
         validateOwnedObjectKey(principal, objectKey);
         writeLocalObject(objectKey, body);
-        return ApiResponse.created(PresignedUploadResponse.builder()
-                .uploadUrl(null)
-                .publicUrl(null)
-                .objectKey(objectKey)
-                .build());
+        return ApiResponse.created(new InternalStorageUploadResponse(null, null, objectKey, null));
     }
 
     private void ensureLocalProfile() {

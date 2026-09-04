@@ -65,7 +65,7 @@ class CourseEnrollmentServiceTest {
     }
 
     @Test
-    void testEnrollStudentAutoJoinsGroupChat() {
+    void testEnrollStudentPublishesActivationWithoutCreatingChatMembership() {
         when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
         when(enrollmentRepository.existsByCourseIdAndStudentUserId(courseId, studentUserId)).thenReturn(false);
         when(enrollmentRepository.save(any(CourseEnrollment.class))).thenAnswer(invocation -> invocation.getArgument(0));

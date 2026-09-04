@@ -140,11 +140,6 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thời gian bắt đầu không được để trống");
         }
         requestedStartAt = requestedStartAt.truncatedTo(java.time.temporal.ChronoUnit.MINUTES);
-        Instant vnAsUtc = requestedStartAt.minus(Duration.ofHours(7));
-        if ((requestedStartAt.isBefore(slotStartUtc) || requestedStartAt.isAfter(slotEndUtc))
-                && !vnAsUtc.isBefore(slotStartUtc) && !vnAsUtc.isAfter(slotEndUtc)) {
-            requestedStartAt = vnAsUtc;
-        }
         Instant requestedEndAt = requestedStartAt.plus(Duration.ofMinutes(serviceCandidate.durationMinutes()));
         LocalDateTime selectedStartTime = BookingTime.fromInstant(requestedStartAt);
         LocalDateTime selectedEndTime = BookingTime.fromInstant(requestedEndAt);

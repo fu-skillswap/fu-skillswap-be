@@ -34,7 +34,7 @@ public class NotificationRetentionScheduler {
     private final StorageLifecycleProperties properties;
     private final ObjectMapper objectMapper;
 
-    @Scheduled(cron = "${application.storage.lifecycle.notification-retention-cron:0 20 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.notification-retention-cron:0 20 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void archiveReadAndDeleteExpiredNotifications() {
         if (!properties.isArchiveEnabled()) {
             return;
@@ -59,7 +59,7 @@ public class NotificationRetentionScheduler {
         log.info("Notification retention archive completed. archived={}, users={}", totalArchived, userIds.size());
     }
 
-    @Scheduled(cron = "${application.storage.lifecycle.notification-unread-cleanup-cron:0 35 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.notification-unread-cleanup-cron:0 35 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void deleteExpiredUnreadNotifications() {
         int retentionDays = properties.getNotificationUnreadRetentionDays();

@@ -1336,7 +1336,7 @@ class BookingServiceTest {
         return new CreateBookingRequest(
                 slot.getId(),
                 serviceId,
-                slot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
+                slot.getStartTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 title,
                 description
         );

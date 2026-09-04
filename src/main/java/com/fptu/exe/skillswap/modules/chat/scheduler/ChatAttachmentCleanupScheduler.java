@@ -30,7 +30,7 @@ public class ChatAttachmentCleanupScheduler {
     private final StorageLifecycleProperties properties;
     private final ChatAttachmentCleanupPersistenceService persistenceService;
 
-    @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-cleanup-cron:0 50 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-cleanup-cron:0 50 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void markExpiredAttachments() {
         LocalDateTime now = com.fptu.exe.skillswap.shared.util.DateTimeUtil.now();
@@ -43,7 +43,7 @@ public class ChatAttachmentCleanupScheduler {
         log.info("Chat attachment expiry transition completed. expired={}", candidates.size());
     }
 
-    @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-delete-cron:0 55 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.chat-attachment-delete-cron:0 55 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void deleteExpiredObjects() {
         PublicStorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
         if (storageGateway == null) {

@@ -405,7 +405,7 @@ class BookingNotificationIntegrationTest {
         return new CreateBookingRequest(
                 testSlot.getId(),
                 mentorService.getId(),
-                testSlot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
+                testSlot.getStartTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 title,
                 description
         );

@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.blog.dto.request;
 
 import com.fptu.exe.skillswap.modules.blog.domain.BlogVisibility;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -9,16 +10,17 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 import java.util.UUID;
 
+@Schema(description = "Internal/Admin - không dùng cho FE người dùng. Cập nhật bài viết CMS với expectedVersion để tránh ghi đè thay đổi mới hơn.")
 public record AdminBlogPostUpdateRequest(
         @NotNull @PositiveOrZero Integer expectedVersion,
         @NotBlank @Size(max = 220) String title,
         @Size(max = 240) String slug,
         String excerpt,
         String contentMarkdown,
-        String coverImageUrl,
-        String coverImageObjectKey,
-        String ogImageUrl,
-        String ogImageObjectKey,
+        @Schema(description = "URL ảnh cover thuộc asset hợp lệ.", nullable = true) String coverImageUrl,
+        @Schema(description = "Internal field - FE không cần sử dụng. Object key ảnh cover trong storage.", nullable = true) String coverImageObjectKey,
+        @Schema(description = "URL ảnh Open Graph thuộc asset hợp lệ.", nullable = true) String ogImageUrl,
+        @Schema(description = "Internal field - FE không cần sử dụng. Object key ảnh Open Graph trong storage.", nullable = true) String ogImageObjectKey,
         BlogVisibility visibility,
         @Size(max = 220) String seoTitle,
         @Size(max = 320) String seoDescription,

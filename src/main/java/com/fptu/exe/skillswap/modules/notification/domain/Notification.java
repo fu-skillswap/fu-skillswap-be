@@ -48,6 +48,9 @@ public class Notification {
     @Column(name = "deep_link", length = 500)
     private String deepLink;
 
+    @Column(name = "dedupe_key", length = 200, unique = true)
+    private String dedupeKey;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 

@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@Tag(name = "System", description = "Server health check and diagnostic tools")
+@Tag(name = "System", description = "Internal/System - không dùng cho FE. Kiểm tra nhanh service còn hoạt động hay không.")
 public class HealthController {
 
     @Operation(

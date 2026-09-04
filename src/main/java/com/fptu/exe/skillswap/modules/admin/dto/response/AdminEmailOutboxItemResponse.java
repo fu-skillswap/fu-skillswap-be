@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Schema(description = "Một dòng email outbox dùng cho admin data center.")
+@Schema(description = "Internal/System - không dùng cho FE người dùng. Một dòng email outbox dùng cho admin vận hành.")
 public record AdminEmailOutboxItemResponse(
         @Schema(description = "Id email outbox", example = "019f1258-bdb6-7312-ac67-b289909329d1")
         UUID emailOutboxId,

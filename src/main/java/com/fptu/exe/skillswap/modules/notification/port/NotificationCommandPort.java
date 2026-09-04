@@ -6,6 +6,7 @@ import java.util.UUID;
 public interface NotificationCommandPort {
 
     void publish(NotificationIntent intent);
+    void publishIfAbsent(NotificationIntent intent);
 
     record NotificationIntent(
             UUID recipientUserId,

@@ -10,19 +10,19 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.scheduling.TaskScheduler;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith(MockitoExtension.class)
 class GroupChatFanoutDispatcherTest {
@@ -31,7 +31,7 @@ class GroupChatFanoutDispatcherTest {
     private RealtimeFanoutService realtimeFanoutService;
 
     @Mock
-    private TaskScheduler taskScheduler;
+    private ChatRealtimeDeliveryDeduplicationService deduplicationService;
 
     private GroupChatProperties properties;
     private GroupChatFanoutDispatcher dispatcher;
@@ -42,7 +42,8 @@ class GroupChatFanoutDispatcherTest {
         properties.setBatchSize(25);
         properties.setBatchDelayMs(50L);
 
-        dispatcher = new GroupChatFanoutDispatcher(realtimeFanoutService, properties, taskScheduler);
+        dispatcher = new GroupChatFanoutDispatcher(realtimeFanoutService, properties, deduplicationService);
+        when(deduplicationService.claim(any(), any())).thenReturn(true);
     }
 
     @Test
@@ -53,7 +54,7 @@ class GroupChatFanoutDispatcherTest {
                 .messageId(UUID.randomUUID())
                 .sequence(1L)
                 .conversationType(ConversationType.GROUP)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.parse("2026-06-24T04:45:00Z"))
                 .build();
 
         List<UUID> recipientIds = List.of(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
@@ -61,7 +62,6 @@ class GroupChatFanoutDispatcherTest {
         dispatcher.dispatchGroupMessage(conversationId, event, recipientIds);
 
         verify(realtimeFanoutService, times(3)).pushChatMessage(any(), eq(event));
-        verify(taskScheduler, never()).schedule(any(Runnable.class), any(Instant.class));
     }
 
     @Test
@@ -72,10 +72,10 @@ class GroupChatFanoutDispatcherTest {
                 .messageId(UUID.randomUUID())
                 .sequence(1L)
                 .conversationType(ConversationType.GROUP)
-                .createdAt(LocalDateTime.now())
+                .createdAt(Instant.parse("2026-06-24T04:45:00Z"))
                 .build();
 
-        // 60 recipients with batchSize = 25 -> Chunk 1 (25, immediate), Chunk 2 (25, scheduled), Chunk 3 (10, scheduled)
+        // 60 recipients with batchSize = 25 -> three synchronous chunks.
         List<UUID> recipientIds = new ArrayList<>();
         for (int i = 0; i < 60; i++) {
             recipientIds.add(UUID.randomUUID());
@@ -83,9 +83,43 @@ class GroupChatFanoutDispatcherTest {
 
         dispatcher.dispatchGroupMessage(conversationId, event, recipientIds);
 
-        // First 25 pushed immediately
-        verify(realtimeFanoutService, times(25)).pushChatMessage(any(), eq(event));
-        // Next 2 chunks scheduled via taskScheduler
-        verify(taskScheduler, times(2)).schedule(any(Runnable.class), any(Instant.class));
+        verify(realtimeFanoutService, times(60)).pushChatMessage(any(), eq(event));
+    }
+
+    @Test
+    void partialFailure_shouldRetryOnlyUndeliveredRecipients() {
+        UUID conversationId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        ChatMessageEvent event = ChatMessageEvent.builder()
+                .conversationId(conversationId)
+                .messageId(UUID.randomUUID())
+                .sequence(1L)
+                .conversationType(ConversationType.GROUP)
+                .createdAt(Instant.parse("2026-06-24T04:45:00Z"))
+                .build();
+        UUID firstRecipient = UUID.randomUUID();
+        UUID secondRecipient = UUID.randomUUID();
+
+        when(deduplicationService.claim(eventId, firstRecipient)).thenReturn(true, false);
+        when(deduplicationService.claim(eventId, secondRecipient)).thenReturn(true, true);
+        boolean[] failedOnce = {false};
+        doAnswer(invocation -> {
+            UUID recipientId = invocation.getArgument(0);
+            if (recipientId.equals(secondRecipient) && !failedOnce[0]) {
+                failedOnce[0] = true;
+                throw new IllegalStateException("temporary broker failure");
+            }
+            return null;
+        }).when(realtimeFanoutService).pushChatMessage(any(), eq(event));
+
+        assertThrows(IllegalStateException.class,
+                () -> dispatcher.dispatchGroupMessage(eventId, conversationId, event,
+                        List.of(firstRecipient, secondRecipient)));
+        dispatcher.dispatchGroupMessage(eventId, conversationId, event,
+                List.of(firstRecipient, secondRecipient));
+
+        verify(realtimeFanoutService, times(1)).pushChatMessage(firstRecipient, event);
+        verify(realtimeFanoutService, times(2)).pushChatMessage(secondRecipient, event);
+        verify(deduplicationService, times(1)).markDelivered(eventId, firstRecipient);
     }
 }

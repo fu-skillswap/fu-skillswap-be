@@ -17,7 +17,7 @@ public class BunnyWebhookEventsCleanupScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final StorageLifecycleProperties properties;
 
-    @Scheduled(cron = "${application.storage.lifecycle.bunny-webhook-cleanup-cron:0 45 2 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.bunny-webhook-cleanup-cron:0 45 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void executeCleanupJob() {
         int retentionDays = properties.getBunnyWebhookRetentionDays();
         if (retentionDays <= 0) {

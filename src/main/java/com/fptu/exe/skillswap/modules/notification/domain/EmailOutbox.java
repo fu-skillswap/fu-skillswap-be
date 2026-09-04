@@ -15,6 +15,7 @@ import java.util.UUID;
 @Table(name = "email_outbox", indexes = {
     @Index(name = "idx_email_outbox_to", columnList = "to_email"),
     @Index(name = "idx_email_outbox_status", columnList = "status"),
+    @Index(name = "idx_email_outbox_sending_started", columnList = "status, sending_started_at"),
     @Index(name = "idx_email_outbox_created", columnList = "created_at")
 })
 @Getter
@@ -56,6 +57,9 @@ public class EmailOutbox {
     @Column(name = "retry_count", nullable = false)
     @Builder.Default
     private Integer retryCount = 0;
+
+    @Column(name = "sending_started_at")
+    private LocalDateTime sendingStartedAt;
 
     @Column(name = "last_error", columnDefinition = "TEXT")
     private String lastError;

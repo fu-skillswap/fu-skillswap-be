@@ -26,7 +26,8 @@ public class UserAuthLookupAdapter implements UserAuthLookupPort {
                 .map(user -> new UserAuthSnapshot(
                         user.getId(),
                         user.getEmail(),
-                        new ArrayList<>(user.getRoles() == null ? java.util.List.of() : user.getRoles())
+                        new ArrayList<>(user.getRoles() == null ? java.util.List.of() : user.getRoles()),
+                        user.getStatus()
                 ));
     }
 }

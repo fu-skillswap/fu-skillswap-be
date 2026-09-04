@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationReadResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
@@ -26,9 +27,11 @@ public class ChatReadReceiptService {
     private final ConversationRepository conversationRepository;
     private final DomainEventOutboxService domainEventOutboxService;
     private final RealtimeOutboxProperties realtimeOutboxProperties;
+    private final UserQueryPort userQueryPort;
 
     @Transactional
     public ConversationReadResponse markConversationAsRead(UUID conversationId, UUID userId, long requestedSequence) {
+        requireActiveUser(userId);
         ConversationParticipant participant = participantRepository.findByConversationIdAndUserId(conversationId, userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này"));
         Conversation conversation = conversationRepository.findById(conversationId)
@@ -49,6 +52,7 @@ public class ChatReadReceiptService {
 
     @Transactional
     public void markConversationAsRead(UUID conversationId, UUID userId) {
+        requireActiveUser(userId);
         ConversationParticipant me = participantRepository.findByConversationIdAndUserId(conversationId, userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này"));
         LocalDateTime now = DateTimeUtil.now();
@@ -69,6 +73,12 @@ public class ChatReadReceiptService {
                         new ConversationService.ChatConversationUpdatedPayload(conversationId, userId)
                 );
             }
+        }
+    }
+
+    private void requireActiveUser(UUID userId) {
+        if (!userQueryPort.isUserActive(userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
         }
     }
 }

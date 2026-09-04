@@ -10,6 +10,8 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.net.SocketTimeoutException;
 
 @Slf4j
 @Service
@@ -57,6 +59,17 @@ public class EmailService {
     }
 
     public boolean sendHtmlEmail(String to, String subject, String htmlBody, String plainTextFallback) {
+        return sendHtmlEmail(to, subject, htmlBody, plainTextFallback, null);
+    }
+
+    /**
+     * Sends with a stable per-outbox identity. SMTP itself cannot provide a transactional
+     * idempotency guarantee, but the stable Message-ID/X-Idempotency-Key lets providers and
+     * receiving systems collapse retries when supported and prevents a new identity being
+     * generated for the same durable outbox row.
+     */
+    public boolean sendHtmlEmail(String to, String subject, String htmlBody, String plainTextFallback,
+                                 String idempotencyKey) {
         if (!mailEnabled) {
             log.info("Email service is disabled. Skipping HTML email to: {}, subject: {}", to, subject);
             return false;
@@ -77,6 +90,10 @@ public class EmailService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(plainTextFallback == null ? "" : plainTextFallback, htmlBody);
+            if (org.springframework.util.StringUtils.hasText(idempotencyKey)) {
+                message.setHeader("Message-ID", "<email-outbox-" + idempotencyKey + "@skillswap.asia>");
+                message.setHeader("X-Idempotency-Key", idempotencyKey);
+            }
             message.setHeader("Content-Language", "vi");
             message.setHeader("Content-Transfer-Encoding", "8bit");
 
@@ -84,9 +101,31 @@ public class EmailService {
             log.info("HTML email sent successfully to: {}", to);
             return true;
         } catch (Exception ex) {
+            if (isDeliveryOutcomeUnknown(ex)) {
+                throw new DeliveryOutcomeUnknownException("SMTP provider outcome is unknown", ex);
+            }
             log.error("Failed to send HTML email to: {}. Reason: {}", to, ex.getMessage(), ex);
             // Email is best-effort and must never roll back business transactions.
             return false;
+        }
+    }
+
+    private boolean isDeliveryOutcomeUnknown(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof SocketTimeoutException || current instanceof IOException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase(java.util.Locale.ROOT).matches(".*(timeout|timed out|connection reset|broken pipe).*")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static class DeliveryOutcomeUnknownException extends RuntimeException {
+        public DeliveryOutcomeUnknownException(String message, Throwable cause) {
+            super(message, cause);
         }
     }
 }

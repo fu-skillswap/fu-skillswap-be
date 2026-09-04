@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatAttachmentState;
 public interface ChatAttachmentRepository extends JpaRepository<ChatAttachment, UUID> {
  List<ChatAttachment> findByMessageId(UUID messageId);
+ List<ChatAttachment> findByMessageIdIn(Collection<UUID> messageIds);
  @org.springframework.data.jpa.repository.Query("select coalesce(sum(a.sizeBytes),0) from ChatAttachment a where a.message.sender.id=:userId and a.createdAt>=:since")
  long sumUploadedBytesByUserSince(@org.springframework.data.repository.query.Param("userId") UUID userId, @org.springframework.data.repository.query.Param("since") java.time.LocalDateTime since);
 

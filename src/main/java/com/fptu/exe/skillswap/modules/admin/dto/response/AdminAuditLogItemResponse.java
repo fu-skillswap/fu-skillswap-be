@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Schema(description = "Một dòng audit log nội bộ dùng cho admin data center.")
+@Schema(description = "Internal/System - không dùng cho FE người dùng. Một dòng audit log nội bộ dành cho admin.")
 public record AdminAuditLogItemResponse(
         @Schema(description = "Id audit log", example = "019f1258-bdb6-7312-ac67-b289909329d1")
         UUID auditLogId,
@@ -21,13 +21,13 @@ public record AdminAuditLogItemResponse(
         UUID entityId,
         @Schema(description = "Loại action", example = "UPDATE")
         String action,
-        @Schema(description = "Snapshot cũ dạng raw JSON/string", example = "{\"status\":\"ACTIVE\"}")
+        @Schema(description = "Internal/System - snapshot cũ dạng raw JSON/string.", example = "{\"status\":\"ACTIVE\"}")
         String oldValue,
-        @Schema(description = "Snapshot mới dạng raw JSON/string", example = "{\"status\":\"BANNED\"}")
+        @Schema(description = "Internal/System - snapshot mới dạng raw JSON/string.", example = "{\"status\":\"BANNED\"}")
         String newValue,
-        @Schema(description = "IP address được lưu trong audit log", example = "127.0.0.1")
+        @Schema(description = "Internal/System - IP address được lưu trong audit log.", example = "127.0.0.1")
         String ipAddress,
-        @Schema(description = "User-Agent được lưu trong audit log", example = "Mozilla/5.0")
+        @Schema(description = "Internal/System - User-Agent được lưu trong audit log.", example = "Mozilla/5.0")
         String userAgent
 ) {
 }

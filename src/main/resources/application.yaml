@@ -16,11 +16,19 @@ spring:
       data-source-properties:
         options: "-c lock_timeout=${DB_LOCK_TIMEOUT_MS:5000} -c statement_timeout=${DB_STATEMENT_TIMEOUT_MS:30000} -c idle_in_transaction_session_timeout=${DB_IDLE_IN_TX_TIMEOUT_MS:15000}"
 
+  jackson:
+    # Explicit product display timezone for legacy/local timestamp contracts.
+    time-zone: ${SPRING_JACKSON_TIME_ZONE:Asia/Ho_Chi_Minh}
+
   jpa:
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
+        # Preserve the current Vietnam-local semantics of legacy timestamp columns.
+        # A UTC column migration is intentionally out of scope for this hardening pass.
+        jdbc:
+          time_zone: ${HIBERNATE_JDBC_TIME_ZONE:Asia/Ho_Chi_Minh}
 
   flyway:
     enabled: ${FLYWAY_ENABLED:false}

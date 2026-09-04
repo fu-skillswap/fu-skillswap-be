@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.infrastructure.storage.PrivateStorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageObjectReader;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageLifecycleProperties;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatAttachment;
 import com.fptu.exe.skillswap.modules.chat.domain.ChatAttachmentState;
@@ -32,6 +33,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
@@ -113,6 +116,46 @@ public class ChatAttachmentService {
     }
 
     public void consumeAttachmentIntents(Conversation conversation, UUID userId, Message message, List<UUID> intentIds) {
+        consumeAttachmentIntents(conversation, userId, message, intentIds, null);
+    }
+
+    public Map<UUID, StorageGateway.ObjectMetadata> validateAttachmentIntents(
+            UUID conversationId,
+            UUID userId,
+            List<UUID> intentIds
+    ) {
+        if (intentIds == null || intentIds.isEmpty()) return Map.of();
+        if (intentIds.size() > 5) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
+
+        Map<UUID, StorageGateway.ObjectMetadata> validated = new LinkedHashMap<>();
+        for (UUID intentId : new LinkedHashSet<>(intentIds)) {
+            ChatUploadIntent intent = chatUploadIntentRepository.findById(intentId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID));
+            if (!intent.getConversation().getId().equals(conversationId)
+                    || !intent.getOwnerUserId().equals(userId)
+                    || intent.getStatus() != ChatUploadIntentStatus.PENDING_UPLOAD
+                    || intent.getExpiresAt().isBefore(DateTimeUtil.now())) {
+                throw new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID);
+            }
+
+            StorageGateway.ObjectMetadata metadata = storageObjectReader().headObject(intent.getStorageKey());
+            if (metadata.sizeBytes() != intent.getExpectedSizeBytes()
+                    || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) {
+                throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+            }
+            validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
+            validated.put(intentId, metadata);
+        }
+        return validated;
+    }
+
+    public void consumeAttachmentIntents(
+            Conversation conversation,
+            UUID userId,
+            Message message,
+            List<UUID> intentIds,
+            Map<UUID, StorageGateway.ObjectMetadata> validatedMetadata
+    ) {
         if (intentIds == null || intentIds.isEmpty()) return;
         if (intentIds.size() > 5) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
 
@@ -126,11 +169,18 @@ public class ChatAttachmentService {
                 throw new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID);
             }
 
-            var metadata = storageObjectReader().headObject(intent.getStorageKey());
+            var metadata = validatedMetadata == null
+                    ? storageObjectReader().headObject(intent.getStorageKey())
+                    : validatedMetadata.get(intentId);
+            if (metadata == null || !intent.getStorageKey().equals(metadata.objectKey())) {
+                throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
+            }
             if (metadata.sizeBytes() != intent.getExpectedSizeBytes() || !intent.getContentType().equalsIgnoreCase(metadata.contentType())) {
                 throw new BaseException(ErrorCode.CHAT_ATTACHMENT_INVALID);
             }
-            validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
+            if (validatedMetadata == null) {
+                validateAttachmentSignature(intent.getStorageKey(), intent.getContentType());
+            }
             int retentionDays = Math.max(1, storageLifecycleProperties.getChatAttachmentExpiryDays());
             chatAttachmentRepository.save(ChatAttachment.builder()
                     .message(message)

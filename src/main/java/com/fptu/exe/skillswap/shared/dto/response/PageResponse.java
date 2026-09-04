@@ -9,24 +9,24 @@ import io.swagger.v3.oas.annotations.media.Schema;
 
 @Data
 @Builder
-@Schema(description = "Standard pagination response wrapper. Used for list endpoints to support pagination.")
+@Schema(description = "Response phân trang dạng page cho các API lấy danh sách. page bắt đầu từ 0.")
 public class PageResponse<T> {
-    @Schema(description = "List of content items for the current page")
+    @Schema(description = "Danh sách phần tử trong trang hiện tại")
     private List<T> content;
 
-    @Schema(description = "Current page index (0-based)", example = "0")
+    @Schema(description = "Số thứ tự trang hiện tại, bắt đầu từ 0", example = "0")
     private int page;
 
-    @Schema(description = "Page size (number of items per page requested)", example = "10")
+    @Schema(description = "Số phần tử trong mỗi trang", example = "10")
     private int size;
 
-    @Schema(description = "Total number of elements matching the filter query across all pages", example = "101")
+    @Schema(description = "Tổng số phần tử phù hợp với bộ lọc trên tất cả các trang", example = "101")
     private long totalElements;
 
-    @Schema(description = "Total number of pages based on totalElements and size", example = "11")
+    @Schema(description = "Tổng số trang, tính từ totalElements và size", example = "11")
     private int totalPages;
 
-    @Schema(description = "Flag indicating if this page is the last page (no more items available)", example = "false")
+    @Schema(description = "Cho biết đây có phải trang cuối hay không", example = "false")
     private boolean last;
 }
 

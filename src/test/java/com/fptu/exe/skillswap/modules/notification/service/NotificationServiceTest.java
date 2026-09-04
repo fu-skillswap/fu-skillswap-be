@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
+import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
@@ -46,6 +47,8 @@ class NotificationServiceTest {
     @Mock
     private DomainEventOutboxService domainEventOutboxService;
     @Mock
+    private NotificationDedupeWriter notificationDedupeWriter;
+    @Mock
     private RealtimeOutboxProperties realtimeOutboxProperties;
     @Spy
     private com.fptu.exe.skillswap.modules.notification.strategy.NotificationTitleRegistry notificationTitleRegistry =
@@ -84,6 +87,27 @@ class NotificationServiceTest {
         assertEquals("Mentor đã nhận lịch", saved.getTitle());
         assertNull(saved.getReadAt());
         verify(domainEventOutboxService, times(2)).enqueue(any(), any(), any(), any());
+    }
+
+    @Test
+    void publishIfAbsent_shouldPersistOnlyOnceForAnnouncementRecipient() {
+        UUID announcementId = UUID.randomUUID();
+        NotificationCommandPort.NotificationIntent intent = new NotificationCommandPort.NotificationIntent(
+                userId, NotificationType.COURSE_ANNOUNCEMENT.name(), "Lesson", "Read this",
+                "COURSE_ANNOUNCEMENT", announcementId, "/courses/announcements");
+        when(notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityId(
+                userId, NotificationType.COURSE_ANNOUNCEMENT, "COURSE_ANNOUNCEMENT", announcementId))
+                .thenReturn(Optional.empty(), Optional.of(Notification.builder().id(UUID.randomUUID()).build()));
+        when(userQueryPort.existsById(userId)).thenReturn(true);
+        Notification persisted = Notification.builder().id(UUID.randomUUID()).recipientUserId(userId)
+                .type(NotificationType.COURSE_ANNOUNCEMENT).title("Lesson").build();
+        when(notificationDedupeWriter.persist(any(Notification.class))).thenReturn(persisted);
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(false);
+
+        notificationService.publishIfAbsent(intent);
+        notificationService.publishIfAbsent(intent);
+
+        verify(notificationDedupeWriter, times(1)).persist(any(Notification.class));
     }
 
     @Test

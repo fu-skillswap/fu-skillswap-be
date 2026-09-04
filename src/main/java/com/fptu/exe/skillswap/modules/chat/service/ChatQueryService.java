@@ -6,17 +6,23 @@ import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationType;
+import com.fptu.exe.skillswap.modules.chat.domain.CourseConversationContext;
 import com.fptu.exe.skillswap.modules.chat.domain.Message;
+import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationContextMetadata;
 import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.CourseConversationContextRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -43,9 +49,12 @@ public class ChatQueryService {
     private final ChatResponseMapper chatResponseMapper;
     private final InternalTelemetryService internalTelemetryService;
     private final CourseQueryPort courseQueryPort;
+    private final UserQueryPort userQueryPort;
+    private final CourseConversationContextRepository courseConversationContextRepository;
 
     @Transactional(readOnly = true)
     public Page<ConversationResponse> getMyConversations(UUID userId, Pageable pageable) {
+        requireActiveUser(userId);
         Page<Conversation> conversationsPage = conversationRepository.findByParticipantUserId(userId, pageable);
         if (conversationsPage.isEmpty()) {
             return Page.empty(pageable);
@@ -61,16 +70,18 @@ public class ChatQueryService {
         List<Object[]> unreadCountsRaw = messageRepository.countUnreadMessagesBatch(conversationIds, userId);
         Map<UUID, Long> unreadCountsMap = unreadCountsRaw.stream()
                 .collect(Collectors.toMap(row -> (UUID) row[0], row -> (Long) row[1], (a, b) -> a));
+        Map<UUID, CourseConversationContext> courseContexts = loadCourseContexts(conversations);
 
         return conversationsPage.map(conv -> {
             var access = chatAccessResolutionService.resolveMessagingAccess(conv, userId);
-            String courseTitle = conv.getType() == ConversationType.GROUP ? resolveCourseTitle(conv.getSourceId()) : null;
-            return chatResponseMapper.mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap, access, courseTitle);
+            return chatResponseMapper.mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap,
+                    access, resolveContextMetadata(conv, courseContexts));
         });
     }
 
     @Transactional(readOnly = true)
     public CursorPageResponse<ConversationResponse> getMyConversations(UUID userId, String cursor, Integer limit) {
+        requireActiveUser(userId);
         int resolvedLimit = chatResponseMapper.defaultLimit(limit, 20);
         String filterHash = "conversations|userId=" + userId;
         ChatResponseMapper.DecodedCursor decodedCursor = chatResponseMapper.decodeCursor(cursor, filterHash, "conversation");
@@ -96,12 +107,13 @@ public class ChatQueryService {
                 : messageRepository.countUnreadMessagesBatch(conversationIds, userId);
         Map<UUID, Long> unreadCountsMap = unreadCountsRaw.stream()
                 .collect(Collectors.toMap(row -> (UUID) row[0], row -> (Long) row[1], (a, b) -> a));
+        Map<UUID, CourseConversationContext> courseContexts = loadCourseContexts(visibleConversations);
 
         List<ConversationResponse> items = visibleConversations.stream()
                 .map(conv -> {
                     var access = chatAccessResolutionService.resolveMessagingAccess(conv, userId);
-                    String courseTitle = conv.getType() == ConversationType.GROUP ? resolveCourseTitle(conv.getSourceId()) : null;
-                    return chatResponseMapper.mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap, access, courseTitle);
+                    return chatResponseMapper.mapConversationResponse(conv, userId, participantsByConvId, unreadCountsMap,
+                            access, resolveContextMetadata(conv, courseContexts));
                 })
                 .toList();
 
@@ -116,20 +128,20 @@ public class ChatQueryService {
 
     @Transactional(readOnly = true)
     public Page<MessageResponse> getMessages(UUID conversationId, UUID userId, Pageable pageable, MessageRepository messageRepoOverride) {
+        requireActiveUser(userId);
         MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
         }
 
         Page<Message> messagePage = activeMessageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
-        List<MessageResponse> dtos = messagePage.getContent().stream()
-                .map(message -> chatResponseMapper.toMessageResponse(message, userId))
-                .toList();
+        List<MessageResponse> dtos = chatResponseMapper.toMessageResponses(messagePage.getContent(), userId);
         return new org.springframework.data.domain.PageImpl<>(dtos, pageable, messagePage.getTotalElements());
     }
 
     @Transactional(readOnly = true)
     public CursorPageResponse<MessageResponse> getMessages(UUID conversationId, UUID userId, String cursor, Integer limit) {
+        requireActiveUser(userId);
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
         }
@@ -155,9 +167,7 @@ public class ChatQueryService {
                 ? messageWindow.subList(0, resolvedLimit)
                 : messageWindow;
 
-        List<MessageResponse> items = visibleMessages.stream()
-                .map(message -> chatResponseMapper.toMessageResponse(message, userId))
-                .toList();
+        List<MessageResponse> items = chatResponseMapper.toMessageResponses(visibleMessages, userId);
 
         String nextCursor = null;
         if (hasNext && !items.isEmpty()) {
@@ -170,6 +180,7 @@ public class ChatQueryService {
 
     @Transactional(readOnly = true)
     public List<MessageResponse> getMessagesBySequence(UUID conversationId, UUID userId, Long beforeSequence, Long afterSequence, Integer limit) {
+        requireActiveUser(userId);
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
         }
@@ -184,11 +195,12 @@ public class ChatQueryService {
             messages = messageRepository.findLatestMessages(conversationId, PageRequest.of(0, resolvedLimit));
         }
 
-        return messages.stream().map(message -> chatResponseMapper.toMessageResponse(message, userId)).toList();
+        return chatResponseMapper.toMessageResponses(messages, userId);
     }
 
     @Transactional(readOnly = true)
     public ConversationResponse getConversationDetail(UUID conversationId, UUID userId) {
+        requireActiveUser(userId);
         Conversation conv = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
 
@@ -205,11 +217,14 @@ public class ChatQueryService {
 
         long unread = messageRepository.countUnreadMessages(conversationId, userId, me.getLastReadSequence());
 
+        ConversationContextMetadata context = resolveContextMetadata(
+                conv, loadCourseContexts(List.of(conv)));
+
         String otherUserName;
         String otherUserAvatarUrl;
         UUID otherUserId;
         if (conv.getType() == ConversationType.GROUP) {
-            otherUserName = resolveCourseTitle(conv.getSourceId());
+            otherUserName = context.courseTitle();
             otherUserAvatarUrl = null;
             otherUserId = conv.getMentorUserId();
         } else {
@@ -228,8 +243,8 @@ public class ChatQueryService {
                 .otherUserName(otherUserName)
                 .otherUserAvatarUrl(otherUserAvatarUrl)
                 .lastMessageContent(conv.getLastMessageContent())
-                .lastMessageAt(conv.getLastMessageAt())
-                .createdAt(conv.getCreatedAt())
+                .lastMessageAt(BusinessTime.toInstant(conv.getLastMessageAt()))
+                .createdAt(BusinessTime.toInstant(conv.getCreatedAt()))
                 .unreadCount(unread)
                 .myLastReadSequence(me != null ? me.getLastReadSequence() : 0L)
                 .otherLastReadSequence(other != null ? other.getLastReadSequence() : 0L)
@@ -238,14 +253,24 @@ public class ChatQueryService {
                 .canUploadAttachments(access.canUploadAttachments())
                 .canDownloadAttachments(access.canDownloadAttachments())
                 .readOnlyReason(access.readOnlyReason())
-                .messagingWindowEndsAt(access.messagingWindowEndsAt())
+                .userActionMessage(ConversationResponse.userActionMessage(access.readOnlyReason()))
+                .retryable(ConversationResponse.retryable(access.readOnlyReason()))
+                .messagingWindowEndsAt(BusinessTime.toInstant(access.messagingWindowEndsAt()))
                 .postSessionChatPermanent(access.postSessionChatPermanent())
                 .participantCount(conv.getType() == ConversationType.GROUP ? participants.size() : null)
+                .contextType(context.contextType())
+                .bookingId(context.bookingId())
+                .courseId(context.courseId())
+                .courseTitle(context.courseTitle())
+                .mentorUserId(context.mentorUserId())
+                .mentorName(context.mentorName())
+                .mentorAvatarUrl(context.mentorAvatarUrl())
                 .build();
     }
 
     @Transactional(readOnly = true)
     public long getTotalUnreadCount(UUID userId) {
+        requireActiveUser(userId);
         return messageRepository.countTotalUnreadMessages(userId);
     }
 
@@ -262,8 +287,67 @@ public class ChatQueryService {
         ));
     }
 
-    private String resolveCourseTitle(UUID courseId) {
-        if (courseId == null) return null;
-        return courseQueryPort.findCourseTitleById(courseId).orElse(null);
+    private Map<UUID, CourseConversationContext> loadCourseContexts(List<Conversation> conversations) {
+        List<UUID> directCourseConversationIds = conversations.stream()
+                .filter(conversation -> conversation.getSourceType() == ConversationSourceType.COURSE)
+                .filter(conversation -> conversation.getType() == ConversationType.DIRECT)
+                .map(Conversation::getId)
+                .toList();
+        if (directCourseConversationIds.isEmpty()) {
+            return Map.of();
+        }
+        return courseConversationContextRepository.findByConversationIdIn(directCourseConversationIds).stream()
+                .collect(Collectors.toMap(CourseConversationContext::getConversationId, context -> context));
+    }
+
+    private ConversationContextMetadata resolveContextMetadata(
+            Conversation conversation,
+            Map<UUID, CourseConversationContext> courseContexts
+    ) {
+        UUID bookingId = conversation.getSourceType() == ConversationSourceType.BOOKING
+                ? conversation.getSourceId() : null;
+        UUID courseId = null;
+        String contextType = conversation.getSourceType() == null
+                ? null : conversation.getSourceType().name();
+
+        if (conversation.getSourceType() == ConversationSourceType.COURSE) {
+            if (conversation.getType() == ConversationType.DIRECT) {
+                CourseConversationContext context = courseContexts.get(conversation.getId());
+                courseId = context == null ? null : context.getCourseId();
+                contextType = "COURSE_DIRECT";
+            } else {
+                courseId = conversation.getSourceId();
+                contextType = "COURSE_GROUP";
+            }
+        }
+
+        String courseTitle = courseId == null
+                ? null
+                : courseQueryPort.findCourseTitleById(courseId).orElse(null);
+        UUID mentorUserId = conversation.getMentorUserId();
+        if (mentorUserId == null && courseId != null) {
+            mentorUserId = courseQueryPort.findCourseChatContext(courseId)
+                    .map(CourseQueryPort.CourseChatContext::mentorUserId)
+                    .orElse(null);
+        }
+        UserSummaryRecord mentor = mentorUserId == null
+                ? null
+                : userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
+
+        return new ConversationContextMetadata(
+                contextType,
+                bookingId,
+                courseId,
+                courseTitle,
+                mentorUserId,
+                mentor == null ? null : mentor.fullName(),
+                mentor == null ? null : mentor.avatarUrl()
+        );
+    }
+
+    private void requireActiveUser(UUID userId) {
+        if (!userQueryPort.isUserActive(userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
+        }
     }
 }

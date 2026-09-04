@@ -15,8 +15,11 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,14 +55,15 @@ class EmailDispatchServiceTest {
             outbox.setId(UUID.randomUUID());
             return outbox;
         });
+        when(emailOutboxRepository.claimForSending(any(UUID.class), any(), any(Integer.class))).thenReturn(1);
         when(emailOutboxRepository.findById(any(UUID.class))).thenAnswer(invocation -> Optional.of(savedOutbox(invocation.getArgument(0))));
-        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body")).thenReturn(true);
+        when(emailService.sendHtmlEmail(eq("to@test.com"), eq("Subject"), eq("<p>Body</p>"), eq("Body"), anyString())).thenReturn(true);
 
         boolean accepted = service.sendHtmlOnce("key-2", "to@test.com", "Subject", "<p>Body</p>", "Body", "TEMPLATE");
 
         assertTrue(accepted);
         verify(emailOutboxRepository).saveAndFlush(any(EmailOutbox.class));
-        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body");
+        verify(emailService).sendHtmlEmail(eq("to@test.com"), eq("Subject"), eq("<p>Body</p>"), eq("Body"), anyString());
         verify(emailOutboxRepository).updateStatus(any(UUID.class), org.mockito.ArgumentMatchers.eq(NotificationStatus.SENT), org.mockito.ArgumentMatchers.isNull());
     }
 
@@ -79,11 +83,12 @@ class EmailDispatchServiceTest {
                 .retryCount(0)
                 .build();
         when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
-        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body")).thenReturn(false);
+        when(emailOutboxRepository.claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS))).thenReturn(1);
+        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body", outboxId.toString())).thenReturn(false);
 
         service.dispatchEmailAsync(outboxId);
 
-        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body");
+        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body", outboxId.toString());
         verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.FAILED, "EmailService returned false");
     }
 
@@ -101,11 +106,12 @@ class EmailDispatchServiceTest {
                 .retryCount(0)
                 .build();
         when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
-        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body")).thenReturn(true);
+        when(emailOutboxRepository.claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS))).thenReturn(1);
+        when(emailService.sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body", outboxId.toString())).thenReturn(true);
 
         service.dispatchEmailAsync(outboxId);
 
-        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body");
+        verify(emailService).sendHtmlEmail("to@test.com", "Subject", "<p>Body</p>", "Body", outboxId.toString());
         verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.SENT, null);
     }
 
@@ -122,12 +128,58 @@ class EmailDispatchServiceTest {
                 .retryCount(0)
                 .build();
         when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
-        when(emailService.sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body")).thenReturn(true);
+        when(emailOutboxRepository.claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS))).thenReturn(1);
+        when(emailService.sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body", outboxId.toString())).thenReturn(true);
 
         service.dispatchEmailAsync(outboxId);
 
-        verify(emailService).sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body");
+        verify(emailService).sendHtmlEmail("legacy@test.com", "Legacy subject", "Legacy body", "Legacy body", outboxId.toString());
         verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.SENT, null);
+    }
+
+    @Test
+    void retryAfterProviderSuccessButBeforeStatusUpdate_shouldNotClaimOrResend() {
+        UUID outboxId = UUID.randomUUID();
+        EmailOutbox outbox = EmailOutbox.builder()
+                .id(outboxId)
+                .toEmail("to@test.com")
+                .subject("Subject")
+                .body("Body")
+                .payloadData("{\"toEmail\":\"to@test.com\",\"subject\":\"Subject\",\"htmlBody\":\"Body\",\"plainTextFallback\":\"Body\"}")
+                .status(NotificationStatus.PENDING)
+                .retryCount(0)
+                .build();
+        when(emailOutboxRepository.claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS)))
+                .thenReturn(1, 0);
+        when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
+        when(emailService.sendHtmlEmail("to@test.com", "Subject", "Body", "Body", outboxId.toString()))
+                .thenReturn(true);
+
+        service.dispatchEmailAsync(outboxId);
+        // A second scheduler/consumer attempt observes the durable claim and cannot call SMTP.
+        service.dispatchEmailAsync(outboxId);
+
+        verify(emailService, times(1)).sendHtmlEmail("to@test.com", "Subject", "Body", "Body", outboxId.toString());
+        verify(emailOutboxRepository, times(2)).claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS));
+    }
+
+    @Test
+    void providerTimeout_shouldBecomeTerminalUnknownInsteadOfAutomaticRetry() {
+        UUID outboxId = UUID.randomUUID();
+        EmailOutbox outbox = EmailOutbox.builder()
+                .id(outboxId).toEmail("to@test.com").subject("Subject").body("Body")
+                .payloadData("{\"toEmail\":\"to@test.com\",\"subject\":\"Subject\",\"htmlBody\":\"Body\",\"plainTextFallback\":\"Body\"}")
+                .status(NotificationStatus.PENDING).retryCount(0).build();
+        when(emailOutboxRepository.claimForSending(eq(outboxId), any(), eq(EmailDispatchService.MAX_SEND_ATTEMPTS))).thenReturn(1);
+        when(emailOutboxRepository.findById(outboxId)).thenReturn(Optional.of(outbox));
+        when(emailService.sendHtmlEmail(any(), any(), any(), any(), eq(outboxId.toString())))
+                .thenThrow(new EmailService.DeliveryOutcomeUnknownException("SMTP provider outcome is unknown", null));
+
+        service.dispatchEmailAsync(outboxId);
+
+        verify(emailOutboxRepository).updateStatus(outboxId, NotificationStatus.FATAL_ERROR,
+                "Provider outcome unknown: SMTP provider outcome is unknown");
+        verify(emailService).sendHtmlEmail(any(), any(), any(), any(), eq(outboxId.toString()));
     }
 
     private EmailOutbox savedOutbox(UUID id) throws Exception {

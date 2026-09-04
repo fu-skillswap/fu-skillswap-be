@@ -8,6 +8,7 @@ import com.fptu.exe.skillswap.modules.chat.domain.ConversationType;
 import com.fptu.exe.skillswap.modules.chat.domain.Message;
 import com.fptu.exe.skillswap.modules.chat.domain.MessageState;
 import com.fptu.exe.skillswap.modules.chat.dto.response.ChatAttachmentResponse;
+import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationContextMetadata;
 import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
 import com.fptu.exe.skillswap.modules.chat.dto.response.MessageResponse;
 import com.fptu.exe.skillswap.modules.chat.repository.ChatAttachmentRepository;
@@ -16,6 +17,7 @@ import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -23,6 +25,8 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
@@ -40,7 +44,7 @@ public class ChatResponseMapper {
             Map<UUID, List<ConversationParticipant>> participantsByConvId,
             Map<UUID, Long> unreadCountsMap,
             BookingChatAccessPolicy.Access access,
-            String courseTitle
+            ConversationContextMetadata context
     ) {
         List<ConversationParticipant> participants = participantsByConvId.getOrDefault(conv.getId(), List.of());
         ConversationParticipant other = participants.stream()
@@ -57,7 +61,7 @@ public class ChatResponseMapper {
         String otherUserAvatarUrl;
         UUID otherUserId;
         if (conv.getType() == ConversationType.GROUP) {
-            otherUserName = courseTitle != null ? courseTitle : "Nhóm học tập";
+            otherUserName = context.courseTitle() != null ? context.courseTitle() : "Nhóm học tập";
             otherUserAvatarUrl = null;
             otherUserId = conv.getMentorUserId();
         } else {
@@ -74,8 +78,8 @@ public class ChatResponseMapper {
                 .otherUserName(otherUserName)
                 .otherUserAvatarUrl(otherUserAvatarUrl)
                 .lastMessageContent(conv.getLastMessageContent())
-                .lastMessageAt(conv.getLastMessageAt())
-                .createdAt(conv.getCreatedAt())
+                .lastMessageAt(BusinessTime.toInstant(conv.getLastMessageAt()))
+                .createdAt(BusinessTime.toInstant(conv.getCreatedAt()))
                 .unreadCount(unread)
                 .myLastReadSequence(me != null ? me.getLastReadSequence() : 0L)
                 .otherLastReadSequence(other != null ? other.getLastReadSequence() : 0L)
@@ -84,17 +88,78 @@ public class ChatResponseMapper {
                 .canUploadAttachments(access.canUploadAttachments())
                 .canDownloadAttachments(access.canDownloadAttachments())
                 .readOnlyReason(access.readOnlyReason())
-                .messagingWindowEndsAt(access.messagingWindowEndsAt())
+                .userActionMessage(ConversationResponse.userActionMessage(access.readOnlyReason()))
+                .retryable(ConversationResponse.retryable(access.readOnlyReason()))
+                .messagingWindowEndsAt(BusinessTime.toInstant(access.messagingWindowEndsAt()))
                 .postSessionChatPermanent(access.postSessionChatPermanent())
                 .participantCount(conv.getType() == ConversationType.GROUP ? participants.size() : null)
+                .contextType(context.contextType())
+                .bookingId(context.bookingId())
+                .courseId(context.courseId())
+                .courseTitle(context.courseTitle())
+                .mentorUserId(context.mentorUserId())
+                .mentorName(context.mentorName())
+                .mentorAvatarUrl(context.mentorAvatarUrl())
                 .build();
     }
 
     public MessageResponse toMessageResponse(Message msg, UUID userId) {
-        return toMessageResponse(msg, userId, resolveOtherLastReadSequence(msg.getConversation().getId(), userId));
+        return toMessageResponse(msg, userId,
+                resolveOtherLastReadSequence(msg.getConversation().getId(), userId),
+                chatAttachmentRepository.findByMessageId(msg.getId()));
     }
 
     public MessageResponse toMessageResponse(Message msg, UUID userId, long otherLastReadSequence) {
+        return toMessageResponse(msg, userId, otherLastReadSequence,
+                chatAttachmentRepository.findByMessageId(msg.getId()));
+    }
+
+    /**
+     * Maps a page of messages using one attachment query and one participant query.
+     * The single-message mapper remains for command/replay responses.
+     */
+    public List<MessageResponse> toMessageResponses(List<Message> messages, UUID userId) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+
+        List<UUID> messageIds = messages.stream().map(Message::getId).toList();
+        List<UUID> conversationIds = messages.stream()
+                .map(message -> message.getConversation().getId())
+                .distinct()
+                .toList();
+
+        Map<UUID, List<ChatAttachment>> attachmentsByMessageId = chatAttachmentRepository
+                .findByMessageIdIn(messageIds).stream()
+                .collect(java.util.stream.Collectors.groupingBy(attachment -> attachment.getMessage().getId()));
+
+        Map<UUID, Long> otherLastReadByConversationId = new HashMap<>();
+        for (ConversationParticipant participant : participantRepository.findByConversationIdInWithUser(conversationIds)) {
+            if (!participant.getUser().getId().equals(userId)) {
+                UUID conversationId = participant.getConversation().getId();
+                otherLastReadByConversationId.merge(
+                        conversationId,
+                        participant.getLastReadSequence(),
+                        Math::max
+                );
+            }
+        }
+
+        return messages.stream()
+                .map(message -> toMessageResponse(
+                        message,
+                        userId,
+                        otherLastReadByConversationId.getOrDefault(
+                                message.getConversation().getId(), 0L),
+                        attachmentsByMessageId.getOrDefault(message.getId(), List.of())
+                ))
+                .toList();
+    }
+
+    private MessageResponse toMessageResponse(Message msg,
+                                               UUID userId,
+                                               long otherLastReadSequence,
+                                               List<ChatAttachment> attachments) {
         boolean mine = msg.getSender() != null && msg.getSender().getId().equals(userId);
         return MessageResponse.builder()
                 .id(msg.getId())
@@ -106,18 +171,22 @@ public class ChatResponseMapper {
                 .content(msg.getState() == MessageState.DELETED ? null : msg.getContent())
                 .state(msg.getState())
                 .version(msg.getVersion())
-                .editedAt(msg.getEditedAt())
-                .deletedAt(msg.getDeletedAt())
+                .editedAt(BusinessTime.toInstant(msg.getEditedAt()))
+                .deletedAt(BusinessTime.toInstant(msg.getDeletedAt()))
                 .isReadByOther(mine ? otherLastReadSequence >= msg.getSequence() : null)
-                .createdAt(msg.getCreatedAt())
+                .createdAt(BusinessTime.toInstant(msg.getCreatedAt()))
                 .isMine(mine)
-                .attachments(mapAttachments(msg.getId()))
+                .attachments(mapAttachmentResponses(attachments))
                 .build();
     }
 
     public List<ChatAttachmentResponse> mapAttachments(UUID messageId) {
         if (chatAttachmentRepository == null) return List.of();
-        return chatAttachmentRepository.findByMessageId(messageId).stream()
+        return mapAttachmentResponses(chatAttachmentRepository.findByMessageId(messageId));
+    }
+
+    private List<ChatAttachmentResponse> mapAttachmentResponses(Collection<ChatAttachment> attachments) {
+        return attachments.stream()
                 .map(a -> new ChatAttachmentResponse(
                         a.getId(),
                         a.getOriginalFilename(),
@@ -125,7 +194,7 @@ public class ChatResponseMapper {
                         a.getSizeBytes(),
                         inlineCapable(a.getContentType()),
                         a.getState() == ChatAttachmentState.ACTIVE && a.getExpiresAt().isAfter(DateTimeUtil.now()),
-                        a.getExpiresAt(),
+                        BusinessTime.toInstant(a.getExpiresAt()),
                         a.getState()))
                 .toList();
     }

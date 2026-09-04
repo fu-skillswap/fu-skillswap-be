@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationStatus;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationType;
+import com.fptu.exe.skillswap.modules.chat.domain.CourseConversationContext;
 import com.fptu.exe.skillswap.modules.chat.domain.Message;
 import com.fptu.exe.skillswap.modules.chat.dto.request.SendMessageRequest;
 import com.fptu.exe.skillswap.modules.chat.dto.response.ConversationResponse;
@@ -16,10 +17,12 @@ import com.fptu.exe.skillswap.modules.chat.repository.ConversationBookingLinkRep
 import com.fptu.exe.skillswap.modules.chat.repository.ChatAttachmentRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ChatUploadIntentRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
+import com.fptu.exe.skillswap.modules.chat.repository.CourseConversationContextRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationSafetyPolicy;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.course.port.CourseQueryPort;
@@ -32,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -90,6 +94,8 @@ class ConversationServiceUnitTest {
     @Mock
     private CourseQueryPort courseQueryPort;
     @Mock
+    private CourseConversationContextRepository courseConversationContextRepository;
+    @Mock
     private ChatAttachmentService chatAttachmentService;
     @Mock
     private ChatAccessResolutionService chatAccessResolutionService;
@@ -109,6 +115,15 @@ class ConversationServiceUnitTest {
     @BeforeEach
     void setUp() {
         lenient().when(conversationSafetyPolicy.apply(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        lenient().when(userQueryPort.isUserActive(any())).thenReturn(true);
+        lenient().when(userQueryPort.findUsersByIdIn(any())).thenAnswer(invocation ->
+                ((java.util.Collection<UUID>) invocation.getArgument(0)).stream().map(id -> {
+                    User user = new User();
+                    user.setId(id);
+                    user.setStatus(UserStatus.ACTIVE);
+                    return user;
+                }).toList());
+        lenient().when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
         bookingId = UUID.randomUUID();
         mentorUser = new User();
         mentorUser.setId(UUID.randomUUID());
@@ -156,7 +171,8 @@ class ConversationServiceUnitTest {
                 participantRepository,
                 conversationRepository,
                 domainEventOutboxService,
-                realtimeOutboxProperties
+                realtimeOutboxProperties,
+                userQueryPort
         );
         ChatQueryService chatQueryService = new ChatQueryService(
                 conversationRepository,
@@ -166,7 +182,9 @@ class ConversationServiceUnitTest {
                 chatAccessResolutionService,
                 chatResponseMapper,
                 internalTelemetryService,
-                courseQueryPort
+                courseQueryPort,
+                userQueryPort,
+                courseConversationContextRepository
         );
         ChatService chatService = new ChatService(
                 chatRoomService,
@@ -358,10 +376,16 @@ class ConversationServiceUnitTest {
         UUID senderId = UUID.randomUUID();
         SendMessageRequest request = new SendMessageRequest("Hello world!");
 
-        Conversation conversation = Conversation.builder().id(conversationId).type(ConversationType.DIRECT).build();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .sourceType(ConversationSourceType.COURSE)
+                .sourceId(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .build();
         User sender = new User(); sender.setId(senderId); sender.setFullName("Sender Name");
 
         when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
         when(conversationRepository.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
         when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
         when(userQueryPort.findUserById(senderId)).thenReturn(Optional.of(sender));
@@ -402,6 +426,121 @@ class ConversationServiceUnitTest {
     }
 
     @Test
+    void attachmentValidation_shouldCompleteBeforeConversationLock() {
+        UUID conversationId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        UUID attachmentIntentId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .type(ConversationType.DIRECT)
+                .nextSequence(0L)
+                .build();
+        User sender = new User();
+        sender.setId(senderId);
+        sender.setFullName("Sender");
+
+        when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(conversationRepository.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
+        when(userQueryPort.findUserById(senderId)).thenReturn(Optional.of(sender));
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(senderId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
+        doReturn(java.util.Map.of()).when(chatAttachmentService)
+                .validateAttachmentIntents(conversationId, senderId, List.of(attachmentIntentId));
+        doNothing().when(chatAttachmentService).consumeAttachmentIntents(
+                any(), any(), any(), any(), any());
+
+        InOrder order = inOrder(chatAttachmentService, conversationRepository);
+        conversationService.sendMessage(
+                conversationId,
+                senderId,
+                new SendMessageRequest(UUID.randomUUID(), "with attachment", null, List.of(attachmentIntentId))
+        );
+
+        order.verify(chatAttachmentService).validateAttachmentIntents(
+                conversationId, senderId, List.of(attachmentIntentId));
+        order.verify(conversationRepository).findByIdForUpdate(conversationId);
+    }
+
+    @Test
+    void sendMessage_shouldRejectInactiveUserBeforePersistence() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        User inactiveUser = new User();
+        inactiveUser.setId(userId);
+        inactiveUser.setStatus(UserStatus.INACTIVE);
+
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .type(ConversationType.DIRECT)
+                .nextSequence(0L)
+                .build();
+
+        when(participantRepository.existsByConversationIdAndUserId(conversationId, userId)).thenReturn(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
+        when(userQueryPort.findUserById(userId)).thenReturn(Optional.of(inactiveUser));
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(userId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
+
+        var exception = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> conversationService.sendMessage(conversationId, userId, new SendMessageRequest("blocked")));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, exception.getErrorCode());
+        verify(messageRepository, never()).save(any(Message.class));
+    }
+
+    @Test
+    void getMessages_shouldRejectDeletedUserBeforeReadingConversation() {
+        UUID conversationId = UUID.randomUUID();
+        UUID deletedUserId = UUID.randomUUID();
+        when(userQueryPort.isUserActive(deletedUserId)).thenReturn(false);
+
+        var exception = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> conversationService.getMessages(conversationId, deletedUserId, PageRequest.of(0, 10), null));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.ACCESS_DENIED, exception.getErrorCode());
+        verify(participantRepository, never()).existsByConversationIdAndUserId(any(), any());
+    }
+
+    @Test
+    void sendGroupMessage_shouldUseOutboxOnlyWhenRealtimeIsEnabled() {
+        UUID conversationId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        User sender = new User();
+        sender.setId(senderId);
+        sender.setFullName("Sender");
+        User recipient = new User();
+        recipient.setId(UUID.randomUUID());
+
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .type(ConversationType.GROUP)
+                .nextSequence(0L)
+                .build();
+        when(participantRepository.existsByConversationIdAndUserId(conversationId, senderId)).thenReturn(true);
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(conversationRepository.findByIdForUpdate(conversationId)).thenReturn(Optional.of(conversation));
+        when(userQueryPortProvider.getIfAvailable()).thenReturn(userQueryPort);
+        when(userQueryPort.findUserById(senderId)).thenReturn(Optional.of(sender));
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(senderId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, false));
+        when(realtimeOutboxProperties.isEnabled()).thenReturn(true);
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                ConversationParticipant.builder().conversation(conversation).user(sender).build(),
+                ConversationParticipant.builder().conversation(conversation).user(recipient).build()
+        ));
+
+        conversationService.sendMessage(conversationId, senderId, new SendMessageRequest("group message"));
+
+        verify(domainEventOutboxService, times(1)).enqueue(
+                eq("CONVERSATION"), eq(conversationId), eq(DomainEventOutboxEventTypes.CHAT_MESSAGE_CREATED), any());
+        verify(groupChatFanoutDispatcherProvider, never()).getIfAvailable();
+    }
+
+    @Test
     void buildChatMessageDeliveries_shouldExposePersistedSequence() {
         UUID conversationId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
@@ -432,6 +571,77 @@ class ConversationServiceUnitTest {
 
         assertEquals(1, deliveries.size());
         assertEquals(42L, deliveries.getFirst().event().sequence());
+    }
+
+    @Test
+    void buildChatMessageDeliveries_shouldSkipInactiveRecipients() {
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID senderId = UUID.randomUUID();
+        UUID inactiveRecipientId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .sourceType(ConversationSourceType.COURSE)
+                .sourceId(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .build();
+        User sender = new User();
+        sender.setId(senderId);
+        sender.setFullName("Sender");
+        Message message = Message.builder()
+                .id(messageId)
+                .conversation(conversation)
+                .sender(sender)
+                .sequence(42L)
+                .content("Ordered message")
+                .createdAt(LocalDateTime.now())
+                .build();
+        User inactiveRecipient = new User();
+        inactiveRecipient.setId(inactiveRecipientId);
+
+        doReturn(List.of(sender)).when(userQueryPort).findUsersByIdIn(any());
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                ConversationParticipant.builder().conversation(conversation).user(sender).build(),
+                ConversationParticipant.builder().conversation(conversation).user(inactiveRecipient).build()
+        ));
+
+        var deliveries = conversationService.buildChatMessageDeliveries(conversationId, messageId, senderId);
+
+        assertEquals(0, deliveries.size());
+        verify(userQueryPort, times(1)).findUsersByIdIn(any());
+    }
+
+    @Test
+    void messagePageMapping_shouldBatchAttachmentsAndReadReceipts() {
+        UUID userId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(UUID.randomUUID())
+                .type(ConversationType.DIRECT)
+                .build();
+        List<Message> messages = java.util.stream.IntStream.range(0, 50)
+                .mapToObj(index -> Message.builder()
+                        .id(UUID.randomUUID())
+                        .conversation(conversation)
+                        .sequence((long) index)
+                        .content("message-" + index)
+                        .build())
+                .toList();
+        when(chatAttachmentRepository.findByMessageIdIn(any())).thenReturn(List.of());
+        when(participantRepository.findByConversationIdInWithUser(any())).thenReturn(List.of());
+
+        List<MessageResponse> responses = new ChatResponseMapper(
+                cursorCodec,
+                chatAttachmentRepository,
+                participantRepository
+        ).toMessageResponses(messages, userId);
+
+        assertEquals(50, responses.size());
+        verify(chatAttachmentRepository, times(1)).findByMessageIdIn(any());
+        verify(participantRepository, times(1)).findByConversationIdInWithUser(any());
+        verify(chatAttachmentRepository, never()).findByMessageId(any());
+        verify(participantRepository, never()).findByConversationId(any());
     }
 
     @Test
@@ -480,6 +690,60 @@ class ConversationServiceUnitTest {
         assertEquals(otherUserId, response.otherUserId());
         assertEquals(5L, response.unreadCount());
         assertEquals(42L, response.myLastReadSequence());
+    }
+
+    @Test
+    void getConversationDetail_shouldExposeCourseContextMetadata() {
+        UUID conversationId = UUID.randomUUID();
+        UUID contextId = UUID.randomUUID();
+        UUID courseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        UUID mentorId = UUID.randomUUID();
+
+        User meUser = new User();
+        meUser.setId(userId);
+        User mentorUser = new User();
+        mentorUser.setId(mentorId);
+        mentorUser.setFullName("Course Mentor");
+
+        Conversation conversation = Conversation.builder()
+                .id(conversationId)
+                .sourceType(ConversationSourceType.COURSE)
+                .sourceId(contextId)
+                .type(ConversationType.DIRECT)
+                .status(ConversationStatus.ACTIVE)
+                .build();
+        ConversationParticipant me = ConversationParticipant.builder()
+                .conversation(conversation).user(meUser).lastReadSequence(0L).build();
+        ConversationParticipant mentor = ConversationParticipant.builder()
+                .conversation(conversation).user(mentorUser).build();
+
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationIdWithUser(conversationId)).thenReturn(List.of(me, mentor));
+        when(messageRepository.countUnreadMessages(conversationId, userId, 0L)).thenReturn(0L);
+        when(chatAccessResolutionService.resolveMessagingAccess(any(), eq(userId)))
+                .thenReturn(BookingChatAccessPolicy.Access.open(null, true));
+        when(courseConversationContextRepository.findByConversationIdIn(any()))
+                .thenReturn(List.of(CourseConversationContext.builder()
+                        .id(contextId).courseId(courseId).menteeUserId(userId)
+                        .conversationId(conversationId).build()));
+        when(courseQueryPort.findCourseTitleById(courseId)).thenReturn(Optional.of("Course X"));
+        when(courseQueryPort.findCourseChatContext(courseId))
+                .thenReturn(Optional.of(new CourseQueryPort.CourseChatContext(courseId, mentorId)));
+        when(userQueryPort.findUserSummaryById(mentorId)).thenReturn(Optional.of(
+                new com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord(
+                        mentorId, "mentor@example.com", "Course Mentor", "mentor.png",
+                        java.util.Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR),
+                        "ACTIVE", true)));
+
+        ConversationResponse response = conversationService.getConversationDetail(conversationId, userId);
+
+        assertEquals("COURSE_DIRECT", response.contextType());
+        assertEquals(courseId, response.courseId());
+        assertEquals("Course X", response.courseTitle());
+        assertEquals(mentorId, response.mentorUserId());
+        assertEquals("Course Mentor", response.mentorName());
+        assertEquals("mentor.png", response.mentorAvatarUrl());
     }
 
     @Test

@@ -1,16 +1,17 @@
 package com.fptu.exe.skillswap.modules.admin.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumCommentResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumPostResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumReportResponse;
+import com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumResponseMapper;
 import com.fptu.exe.skillswap.modules.forum.port.CreateForumProhibitedPhraseCommand;
 import com.fptu.exe.skillswap.modules.forum.port.ForumProhibitedPhraseView;
 import com.fptu.exe.skillswap.modules.forum.port.SetForumProhibitedPhraseActiveCommand;
 import com.fptu.exe.skillswap.modules.forum.port.UpdateForumProhibitedPhraseCommand;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentListQuery;
-import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.CommentView;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostListQuery;
-import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.PostView;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportListQuery;
-import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ReportView;
 import com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ResolveReportCommand;
 import com.fptu.exe.skillswap.modules.admin.service.AdminForumModerationService;
 import com.fptu.exe.skillswap.modules.admin.service.AdminForumProhibitedPhraseService;
@@ -20,6 +21,8 @@ import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -42,7 +45,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/forum")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Forum", description = "Nhóm API moderation forum dành cho admin để xử lý report, ẩn hoặc khôi phục nội dung.")
+@Tag(name = "Admin - Forum", description = "Admin - dành cho quản trị viên. Xử lý report, ẩn hoặc khôi phục nội dung forum; dữ liệu moderation không dùng cho public FE.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminForumController {
@@ -100,25 +103,36 @@ public class AdminForumController {
 
     @GetMapping("/reports")
     @Operation(summary = "Lấy queue forum reports")
-    public ApiResponse<PageResponse<ReportView>> getReports(@ParameterObject @ModelAttribute ReportListQuery request) {
-        return ApiResponse.success(adminForumModerationService.getReports(request));
+    public ApiResponse<PageResponse<AdminForumReportResponse>> getReports(@ParameterObject @ModelAttribute ReportListQuery request) {
+        return ApiResponse.success(AdminForumResponseMapper.reports(adminForumModerationService.getReports(request)));
     }
 
     @GetMapping("/reports/{reportId}")
     @Operation(summary = "Lấy chi tiết forum report")
-    public ApiResponse<ReportView> getReportDetail(@PathVariable UUID reportId) {
-        return ApiResponse.success(adminForumModerationService.getReportDetail(reportId));
+    public ApiResponse<AdminForumReportResponse> getReportDetail(@PathVariable UUID reportId) {
+        return ApiResponse.success(AdminForumResponseMapper.report(adminForumModerationService.getReportDetail(reportId)));
     }
 
     @PostMapping("/reports/{reportId}/resolve")
-    @Operation(summary = "Resolve forum report")
-    public ApiResponse<ReportView> resolveReport(
+    @Operation(summary = "Xử lý forum report", description = "Admin chọn action moderation và có thể ghi review note. Kết quả trả về trạng thái report và target sau xử lý.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+            responseCode = "200",
+            description = "Xử lý report thành công",
+            content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                    name = "ForumReportResolved",
+                    value = """
+                            {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"reportId":"019f8234-aaaa-bbbb-cccc-1234567890ab","targetType":"POST","targetId":"019f5234-aaaa-bbbb-cccc-1234567890ab","targetStatus":"HIDDEN","status":"RESOLVED","reviewNote":"Đã ẩn nội dung spam.","resolvedAt":"2026-09-04T03:35:00"}}
+                            """
+            ))
+    )
+    public ApiResponse<AdminForumReportResponse> resolveReport(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID reportId,
             @Valid @RequestBody ResolveReportCommand request
     ) {
         ensureAuthenticated(principal);
-        return ApiResponse.success(adminForumModerationService.resolveReport(principal.getPublicId(), reportId, request));
+        return ApiResponse.success(AdminForumResponseMapper.report(
+                adminForumModerationService.resolveReport(principal.getPublicId(), reportId, request)));
     }
 
     @GetMapping("/posts")
@@ -130,7 +144,7 @@ public class AdminForumController {
                     Lưu ý cho Frontend:
                     - `cursor` là opaque string, chỉ được lấy từ `nextCursor` của response trước đó.
                     - Không được decode, chỉnh sửa hoặc tự tạo cursor mới.
-                    - Response là `ApiResponse<CursorPageResponse<ForumPostResponse>>`.
+                    - Response là `ApiResponse<CursorPageResponse<AdminForumPostResponse>>`.
                     - Bộ lọc hỗ trợ `keyword`, `forumTopicId`, `authorId`, `status`.
                     """
     )
@@ -188,30 +202,32 @@ public class AdminForumController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin")
     })
-    public ApiResponse<CursorPageResponse<PostView>> getPosts(@ParameterObject @ModelAttribute PostListQuery request) {
-        return ApiResponse.success(adminForumModerationService.getAdminPosts(request));
+    public ApiResponse<CursorPageResponse<AdminForumPostResponse>> getPosts(@ParameterObject @ModelAttribute PostListQuery request) {
+        return ApiResponse.success(AdminForumResponseMapper.posts(adminForumModerationService.getAdminPosts(request)));
     }
 
     @GetMapping("/comments")
     @Operation(summary = "Lấy danh sách forum comments cho admin")
-    public ApiResponse<CursorPageResponse<CommentView>> getComments(@ParameterObject @ModelAttribute CommentListQuery request) {
-        return ApiResponse.success(adminForumModerationService.getAdminComments(request));
+    public ApiResponse<CursorPageResponse<AdminForumCommentResponse>> getComments(@ParameterObject @ModelAttribute CommentListQuery request) {
+        return ApiResponse.success(AdminForumResponseMapper.comments(adminForumModerationService.getAdminComments(request)));
     }
 
     @PostMapping("/posts/{postId}/restore")
     @Operation(summary = "Khôi phục bài viết forum đã bị ẩn")
-    public ApiResponse<PostView> restorePost(
+    public ApiResponse<AdminForumPostResponse> restorePost(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID postId) {
-        return ApiResponse.success(adminForumModerationService.restorePost(principal.getPublicId(), postId));
+        return ApiResponse.success(AdminForumResponseMapper.post(
+                adminForumModerationService.restorePost(principal.getPublicId(), postId)));
     }
 
     @PostMapping("/comments/{commentId}/restore")
     @Operation(summary = "Khôi phục bình luận forum đã bị ẩn")
-    public ApiResponse<CommentView> restoreComment(
+    public ApiResponse<AdminForumCommentResponse> restoreComment(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID commentId) {
-        return ApiResponse.success(adminForumModerationService.restoreComment(principal.getPublicId(), commentId));
+        return ApiResponse.success(AdminForumResponseMapper.comment(
+                adminForumModerationService.restoreComment(principal.getPublicId(), commentId)));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

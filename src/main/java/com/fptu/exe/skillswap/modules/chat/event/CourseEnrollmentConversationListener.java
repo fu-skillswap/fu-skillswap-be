@@ -17,7 +17,8 @@ class CourseEnrollmentConversationListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onActivated(CourseEnrollmentActivatedEvent event) {
-        courseConversationPort.addCourseStudentParticipant(event.courseId(), event.studentUserId());
+        // New enrollments use persistent course announcements and lazy direct chat.
+        // Keep legacy COURSE_GROUP participants unchanged; do not grow them here.
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

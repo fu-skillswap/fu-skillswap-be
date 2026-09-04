@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.course.scheduler;
 
 import com.fptu.exe.skillswap.modules.course.service.CourseSettlementService;
+import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,12 +19,13 @@ import java.util.UUID;
 public class CourseSettlementLifecycleScheduler {
 
     private final CourseSettlementService courseSettlementService;
+    private final TimeProvider timeProvider;
 
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void progressEscrowLifecycle() {
         try {
             int eligible = courseSettlementService.markEligibleSettlements();
-            Instant now = Instant.now();
+            Instant now = timeProvider.instant();
             int released = 0;
             for (UUID allocationId : courseSettlementService.findEligibleAllocationIdsBefore(now)) {
                 if (courseSettlementService.releaseEligibleAllocation(allocationId, now)) {

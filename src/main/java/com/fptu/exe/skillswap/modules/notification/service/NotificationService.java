@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.notification.port.NotificationCommandPort;
 import com.fptu.exe.skillswap.modules.notification.domain.Notification;
 import com.fptu.exe.skillswap.modules.notification.domain.NotificationRepository;
 import com.fptu.exe.skillswap.modules.notification.dto.response.NotificationResponse;
+import com.fptu.exe.skillswap.modules.notification.dto.event.NotificationRealtimeEvent;
 import com.fptu.exe.skillswap.shared.cursor.CursorCodec;
 import com.fptu.exe.skillswap.shared.cursor.CursorTokenPayload;
 import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
@@ -15,6 +16,7 @@ import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.modules.notification.strategy.NotificationTitleRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -23,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -39,6 +42,7 @@ public class NotificationService implements NotificationCommandPort {
     private final DomainEventOutboxService domainEventOutboxService;
     private final RealtimeOutboxProperties realtimeOutboxProperties;
     private final NotificationTitleRegistry notificationTitleRegistry;
+    private final NotificationDedupeWriter notificationDedupeWriter;
 
     @Transactional
     public void createNotification(UUID recipientUserId, NotificationType type, String title, String message,
@@ -62,6 +66,26 @@ public class NotificationService implements NotificationCommandPort {
                 intent.relatedEntityType(), intent.relatedEntityId(), intent.deepLink());
     }
 
+    @Override
+    @Transactional
+    public void publishIfAbsent(NotificationIntent intent) {
+        if (intent == null || intent.type() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu notification intent");
+        }
+        final NotificationType type;
+        try {
+            type = NotificationType.valueOf(intent.type());
+        } catch (IllegalArgumentException ex) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Loại thông báo không hợp lệ");
+        }
+        if (notificationRepository.findFirstByRecipientUserIdAndTypeAndRelatedEntityTypeAndRelatedEntityId(
+                intent.recipientUserId(), type, intent.relatedEntityType(), intent.relatedEntityId()).isPresent()) {
+            return;
+        }
+        createNotificationWithDedupeKey(intent.recipientUserId(), type, intent.title(), intent.message(),
+                intent.relatedEntityType(), intent.relatedEntityId(), intent.deepLink(), dedupeKey(intent, type));
+    }
+
     @Transactional
     public void createNotification(UUID recipientUserId,
             NotificationType type,
@@ -70,6 +94,13 @@ public class NotificationService implements NotificationCommandPort {
             String relatedEntityType,
             UUID relatedEntityId,
             String deepLink) {
+        createNotificationWithDedupeKey(recipientUserId, type, title, message, relatedEntityType,
+                relatedEntityId, deepLink, null);
+    }
+
+    private void createNotificationWithDedupeKey(UUID recipientUserId,
+            NotificationType type, String title, String message,
+            String relatedEntityType, UUID relatedEntityId, String deepLink, String dedupeKey) {
         if (!userQueryPort.existsById(recipientUserId)) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người nhận");
         }
@@ -82,9 +113,22 @@ public class NotificationService implements NotificationCommandPort {
                 .relatedEntityType(relatedEntityType)
                 .relatedEntityId(relatedEntityId)
                 .deepLink(deepLink)
+                .dedupeKey(dedupeKey)
                 .build();
 
-        notification = notificationRepository.save(notification);
+        if (dedupeKey == null) {
+            notification = notificationRepository.save(notification);
+        } else {
+            notification.setId(java.util.UUID.randomUUID());
+            try {
+                notification = notificationDedupeWriter.persist(notification);
+            } catch (DataIntegrityViolationException duplicate) {
+                // The unique dedupe key is the concurrency guard. A competing
+                // retry already created the notification, so this invocation is
+                // intentionally a no-op.
+                return;
+            }
+        }
         long unreadCount = notificationRepository.countByRecipientUserIdAndReadAtIsNull(recipientUserId);
 
         enqueueNotificationOutbox(notification, unreadCount, "CREATED");
@@ -201,6 +245,16 @@ public class NotificationService implements NotificationCommandPort {
         return mapToResponse(notification, unreadCount, realtimeEventKind);
     }
 
+    /**
+     * Builds the dedicated WebSocket projection without changing the legacy
+     * NotificationResponse method used by existing callers.
+     */
+    @Transactional(readOnly = true)
+    public NotificationRealtimeEvent getRealtimeNotificationEvent(UUID recipientUserId, UUID notificationId,
+            String realtimeEventKind) {
+        return NotificationRealtimeEvent.from(getRealtimeNotification(recipientUserId, notificationId, realtimeEventKind));
+    }
+
     private NotificationResponse mapToResponse(Notification notification) {
         return mapToResponse(notification, null, null);
     }
@@ -244,8 +298,8 @@ public class NotificationService implements NotificationCommandPort {
                 .deepLink(deepLink)
                 .actionType(actionType)
                 .read(notification.getReadAt() != null)
-                .readAt(notification.getReadAt())
-                .createdAt(notification.getCreatedAt())
+                .readAt(BusinessTime.toInstant(notification.getReadAt()))
+                .createdAt(BusinessTime.toInstant(notification.getCreatedAt()))
                 .unreadCount(unreadCount)
                 .realtimeEventKind(realtimeEventKind)
                 .build();
@@ -311,6 +365,11 @@ public class NotificationService implements NotificationCommandPort {
                         notification.getType().name(), eventKind, unreadCount));
         enqueueNotificationBadgeOutbox(notification.getId(), notification.getRecipientUserId(), unreadCount,
                 eventKind);
+    }
+
+    private String dedupeKey(NotificationCommandPort.NotificationIntent intent, NotificationType type) {
+        return "NOTIFICATION:" + intent.recipientUserId() + ":" + type.name() + ":"
+                + String.valueOf(intent.relatedEntityType()) + ":" + String.valueOf(intent.relatedEntityId());
     }
 
     private void enqueueNotificationBadgeOutbox(UUID aggregateId, UUID recipientUserId, long unreadCount,

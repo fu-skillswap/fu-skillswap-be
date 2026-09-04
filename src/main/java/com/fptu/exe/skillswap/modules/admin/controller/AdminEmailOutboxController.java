@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.admin.service.AdminEmailOutboxService;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +29,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/email-outbox")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Email Outbox", description = "Nhóm API để admin xem email outbox nội bộ, chẩn đoán delivery issue và retry lại các email đang FAILED.")
+@Tag(name = "Internal/System", description = "Internal/System - không dùng cho FE. Công cụ vận hành để kiểm tra email outbox và retry lỗi; body/lastError chỉ dành cho admin được cấp quyền.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminEmailOutboxController {
@@ -39,7 +41,16 @@ public class AdminEmailOutboxController {
             description = "Trả về danh sách email outbox có thể lọc theo status, templateCode, toEmail và createdAt range. FE admin dùng endpoint này để giám sát backlog email và điều hướng sang retry khi cần."
     )
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy email outbox thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Lấy email outbox thành công",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "EmailOutboxFailedItem",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"content":[{"emailOutboxId":"019f5234-aaaa-bbbb-cccc-1234567890ab","toEmail":"user@example.com","subject":"Booking update","templateCode":"BOOKING_ACCEPTED_EMAIL","status":"FAILED","retryCount":2,"createdAt":"2026-09-04T03:00:00","sentAt":null,"lastErrorPreview":"Provider timeout"}],"page":0,"size":20,"totalElements":1,"totalPages":1,"last":true}}
+                                    """
+                    ))
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền admin")
     })

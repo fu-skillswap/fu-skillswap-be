@@ -66,9 +66,12 @@ public class OpenApiFlowConfig {
             tag("Payout Requests", "Yêu cầu rút tiền", "Mentor tạo và theo dõi yêu cầu rút tiền."),
             tag("Forum", "Diễn đàn", "Đăng bài, bình luận, tương tác và báo cáo nội dung."),
             tag("Blog", "Blog", "Đọc, viết và quản lý bài viết."),
-            tag("Course Vault", "Tài liệu khóa học", "Tải lên và xem tài liệu hoặc video của khóa học."),
-            tag("File Storage", "Lưu trữ tệp", "Các API hỗ trợ tải tệp trong môi trường phát triển."),
-            tag("SEO & Social Sharing", "Chia sẻ và tìm kiếm", "Hỗ trợ link chia sẻ và công cụ tìm kiếm."),
+            tag("Course Vault", "Khóa học", "Xem và quản lý chương, tài liệu và video của khóa học."),
+            tag("Course curriculum", "Khóa học", "Xem và quản lý chương, tài liệu và thứ tự nội dung khóa học."),
+            tag("Course announcements", "Thông báo khóa học", "Đọc hoặc tạo thông báo dành cho người học trong khóa học."),
+            tag("Course chat", "Trò chuyện khóa học", "Mở cuộc trò chuyện trong phạm vi một khóa học."),
+            tag("File Storage", "Internal / System", "Internal/System - không dùng cho FE. Chỉ dùng cho vận hành hoặc local development."),
+            tag("SEO & Social Sharing", "Internal / System", "Internal/System - không dùng cho màn hình nghiệp vụ."),
             tag("Admin - Dashboard", "Quản trị - Tổng quan", "Số liệu chính và các hàng chờ cần xử lý."),
             tag("Admin - Mentor Verification", "Quản trị - Duyệt mentor", "Xem hồ sơ, yêu cầu bổ sung, duyệt hoặc từ chối mentor."),
             tag("Admin - Users", "Quản trị - Người dùng", "Xem danh sách và khóa hoặc mở khóa tài khoản."),
@@ -81,11 +84,11 @@ public class OpenApiFlowConfig {
             tag("Admin Chat Moderation", "Quản trị - Trò chuyện", "Xử lý báo cáo và khóa cuộc trò chuyện khi cần."),
             tag("Admin - Campaigns", "Quản trị - Chiến dịch", "Quản lý chương trình khuyến mãi."),
             tag("Admin - Coupons", "Quản trị - Mã giảm giá", "Quản lý mã giảm giá và lịch sử sử dụng."),
-            tag("Admin - Email Outbox", "Quản trị - Email", "Kiểm tra và gửi lại email bị lỗi."),
-            tag("Admin - Audit Logs", "Quản trị - Nhật ký", "Tra cứu lịch sử thao tác quản trị."),
+            tag("Admin - Email Outbox", "Internal / System", "Internal/System - không dùng cho FE người dùng. Chỉ vận hành dùng."),
+            tag("Admin - Audit Logs", "Internal / System", "Internal/System - không dùng cho FE người dùng. Chỉ vận hành dùng."),
             tag("System Admin - Roles", "Quản trị hệ thống - Phân quyền", "Cấp hoặc thu hồi quyền admin."),
-            tag("Webhooks", "Kết nối bên ngoài", "Nhận thông báo từ dịch vụ bên ngoài."),
-            tag("System", "Tình trạng hệ thống", "Kiểm tra dịch vụ có đang hoạt động hay không.")
+            tag("Webhooks", "Internal / System", "Internal/System - không dùng cho FE. Nhận callback từ dịch vụ bên ngoài."),
+            tag("System", "Internal / System", "Internal/System - không dùng cho FE. Kiểm tra tình trạng dịch vụ.")
     );
 
     private static final Map<String, TagRule> TAGS_BY_ORIGINAL_NAME = buildTagIndex();
@@ -185,15 +188,26 @@ public class OpenApiFlowConfig {
     public GroupedOpenApi integrationApis() {
         return group(
                 "07-integrations",
-                "7. Hệ thống và kết nối ngoài",
-                "/health",
-                "/api/files/**",
+                "7. Kết nối bên ngoài",
                 "/api/webhooks/**",
                 "/api/payments/webhook/**",
-                "/api/private-download/**",
                 "/share/**",
                 "/sitemap.xml",
                 "/robots.txt"
+        );
+    }
+
+    @Bean
+    public GroupedOpenApi internalSystemApis() {
+        return group(
+                "08-internal-system",
+                "8. Internal/System - không dùng cho FE",
+                "/health",
+                "/api/files/**",
+                "/api/private-download/**",
+                "/api/admin/email-outbox/**",
+                "/api/admin/audit-logs/**",
+                "/api/system/**"
         );
     }
 
@@ -242,7 +256,10 @@ public class OpenApiFlowConfig {
         }
         if (!VIETNAMESE_CHARACTER.matcher(description).find()
                 && ENGLISH_DESCRIPTION.matcher(description).find()) {
-            operation.setDescription(null);
+            // Keep a useful English technical note when a controller has not yet
+            // been translated. Removing it makes the generated contract less
+            // useful; the controller documentation pass can translate it later.
+            operation.setDescription(shorten(description));
             return;
         }
         operation.setDescription(shorten(description));
@@ -292,6 +309,14 @@ public class OpenApiFlowConfig {
 
         value = replaceIgnoreCase(value, "availability templates", "mẫu lịch rảnh");
         value = replaceIgnoreCase(value, "availability template", "mẫu lịch rảnh");
+        value = replaceIgnoreCase(value, "course curriculum", "chương trình khóa học");
+        value = replaceIgnoreCase(value, "course chapters", "chương khóa học");
+        value = replaceIgnoreCase(value, "course chapter", "chương khóa học");
+        value = replaceIgnoreCase(value, "mentor blog posts", "bài viết blog của mentor");
+        value = replaceIgnoreCase(value, "mentor blog post", "bài viết blog của mentor");
+        value = replaceIgnoreCase(value, "payment orders", "đơn thanh toán");
+        value = replaceIgnoreCase(value, "payout requests", "yêu cầu rút tiền");
+        value = replaceIgnoreCase(value, "payout profile", "tài khoản nhận tiền");
         value = replaceIgnoreCase(value, "booking quote", "báo giá booking");
         value = replaceIgnoreCase(value, "blog posts", "bài viết blog");
         value = replaceIgnoreCase(value, "blog post", "bài viết blog");

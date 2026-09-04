@@ -16,6 +16,9 @@ import com.fptu.exe.skillswap.shared.dto.response.CursorPageResponse;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,13 +52,27 @@ public class BlogController {
 
     @GetMapping("/posts")
     @Operation(
-            summary = "List published blog posts",
+            summary = "Lấy danh sách bài viết blog đã xuất bản",
             description = """
-                    Cursor-based public blog list.
-                    `cursor` is an opaque string: Frontend must not decode or create it, only pass back `nextCursor`.
-                    Visibility is resolved by requester: anonymous sees PUBLIC; authenticated users also see AUTHENTICATED.
+                    Danh sách bài viết public theo cursor pagination. FE chỉ truyền lại `nextCursor` ở lần gọi tiếp theo,
+                    không tự tạo hoặc decode cursor. Người chưa đăng nhập chỉ thấy bài viết public; bài cần đăng nhập sẽ
+                    được backend lọc theo tài khoản hiện tại. Danh sách rỗng là trạng thái bình thường.
                     """
     )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Danh sách bài viết blog",
+                    content = @Content(mediaType = "application/json", examples = {
+                            @ExampleObject(name = "PublishedPosts", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[{"id":"019f5234-aaaa-bbbb-cccc-1234567890ab","title":"Chuẩn bị phỏng vấn Backend Intern","slug":"chuan-bi-phong-van-backend-intern","excerpt":"Các bước ôn tập thực tế cho sinh viên.","coverImageUrl":"https://cdn.skillswap.asia/blog/backend-interview.jpg","author":{"userId":"019f6234-aaaa-bbbb-cccc-1234567890ab","displayName":"Nguyen Van B"},"readingTimeMinutes":6,"viewCount":120,"likeCount":18,"bookmarkCount":7,"likedByCurrentUser":false,"bookmarkedByCurrentUser":false,"featured":true,"publishedAt":"2026-09-04T03:00:00","categories":[],"tags":[]}],"nextCursor":"djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I","hasNext":true,"limit":20}}
+                                    """),
+                            @ExampleObject(name = "EmptyBlogList", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    """)
+                    })
+            )
+    })
     public ApiResponse<CursorPageResponse<BlogPostReaderCardResponse>> listPosts(
             @AuthenticationPrincipal UserPrincipal principal,
             @Parameter(description = "Opaque cursor from previous response nextCursor. Do not decode or modify.")
@@ -112,7 +129,23 @@ public class BlogController {
     }
 
     @GetMapping("/posts/{slug}")
-    @Operation(summary = "Get blog post detail by slug")
+    @Operation(
+            summary = "Lấy chi tiết bài viết blog theo slug",
+            description = "Public user dùng endpoint này để đọc bài viết đã xuất bản. Nội dung quản trị, storage metadata và thông tin moderation không nằm trong response public."
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Bài viết blog tồn tại và người dùng được phép xem",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "PublishedArticle",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ab","title":"Chuẩn bị phỏng vấn Backend Intern","slug":"chuan-bi-phong-van-backend-intern","excerpt":"Các bước ôn tập thực tế cho sinh viên.","contentMarkdown":"## Checklist\n- Ôn REST API\n- Luyện giải thích project","coverImageUrl":"https://cdn.skillswap.asia/blog/backend-interview.jpg","author":{"userId":"019f6234-aaaa-bbbb-cccc-1234567890ab","displayName":"Nguyen Van B"},"readingTimeMinutes":6,"likedByCurrentUser":false,"bookmarkedByCurrentUser":false,"featured":true,"publishedAt":"2026-09-04T03:00:00","categories":[],"tags":[]}}
+                                    """
+                    ))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy bài viết hoặc bài viết chưa được public")
+    })
     public ApiResponse<BlogPostReaderDetailResponse> getBySlug(
             @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable String slug

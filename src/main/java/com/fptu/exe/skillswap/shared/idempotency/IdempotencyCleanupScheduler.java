@@ -17,7 +17,7 @@ public class IdempotencyCleanupScheduler {
 
     private final IdempotencyKeyRepository idempotencyKeyRepository;
 
-    @Scheduled(cron = "0 0 2 * * *") // Chạy vào lúc 2:00 AM mỗi ngày
+    @Scheduled(cron = "0 0 2 * * *", zone = "Asia/Ho_Chi_Minh") // Chạy vào lúc 2:00 AM mỗi ngày
     @Transactional
     public void cleanupOldKeys() {
         log.info("[{}] Bắt đầu dọn dẹp các Idempotency Key quá hạn (lớn hơn 24h)...", Thread.currentThread().getName());

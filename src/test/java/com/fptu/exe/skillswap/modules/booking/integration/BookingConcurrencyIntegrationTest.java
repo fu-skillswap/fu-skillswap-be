@@ -185,11 +185,11 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
         BookingResponse bookingA = bookingService.createBooking(
                 setupData.menteeAId(),
-                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help A", "Spring transaction")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), "Need help A", "Spring transaction")
         );
         BookingResponse bookingB = bookingService.createBooking(
                 setupData.menteeBId(),
-                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help B", "REST API")
+                new CreateBookingRequest(setupData.slotId(), setupData.serviceId(), setupData.slotStart().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), "Need help B", "REST API")
         );
 
         CountDownLatch readyLatch = new CountDownLatch(2);
@@ -363,7 +363,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             assertTrue(startLatch.await(5, TimeUnit.SECONDS));
             try {
                 bookingService.createBooking(menteeId,
-                        new CreateBookingRequest(slotId, serviceId, start.toInstant(java.time.ZoneOffset.UTC),
+                        new CreateBookingRequest(slotId, serviceId, start.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                                 "Concurrent quota request", "Verify pending quota lock"));
                 return true;
             } catch (BaseException exception) {
@@ -503,12 +503,12 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
         // Mentee tạo 2 booking trùng thời gian
         BookingResponse booking1 = bookingService.createBooking(
                 setupData.menteeId(),
-                new CreateBookingRequest(setupData.slot1Id(), setupData.service1Id(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help 1", "Goal 1")
+                new CreateBookingRequest(setupData.slot1Id(), setupData.service1Id(), setupData.slotStart().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), "Need help 1", "Goal 1")
         );
 
         BookingResponse booking2 = bookingService.createBooking(
                 setupData.menteeId(),
-                new CreateBookingRequest(setupData.slot2Id(), setupData.service2Id(), setupData.slotStart().toInstant(java.time.ZoneOffset.UTC), "Need help 2", "Goal 2")
+                new CreateBookingRequest(setupData.slot2Id(), setupData.service2Id(), setupData.slotStart().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), "Need help 2", "Goal 2")
         );
 
         CountDownLatch readyLatch = new CountDownLatch(2);

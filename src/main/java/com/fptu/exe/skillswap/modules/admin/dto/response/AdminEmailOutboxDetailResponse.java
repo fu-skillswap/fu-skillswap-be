@@ -5,7 +5,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-@Schema(description = "Chi tiết email outbox dùng cho admin data center.")
+@Schema(description = "Internal/System - không dùng cho FE người dùng. Chi tiết email outbox dùng cho admin vận hành.")
 public record AdminEmailOutboxDetailResponse(
         @Schema(description = "Id email outbox", example = "019f1258-bdb6-7312-ac67-b289909329d1")
         UUID emailOutboxId,
@@ -25,9 +25,9 @@ public record AdminEmailOutboxDetailResponse(
         LocalDateTime sentAt,
         @Schema(description = "Bản rút gọn lỗi gần nhất để đọc nhanh trên list", example = "Authentication failed")
         String lastErrorPreview,
-        @Schema(description = "Toàn bộ HTML/text body đã lưu trong outbox")
+        @Schema(description = "Internal/System - nội dung email đã lưu trong outbox; chỉ hiển thị cho admin được cấp quyền.")
         String body,
-        @Schema(description = "Lỗi đầy đủ gần nhất từ pipeline gửi mail")
+        @Schema(description = "Internal/System - lỗi kỹ thuật gần nhất từ pipeline gửi mail; không hiển thị cho người dùng cuối.")
         String lastError
 ) {
 }

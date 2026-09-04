@@ -20,7 +20,7 @@ public class DomainEventOutboxCleanupScheduler {
     private final DomainEventOutboxBatchCleanupService batchCleanupService;
     private final RealtimeOutboxProperties properties;
 
-    @Scheduled(cron = "${application.realtime.outbox.cleanup-cron:0 0 2 * * *}")
+    @Scheduled(cron = "${application.realtime.outbox.cleanup-cron:0 0 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public int executeCleanupJob() {
         long startTimeMs = System.currentTimeMillis();
         LocalDateTime publishedBefore = DateTimeUtil.now().minusDays(properties.getRetentionDays());

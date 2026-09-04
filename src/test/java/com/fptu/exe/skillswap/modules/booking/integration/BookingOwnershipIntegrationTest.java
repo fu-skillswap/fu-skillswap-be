@@ -218,7 +218,7 @@ class BookingOwnershipIntegrationTest {
         var booking = bookingService.createBooking(menteeUser.getId(), new CreateBookingRequest(
                 slot.getId(),
                 mentorService.getId(),
-                slot.getStartTime().toInstant(java.time.ZoneOffset.UTC),
+                slot.getStartTime().atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 "Ownership help",
                 "Please help with access control"
         ));

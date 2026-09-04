@@ -35,7 +35,7 @@ public class OnboardingStatusController {
     @GetMapping
     @Operation(
             summary = "Lấy trạng thái onboarding của tôi",
-            description = "Trả về trạng thái hoàn thành student profile, mentor profile, verification status và gợi ý action tiếp theo cho FE điều hướng."
+            description = "Trả về trạng thái hoàn thành hồ sơ học tập, hồ sơ mentor, verification và hành động tiếp theo để FE điều hướng. API chỉ đọc. `nextRecommendedAction` có thể là `COMPLETE_STUDENT_PROFILE`, `REVISE_MENTOR_VERIFICATION`, `WAIT_FOR_APPROVE`, `COMPLETE_MENTOR_PROFILE_OR_EXPLORE`, `SUBMIT_MENTOR_VERIFICATION_OR_EXPLORE` hoặc `EXPLORE`."
     )
     public ApiResponse<OnboardingStatusResponse> getOnboardingStatus(
             @AuthenticationPrincipal UserPrincipal principal) {

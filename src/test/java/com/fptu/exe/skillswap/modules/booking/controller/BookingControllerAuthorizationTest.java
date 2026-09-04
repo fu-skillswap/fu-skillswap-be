@@ -90,7 +90,7 @@ class BookingControllerAuthorizationTest {
         return new CreateBookingRequest(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                start.toInstant(java.time.ZoneOffset.UTC),
+                start.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(),
                 "Cần hỗ trợ Spring Boot",
                 "Muốn hiểu rõ transaction và JPA locking"
         );

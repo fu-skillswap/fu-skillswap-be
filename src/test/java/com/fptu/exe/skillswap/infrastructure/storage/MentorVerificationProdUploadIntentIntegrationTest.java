@@ -40,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "FLYWAY_ENABLED=false",
         "HIBERNATE_DDL_AUTO=create-drop",
+        "application.production-validation.enabled=false",
         "application.storage.enabled=true",
         "application.storage.endpoint=https://test.r2.cloudflarestorage.com",
         "application.storage.access-key=test-access-key",

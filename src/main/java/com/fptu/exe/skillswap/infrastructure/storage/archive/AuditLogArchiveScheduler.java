@@ -30,7 +30,7 @@ public class AuditLogArchiveScheduler {
     private final ObjectMapper objectMapper;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
-    @Scheduled(cron = "${application.storage.lifecycle.audit-log-archive-cron:0 0 4 * * *}")
+    @Scheduled(cron = "${application.storage.lifecycle.audit-log-archive-cron:0 0 4 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void executeArchiveJob() {
         int retentionDays = properties.getAuditLogRetentionDays();
         if (retentionDays <= 0) {

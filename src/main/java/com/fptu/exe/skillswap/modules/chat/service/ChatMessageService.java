@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.chat.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.RealtimeOutboxProperties;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
 import com.fptu.exe.skillswap.modules.chat.domain.Conversation;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipant;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationParticipantAccess;
@@ -18,14 +19,17 @@ import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRep
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.MessageRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxService;
+import com.fptu.exe.skillswap.shared.time.BusinessTime;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,11 +40,11 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ChatMessageService {
 
     private final MessageRepository messageRepository;
@@ -54,19 +58,88 @@ public class ChatMessageService {
     private final RealtimeOutboxProperties realtimeOutboxProperties;
     private final ObjectProvider<GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider;
     private final ObjectProvider<UserQueryPort> userQueryPortProvider;
+    private final org.springframework.transaction.PlatformTransactionManager transactionManager;
 
-    @Transactional
+    @Autowired
+    public ChatMessageService(
+            MessageRepository messageRepository,
+            ConversationRepository conversationRepository,
+            ConversationParticipantRepository participantRepository,
+            ChatAttachmentRepository chatAttachmentRepository,
+            ChatAttachmentService chatAttachmentService,
+            ChatAccessResolutionService chatAccessResolutionService,
+            ChatResponseMapper chatResponseMapper,
+            DomainEventOutboxService domainEventOutboxService,
+            RealtimeOutboxProperties realtimeOutboxProperties,
+            ObjectProvider<GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider,
+            ObjectProvider<UserQueryPort> userQueryPortProvider,
+            org.springframework.transaction.PlatformTransactionManager transactionManager
+    ) {
+        this.messageRepository = messageRepository;
+        this.conversationRepository = conversationRepository;
+        this.participantRepository = participantRepository;
+        this.chatAttachmentRepository = chatAttachmentRepository;
+        this.chatAttachmentService = chatAttachmentService;
+        this.chatAccessResolutionService = chatAccessResolutionService;
+        this.chatResponseMapper = chatResponseMapper;
+        this.domainEventOutboxService = domainEventOutboxService;
+        this.realtimeOutboxProperties = realtimeOutboxProperties;
+        this.groupChatFanoutDispatcherProvider = groupChatFanoutDispatcherProvider;
+        this.userQueryPortProvider = userQueryPortProvider;
+        this.transactionManager = transactionManager;
+    }
+
+    public ChatMessageService(
+            MessageRepository messageRepository,
+            ConversationRepository conversationRepository,
+            ConversationParticipantRepository participantRepository,
+            ChatAttachmentRepository chatAttachmentRepository,
+            ChatAttachmentService chatAttachmentService,
+            ChatAccessResolutionService chatAccessResolutionService,
+            ChatResponseMapper chatResponseMapper,
+            DomainEventOutboxService domainEventOutboxService,
+            RealtimeOutboxProperties realtimeOutboxProperties,
+            ObjectProvider<GroupChatFanoutDispatcher> groupChatFanoutDispatcherProvider,
+            ObjectProvider<UserQueryPort> userQueryPortProvider
+    ) {
+        this(messageRepository, conversationRepository, participantRepository, chatAttachmentRepository,
+                chatAttachmentService, chatAccessResolutionService, chatResponseMapper,
+                domainEventOutboxService, realtimeOutboxProperties, groupChatFanoutDispatcherProvider,
+                userQueryPortProvider, null);
+    }
+
     public MessageResponse sendMessage(UUID conversationId, UUID userId, SendMessageRequest request) {
         return sendMessage(conversationId, userId, request, null, (UserQueryPort) null);
     }
 
-    @Transactional
     public MessageResponse sendMessage(
             UUID conversationId,
             UUID userId,
             SendMessageRequest request,
             MessageRepository messageRepoOverride,
             UserQueryPort userPortOverride
+    ) {
+        authorizeMessageSend(conversationId, userId, userPortOverride);
+        List<UUID> attachmentIntentIds = request.attachmentIntentIds();
+        Map<UUID, StorageGateway.ObjectMetadata> validatedMetadata = attachmentIntentIds == null || attachmentIntentIds.isEmpty()
+                ? Map.of()
+                : chatAttachmentService.validateAttachmentIntents(conversationId, userId, attachmentIntentIds);
+
+        java.util.function.Supplier<MessageResponse> operation = () -> sendMessageInTransaction(
+                conversationId, userId, request, messageRepoOverride, userPortOverride, validatedMetadata);
+        if (transactionManager == null) {
+            return operation.get();
+        }
+        return new org.springframework.transaction.support.TransactionTemplate(transactionManager).execute(status -> operation.get());
+    }
+
+    private MessageResponse sendMessageInTransaction(
+            UUID conversationId,
+            UUID userId,
+            SendMessageRequest request,
+            MessageRepository messageRepoOverride,
+            UserQueryPort userPortOverride,
+            Map<UUID, StorageGateway.ObjectMetadata> validatedMetadata
     ) {
         MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
@@ -82,10 +155,7 @@ public class ChatMessageService {
             throw new BaseException(chatAccessResolutionService.resolveMessagingAccessError(access));
         }
 
-        User sender = resolveUser(userId, userPortOverride);
-        if (sender == null) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng");
-        }
+        User sender = requireActiveUser(userId, userPortOverride);
 
         String content = request.content() == null ? "" : request.content().trim();
         if (content.isBlank() && (request.attachmentIntentIds() == null || request.attachmentIntentIds().isEmpty())) {
@@ -114,7 +184,13 @@ public class ChatMessageService {
                 .build();
         message = activeMessageRepo.save(message);
 
-        chatAttachmentService.consumeAttachmentIntents(conversation, sender.getId(), message, request.attachmentIntentIds());
+        chatAttachmentService.consumeAttachmentIntents(
+                conversation,
+                sender.getId(),
+                message,
+                request.attachmentIntentIds(),
+                validatedMetadata
+        );
 
         conversation.setNextSequence(message.getSequence());
         conversation.setLastMessageContent(content);
@@ -129,7 +205,7 @@ public class ChatMessageService {
                 .senderName(sender.getFullName())
                 .messageType(message.getMessageType())
                 .content(message.getContent())
-                .createdAt(message.getCreatedAt())
+                .createdAt(BusinessTime.toInstant(message.getCreatedAt()))
                 .conversationType(conversation.getType())
                 .isSelf(false)
                 .unreadCount(0L)
@@ -143,10 +219,6 @@ public class ChatMessageService {
                 .toList();
 
         if (conversation.getType() == ConversationType.GROUP) {
-            var dispatcher = groupChatFanoutDispatcherProvider.getIfAvailable();
-            if (dispatcher != null) {
-                dispatcher.dispatchGroupMessage(conversation.getId(), event, recipientIds);
-            }
             if (realtimeOutboxProperties.isEnabled()) {
                 domainEventOutboxService.enqueue(
                         "CONVERSATION",
@@ -169,14 +241,28 @@ public class ChatMessageService {
                 .content(message.getContent())
                 .state(message.getState())
                 .version(message.getVersion())
-                .createdAt(message.getCreatedAt())
+                .createdAt(BusinessTime.toInstant(message.getCreatedAt()))
                 .isMine(true)
                 .attachments(chatResponseMapper.mapAttachments(message.getId()))
                 .build();
     }
 
+    private void authorizeMessageSend(UUID conversationId, UUID userId, UserQueryPort userPortOverride) {
+        if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền gửi tin nhắn trong cuộc hội thoại này");
+        }
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
+        var access = chatAccessResolutionService.resolveMessagingAccess(conversation, userId);
+        if (!access.canSendMessages()) {
+            throw new BaseException(chatAccessResolutionService.resolveMessagingAccessError(access));
+        }
+        requireActiveUser(userId, userPortOverride);
+    }
+
     @Transactional
     public MessageResponse deleteMessage(UUID conversationId, UUID messageId, UUID userId, DeleteMessageRequest request) {
+        requireActiveUser(userId, null);
         var message = messageRepository.findById(messageId).filter(m -> m.getConversation().getId().equals(conversationId))
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tin nhắn"));
         assertEditable(message, userId, request.expectedVersion());
@@ -227,7 +313,7 @@ public class ChatMessageService {
                 .senderName(message.getSender() != null ? message.getSender().getFullName() : "Hệ thống")
                 .messageType(message.getMessageType())
                 .content(message.getContent())
-                .createdAt(message.getCreatedAt())
+                .createdAt(BusinessTime.toInstant(message.getCreatedAt()))
                 .conversationType(conversation.getType())
                 .isSelf(false)
                 .unreadCount(0L)
@@ -241,7 +327,11 @@ public class ChatMessageService {
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));
         List<ConversationParticipant> participants = participantRepository.findByConversationId(conversationId);
+        Set<UUID> activeRecipientIds = activeRecipientIds(participants);
         return participants.stream()
+                .filter(p -> p.getAccessState() != ConversationParticipantAccess.REVOKED)
+                .filter(p -> p.getUser() != null && p.getUser().getId() != null)
+                .filter(p -> activeRecipientIds == null || activeRecipientIds.contains(p.getUser().getId()))
                 .filter(p -> senderId == null || !p.getUser().getId().equals(senderId))
                 .map(p -> new ChatMessageRealtimeDelivery(
                         p.getUser().getId(),
@@ -253,7 +343,7 @@ public class ChatMessageService {
                                 .senderName(message.getSender() != null ? message.getSender().getFullName() : "Hệ thống")
                                 .messageType(message.getMessageType())
                                 .content(message.getContent())
-                                .createdAt(message.getCreatedAt())
+                                .createdAt(BusinessTime.toInstant(message.getCreatedAt()))
                                 .conversationType(conversation.getType())
                                 .isSelf(false)
                                 .unreadCount(resolveUnreadCountForParticipant(conversationId, p))
@@ -344,5 +434,34 @@ public class ChatMessageService {
         }
         var userPort = userQueryPortProvider.getIfAvailable();
         return userPort != null ? userPort.findUserById(userId).orElse(null) : null;
+    }
+
+    private User requireActiveUser(UUID userId, UserQueryPort userPortOverride) {
+        User user = resolveUser(userId, userPortOverride);
+        if (user == null) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng");
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
+        }
+        return user;
+    }
+
+    private Set<UUID> activeRecipientIds(List<ConversationParticipant> participants) {
+        UserQueryPort userPort = userQueryPortProvider.getIfAvailable();
+        if (userPort == null) {
+            return null;
+        }
+        List<UUID> userIds = participants.stream()
+                .map(ConversationParticipant::getUser)
+                .filter(Objects::nonNull)
+                .map(User::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return userPort.findUsersByIdIn(userIds).stream()
+                .filter(user -> user.getStatus() == UserStatus.ACTIVE)
+                .map(User::getId)
+                .collect(Collectors.toSet());
     }
 }

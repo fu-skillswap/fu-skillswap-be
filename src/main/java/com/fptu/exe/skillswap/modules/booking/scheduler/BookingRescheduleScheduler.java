@@ -18,7 +18,7 @@ public class BookingRescheduleScheduler {
 
     private final BookingRescheduleService bookingRescheduleService;
 
-    @Scheduled(cron = "0 */15 * * * *")
+    @Scheduled(cron = "0 */15 * * * *", zone = "Asia/Ho_Chi_Minh")
     public void expirePendingRescheduleRequests() {
         try {
             int expired = bookingRescheduleService.expirePendingRequests();

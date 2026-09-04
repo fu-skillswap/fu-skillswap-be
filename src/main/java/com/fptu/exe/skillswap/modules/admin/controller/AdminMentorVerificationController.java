@@ -12,6 +12,8 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,7 +30,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/admin/mentor-verification/requests")
 @RequiredArgsConstructor
-@Tag(name = "Admin - Mentor Verification", description = "Admin xem và xử lý hồ sơ đăng ký mentor.")
+@Tag(name = "Admin - Mentor Verification", description = "Admin - dành cho quản trị viên. Xem queue và xử lý hồ sơ đăng ký mentor; không dùng cho FE người dùng thông thường.")
 @SecurityRequirement(name = "bearerAuth")
 @PreAuthorize("hasAnyRole('ADMIN', 'SYSTEM_ADMIN')")
 public class AdminMentorVerificationController {
@@ -37,7 +39,16 @@ public class AdminMentorVerificationController {
 
     @Operation(summary = "Bước 1 - Lấy danh sách hồ sơ chờ duyệt", description = "Có thể tìm kiếm, lọc và phân trang.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lấy danh sách thành công"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Lấy danh sách hồ sơ cần duyệt",
+                    content = @Content(mediaType = "application/json", examples = @ExampleObject(
+                            name = "VerificationQueue",
+                            value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"content":[{"requestId":"019f5234-aaaa-bbbb-cccc-1234567890ab","mentorUserId":"019f6234-aaaa-bbbb-cccc-1234567890ab","mentorEmail":"mentor@example.com","mentorFullName":"Nguyen Van B","status":"PENDING_REVIEW","revisionCount":0,"submittedAt":"2026-09-04T03:20:00","createdAt":"2026-09-04T03:00:00","updatedAt":"2026-09-04T03:20:00"}],"page":0,"size":20,"totalElements":1,"totalPages":1,"last":true}}
+                                    """
+                    ))
+            ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền truy cập")
     })
@@ -132,7 +143,7 @@ public class AdminMentorVerificationController {
         ));
     }
 
-    @Operation(summary = "Bước 3B - Duyệt hồ sơ mentor", description = "Xác nhận hồ sơ đã đáp ứng yêu cầu.")
+    @Operation(summary = "Bước 3B - Duyệt hồ sơ mentor", description = "Admin - dành cho quản trị viên. Dùng sau khi đã xem minh chứng; request có thể kèm note, kết quả trả hồ sơ với status APPROVED.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Phê duyệt thành công"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),

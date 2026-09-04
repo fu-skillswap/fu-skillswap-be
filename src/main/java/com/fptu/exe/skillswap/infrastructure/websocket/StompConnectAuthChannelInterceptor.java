@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.infrastructure.security.UserAuthLookupPort;
 import com.fptu.exe.skillswap.infrastructure.security.UserBanStatusPort;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.infrastructure.security.UserAuthSnapshot;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
@@ -41,21 +42,24 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
             if (resolvedUser == null || resolvedUser.getName() == null || resolvedUser.getName().isBlank()) {
                 throw new AccessDeniedException("STOMP session chưa được xác thực");
             }
+            requireActiveUser(resolvedUser);
             return MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
             Principal user = accessor.getUser();
             if (user == null || user.getName() == null || user.getName().isBlank()) {
                 throw new AccessDeniedException("STOMP SUBSCRIBE yêu cầu xác thực");
             }
+            requireActiveUser(user);
             String destination = accessor.getDestination();
-            if (destination == null || !destination.startsWith("/user/")) {
-                throw new AccessDeniedException("Chỉ cho phép subscribe các destination bắt đầu bằng /user/");
+            if (destination == null || !destination.startsWith("/user/queue/")) {
+                throw new AccessDeniedException("Chỉ cho phép subscribe private queue của chính session");
             }
         } else if (StompCommand.SEND.equals(accessor.getCommand())) {
             Principal user = accessor.getUser();
             if (user == null || !"/app/chat/typing".equals(accessor.getDestination())) {
                 throw new AccessDeniedException("STOMP SEND destination không được hỗ trợ");
             }
+            requireActiveUser(user);
         }
         return message;
     }
@@ -75,9 +79,26 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
         }
         var snapshot = userAuthLookupPort.findSnapshotByUserId(userId)
                 .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản người dùng"));
+        if (!snapshot.isActive()) {
+            throw new AccessDeniedException("Tài khoản không hoạt động không được kết nối STOMP");
+        }
         List<RoleCode> roles = snapshot.roles() == null ? List.of() : snapshot.roles();
         UserPrincipal userPrincipal = UserPrincipal.create(userId, snapshot.email(), roles);
         return new StompPrincipal(userPrincipal);
+    }
+
+    private void requireActiveUser(Principal principal) {
+        UUID userId;
+        try {
+            userId = UUID.fromString(principal.getName());
+        } catch (RuntimeException ex) {
+            throw new AccessDeniedException("STOMP principal không hợp lệ");
+        }
+        UserAuthSnapshot snapshot = userAuthLookupPort.findSnapshotByUserId(userId)
+                .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản người dùng"));
+        if (!snapshot.isActive()) {
+            throw new AccessDeniedException("Tài khoản không hoạt động không được sử dụng STOMP");
+        }
     }
 
     private String extractBearerToken(StompHeaderAccessor accessor, String headerName) {
