@@ -63,8 +63,7 @@ application:
           secure: ${JWT_REFRESH_COOKIE_SECURE:true}
           same-site: ${JWT_REFRESH_COOKIE_SAME_SITE:Lax}
   cors:
-    # IMPORTANT: Replace with your actual frontend domain before deploying.
-    # Defaults in base application.yaml include localhost — must be overridden for prod.
+    # Production requires explicit HTTPS frontend origins from the environment.
     allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS}
   swagger:
     # Swagger is disabled in production by default.

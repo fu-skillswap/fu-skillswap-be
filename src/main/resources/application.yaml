@@ -194,8 +194,6 @@ application:
           path: ${JWT_REFRESH_COOKIE_PATH:/api/auth}
           secure: ${JWT_REFRESH_COOKIE_SECURE:false}
           same-site: ${JWT_REFRESH_COOKIE_SAME_SITE:Lax}
-  cors:
-    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:3000,http://localhost:5173,http://localhost:8080}
   websocket:
     stomp:
       enabled: ${WEBSOCKET_STOMP_ENABLED:false}

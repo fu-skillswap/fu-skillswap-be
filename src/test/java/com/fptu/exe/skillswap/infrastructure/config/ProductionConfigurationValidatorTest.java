@@ -67,6 +67,32 @@ class ProductionConfigurationValidatorTest {
     }
 
     @Test
+    void productionCorsRejectsNonHttpsFrontendOrigin() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateProductionCors(
+                failures,
+                "http://real-domain.com"
+        );
+
+        assertThat(failures).containsExactly(
+                "CORS_ALLOWED_ORIGIN_PATTERNS must contain only explicit HTTPS frontend origins"
+        );
+    }
+
+    @Test
+    void productionCorsAllowsExplicitHttpsFrontendOrigin() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateProductionCors(
+                failures,
+                "https://real-domain.com"
+        );
+
+        assertThat(failures).isEmpty();
+    }
+
+    @Test
     void developmentCorsAllowsExplicitLocalhostOrigins() {
         WebConfig webConfig = new WebConfig(new MockEnvironment()
                 .withProperty(

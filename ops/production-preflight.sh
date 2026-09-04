@@ -90,12 +90,34 @@ if [[ "${REALTIME_OUTBOX_ENABLED:-}" != "true" || "${WEBSOCKET_STOMP_ENABLED:-}"
   failures=1
 fi
 
-case "${CORS_ALLOWED_ORIGIN_PATTERNS:-}" in
-  *localhost*|*127.0.0.1*|\**)
-    echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS contains a local or wildcard origin" >&2
-    failures=1
-    ;;
-esac
+validate_cors_origins() {
+  local raw="${CORS_ALLOWED_ORIGIN_PATTERNS:-}"
+  local origin normalized
+  local -a origins
+
+  [[ -n "$raw" ]] || return 0
+
+  IFS=',' read -r -a origins <<< "$raw"
+  for origin in "${origins[@]}"; do
+    origin="${origin#"${origin%%[![:space:]]*}"}"
+    origin="${origin%"${origin##*[![:space:]]}"}"
+    normalized="${origin,,}"
+    case "$normalized" in
+      *localhost*|*127.0.0.1*|\**)
+        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS contains localhost, 127.0.0.1, or a wildcard origin" >&2
+        failures=1
+        ;;
+      https://?*)
+        ;;
+      *)
+        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS must contain only explicit HTTPS frontend origins" >&2
+        failures=1
+        ;;
+    esac
+  done
+}
+
+validate_cors_origins
 
 for name in PAYOS_RETURN_URL PAYOS_CANCEL_URL PAYOS_WEBHOOK_URL GOOGLE_CALENDAR_REDIRECT_URI; do
   value="${!name:-}"

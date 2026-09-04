@@ -157,8 +157,28 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
 
     static void validateProductionCors(List<String> failures, String allowedOrigins) {
         require(failures, "CORS_ALLOWED_ORIGIN_PATTERNS", allowedOrigins, 1);
-        if (containsDevelopmentValue(allowedOrigins)) {
+        if (!StringUtils.hasText(allowedOrigins)) {
+            return;
+        }
+
+        boolean containsUnsafeOrigin = false;
+        boolean containsNonHttpsOrigin = false;
+        for (String origin : allowedOrigins.split(",", -1)) {
+            String normalizedOrigin = origin.trim().toLowerCase(Locale.ROOT);
+            if (!StringUtils.hasText(normalizedOrigin)
+                    || normalizedOrigin.contains("*")
+                    || containsDevelopmentValue(normalizedOrigin)) {
+                containsUnsafeOrigin = true;
+            } else if (!normalizedOrigin.startsWith("https://")) {
+                containsNonHttpsOrigin = true;
+            }
+        }
+
+        if (containsUnsafeOrigin) {
             failures.add("CORS_ALLOWED_ORIGIN_PATTERNS without localhost, 127.0.0.1, or wildcard");
+        }
+        if (containsNonHttpsOrigin) {
+            failures.add("CORS_ALLOWED_ORIGIN_PATTERNS must contain only explicit HTTPS frontend origins");
         }
     }
 
