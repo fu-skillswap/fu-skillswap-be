@@ -69,6 +69,8 @@ services:
 
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
+      # Defaults fail closed to production; staging can explicitly allow local FE origins.
+      - DEPLOY_ENV=${DEPLOY_ENV:-production}
 
       - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       - DATABASE_USERNAME=${POSTGRES_USER:?POSTGRES_USER is required}

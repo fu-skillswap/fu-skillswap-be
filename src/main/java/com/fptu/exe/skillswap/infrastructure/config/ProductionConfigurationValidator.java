@@ -38,6 +38,9 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
     @Value("${application.cors.allowed-origin-patterns:}")
     private String allowedOrigins;
 
+    @Value("${DEPLOY_ENV:production}")
+    private String deployEnv;
+
     @Value("${application.mail.enabled:false}")
     private boolean mailEnabled;
 
@@ -76,7 +79,8 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
             missing.add("JWT_REFRESH_COOKIE_SECURE=true");
         }
 
-        validateProductionCors(missing, allowedOrigins);
+        validateDeployEnvironment(missing, deployEnv);
+        validateProductionCors(missing, allowedOrigins, deployEnv);
 
         require(missing, "PAYOS_CLIENT_ID", paymentProperties.getPayos().getClientId(), 1);
         require(missing, "PAYOS_API_KEY", paymentProperties.getPayos().getApiKey(), 1);
@@ -156,18 +160,27 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
     }
 
     static void validateProductionCors(List<String> failures, String allowedOrigins) {
+        validateProductionCors(failures, allowedOrigins, "production");
+    }
+
+    static void validateProductionCors(List<String> failures, String allowedOrigins, String deployEnv) {
         require(failures, "CORS_ALLOWED_ORIGIN_PATTERNS", allowedOrigins, 1);
         if (!StringUtils.hasText(allowedOrigins)) {
             return;
         }
 
+        String normalizedDeployEnv = normalizeDeployEnvironment(deployEnv);
         boolean containsUnsafeOrigin = false;
         boolean containsNonHttpsOrigin = false;
         for (String origin : allowedOrigins.split(",", -1)) {
             String normalizedOrigin = origin.trim().toLowerCase(Locale.ROOT);
-            if (!StringUtils.hasText(normalizedOrigin)
-                    || normalizedOrigin.contains("*")
-                    || containsDevelopmentValue(normalizedOrigin)) {
+            if (!StringUtils.hasText(normalizedOrigin) || normalizedOrigin.contains("*")) {
+                containsUnsafeOrigin = true;
+            } else if (isLocalOrigin(normalizedOrigin)) {
+                if (!("development".equals(normalizedDeployEnv) || "staging".equals(normalizedDeployEnv))) {
+                    containsUnsafeOrigin = true;
+                }
+            } else if (containsDevelopmentValue(normalizedOrigin)) {
                 containsUnsafeOrigin = true;
             } else if (!normalizedOrigin.startsWith("https://")) {
                 containsNonHttpsOrigin = true;
@@ -180,6 +193,30 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         if (containsNonHttpsOrigin) {
             failures.add("CORS_ALLOWED_ORIGIN_PATTERNS must contain only explicit HTTPS frontend origins");
         }
+    }
+
+    static void validateDeployEnvironment(List<String> failures, String deployEnv) {
+        if (!isSupportedDeployEnvironment(deployEnv)) {
+            failures.add("DEPLOY_ENV must be development, staging, or production");
+        }
+    }
+
+    private static String normalizeDeployEnvironment(String deployEnv) {
+        return isSupportedDeployEnvironment(deployEnv) ? deployEnv.trim().toLowerCase(Locale.ROOT) : "production";
+    }
+
+    private static boolean isSupportedDeployEnvironment(String deployEnv) {
+        if (!StringUtils.hasText(deployEnv)) {
+            return false;
+        }
+        return switch (deployEnv.trim().toLowerCase(Locale.ROOT)) {
+            case "development", "staging", "production" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isLocalOrigin(String origin) {
+        return origin.contains("localhost") || origin.contains("127.0.0.1");
     }
 
     private static boolean containsDevelopmentValue(String value) {

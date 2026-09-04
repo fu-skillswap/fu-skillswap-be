@@ -5,10 +5,26 @@ set -Eeuo pipefail
 
 failures=0
 
+deploy_env="${DEPLOY_ENV:-production}"
+case "$deploy_env" in
+  development|staging|production)
+    echo "DEPLOY_ENV=${deploy_env}"
+    ;;
+  *)
+    echo "::error::DEPLOY_ENV must be development, staging, or production" >&2
+    failures=1
+    ;;
+esac
+
+expected_spring_profile="prod"
+if [[ "$deploy_env" == "development" ]]; then
+  expected_spring_profile="dev"
+fi
+
 require_nonempty() {
   local name="$1"
   if [[ -z "${!name:-}" ]]; then
-    echo "::error::missing required production environment variable: ${name}" >&2
+    echo "::error::missing required ${deploy_env} environment variable: ${name}" >&2
     failures=1
   else
     echo "${name}=present"
@@ -20,18 +36,18 @@ reject_placeholder() {
   local value="${!name:-}"
   case "$value" in
     change-me|replace-with*|test-*|*localhost*|*127.0.0.1*)
-      echo "::error::production environment variable contains a development placeholder: ${name}" >&2
+      echo "::error::${deploy_env} environment variable contains a development placeholder: ${name}" >&2
       failures=1
       ;;
   esac
 }
 
-if [[ "${SPRING_PROFILES_ACTIVE:-}" != "prod" ]]; then
-  echo "::error::SPRING_PROFILES_ACTIVE must be exactly prod for a production deployment" >&2
+if [[ "${SPRING_PROFILES_ACTIVE:-}" != "$expected_spring_profile" ]]; then
+  echo "::error::SPRING_PROFILES_ACTIVE must be exactly ${expected_spring_profile} for DEPLOY_ENV=${deploy_env}" >&2
   failures=1
 fi
-if [[ "${PRODUCTION_CONFIG_VALIDATION_ENABLED:-}" != "true" ]]; then
-  echo "::error::PRODUCTION_CONFIG_VALIDATION_ENABLED must be true in production" >&2
+if [[ "$deploy_env" != "development" && "${PRODUCTION_CONFIG_VALIDATION_ENABLED:-}" != "true" ]]; then
+  echo "::error::PRODUCTION_CONFIG_VALIDATION_ENABLED must be true for DEPLOY_ENV=${deploy_env}" >&2
   failures=1
 fi
 
@@ -78,15 +94,15 @@ if [[ "$video_storage_provider" == "BUNNY" ]]; then
 fi
 
 if [[ "${APPLICATION_MAIL_ENABLED:-}" != "true" ]]; then
-  echo "::error::APPLICATION_MAIL_ENABLED must be true in production" >&2
+  echo "::error::APPLICATION_MAIL_ENABLED must be true for DEPLOY_ENV=${deploy_env}" >&2
   failures=1
 fi
 if [[ "${STORAGE_ENABLED:-}" != "true" ]]; then
-  echo "::error::STORAGE_ENABLED must be true in production" >&2
+  echo "::error::STORAGE_ENABLED must be true for DEPLOY_ENV=${deploy_env}" >&2
   failures=1
 fi
 if [[ "${REALTIME_OUTBOX_ENABLED:-}" != "true" || "${WEBSOCKET_STOMP_ENABLED:-}" != "true" ]]; then
-  echo "::error::REALTIME_OUTBOX_ENABLED and WEBSOCKET_STOMP_ENABLED must both be true in production" >&2
+  echo "::error::REALTIME_OUTBOX_ENABLED and WEBSOCKET_STOMP_ENABLED must both be true for DEPLOY_ENV=${deploy_env}" >&2
   failures=1
 fi
 
@@ -103,14 +119,20 @@ validate_cors_origins() {
     origin="${origin%"${origin##*[![:space:]]}"}"
     normalized="${origin,,}"
     case "$normalized" in
-      *localhost*|*127.0.0.1*|\**)
-        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS contains localhost, 127.0.0.1, or a wildcard origin" >&2
+      *\**)
+        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS contains a wildcard origin for DEPLOY_ENV=${deploy_env}" >&2
         failures=1
+        ;;
+      *localhost*|*127.0.0.1*)
+        if [[ "$deploy_env" == "production" ]]; then
+          echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS contains localhost or 127.0.0.1 for DEPLOY_ENV=production" >&2
+          failures=1
+        fi
         ;;
       https://?*)
         ;;
       *)
-        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS must contain only explicit HTTPS frontend origins" >&2
+        echo "::error::CORS_ALLOWED_ORIGIN_PATTERNS must contain allowed origins for DEPLOY_ENV=${deploy_env}" >&2
         failures=1
         ;;
     esac
@@ -122,7 +144,7 @@ validate_cors_origins
 for name in PAYOS_RETURN_URL PAYOS_CANCEL_URL PAYOS_WEBHOOK_URL GOOGLE_CALENDAR_REDIRECT_URI; do
   value="${!name:-}"
   if [[ -n "$value" && "$value" != https://* ]]; then
-    echo "::error::${name} must use HTTPS in production" >&2
+    echo "::error::${name} must use HTTPS for DEPLOY_ENV=${deploy_env}" >&2
     failures=1
   fi
 done

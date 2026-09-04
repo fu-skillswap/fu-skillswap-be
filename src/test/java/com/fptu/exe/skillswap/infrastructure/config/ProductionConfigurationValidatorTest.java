@@ -93,6 +93,47 @@ class ProductionConfigurationValidatorTest {
     }
 
     @Test
+    void stagingCorsAllowsLocalhostOrigin() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateProductionCors(
+                failures,
+                "http://localhost:3000",
+                "staging"
+        );
+
+        assertThat(failures).isEmpty();
+    }
+
+    @Test
+    void productionCorsRejectsLocalhostOriginWithExplicitEnvironment() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateProductionCors(
+                failures,
+                "http://localhost:3000",
+                "production"
+        );
+
+        assertThat(failures).containsExactly(
+                "CORS_ALLOWED_ORIGIN_PATTERNS without localhost, 127.0.0.1, or wildcard"
+        );
+    }
+
+    @Test
+    void developmentCorsAllowsLocalhostOrigin() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateProductionCors(
+                failures,
+                "http://localhost:5173",
+                "development"
+        );
+
+        assertThat(failures).isEmpty();
+    }
+
+    @Test
     void developmentCorsAllowsExplicitLocalhostOrigins() {
         WebConfig webConfig = new WebConfig(new MockEnvironment()
                 .withProperty(
