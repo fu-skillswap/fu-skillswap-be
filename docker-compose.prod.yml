@@ -16,5 +16,8 @@ services:
       FLYWAY_ENABLED: "true"
       HIBERNATE_DDL_AUTO: validate
       PRODUCTION_CONFIG_VALIDATION_ENABLED: "true"
+      # Production origins must be supplied by the VPS environment and are
+      # rejected by ops/production-preflight.sh if local or wildcard values.
+      CORS_ALLOWED_ORIGIN_PATTERNS: "${CORS_ALLOWED_ORIGIN_PATTERNS:?CORS_ALLOWED_ORIGIN_PATTERNS is required}"
     logging: *default-logging
 

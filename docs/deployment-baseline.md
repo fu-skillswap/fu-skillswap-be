@@ -17,6 +17,12 @@ Set these variables before starting the application:
 
 Use `SPRING_PROFILES_ACTIVE=prod` and provide any provider credentials documented in `.env.example`.
 
+`CORS_ALLOWED_ORIGIN_PATTERNS` is required in the production environment and must
+contain only the specific HTTPS frontend origin(s). Do not use `localhost`,
+`127.0.0.1`, or `*` in the production `.env`; `ops/production-preflight.sh`
+rejects those values. Local development uses the `dev` profile, whose defaults
+allow the local frontend origins.
+
 ## Startup
 
 Build and start with:
