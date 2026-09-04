@@ -180,7 +180,8 @@ public class OpenApiFlowConfig {
                 "06-admin",
                 "6. Khu vực quản trị",
                 "/api/admin/**",
-                "/api/system/**"
+                "/api/system/**",
+                "/api/internal/video-streaming/**"
         );
     }
 

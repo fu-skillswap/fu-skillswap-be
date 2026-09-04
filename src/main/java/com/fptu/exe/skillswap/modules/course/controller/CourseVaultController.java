@@ -36,6 +36,39 @@ public class CourseVaultController {
         return ApiResponse.success(courseVaultService.createVideoUpload(principal.getId(), courseId, chapterId, request));
     }
 
+    @Operation(summary = "Mentor khởi tạo upload video lên R2", description = "API mới dùng cho video MP4 provider-neutral. Mentor sở hữu khóa học gọi để nhận presigned upload URL, upload trực tiếp bằng đúng Content-Type, rồi gọi confirm-video-upload. API Bunny cũ vẫn giữ nguyên cho client hiện tại; playback R2 sẽ được triển khai ở phase 5.4.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đã tạo upload intent; FE upload trực tiếp bằng uploadUrl trước thời điểm expiresAt."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Thông tin file hoặc lifecycle upload không hợp lệ."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User không sở hữu khóa học/chapter."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Vị trí material đã được sử dụng."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "413", description = "Video vượt giới hạn kích thước."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "415", description = "MVP chỉ hỗ trợ video/mp4.")
+    })
+    @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/video/r2-upload-intent")
+    public ApiResponse<CourseR2VideoUploadIntentResponse> createR2VideoUploadIntent(@AuthenticationPrincipal UserPrincipal principal,
+                                                                                      @PathVariable UUID courseId,
+                                                                                      @PathVariable UUID chapterId,
+                                                                                      @Valid @RequestBody CreateR2VideoUploadIntentRequest request) {
+        return ApiResponse.success(courseVaultService.createR2VideoUploadIntent(principal.getId(), courseId, chapterId, request));
+    }
+
+    @Operation(summary = "Mentor xác nhận upload video R2", description = "Gọi sau khi FE PUT file thành công lên uploadUrl. Backend kiểm tra intent, thời hạn, object tồn tại, MIME type và kích thước rồi chuyển material sang READY. Gọi lại sau khi đã READY là an toàn và không tạo thay đổi mới.")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Video đã được xác nhận và sẵn sàng cho bước playback sau này."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Intent hết hạn, object chưa tồn tại hoặc metadata file không hợp lệ."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User không sở hữu material."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy course hoặc material."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Material không ở trạng thái có thể xác nhận.")
+    })
+    @PostMapping("/me/mentor/courses/{courseId}/materials/{materialId}/confirm-video-upload")
+    public ApiResponse<Void> confirmR2VideoUpload(@AuthenticationPrincipal UserPrincipal principal,
+                                                   @PathVariable UUID courseId,
+                                                   @PathVariable UUID materialId) {
+        courseVaultService.confirmR2VideoUpload(principal.getId(), courseId, materialId);
+        return ApiResponse.success(null);
+    }
+
     @Operation(summary = "Mentor khởi tạo upload PDF", description = "Mentor sở hữu khóa học gọi trước khi upload PDF. Upload URL có thời hạn; nếu hết hạn, khởi tạo intent mới. Sau khi upload thành công, gọi confirm với đúng giá trị backend đã cấp.")
     @PostMapping("/me/mentor/courses/{courseId}/chapters/{chapterId}/materials/pdf/upload-intent")
     public ApiResponse<CoursePdfUploadInitResponse> createPdfUpload(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID chapterId, @Valid @RequestBody CreatePdfMaterialUploadRequest request) {
@@ -101,13 +134,13 @@ public class CourseVaultController {
         return ApiResponse.success(courseVaultService.getCourseMaterials(principal.getId(), courseId));
     }
 
-    @Operation(summary = "Lấy URL xem video khóa học", description = "Gọi khi material là video, đã công bố và `status=READY`. Material previewable hoặc user có enrollment ACTIVE/COMPLETED mới được cấp URL. URL dùng trong thời gian ngắn; nếu chưa có quyền, trả 403.")
+    @Operation(summary = "Lấy quyền xem video khóa học", description = "Gọi khi material là video đã công bố và `status=READY`. Material Bunny tiếp tục trả URL playback Bunny; material R2 trả URL ngắn hạn tới route streaming của VPS. Material previewable hoặc user có enrollment ACTIVE/COMPLETED mới được cấp quyền. FE không gọi R2 trực tiếp và cần gọi lại API khi URL hết hạn.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Trả URL playback tạm thời cho video đã sẵn sàng"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Trả URL playback tạm thời; browser dùng URL này để phát MP4 và gửi HTTP Range khi seek"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Material không phải video hoặc video chưa ở trạng thái READY"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập hoặc access token không hợp lệ"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User chưa có quyền xem material này"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học hoặc material")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy khóa học, material hoặc video storage reference")
     })
     @GetMapping("/me/courses/{courseId}/materials/{materialId}/playback")
     public ApiResponse<CourseVideoPlaybackResponse> getPlaybackUrl(@AuthenticationPrincipal UserPrincipal principal, @PathVariable UUID courseId, @PathVariable UUID materialId, HttpServletRequest request) {

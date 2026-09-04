@@ -31,4 +31,13 @@ public class StorageProperties {
     private int presignedTtlMinutes = 15;
 
     private List<String> allowedContentTypes = List.of("image/jpeg", "image/png", "application/pdf");
+
+    /** Provider-neutral prefix reserved for future course video objects. */
+    private String videoPrefix = "course-materials/videos";
+
+    /** Maximum size for one uploaded course video in MiB. */
+    private int maxVideoSizeMb = 500;
+
+    /** Keep the MVP upload policy narrow so playback compatibility is predictable. */
+    private List<String> allowedVideoContentTypes = List.of("video/mp4");
 }

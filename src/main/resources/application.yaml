@@ -175,6 +175,11 @@ application:
     pdf-upload-ttl-minutes: ${COURSE_PDF_UPLOAD_TTL_MINUTES:15}
     pdf-download-ttl-minutes: ${COURSE_PDF_DOWNLOAD_TTL_MINUTES:10}
     max-pdf-size-mb: ${COURSE_MAX_PDF_SIZE_MB:25}
+  video-playback:
+    base-url: ${VIDEO_PLAYBACK_BASE_URL:}
+    stream-path: ${VIDEO_PLAYBACK_STREAM_PATH:/stream/videos}
+    token-ttl-seconds: ${VIDEO_PLAYBACK_TOKEN_TTL_SECONDS:300}
+    signing-secret: ${VIDEO_PLAYBACK_SIGNING_SECRET:${JWT_SECRET_KEY:c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0c2VjcmV0}}
   security:
     # Comma-separated Nginx/load-balancer CIDRs allowed to supply the original client address.
     # Leave empty for direct backend access; never trust forwarded headers from arbitrary peers.
@@ -245,6 +250,9 @@ application:
     documents-prefix: ${STORAGE_DOCUMENTS_PREFIX:${R2_DOCUMENTS_PREFIX:skillswap/verification-documents}}
     presigned-ttl-minutes: ${STORAGE_PRESIGNED_TTL_MINUTES:15}
     allowed-content-types: ${STORAGE_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,application/pdf}
+    video-prefix: ${STORAGE_VIDEO_PREFIX:course-materials/videos}
+    max-video-size-mb: ${STORAGE_MAX_VIDEO_SIZE_MB:500}
+    allowed-video-content-types: ${STORAGE_ALLOWED_VIDEO_CONTENT_TYPES:video/mp4}
     lifecycle:
       cleanup-enabled: ${STORAGE_LIFECYCLE_CLEANUP_ENABLED:true}
       archive-enabled: ${STORAGE_LIFECYCLE_ARCHIVE_ENABLED:true}

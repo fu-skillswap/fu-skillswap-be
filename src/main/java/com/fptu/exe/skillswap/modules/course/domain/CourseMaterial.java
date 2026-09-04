@@ -73,6 +73,14 @@ public class CourseMaterial {
     @Column(name = "bunny_library_id", length = 64)
     private String bunnyLibraryId;
 
+    /** Provider-neutral R2 object reference for the future video upload flow. */
+    @Column(name = "video_object_key", length = 500)
+    private String videoObjectKey;
+
+    /** MIME type verified from storage when the future video upload is confirmed. */
+    @Column(name = "video_content_type", length = 100)
+    private String videoContentType;
+
     @Column(name = "thumbnail_url", length = 500)
     private String thumbnailUrl;
 

@@ -66,6 +66,7 @@ public class SecurityConfig {
                                     "/api/private-download/*",
                                     "/api/payments/webhook/**",
                                     "/api/webhooks/bunny/**",
+                                    "/api/internal/video-streaming/authorize",
                                     "/uploads/storage/**",
                                     "/health",
                                     "/actuator/health",
