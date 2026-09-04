@@ -481,14 +481,6 @@ jobs:
           run_required_step "preflight deploy directory" "mkdir -p '${DEPLOY_DIR}' && test -d '${DEPLOY_DIR}' && test -w '${DEPLOY_DIR}' && ls -ld '${DEPLOY_DIR}'"
           cd "$DEPLOY_DIR"
 
-          run_required_step "preflight required tools" "command -v curl && command -v docker && command -v aws && docker --version && docker compose version && aws --version"
-          run_required_step "preflight docker daemon" "docker info"
-          run_required_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
-
-          run_required_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
-          run_required_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
-          run_required_step "download ops scripts" "mkdir -p ops/rabbitmq && if [ -d ops/rabbitmq/enabled_plugins ]; then rm -rf ops/rabbitmq/enabled_plugins; fi && curl --fail --silent --show-error --location -o ops/rabbitmq/enabled_plugins https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/rabbitmq/enabled_plugins && test -f ops/rabbitmq/enabled_plugins && for script in backup-postgres.sh production-preflight.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
-
           run_required_step "preflight .env presence and permissions" "test -f .env && test -r .env && ls -l .env"
           if [ "$DEPLOY_FAILED" -eq 0 ] && [ -f ".env" ]; then
             set +x
@@ -506,6 +498,14 @@ jobs:
               DEPLOY_FAILED=1
             fi
           fi
+
+          run_required_step "preflight required tools" "command -v curl && command -v docker && command -v aws && docker --version && docker compose version && aws --version"
+          run_required_step "preflight docker daemon" "docker info"
+          run_required_step "preflight docker permission" "docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20"
+
+          run_required_step "download docker-compose.yml" "curl --fail --silent --show-error --location -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.yml && test -s docker-compose.yml"
+          run_required_step "download docker-compose.prod.yml" "curl --fail --silent --show-error --location -o docker-compose.prod.yml https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/docker-compose.prod.yml && test -s docker-compose.prod.yml"
+          run_required_step "download ops scripts" "mkdir -p ops/rabbitmq && if [ -d ops/rabbitmq/enabled_plugins ]; then rm -rf ops/rabbitmq/enabled_plugins; fi && curl --fail --silent --show-error --location -o ops/rabbitmq/enabled_plugins https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/rabbitmq/enabled_plugins && test -f ops/rabbitmq/enabled_plugins && for script in backup-postgres.sh production-preflight.sh smoke-test.sh write-release-manifest.sh; do curl --fail --silent --show-error --location -o ops/\$script https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/ops/\$script && test -s ops/\$script && chmod 700 ops/\$script; done"
 
           export APP_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
           export APP_IMAGE="$(echo "$APP_IMAGE" | tr '[:upper:]' '[:lower:]')"
