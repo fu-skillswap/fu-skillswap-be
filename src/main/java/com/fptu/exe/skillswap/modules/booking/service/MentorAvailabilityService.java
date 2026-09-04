@@ -555,17 +555,17 @@ public class MentorAvailabilityService {
             String reasonIfBlocked = null;
             String bookingConflictNote = null;
             boolean selectable = true;
-            if (!candidateStart.isAfter(now)) {
-                selectable = false;
-                reasonIfBlocked = BLOCKED_BY_PAST_TIME_REASON;
-                bookingConflictNote = "Khung giờ này đã bắt đầu hoặc đã trôi qua";
-            } else if (candidateStart.isBefore(earliestAllowed)) {
+            if (candidateStart.isBefore(earliestAllowed)) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_LEAD_TIME_REASON;
                 String leadTimeText = (leadTimeMinutes >= 60 && leadTimeMinutes % 60 == 0)
                         ? (leadTimeMinutes / 60) + " giờ"
                         : leadTimeMinutes + " phút";
                 bookingConflictNote = "Khung giờ này yêu cầu đặt trước tối thiểu " + leadTimeText;
+            } else if (!candidateStart.isAfter(now)) {
+                selectable = false;
+                reasonIfBlocked = BLOCKED_BY_PAST_TIME_REASON;
+                bookingConflictNote = "Khung giờ này đã bắt đầu hoặc đã trôi qua";
             } else if (candidateStart.isAfter(latestAllowed)) {
                 selectable = false;
                 reasonIfBlocked = BLOCKED_BY_HORIZON_REASON;

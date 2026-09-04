@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +41,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class IdentityServiceTest {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     @Mock
     private UserRepository userRepository;
@@ -111,7 +114,7 @@ class IdentityServiceTest {
         rotatingSession.setId(UUID.randomUUID());
         rotatingSession.setUser(user);
         rotatingSession.setRefreshTokenHash("hash-1");
-        rotatingSession.setExpiresAt(LocalDateTime.now().plusHours(1));
+        rotatingSession.setExpiresAt(LocalDateTime.now(BUSINESS_ZONE).plusHours(1));
         rotatingSession.setRevoked(false);
         rotatingSession.setSessionState(UserSessionState.ACTIVE);
 

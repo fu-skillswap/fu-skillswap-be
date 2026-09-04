@@ -33,6 +33,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.Clock;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -52,6 +53,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class BookingLifecycleMaintenanceServiceTest {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     @Mock
     private BookingRepository bookingRepository;
@@ -173,7 +176,7 @@ class BookingLifecycleMaintenanceServiceTest {
 
     @Test
     void processPostSessionLifecycle_awaitingMenteeConfirmation_oneHourBeforeReviewDeadline_shouldSendWarningNotification() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .menteeUserId(mentee.getId())
@@ -201,7 +204,7 @@ class BookingLifecycleMaintenanceServiceTest {
 
     @Test
     void processPostSessionLifecycle_awaitingMenteeConfirmation_afterReviewDeadline_shouldAutoCloseAndReleaseSettlement() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
                 .menteeUserId(mentee.getId())

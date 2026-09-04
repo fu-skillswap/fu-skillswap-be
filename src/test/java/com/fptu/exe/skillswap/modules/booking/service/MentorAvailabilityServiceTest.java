@@ -37,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -55,6 +56,8 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MentorAvailabilityServiceTest {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     @Mock
     private MentorBookingQueryPort mentorBookingQueryPort;
@@ -356,7 +359,7 @@ class MentorAvailabilityServiceTest {
         UUID slotId = UUID.randomUUID();
         UUID serviceId = UUID.randomUUID();
 
-        LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE).withSecond(0).withNano(0);
         LocalDateTime slotStart = now.plusHours(1); // 1 hour ahead (60 min)
         LocalDateTime slotEnd = now.plusHours(4);   // 4 hours ahead (3 x 60min segments)
 
