@@ -11,6 +11,12 @@ import java.util.List;
 @ConfigurationProperties(prefix = "application.storage")
 public class StorageProperties {
 
+    /**
+     * Active provider for new course videos. Bunny remains supported for
+     * existing materials, but R2 is the default for new deployments.
+     */
+    private String videoProvider = "R2";
+
     // Mặc định tắt, chỉ bật khi .env có STORAGE_ENABLED=true.
     private boolean enabled = false;
 

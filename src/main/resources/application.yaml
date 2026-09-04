@@ -241,6 +241,7 @@ application:
       notification-routing-pattern: ${REALTIME_OUTBOX_NOTIFICATION_ROUTING_PATTERN:notification.#}
   storage:
     enabled: ${STORAGE_ENABLED:${R2_ENABLED:false}}
+    video-provider: ${VIDEO_STORAGE_PROVIDER:R2}
     endpoint: ${STORAGE_ENDPOINT:${R2_ENDPOINT:}}
     access-key: ${STORAGE_ACCESS_KEY:${R2_ACCESS_KEY_ID:}}
     secret-key: ${STORAGE_SECRET_KEY:${R2_SECRET_ACCESS_KEY:}}

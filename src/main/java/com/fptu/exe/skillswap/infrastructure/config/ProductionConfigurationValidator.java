@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Fail-fast validation for the production deployment contract.
@@ -75,10 +76,7 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
             missing.add("JWT_REFRESH_COOKIE_SECURE=true");
         }
 
-        require(missing, "CORS_ALLOWED_ORIGIN_PATTERNS", allowedOrigins, 1);
-        if (containsDevelopmentValue(allowedOrigins)) {
-            missing.add("CORS_ALLOWED_ORIGIN_PATTERNS without localhost, 127.0.0.1, or wildcard");
-        }
+        validateProductionCors(missing, allowedOrigins);
 
         require(missing, "PAYOS_CLIENT_ID", paymentProperties.getPayos().getClientId(), 1);
         require(missing, "PAYOS_API_KEY", paymentProperties.getPayos().getApiKey(), 1);
@@ -93,10 +91,7 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         requireHttps(missing, "GOOGLE_CALENDAR_REDIRECT_URI", googleApiProperties.getCalendarRedirectUri());
         require(missing, "GOOGLE_TOKEN_ENCRYPTION_KEY", googleApiProperties.getTokenEncryptionKey(), 1);
 
-        require(missing, "BUNNY_STREAM_API_KEY", bunnyStreamProperties.getApiKey(), 1);
-        require(missing, "BUNNY_STREAM_LIBRARY_ID", bunnyStreamProperties.getLibraryId(), 1);
-        require(missing, "BUNNY_STREAM_TOKEN_AUTH_KEY", bunnyStreamProperties.getTokenAuthKey(), 1);
-        require(missing, "BUNNY_STREAM_WEBHOOK_SECRET", bunnyStreamProperties.getWebhookSecret(), 1);
+        validateVideoProvider(missing, storageProperties.getVideoProvider(), bunnyStreamProperties);
 
         if (!storageProperties.isEnabled()) {
             missing.add("STORAGE_ENABLED=true");
@@ -120,7 +115,7 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         }
     }
 
-    private void require(List<String> failures, String name, String value, int minimumLength) {
+    private static void require(List<String> failures, String name, String value, int minimumLength) {
         if (!StringUtils.hasText(value) || value.trim().length() < minimumLength) {
             failures.add(name);
         }
@@ -139,7 +134,35 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         }
     }
 
-    private boolean containsDevelopmentValue(String value) {
+    static void validateVideoProvider(
+            List<String> failures,
+            String provider,
+            BunnyStreamProperties bunnyStreamProperties
+    ) {
+        String normalized = StringUtils.hasText(provider)
+                ? provider.trim().toUpperCase(Locale.ROOT)
+                : "R2";
+        if ("R2".equals(normalized)) {
+            return;
+        }
+        if ("BUNNY".equals(normalized)) {
+            require(failures, "BUNNY_STREAM_API_KEY", bunnyStreamProperties.getApiKey(), 1);
+            require(failures, "BUNNY_STREAM_LIBRARY_ID", bunnyStreamProperties.getLibraryId(), 1);
+            require(failures, "BUNNY_STREAM_TOKEN_AUTH_KEY", bunnyStreamProperties.getTokenAuthKey(), 1);
+            require(failures, "BUNNY_STREAM_WEBHOOK_SECRET", bunnyStreamProperties.getWebhookSecret(), 1);
+            return;
+        }
+        failures.add("VIDEO_STORAGE_PROVIDER must be R2 or BUNNY");
+    }
+
+    static void validateProductionCors(List<String> failures, String allowedOrigins) {
+        require(failures, "CORS_ALLOWED_ORIGIN_PATTERNS", allowedOrigins, 1);
+        if (containsDevelopmentValue(allowedOrigins)) {
+            failures.add("CORS_ALLOWED_ORIGIN_PATTERNS without localhost, 127.0.0.1, or wildcard");
+        }
+    }
+
+    private static boolean containsDevelopmentValue(String value) {
         if (!StringUtils.hasText(value)) {
             return false;
         }

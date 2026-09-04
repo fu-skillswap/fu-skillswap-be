@@ -35,6 +35,7 @@ application:
       token-auth-key: ${BUNNY_STREAM_TOKEN_AUTH_KEY:}
       webhook-secret: ${BUNNY_STREAM_WEBHOOK_SECRET:}
   storage:
+    video-provider: ${VIDEO_STORAGE_PROVIDER:R2}
     enabled: ${STORAGE_ENABLED:false}
     endpoint: ${STORAGE_ENDPOINT:}
     access-key: ${STORAGE_ACCESS_KEY:}
