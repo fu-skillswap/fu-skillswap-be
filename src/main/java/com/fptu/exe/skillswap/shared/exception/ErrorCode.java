@@ -17,6 +17,7 @@ public enum ErrorCode {
     TOO_MANY_REQUESTS(429, "SYS_0010", "error.sys.too_many_requests", "Thao tác quá nhanh, thử lại sau"),
     METHOD_NOT_ALLOWED(405, "SYS_0011", "error.sys.method_not_allowed", "Phương thức không được hỗ trợ"),
     UNPROCESSABLE_ENTITY(422, "SYS_0012", "error.sys.unprocessable_entity", "Dữ liệu đúng định dạng nhưng không thể xử lý"),
+    LEGACY_WEBSOCKET_GONE(410, "WS_0410", "error.websocket.legacy_gone", "Raw WebSocket endpoint /ws đã ngừng hỗ trợ. Vui lòng chuyển sang STOMP /ws-stomp."),
 
     // Xác thực.
     UNAUTHENTICATED(401, "AUTH_1001", "error.auth.unauthenticated", "Chưa xác thực người dùng"),
@@ -31,6 +32,7 @@ public enum ErrorCode {
     GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước"),
     GOOGLE_CALENDAR_MENTOR_VERIFICATION_REQUIRED(409, "CAL_4402", "error.calendar.mentor_verification_required", "Chỉ dành cho mentor đã được duyệt"),
     GOOGLE_CALENDAR_DISCONNECT_BLOCKED(409, "CAL_4403", "error.calendar.disconnect_blocked", "Phải tắt toàn bộ dịch vụ mentoring trước"),
+    GOOGLE_CALENDAR_PROVIDER_ERROR(503, "CAL_5001", "error.calendar.provider_error", "Google Calendar tạm thời không khả dụng, vui lòng thử lại sau"),
 
     // Nghiệp vụ.
     USER_EXISTED(400, "USER_2001", "error.user.existed", "Người dùng đã tồn tại"),
@@ -41,6 +43,21 @@ public enum ErrorCode {
     // Thanh toán.
     PAYMENT_PROVIDER_ERROR(502, "PAY_5001", "error.pay.provider_error", "Cổng thanh toán đang gặp sự cố, vui lòng thử lại sau"),
     INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
+    PAYMENT_EXPIRED(409, "PAY_5003", "error.pay.expired", "Phiên thanh toán đã hết hạn"),
+    PAYMENT_CHECKOUT_FAILED(502, "PAY_5004", "error.pay.checkout_failed", "Không thể tạo thanh toán"),
+    VIDEO_PROVIDER_ERROR(502, "VIDEO_5001", "error.video.provider_error", "Dịch vụ video tạm thời không khả dụng, vui lòng thử lại sau"),
+
+    // Khóa học.
+    COURSE_ACCESS_DENIED(403, "COURSE_4601", "error.course.access_denied", "Bạn không có quyền truy cập khóa học"),
+    COURSE_MATERIAL_LOCKED(403, "COURSE_4602", "error.course.material_locked", "Tài liệu này chưa được mở khóa"),
+    COURSE_INVALID_STATUS(409, "COURSE_4603", "error.course.invalid_status", "Trạng thái khóa học không hợp lệ"),
+    COURSE_ALREADY_ENROLLED(409, "COURSE_4604", "error.course.already_enrolled", "Bạn đã đăng ký khóa học này"),
+
+    // Booking.
+    BOOKING_SLOT_UNAVAILABLE(409, "BOOKING_4001", "error.booking.slot_unavailable", "Khung giờ này không còn khả dụng"),
+    BOOKING_ALREADY_EXISTS(409, "BOOKING_4002", "error.booking.already_exists", "Bạn đã có booking cho khung giờ này"),
+    BOOKING_INVALID_STATUS(409, "BOOKING_4003", "error.booking.invalid_status", "Trạng thái booking không hợp lệ"),
+    BOOKING_EXPIRED(409, "BOOKING_4004", "error.booking.expired", "Booking này đã hết hạn"),
 
     // Blog.
     BLOG_POST_VERSION_CONFLICT(409, "BLOG_4001", "error.blog.post_version_conflict", "Bài viết đã được quản trị viên khác cập nhật"),
@@ -81,6 +98,9 @@ public enum ErrorCode {
     CHAT_ATTACHMENT_REVOKED(404, "CHAT_4111", "error.chat.attachment_revoked", "Tệp đính kèm không còn khả dụng"),
     CHAT_UPLOAD_INTENT_INVALID(400, "CHAT_4112", "error.chat.upload_intent_invalid", "Upload intent không hợp lệ"),
     CHAT_CONVERSATION_LOCKED(403, "CHAT_4113", "error.chat.conversation_locked", "Cuộc hội thoại đang bị khóa"),
+    CHAT_ACCESS_DENIED(403, "CHAT_4114", "error.chat.access_denied", "Bạn không có quyền truy cập đoạn chat"),
+    CHAT_INVALID_MESSAGE(400, "CHAT_4115", "error.chat.invalid_message", "Nội dung tin nhắn không hợp lệ"),
+    CHAT_INTERNAL_ERROR(500, "CHAT_5001", "error.chat.internal_error", "Không thể xử lý tin nhắn lúc này, vui lòng thử lại sau"),
 
     // Minh chứng booking dispute.
     BOOKING_ISSUE_EVIDENCE_INVALID(400, "BOOKING_4501", "error.booking.issue_evidence_invalid", "File minh chứng dispute không hợp lệ"),

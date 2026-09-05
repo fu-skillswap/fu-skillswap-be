@@ -28,7 +28,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -73,7 +72,7 @@ public class SdkPayOsGateway implements PayOsGateway {
             );
         } catch (PayOSException ex) {
             throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
-                    "Không thể tạo link thanh toán PayOS lúc này: " + safeProviderMessage(ex));
+                    ErrorCode.PAYMENT_PROVIDER_ERROR.getMessage(), ex);
         }
     }
 
@@ -96,7 +95,7 @@ public class SdkPayOsGateway implements PayOsGateway {
             );
         } catch (PayOSException ex) {
             throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
-                    "Không thể đồng bộ trạng thái thanh toán PayOS: " + safeProviderMessage(ex));
+                    ErrorCode.PAYMENT_PROVIDER_ERROR.getMessage(), ex);
         }
     }
 
@@ -287,13 +286,4 @@ public class SdkPayOsGateway implements PayOsGateway {
         return value.trim();
     }
 
-    private String safeProviderMessage(PayOSException ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message)) {
-            return "PayOS không trả về thông tin chi tiết";
-        }
-        return message.toLowerCase(Locale.ROOT).contains("null")
-                ? "PayOS từ chối request hoặc không phản hồi chi tiết"
-                : message;
-    }
 }

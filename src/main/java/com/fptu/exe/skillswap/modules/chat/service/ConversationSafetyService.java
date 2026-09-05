@@ -168,7 +168,7 @@ public class ConversationSafetyService {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "Tài khoản không hoạt động không được sử dụng chat");
         }
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không tham gia cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
         return (lock ? conversationRepository.findByIdForUpdate(conversationId) : conversationRepository.findById(conversationId))
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));

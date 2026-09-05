@@ -43,6 +43,18 @@ class JwtTokenProviderTest {
         assertFalse(expectedProvider.validateAccessToken(tamperedToken));
     }
 
+    @Test
+    void isAccessTokenExpired_shouldDistinguishExpiredSessionFromOtherInvalidTokens() {
+        JwtProperties properties = buildProperties("skillswap", "skillswap-api");
+        properties.getJwt().setExpiration(-1_000L);
+        JwtTokenProvider provider = new JwtTokenProvider(properties);
+
+        String expiredToken = provider.generateAccessToken(UUID.randomUUID(), "user@test.com", List.of("MENTEE"));
+
+        assertTrue(provider.isAccessTokenExpired(expiredToken));
+        assertFalse(provider.isAccessTokenExpired("not-a-jwt"));
+    }
+
     private JwtProperties buildProperties(String issuer, String audience) {
         JwtProperties properties = new JwtProperties();
         properties.getJwt().setSecretKey(base64Secret());

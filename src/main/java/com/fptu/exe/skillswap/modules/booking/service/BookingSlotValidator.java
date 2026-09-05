@@ -72,7 +72,7 @@ public class BookingSlotValidator {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khoảng thời gian đã chọn phải nằm hoàn toàn trong khung giờ của mentor");
         }
         if (!selectedStartAt.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khoảng thời gian đã chọn đã bắt đầu hoặc đã trôi qua");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
         long durationMinutes = Duration.between(selectedStartAt, selectedEndAt).toMinutes();
         if (service == null || service.durationMinutes() == null) {
@@ -128,8 +128,7 @@ public class BookingSlotValidator {
                 selectedStartAt,
                 selectedEndAt
         )) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Segment đã chọn đã có booking được mentor chấp nhận trùng thời gian.");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
 
         long pendingCount = bookingRepository.countBySlotIdAndExactSegmentAndStatusUtc(
@@ -139,8 +138,7 @@ public class BookingSlotValidator {
                 BookingStatus.PENDING
         );
         if (pendingCount >= BookingQueueConstants.MAX_PENDING_REQUESTS_PER_SLOT) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Segment đã chọn đã đạt tối đa 3 yêu cầu chờ xác nhận.");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
 
         if (bookingRepository.hasOverlappingBookingByStatusesUtc(

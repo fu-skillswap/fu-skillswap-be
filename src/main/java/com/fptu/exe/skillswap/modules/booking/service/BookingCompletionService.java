@@ -145,7 +145,7 @@ public class BookingCompletionService {
         }
         synchronizePostSessionStatusForPhaseOne(booking, nowUtc);
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ mentor hoàn tất");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
         if (endUtc == null || nowUtc.isBefore(endUtc)) {
@@ -211,7 +211,7 @@ public class BookingCompletionService {
 
         if (booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION
                 && booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái chờ xác nhận sau buổi học");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         ensureWithinPostSessionReviewWindow(booking, nowUtc);
 
@@ -279,7 +279,7 @@ public class BookingCompletionService {
 
         if (booking.getStatus() != BookingStatus.AWAITING_MENTOR_COMPLETION
                 && booking.getStatus() != BookingStatus.AWAITING_MENTEE_CONFIRMATION) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện chưa ở trạng thái cho phép báo vấn đề");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         Instant endUtc = BookingTime.resolveSelectedEndUtc(booking);
         if (endUtc == null || nowUtc.isBefore(endUtc)) {
@@ -326,7 +326,7 @@ public class BookingCompletionService {
         Booking booking = getBookingForSessionAction(currentUserId, bookingId);
         assertBookingAccess(booking, currentUserId);
         if (booking.getStatus() != BookingStatus.UNDER_REVIEW || (booking.getIssueSubmittedAtUtc() == null && booking.getIssueSubmittedAt() == null)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking hiện không có issue đang mở");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         if (currentUserId.equals(booking.getIssueRespondedByUserId()) && (booking.getIssueRespondedAtUtc() != null || booking.getIssueRespondedAt() != null)) {
             requireEvidenceService().assertResponderReplayMatches(booking, currentUserId, request.evidenceIds());
@@ -376,7 +376,7 @@ public class BookingCompletionService {
         Booking booking = bookingRepository.findByIdForSessionUpdate(bookingId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
         if (booking.getStatus() != BookingStatus.UNDER_REVIEW) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể resolve booking đang UNDER_REVIEW");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         AdminBookingIssueResolutionPolicy.validate(request, booking.getIssueType());
         if (requireIssueResolutionRepository().findFirstByBookingIdAndResolutionKindAndStatusOrderByCreatedAtUtcDesc(
@@ -459,7 +459,7 @@ public class BookingCompletionService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy booking"));
 
         if (booking.getStatus() != BookingStatus.COMPLETED) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể đảo ngược quyết định của booking đã COMPLETED");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
 
         BookingIssueResolution originalResolution = requireIssueResolutionRepository()

@@ -12,6 +12,7 @@ import org.springframework.core.task.TaskDecorator;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.SchedulingConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -24,7 +25,7 @@ import java.time.Clock;
 @EnableAsync
 @RequiredArgsConstructor
 @Slf4j
-public class SchedulingConfig implements SchedulingConfigurer {
+public class SchedulingConfig implements SchedulingConfigurer, AsyncConfigurer {
 
     private final RealtimeOutboxProperties realtimeOutboxProperties;
     private final ObjectProvider<DomainEventOutboxPublisherScheduler> outboxPublisherSchedulerProvider;
@@ -35,11 +36,22 @@ public class SchedulingConfig implements SchedulingConfigurer {
         return new MdcTaskDecorator();
     }
 
+    @Bean
+    public AsyncExceptionTraceabilityHandler asyncExceptionTraceabilityHandler() {
+        return new AsyncExceptionTraceabilityHandler();
+    }
+
+    @Override
+    public org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return asyncExceptionTraceabilityHandler();
+    }
+
     @Bean(name = "applicationTaskScheduler")
     public ThreadPoolTaskScheduler applicationTaskScheduler() {
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setThreadNamePrefix("sched-");
         scheduler.setPoolSize(5);
+        scheduler.setErrorHandler(asyncExceptionTraceabilityHandler());
         scheduler.setClock(Clock.system(TimeProvider.BUSINESS_ZONE));
         scheduler.setWaitForTasksToCompleteOnShutdown(true);
         scheduler.setAwaitTerminationSeconds(30);

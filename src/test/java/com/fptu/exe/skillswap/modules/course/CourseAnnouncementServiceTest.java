@@ -14,6 +14,8 @@ import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -128,10 +130,25 @@ class CourseAnnouncementServiceTest {
     void mentorCannotCreateAnnouncementAfterCourseCompletion() {
         course.setStatus(CourseStatus.COMPLETED);
 
-        assertThrows(AccessDeniedException.class, () -> announcementService.createAnnouncement(
+        BaseException exception = assertThrows(BaseException.class, () -> announcementService.createAnnouncement(
                 mentorId, courseId, new CreateCourseAnnouncementRequest("Title", "Content")));
 
+        assertEquals(ErrorCode.COURSE_INVALID_STATUS, exception.getErrorCode());
         verifyNoInteractions(announcementRepository, outboxEventRepository);
+    }
+
+    @Test
+    void nonEnrolledUserCannotReadAnnouncementsWithCourseCode() {
+        when(enrollmentRepository.existsByCourseIdAndStudentUserIdAndStatusIn(
+                courseId, menteeId, List.of(EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED)))
+                .thenReturn(false);
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> announcementService.getAnnouncements(menteeId, courseId, 0, 20));
+
+        assertEquals(ErrorCode.COURSE_ACCESS_DENIED, exception.getErrorCode());
+        assertEquals("Bạn không có quyền truy cập khóa học", exception.getMessage());
+        verifyNoInteractions(announcementRepository);
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
 import com.fptu.exe.skillswap.modules.course.repository.*;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
@@ -196,7 +197,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         CourseMaterial material = materialForCourse(courseId, materialId);
         if (material.getMaterialType() != CourseMaterialType.VIDEO) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Material is not a video");
         assertAvailable(userId, material);
-        if (material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Video is not ready for playback");
+        if (material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.COURSE_INVALID_STATUS);
         if (material.getStorageProviderType() == StorageProviderType.OBJECT_STORAGE) {
             if (material.getVideoObjectKey() == null) throw new ResourceNotFoundException("Không tìm thấy video");
             VideoPlaybackTokenService.PlaybackGrant grant = videoPlaybackTokenService.issue(material.getId());
@@ -214,7 +215,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     @Transactional(readOnly = true)
     public CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId) {
         CourseMaterial material = materialForCourse(courseId, materialId);
-        if (material.getMaterialType() != CourseMaterialType.PDF || material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.BAD_REQUEST, "PDF is not ready");
+        if (material.getMaterialType() != CourseMaterialType.PDF || material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.COURSE_INVALID_STATUS);
         assertAvailable(userId, material);
         StorageGateway.PrivatePresignedDownload download = storageGateway.generatePrivateDownloadUrl(material.getDocumentObjectKey(), pdfDownloadTtl(),
                 "attachment; filename=\"" + material.getTitle().replace("\"", "") + ".pdf\"");
@@ -248,8 +249,8 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private CourseMaterial ownedMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=materialForCourse(courseId,materialId);if(!isCourseMentor(userId, courseId))throw new AccessDeniedException("Only course mentor can change curriculum");return m;}
     private CourseMaterial materialForCourse(UUID courseId,UUID materialId){CourseMaterial m=materialRepository.findActiveWithCurriculumById(materialId).orElseThrow(()->new ResourceNotFoundException("Course material not found"));if(!m.getChapter().getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Material does not belong to course");return m;}
     private void assertUnusedOrder(UUID chapterId,int order,UUID self){materialRepository.findByChapterIdAndDeletedAtIsNullOrderBySortOrderAsc(chapterId).stream().filter(m->m.getSortOrder()==order&&!m.getId().equals(self)).findAny().ifPresent(m->{throw new BadRequestException(ErrorCode.RESOURCE_CONFLICT,"Material sort order already exists in this chapter");});}
-    private boolean canAccess(UUID user,CourseMaterial m){try{assertAvailable(user,m);return true;}catch(AccessDeniedException e){return false;}}
-    private void assertAvailable(UUID user,CourseMaterial m){Course c=m.getChapter().getCourse();if(isCourseMentor(user, c.getId())||m.isPreviewable())return;CourseEnrollment e=enrollmentRepository.findByCourseIdAndStudentUserId(c.getId(),user).orElseThrow(()->new AccessDeniedException("User is not enrolled"));if(e.getStatus()!=EnrollmentStatus.ACTIVE&&e.getStatus()!=EnrollmentStatus.COMPLETED)throw new AccessDeniedException("No active course entitlement");}
+    private boolean canAccess(UUID user,CourseMaterial m){try{assertAvailable(user,m);return true;}catch(AccessDeniedException|BaseException e){return false;}}
+    private void assertAvailable(UUID user,CourseMaterial m){Course c=m.getChapter().getCourse();if(isCourseMentor(user, c.getId())||m.isPreviewable())return;CourseEnrollment e=enrollmentRepository.findByCourseIdAndStudentUserId(c.getId(),user).orElseThrow(()->new BaseException(ErrorCode.COURSE_MATERIAL_LOCKED));if(e.getStatus()!=EnrollmentStatus.ACTIVE&&e.getStatus()!=EnrollmentStatus.COMPLETED)throw new BaseException(ErrorCode.COURSE_MATERIAL_LOCKED);}
     private boolean isCourseMentor(UUID userId, UUID courseId) {
         return courseRepository.findMentorUserIdByCourseId(courseId)
                 .map(mentorUserId -> mentorOwnershipQueryPort.isOwnedBy(mentorUserId, userId))

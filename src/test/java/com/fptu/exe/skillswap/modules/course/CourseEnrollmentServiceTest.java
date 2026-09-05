@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.course.service.CourseEnrollmentService;
 import com.fptu.exe.skillswap.modules.course.service.CourseSettlementService;
 import com.fptu.exe.skillswap.modules.payment.port.CoursePaymentPort;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.lenient;
@@ -92,5 +95,26 @@ class CourseEnrollmentServiceTest {
         assertEquals(110_000, result.getPaidAmountScoin());
         assertEquals(5_000, result.getMentorCommissionScoin());
         assertEquals(95_000, result.getMentorPayoutScoin());
+    }
+
+    @Test
+    void enrollStudent_missingCourseReturnsNotFoundBusinessError() {
+        when(courseRepository.findById(courseId)).thenReturn(Optional.empty());
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> enrollmentService.enrollStudent(studentUserId, courseId));
+
+        assertEquals(ErrorCode.NOT_FOUND, exception.getErrorCode());
+    }
+
+    @Test
+    void enrollStudent_duplicateEnrollmentReturnsStableConflictCode() {
+        when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
+        when(enrollmentRepository.existsByCourseIdAndStudentUserId(courseId, studentUserId)).thenReturn(true);
+
+        BaseException exception = assertThrows(BaseException.class,
+                () -> enrollmentService.enrollStudent(studentUserId, courseId));
+
+        assertEquals(ErrorCode.COURSE_ALREADY_ENROLLED, exception.getErrorCode());
     }
 }

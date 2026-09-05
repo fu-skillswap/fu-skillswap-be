@@ -15,6 +15,8 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseStatus;
 import com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent;
 import com.fptu.exe.skillswap.modules.course.repository.CourseOutboxEventRepository;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -114,7 +116,7 @@ public class CourseAnnouncementService {
         if (course.getStatus() != CourseStatus.OPEN_FOR_ENROLLMENT
                 && course.getStatus() != CourseStatus.REGISTRATION_CLOSED
                 && course.getStatus() != CourseStatus.IN_PROGRESS) {
-            throw new AccessDeniedException("Announcements are read-only for this course");
+            throw new BaseException(ErrorCode.COURSE_INVALID_STATUS);
         }
     }
 
@@ -125,7 +127,8 @@ public class CourseAnnouncementService {
         boolean enrolled = enrollmentRepository.existsByCourseIdAndStudentUserIdAndStatusIn(
                 course.getId(), userId, List.of(EnrollmentStatus.ACTIVE, EnrollmentStatus.COMPLETED));
         if (!enrolled) {
-            throw new AccessDeniedException("User is not enrolled in this course");
+            throw new BaseException(ErrorCode.COURSE_ACCESS_DENIED)
+                    .withLogContext("courseId", course.getId());
         }
     }
 

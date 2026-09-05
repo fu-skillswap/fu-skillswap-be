@@ -91,7 +91,7 @@ public class BookingCancellationService {
         LocalDateTime nowBusiness = timeProvider.nowBusiness();
         long minutesUntilStart = minutesUntilStart(booking, nowUtc);
         if (!BookingActionPolicy.canCancelByMentor(booking.getStatus(), minutesUntilStart > 0)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor chỉ có thể hủy booking đã được chấp nhận");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
 
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
@@ -176,7 +176,7 @@ public class BookingCancellationService {
         BookingStatus currentStatus = booking.getStatus();
         long minutesUntilStart = minutesUntilStart(booking, nowUtc);
         if (!BookingActionPolicy.canCancelByMentee(currentStatus, minutesUntilStart > 0)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể hủy booking đang chờ phản hồi hoặc đã được chấp nhận");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         MentorAvailabilitySlot slot = booking.getSlot() == null ? null
                 : mentorAvailabilitySlotRepository.findByIdForUpdate(booking.getSlot().getId()).orElse(null);

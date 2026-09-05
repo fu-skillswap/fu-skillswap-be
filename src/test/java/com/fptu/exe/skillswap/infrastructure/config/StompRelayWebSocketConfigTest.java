@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.infrastructure.security.JwtTokenProvider;
 import com.fptu.exe.skillswap.infrastructure.security.UserAuthLookupPort;
 import com.fptu.exe.skillswap.infrastructure.security.UserBanStatusPort;
 import com.fptu.exe.skillswap.infrastructure.websocket.StompConnectAuthChannelInterceptor;
+import com.fptu.exe.skillswap.infrastructure.websocket.StompErrorFrameHandler;
 import com.fptu.exe.skillswap.infrastructure.websocket.StompPrincipalHandshakeHandler;
 import com.fptu.exe.skillswap.infrastructure.websocket.WebSocketAuthHandshakeInterceptor;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.socket.messaging.SubProtocolWebSocketHandler;
 import org.springframework.web.servlet.handler.AbstractHandlerMapping;
 import org.springframework.web.servlet.handler.SimpleUrlHandlerMapping;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
@@ -44,7 +46,8 @@ class StompRelayWebSocketConfigTest {
                 properties,
                 new WebSocketAuthHandshakeInterceptor(),
                 new StompPrincipalHandshakeHandler(),
-                buildAuthInterceptor()
+                buildAuthInterceptor(),
+                new StompErrorFrameHandler(new ObjectMapper())
         );
 
         MessageBrokerRegistry registry = new MessageBrokerRegistry(new ExecutorSubscribableChannel(), new NoOpMessageChannel());
@@ -78,7 +81,8 @@ class StompRelayWebSocketConfigTest {
                 properties,
                 new WebSocketAuthHandshakeInterceptor(),
                 new StompPrincipalHandshakeHandler(),
-                buildAuthInterceptor()
+                buildAuthInterceptor(),
+                new StompErrorFrameHandler(new ObjectMapper())
         );
 
         WebMvcStompEndpointRegistry registry = new WebMvcStompEndpointRegistry(

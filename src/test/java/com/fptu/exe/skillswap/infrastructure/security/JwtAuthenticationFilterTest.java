@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.security;
 
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,8 +13,11 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +31,9 @@ class JwtAuthenticationFilterTest {
 
     @Mock
     private UserBanStatusPort userBanStatusPort;
+
+    @Mock
+    private SecurityErrorResponseHandler securityErrorResponseHandler;
 
     @InjectMocks
     private JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -64,6 +72,25 @@ class JwtAuthenticationFilterTest {
         );
 
         verify(jwtTokenProvider, never()).validateAccessToken("socket-jwt");
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+    }
+
+    @Test
+    void bannedUser_receivesCommonErrorEnvelopeThroughSecurityHandler() throws Exception {
+        UUID userId = UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer access-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        Claims claims = org.mockito.Mockito.mock(Claims.class);
+        when(claims.get("userId", String.class)).thenReturn(userId.toString());
+        when(jwtTokenProvider.validateAccessToken("access-token")).thenReturn(true);
+        when(jwtTokenProvider.getClaimsFromToken("access-token")).thenReturn(claims);
+        when(userBanStatusPort.isBanned(userId)).thenReturn(true);
+
+        jwtAuthenticationFilter.doFilter(request, response, new MockFilterChain());
+
+        verify(securityErrorResponseHandler).writeError(request, response, ErrorCode.USER_BANNED);
         assertNull(SecurityContextHolder.getContext().getAuthentication());
     }
 }

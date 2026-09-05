@@ -7,6 +7,8 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentReposito
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.course.event.CourseEnrollmentActivatedEvent;
 import com.fptu.exe.skillswap.modules.payment.port.CoursePaymentPort;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +32,10 @@ public class CourseEnrollmentService {
     @Transactional
     public CourseEnrollment enrollStudent(UUID studentUserId, UUID courseId) {
         Course course = courseRepository.findById(courseId)
-                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy khóa học"));
 
         if (enrollmentRepository.existsByCourseIdAndStudentUserId(courseId, studentUserId)) {
-            throw new IllegalStateException("Student already enrolled");
+            throw new BaseException(ErrorCode.COURSE_ALREADY_ENROLLED);
         }
 
         // Increment enrolled count (unlimited capacity for self-paced)

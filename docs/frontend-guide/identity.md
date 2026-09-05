@@ -11,7 +11,7 @@ Tất cả các API của SkillSwap đều trả về một envelope chuẩn d�
 
 ```typescript
 interface ApiResponse<T> {
-  timestamp: string;          // Định dạng "yyyy-MM-dd HH:mm:ss"
+  timestamp: string;          // ISO-8601, ví dụ: "2026-06-22T14:20:25Z"
   status: number;             // HTTP status code (ví dụ: 200, 400, 401, 403, 429)
   code: string;               // Mã nghiệp vụ riêng (ví dụ: "SUCCESS_0200", "AUTH_1001", "VAL_3001")
   message: string;            // Thông điệp an toàn có thể hiển thị trực tiếp lên UI
@@ -30,6 +30,7 @@ interface ValidationError {
 > - Với response thành công: `data` chứa payload kiểu `T`.
 > - Với lỗi validation `400`: `data` là mảng các `ValidationError`. Frontend gắn `message` vào đúng trường nhập liệu nếu `field` có giá trị; nếu `field` là null thì hiển thị ở đầu form.
 > - Luôn ưu tiên kết hợp HTTP status code và mã nghiệp vụ `code` để quyết định luồng xử lý trên UI.
+> - Khi API trả lỗi, Frontend đọc `X-Correlation-ID` từ response header để hiển thị/mở ticket hỗ trợ. Header này được CORS expose; `X-Request-Id` là alias tương thích cũ. Chi tiết vận hành xem [error-contract-operations.md](../architecture/error-contract-operations.md).
 
 ---
 

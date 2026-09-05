@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserAuthSnapshot;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.infrastructure.security.UserBanStatusPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.impl.DefaultClaims;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,7 +18,6 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.security.access.AccessDeniedException;
 
 import java.security.Principal;
 import java.util.List;
@@ -76,7 +76,22 @@ class StompConnectAuthChannelInterceptorTest {
 
         when(jwtTokenProvider.validateAccessToken("invalid")).thenReturn(false);
 
-        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+        StompErrorException error = assertThrows(StompErrorException.class, () -> interceptor.preSend(message, null));
+        assertEquals(ErrorCode.UNAUTHENTICATED, error.getErrorCode());
+    }
+
+    @Test
+    void shouldRejectExpiredConnectFrameWithSessionExpiredCode() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setLeaveMutable(true);
+        accessor.addNativeHeader("Authorization", "Bearer expired");
+        Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
+
+        when(jwtTokenProvider.validateAccessToken("expired")).thenReturn(false);
+        when(jwtTokenProvider.isAccessTokenExpired("expired")).thenReturn(true);
+
+        StompErrorException error = assertThrows(StompErrorException.class, () -> interceptor.preSend(message, null));
+        assertEquals(ErrorCode.SESSION_EXPIRED, error.getErrorCode());
     }
 
     @Test
@@ -95,7 +110,8 @@ class StompConnectAuthChannelInterceptorTest {
         accessor.addNativeHeader("Authorization", "Bearer inactive-token");
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
-        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+        StompErrorException error = assertThrows(StompErrorException.class, () -> interceptor.preSend(message, null));
+        assertEquals(ErrorCode.USER_INACTIVE, error.getErrorCode());
     }
 
     @Test
@@ -111,7 +127,8 @@ class StompConnectAuthChannelInterceptorTest {
         accessor.setDestination("/user/" + userB + "/queue/chat/messages");
         Message<byte[]> message = MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
 
-        assertThrows(AccessDeniedException.class, () -> interceptor.preSend(message, null));
+        StompErrorException error = assertThrows(StompErrorException.class, () -> interceptor.preSend(message, null));
+        assertEquals(ErrorCode.CHAT_ACCESS_DENIED, error.getErrorCode());
     }
 
     @Test

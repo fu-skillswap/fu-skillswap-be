@@ -216,7 +216,9 @@ interface PayoutRequestResponse {
 | HTTP Status | Error Code | Ý nghĩa & Hướng xử lý cho Frontend |
 |---|---|---|
 | `400` | `VAL_3001` | Thông tin tài khoản ngân hàng không hợp lệ hoặc số dư rút vượt quá hạn mức khả dụng. |
-| `400` | `PAYMENT_5001` | Booking chưa sẵn sàng để thanh toán (ví dụ: booking chưa được mentor chấp nhận). |
+| `502` | `PAY_5001` | Cổng thanh toán gặp sự cố khi tạo hoặc xử lý thanh toán. Thử lại theo chính sách của FE. |
+| `502` | `PAY_5004` | Không thể tạo thanh toán. Hiển thị `message` và cho phép người dùng thử lại. |
+| `409` | `PAY_5003` | Phiên thanh toán đã hết hạn; tạo checkout mới. |
 | `400` | `COUPON_4001` | Mã coupon không hợp lệ, đã hết hạn hoặc không áp dụng cho dịch vụ này. |
 | `401` | `AUTH_1001` | Chưa đăng nhập hoặc token đã hết hạn. |
 | `409` | `SYS_0007` | Đơn hàng checkout này đã được thanh toán thành công từ trước. |

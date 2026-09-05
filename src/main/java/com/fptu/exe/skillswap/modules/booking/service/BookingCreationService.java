@@ -122,7 +122,7 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Mentor đang bị tạm khóa nhận lịch mới đến " + capability.bookingSuspendedUntil());
         }
         if (!slot.isActive()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
         Instant slotStartUtc = slot.getStartTimeUtc() != null ? slot.getStartTimeUtc() : BookingTime.toInstant(slot.getStartTime());
         Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc() : BookingTime.toInstant(slot.getEndTime());
@@ -130,7 +130,7 @@ public class BookingCreationService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Khung giờ mentoring hiện tại không hợp lệ");
         }
         if (!slotEndUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này đã kết thúc hoặc đã trôi qua");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
 
         ServiceSlotCandidate serviceCandidate = resolveServiceCandidate(request.serviceId(), mentorUserId);
@@ -158,14 +158,12 @@ public class BookingCreationService {
                 requestedEndAt,
                 List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID)
         )) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Bạn đã có yêu cầu booking đang chờ hoặc đã được chấp nhận cho đúng segment này.");
+            throw new BaseException(ErrorCode.BOOKING_ALREADY_EXISTS);
         }
 
         Instant pendingExpireAtUtc = BookingDeadlinePolicy.resolvePendingExpiry(nowUtc, requestedStartAt);
         if (pendingExpireAtUtc == null || !pendingExpireAtUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Khung giờ không còn đủ thời gian để mentor phản hồi yêu cầu booking.");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
         LocalDateTime pendingExpireAt = BookingTime.fromInstant(pendingExpireAtUtc);
 

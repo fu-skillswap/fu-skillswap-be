@@ -131,7 +131,7 @@ public class ChatQueryService {
         requireActiveUser(userId);
         MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
 
         Page<Message> messagePage = activeMessageRepo.findByConversationIdOrderByCreatedAtDesc(conversationId, pageable);
@@ -143,7 +143,7 @@ public class ChatQueryService {
     public CursorPageResponse<MessageResponse> getMessages(UUID conversationId, UUID userId, String cursor, Integer limit) {
         requireActiveUser(userId);
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
 
         int resolvedLimit = chatResponseMapper.defaultLimit(limit, 30);
@@ -182,7 +182,7 @@ public class ChatQueryService {
     public List<MessageResponse> getMessagesBySequence(UUID conversationId, UUID userId, Long beforeSequence, Long afterSequence, Integer limit) {
         requireActiveUser(userId);
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
 
         int resolvedLimit = chatResponseMapper.defaultLimit(limit, 50);
@@ -208,7 +208,7 @@ public class ChatQueryService {
         ConversationParticipant me = participants.stream()
                 .filter(cp -> cp.getUser().getId().equals(userId))
                 .findFirst()
-                .orElseThrow(() -> new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không thuộc cuộc hội thoại này"));
+                .orElseThrow(() -> new BaseException(ErrorCode.CHAT_ACCESS_DENIED));
 
         ConversationParticipant other = participants.stream()
                 .filter(cp -> !cp.getUser().getId().equals(userId))

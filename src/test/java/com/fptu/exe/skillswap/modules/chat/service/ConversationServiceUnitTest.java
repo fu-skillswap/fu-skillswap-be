@@ -506,6 +506,20 @@ class ConversationServiceUnitTest {
     }
 
     @Test
+    void getMessages_shouldUseChatAccessDenied_whenUserIsNotParticipant() {
+        UUID conversationId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(userQueryPort.isUserActive(userId)).thenReturn(true);
+        when(participantRepository.existsByConversationIdAndUserId(conversationId, userId)).thenReturn(false);
+
+        var exception = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> conversationService.getMessages(conversationId, userId, PageRequest.of(0, 10), null));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.CHAT_ACCESS_DENIED, exception.getErrorCode());
+        assertEquals("Bạn không có quyền truy cập đoạn chat", exception.getMessage());
+    }
+
+    @Test
     void sendGroupMessage_shouldUseOutboxOnlyWhenRealtimeIsEnabled() {
         UUID conversationId = UUID.randomUUID();
         UUID senderId = UUID.randomUUID();

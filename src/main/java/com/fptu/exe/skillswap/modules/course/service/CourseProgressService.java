@@ -43,7 +43,8 @@ public class CourseProgressService {
                 .filter(enrollment -> enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.ACTIVE
                         || enrollment.getStatus() == com.fptu.exe.skillswap.modules.course.domain.EnrollmentStatus.COMPLETED)
                 .isEmpty()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "You do not have access to this course");
+            throw new BaseException(ErrorCode.COURSE_ACCESS_DENIED)
+                    .withLogContext("courseId", courseId);
         }
         if (material.getDurationSeconds() == null || material.getDurationSeconds() <= 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Progress is available only after video duration is known");

@@ -97,17 +97,29 @@ public class JwtTokenProvider {
             validateAccessClaims(parseClaims(token));
             return true;
         } catch (MalformedJwtException ex) {
-            log.warn("Invalid JWT token: {}", ex.getMessage());
+            log.warn("Invalid JWT token");
         } catch (ExpiredJwtException ex) {
             log.info("Expired JWT token");
         } catch (UnsupportedJwtException ex) {
-            log.warn("Unsupported JWT token: {}", ex.getMessage());
+            log.warn("Unsupported JWT token");
         } catch (IllegalArgumentException ex) {
-            log.warn("JWT claims string is empty: {}", ex.getMessage());
+            log.warn("JWT claims string is empty");
         } catch (Exception ex) {
-            log.error("JWT parsing error: {}", ex.getMessage());
+            log.error("JWT parsing error");
         }
         return false;
+    }
+
+    /** Distinguishes an expired session from other invalid credentials. */
+    public boolean isAccessTokenExpired(String token) {
+        try {
+            parseClaims(token);
+            return false;
+        } catch (ExpiredJwtException ex) {
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     public Claims getClaimsFromToken(String token) {

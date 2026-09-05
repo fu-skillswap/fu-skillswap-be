@@ -471,7 +471,7 @@ class BookingServiceTest {
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_SLOT_UNAVAILABLE, exception.getErrorCode());
     }
 
     @Test
@@ -489,7 +489,7 @@ class BookingServiceTest {
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_SLOT_UNAVAILABLE, exception.getErrorCode());
     }
 
     @Test
@@ -508,7 +508,7 @@ class BookingServiceTest {
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_ALREADY_EXISTS, exception.getErrorCode());
     }
 
     @Test
@@ -557,7 +557,7 @@ class BookingServiceTest {
                 () -> bookingService.acceptBooking(mentorId, booking.getId(),
                         new AcceptBookingRequest("Accepted", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/test-abc", null)));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_EXPIRED, exception.getErrorCode());
         assertEquals(BookingStatus.PENDING, booking.getStatus());
         verify(bookingRepository, never()).save(booking);
     }
@@ -636,7 +636,7 @@ class BookingServiceTest {
                 new SaveMeetingLinkRequest(MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/abc", null)
         ));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_INVALID_STATUS, exception.getErrorCode());
     }
 
     @Test
@@ -754,7 +754,7 @@ class BookingServiceTest {
                 new CompleteBookingRequest("Too early")
         ));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_INVALID_STATUS, exception.getErrorCode());
         verify(notificationService, never()).createNotification(any(), any(), any(), any(), any(), any());
     }
 
@@ -1262,8 +1262,7 @@ class BookingServiceTest {
         )).thenReturn(true);
 
         BaseException exception = assertThrows(BaseException.class, () -> bookingService.createBooking(menteeId, request));
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
-        assertTrue(exception.getMessage().contains("đã có booking được mentor chấp nhận"));
+        assertEquals(ErrorCode.BOOKING_SLOT_UNAVAILABLE, exception.getErrorCode());
     }
 
     @Test
@@ -1298,7 +1297,7 @@ class BookingServiceTest {
                 new AdminResolveBookingIssueRequest(AdminBookingIssueResolutionAction.CONFIRM_SESSION, "Manual close")
         ));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_INVALID_STATUS, exception.getErrorCode());
     }
 
     private Booking bookingForDecision(BookingStatus status) {

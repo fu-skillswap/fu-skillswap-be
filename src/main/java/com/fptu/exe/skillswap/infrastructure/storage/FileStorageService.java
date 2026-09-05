@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.storage;
 
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -101,7 +103,7 @@ public class FileStorageService {
 
     private void ensureStorageReady() {
         if (!storageReady || uploadPath == null) {
-            throw new IllegalStateException(STORAGE_NOT_READY_MESSAGE);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, STORAGE_NOT_READY_MESSAGE);
         }
     }
 }

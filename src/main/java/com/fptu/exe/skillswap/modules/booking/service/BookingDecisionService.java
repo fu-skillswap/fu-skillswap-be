@@ -112,10 +112,10 @@ public class BookingDecisionService {
             return bookingResponseMapper.toBookingResponse(booking);
         }
         if (booking.getStatus() != BookingStatus.PENDING) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể chấp nhận booking đang chờ phản hồi");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
         if (!slot.isActive()) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
 
         Instant nowUtc = timeProvider.instant();
@@ -123,8 +123,8 @@ public class BookingDecisionService {
         Instant pendingExpireAtUtc = booking.getPendingExpireAtUtc() != null ? booking.getPendingExpireAtUtc()
                 : (booking.getPendingExpireAt() != null ? BookingTime.toInstant(booking.getPendingExpireAt()) : null);
         if (pendingExpireAtUtc != null && !pendingExpireAtUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                    "Yêu cầu đặt lịch đã quá hạn phản hồi và không thể được chấp nhận.");
+            throw new BaseException(ErrorCode.BOOKING_EXPIRED)
+                    .withLogContext("bookingId", booking.getId());
         }
         Instant selectedStartAt = BookingTime.resolveSelectedStartUtc(booking);
         Instant selectedEndAt = BookingTime.resolveSelectedEndUtc(booking);
@@ -137,7 +137,7 @@ public class BookingDecisionService {
                 selectedStartAt,
                 selectedEndAt
         )) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Segment này đã được chấp nhận cho booking khác");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
 
         List<Booking> menteeOverlappingBookings = bookingRepository.findMenteeOverlappingBookingsForUpdateUtc(
@@ -380,7 +380,7 @@ public class BookingDecisionService {
             return bookingResponseMapper.toBookingResponse(booking);
         }
         if (booking.getStatus() != BookingStatus.PENDING) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể từ chối booking đang chờ phản hồi");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
 
         Instant nowUtc = timeProvider.instant();

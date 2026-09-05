@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.infrastructure.security.UserBanStatusPort;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.infrastructure.security.UserAuthSnapshot;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import org.springframework.messaging.Message;
@@ -14,7 +15,6 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -40,24 +40,24 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
             }
             Principal resolvedUser = accessor.getUser();
             if (resolvedUser == null || resolvedUser.getName() == null || resolvedUser.getName().isBlank()) {
-                throw new AccessDeniedException("STOMP session chưa được xác thực");
+                throw new StompErrorException(ErrorCode.UNAUTHENTICATED);
             }
             requireActiveUser(resolvedUser);
             return MessageBuilder.createMessage(message.getPayload(), accessor.getMessageHeaders());
         } else if (StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
             Principal user = accessor.getUser();
             if (user == null || user.getName() == null || user.getName().isBlank()) {
-                throw new AccessDeniedException("STOMP SUBSCRIBE yêu cầu xác thực");
+                throw new StompErrorException(ErrorCode.UNAUTHENTICATED);
             }
             requireActiveUser(user);
             String destination = accessor.getDestination();
             if (destination == null || !destination.startsWith("/user/queue/")) {
-                throw new AccessDeniedException("Chỉ cho phép subscribe private queue của chính session");
+                throw new StompErrorException(ErrorCode.CHAT_ACCESS_DENIED);
             }
         } else if (StompCommand.SEND.equals(accessor.getCommand())) {
             Principal user = accessor.getUser();
             if (user == null || !"/app/chat/typing".equals(accessor.getDestination())) {
-                throw new AccessDeniedException("STOMP SEND destination không được hỗ trợ");
+                throw new StompErrorException(ErrorCode.CHAT_INVALID_MESSAGE);
             }
             requireActiveUser(user);
         }
@@ -69,18 +69,24 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
         if (!StringUtils.hasText(token)) {
             token = extractRawToken(accessor, "X-Access-Token");
         }
-        if (!StringUtils.hasText(token) || !jwtTokenProvider.validateAccessToken(token)) {
-            throw new AccessDeniedException("STOMP access token không hợp lệ");
+        if (!StringUtils.hasText(token)) {
+            throw new StompErrorException(ErrorCode.UNAUTHENTICATED);
+        }
+        if (!jwtTokenProvider.validateAccessToken(token)) {
+            if (jwtTokenProvider.isAccessTokenExpired(token)) {
+                throw new StompErrorException(ErrorCode.SESSION_EXPIRED);
+            }
+            throw new StompErrorException(ErrorCode.UNAUTHENTICATED);
         }
         Claims claims = jwtTokenProvider.getClaimsFromToken(token);
         UUID userId = UUID.fromString(claims.get("userId", String.class));
         if (userBanStatusPort.isBanned(userId)) {
-            throw new AccessDeniedException("Tài khoản của bạn đã bị khóa");
+            throw new StompErrorException(ErrorCode.USER_BANNED);
         }
         var snapshot = userAuthLookupPort.findSnapshotByUserId(userId)
-                .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản người dùng"));
+                .orElseThrow(() -> new StompErrorException(ErrorCode.UNAUTHENTICATED));
         if (!snapshot.isActive()) {
-            throw new AccessDeniedException("Tài khoản không hoạt động không được kết nối STOMP");
+            throw new StompErrorException(ErrorCode.USER_INACTIVE);
         }
         List<RoleCode> roles = snapshot.roles() == null ? List.of() : snapshot.roles();
         UserPrincipal userPrincipal = UserPrincipal.create(userId, snapshot.email(), roles);
@@ -92,12 +98,12 @@ public class StompConnectAuthChannelInterceptor implements ChannelInterceptor {
         try {
             userId = UUID.fromString(principal.getName());
         } catch (RuntimeException ex) {
-            throw new AccessDeniedException("STOMP principal không hợp lệ");
+            throw new StompErrorException(ErrorCode.UNAUTHENTICATED);
         }
         UserAuthSnapshot snapshot = userAuthLookupPort.findSnapshotByUserId(userId)
-                .orElseThrow(() -> new AccessDeniedException("Không tìm thấy tài khoản người dùng"));
+                .orElseThrow(() -> new StompErrorException(ErrorCode.UNAUTHENTICATED));
         if (!snapshot.isActive()) {
-            throw new AccessDeniedException("Tài khoản không hoạt động không được sử dụng STOMP");
+            throw new StompErrorException(ErrorCode.USER_INACTIVE);
         }
     }
 

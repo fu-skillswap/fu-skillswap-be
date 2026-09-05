@@ -1,5 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.storage;
 
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -12,14 +14,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FileStorageServiceTest {
 
     @Test
-    void store_whenStorageIsNotReady_shouldThrowClearIllegalState() throws Exception {
+    void store_whenStorageIsNotReady_shouldReturnStableStorageError() throws Exception {
         FileStorageService fileStorageService = new FileStorageService();
         setField(fileStorageService, "storageReady", false);
 
         MockMultipartFile file = new MockMultipartFile("file", "test.txt", "text/plain", "data".getBytes());
 
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> fileStorageService.store(file));
+        BaseException ex = assertThrows(BaseException.class, () -> fileStorageService.store(file));
 
+        assertEquals(ErrorCode.STORAGE_ERROR, ex.getErrorCode());
         assertEquals(
                 "Dịch vụ lưu trữ tệp hiện chưa sẵn sàng. Vui lòng kiểm tra cấu hình application.upload.dir và quyền ghi thư mục.",
                 ex.getMessage()

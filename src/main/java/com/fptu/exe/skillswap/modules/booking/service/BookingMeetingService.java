@@ -55,7 +55,7 @@ public class BookingMeetingService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Thiếu dữ liệu meeting link");
         }
         if (!isScheduledBookingStatus(booking.getStatus()) && booking.getStatus() != BookingStatus.ACCEPTED_AWAITING_PAYMENT) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Chỉ có thể cập nhật meeting link cho booking đã được xác nhận hoặc chờ thanh toán");
+            throw new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
         }
 
         Instant startUtc = BookingTime.resolveSelectedStartUtc(booking);

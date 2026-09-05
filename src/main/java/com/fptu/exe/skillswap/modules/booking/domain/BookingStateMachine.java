@@ -90,7 +90,9 @@ public final class BookingStateMachine {
     }
 
     private static BaseException invalid(BookingStatus current, BookingTransitionCommand command) {
-        return new BaseException(ErrorCode.RESOURCE_CONFLICT,
-                "Không thể thực hiện " + command + " khi booking đang ở trạng thái " + current);
+        if (current == BookingStatus.EXPIRED) {
+            return new BaseException(ErrorCode.BOOKING_EXPIRED);
+        }
+        return new BaseException(ErrorCode.BOOKING_INVALID_STATUS);
     }
 }

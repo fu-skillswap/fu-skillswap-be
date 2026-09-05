@@ -99,12 +99,12 @@ public class BookingQuoteService {
         if (bookingRepository.existsByMenteeUserIdAndSlotIdAndSelectedStartTimeUtcAndSelectedEndTimeUtcAndStatusIn(
                 menteeUserId, slot.getId(), normalizedStartAt, normalizedEndAt,
                 List.of(BookingStatus.PENDING, BookingStatus.ACCEPTED_AWAITING_PAYMENT, BookingStatus.PAID))) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã có booking cho exact segment này.");
+            throw new BaseException(ErrorCode.BOOKING_ALREADY_EXISTS);
         }
 
         Instant pendingExpireAtUtc = BookingDeadlinePolicy.resolvePendingExpiry(nowUtc, normalizedStartAt);
         if (pendingExpireAtUtc == null || !pendingExpireAtUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ không còn đủ thời gian để mentor phản hồi.");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
         return new BookingQuoteResponse(
                 slot.getId(),
@@ -146,7 +146,7 @@ public class BookingQuoteService {
         Instant slotEndUtc = slot.getEndTimeUtc() != null ? slot.getEndTimeUtc() : BookingTime.toInstant(slot.getEndTime());
         if (!slot.isActive() || slotStartUtc == null || slotEndUtc == null
                 || !slotEndUtc.isAfter(slotStartUtc) || !slotEndUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Khung giờ này hiện không còn khả dụng");
+            throw new BaseException(ErrorCode.BOOKING_SLOT_UNAVAILABLE);
         }
     }
 }

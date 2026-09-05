@@ -41,9 +41,10 @@ public class WebConfig {
                 "X-Requested-With",
                 "x-auth-token",
                 "X-Request-Id",
+                "X-Correlation-ID",
                 "ngrok-skip-browser-warning"
         ));
-        configuration.setExposedHeaders(List.of("x-auth-token", "X-Request-Id"));
+        configuration.setExposedHeaders(List.of("x-auth-token", "X-Request-Id", "X-Correlation-ID"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

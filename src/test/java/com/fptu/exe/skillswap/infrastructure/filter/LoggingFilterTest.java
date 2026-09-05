@@ -31,6 +31,7 @@ class LoggingFilterTest {
         mockMvc.perform(get("/__phase1/error").accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(header().exists(TraceContext.TRACE_ID_HEADER))
+                .andExpect(header().exists(TraceContext.CORRELATION_ID_HEADER))
                 .andExpect(jsonPath("$.code", is(ErrorCode.BAD_REQUEST.getCode())));
 
         assertNull(TraceContext.getCurrentTraceId());
@@ -45,6 +46,26 @@ class LoggingFilterTest {
         mockMvc.perform(get("/__phase1/ok").header(TraceContext.TRACE_ID_HEADER, "trace-abc-123"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(TraceContext.TRACE_ID_HEADER, "trace-abc-123"));
+    }
+
+    @Test
+    void shouldReuseIncomingCorrelationIdOnErrorResponse() throws Exception {
+        MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ErrorController())
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .addFilter(new LoggingFilter())
+                .build();
+
+        mockMvc.perform(get("/__phase1/error")
+                        .header(TraceContext.CORRELATION_ID_HEADER, "abc-123")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string(TraceContext.CORRELATION_ID_HEADER, "abc-123"))
+                .andExpect(header().string(TraceContext.TRACE_ID_HEADER, "abc-123"))
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status", is(400)))
+                .andExpect(jsonPath("$.code", is(ErrorCode.BAD_REQUEST.getCode())))
+                .andExpect(jsonPath("$.message", is("phase1 error")))
+                .andExpect(jsonPath("$.correlationId").doesNotExist());
     }
 
     @RestController

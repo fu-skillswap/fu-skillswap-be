@@ -265,7 +265,7 @@ public class ChatRoomService {
         }
         var participant = participantRepository.findByConversationIdAndUserId(conversationId, userId);
         if (participant.isEmpty() || participant.get().getAccessState() == ConversationParticipantAccess.REVOKED) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền truy cập vào cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
     }
 

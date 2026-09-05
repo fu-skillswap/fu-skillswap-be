@@ -217,7 +217,7 @@ class BookingCompletionServiceTest {
         BaseException exception = assertThrows(BaseException.class, () -> service.completeBookingByMentor(
                 mentorId, bookingId, new CompleteBookingRequest("Retry completion")));
 
-        assertEquals(ErrorCode.RESOURCE_CONFLICT, exception.getErrorCode());
+        assertEquals(ErrorCode.BOOKING_INVALID_STATUS, exception.getErrorCode());
         verify(sessionFinalizationService, never()).recordMentorReportedCompletion(any(Booking.class), any(Instant.class));
         verify(bookingRepository, never()).save(any(Booking.class));
     }

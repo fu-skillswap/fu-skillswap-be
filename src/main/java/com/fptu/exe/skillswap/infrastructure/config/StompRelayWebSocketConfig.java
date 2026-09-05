@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.fptu.exe.skillswap.infrastructure.websocket.StompConnectAuthChannelInterceptor;
+import com.fptu.exe.skillswap.infrastructure.websocket.StompErrorFrameHandler;
 import com.fptu.exe.skillswap.infrastructure.websocket.StompPrincipalHandshakeHandler;
 import com.fptu.exe.skillswap.infrastructure.websocket.WebSocketAuthHandshakeInterceptor;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class StompRelayWebSocketConfig implements WebSocketMessageBrokerConfigur
     private final WebSocketAuthHandshakeInterceptor webSocketAuthHandshakeInterceptor;
     private final StompPrincipalHandshakeHandler stompPrincipalHandshakeHandler;
     private final StompConnectAuthChannelInterceptor stompConnectAuthChannelInterceptor;
+    private final StompErrorFrameHandler stompErrorFrameHandler;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
@@ -59,6 +61,7 @@ public class StompRelayWebSocketConfig implements WebSocketMessageBrokerConfigur
                 .addInterceptors(webSocketAuthHandshakeInterceptor)
                 .setHandshakeHandler(stompPrincipalHandshakeHandler)
                 .setAllowedOriginPatterns(resolveAllowedOriginPatterns());
+        registry.setErrorHandler(stompErrorFrameHandler);
     }
 
     @Override

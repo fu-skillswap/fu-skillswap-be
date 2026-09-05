@@ -222,10 +222,24 @@ public class PaymentCheckoutService {
                             preparation.booking(), preparation.order(), parseProviderOrderCode(preparation.attempt().getProviderOrderCode())));
         } catch (RuntimeException ex) {
             failProviderAttempt(preparation.order().getId(), preparation.attempt().getId(), ex);
-            throw ex;
+            if (ex instanceof BaseException) {
+                throw ((BaseException) ex).withLogContext("paymentOrderId", preparation.order().getId());
+            }
+            throw new BaseException(ErrorCode.PAYMENT_PROVIDER_ERROR,
+                    ErrorCode.PAYMENT_PROVIDER_ERROR.getMessage(), ex)
+                    .withLogContext("paymentOrderId", preparation.order().getId());
         }
 
-        return completeProviderAttemptCreation(preparation.order().getId(), preparation.attempt().getId(), createResult, currentUserId);
+        try {
+            return completeProviderAttemptCreation(preparation.order().getId(), preparation.attempt().getId(), createResult, currentUserId);
+        } catch (RuntimeException ex) {
+            if (ex instanceof BaseException) {
+                throw ((BaseException) ex).withLogContext("paymentOrderId", preparation.order().getId());
+            }
+            throw new BaseException(ErrorCode.PAYMENT_CHECKOUT_FAILED,
+                    ErrorCode.PAYMENT_CHECKOUT_FAILED.getMessage(), ex)
+                    .withLogContext("paymentOrderId", preparation.order().getId());
+        }
     }
 
     private PaymentCheckoutResponse completeProviderAttemptCreation(UUID paymentOrderId,
@@ -306,7 +320,7 @@ public class PaymentCheckoutService {
         }
         Instant deadlineUtc = paymentDeadlineUtc(booking);
         if (deadlineUtc != null && !deadlineUtc.isAfter(timeProvider.instant())) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã quá hạn thanh toán");
+            throw new BaseException(ErrorCode.PAYMENT_EXPIRED);
         }
     }
 
@@ -480,7 +494,7 @@ public class PaymentCheckoutService {
                 ? bookingDeadlineUtc
                 : configuredLinkExpiryUtc;
         if (!effectiveExpiryUtc.isAfter(nowUtc)) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Booking đã quá hạn thanh toán");
+            throw new BaseException(ErrorCode.PAYMENT_EXPIRED);
         }
         return effectiveExpiryUtc;
     }

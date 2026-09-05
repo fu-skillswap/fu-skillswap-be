@@ -1,6 +1,7 @@
 package com.fptu.exe.skillswap.modules.booking.domain;
 
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumMap;
@@ -82,6 +83,24 @@ class BookingStateMachineTest {
         assertTrue(BookingStateMachine.isScheduled(BookingStatus.AWAITING_MENTOR_COMPLETION));
         assertTrue(BookingStateMachine.isScheduled(BookingStatus.AWAITING_MENTEE_CONFIRMATION));
         assertTrue(BookingStateMachine.isTerminal(BookingStatus.COMPLETED));
+    }
+
+    @Test
+    void reportsExpiredBookingWithStableBusinessCode() {
+        BaseException exception = assertThrows(BaseException.class,
+                () -> BookingStateMachine.target(BookingStatus.EXPIRED, BookingTransitionCommand.CANCEL_BY_MENTEE));
+
+        assertEquals(ErrorCode.BOOKING_EXPIRED, exception.getErrorCode());
+        assertEquals("Booking này đã hết hạn", exception.getMessage());
+    }
+
+    @Test
+    void reportsInvalidLifecycleTransitionWithStableBusinessCode() {
+        BaseException exception = assertThrows(BaseException.class,
+                () -> BookingStateMachine.target(BookingStatus.PENDING, BookingTransitionCommand.SESSION_ENDED));
+
+        assertEquals(ErrorCode.BOOKING_INVALID_STATUS, exception.getErrorCode());
+        assertEquals("Trạng thái booking không hợp lệ", exception.getMessage());
     }
 
     private BookingStatus target(BookingStatus current, BookingTransitionCommand command) {

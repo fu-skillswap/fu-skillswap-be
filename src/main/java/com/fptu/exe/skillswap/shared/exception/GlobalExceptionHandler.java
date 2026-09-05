@@ -21,8 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.MissingPathVariableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
@@ -58,7 +61,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<ApiResponse<Object>> handleBaseException(BaseException ex) {
-        return buildResponse(ex.getErrorCode(), ex.getMessage());
+        Throwable diagnosticCause = ex.getErrorCode().getStatus() >= 500 ? ex : null;
+        return buildResponse(ex.getErrorCode(), ex.getMessage(), null, null, ex.getLogContext(), diagnosticCause);
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
@@ -182,45 +186,67 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        log.error("Data integrity violation traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.RESOURCE_CONFLICT, "Dữ liệu không hợp lệ hoặc đang xung đột với trạng thái hiện tại");
+        return buildResponse(
+                ErrorCode.RESOURCE_CONFLICT,
+                "Dữ liệu không hợp lệ hoặc đang xung đột với trạng thái hiện tại",
+                null,
+                null,
+                Map.of(),
+                ex
+        );
     }
 
     @ExceptionHandler({DataAccessException.class, JpaSystemException.class})
     public ResponseEntity<ApiResponse<Object>> handleDataAccess(Exception ex) {
-        log.error("Database access error traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.DATABASE_ERROR, ErrorCode.DATABASE_ERROR.getMessage());
+        return buildResponse(ErrorCode.DATABASE_ERROR, ErrorCode.DATABASE_ERROR.getMessage(), null, null, Map.of(), ex);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalArgument(IllegalArgumentException ex) {
-        log.warn("Invalid argument traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.INVALID_INPUT, ErrorCode.INVALID_INPUT.getMessage());
+        // Raw IllegalArgumentException is an internal invariant failure.
+        // Request validation uses Spring validation handlers or BaseException
+        // business codes above, so unexpected arguments remain HTTP 500.
+        return buildResponse(
+                ErrorCode.UNCATEGORIZED_EXCEPTION,
+                ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage(),
+                null,
+                null,
+                Map.of(),
+                ex
+        );
     }
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ApiResponse<Object>> handleIllegalState(IllegalStateException ex) {
-        log.error("Illegal state traceId={}", TraceContext.getCurrentTraceId(), ex);
         return buildResponse(
                 ErrorCode.CONFIGURATION_ERROR,
-                "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu"
+                "Hệ thống đang ở trạng thái không hợp lệ để xử lý yêu cầu",
+                null,
+                null,
+                Map.of(),
+                ex
         );
     }
 
     @ExceptionHandler(IOException.class)
     public ResponseEntity<ApiResponse<Object>> handleIOException(IOException ex) {
-        log.error("I/O error traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.STORAGE_ERROR, ErrorCode.STORAGE_ERROR.getMessage());
+        return buildResponse(ErrorCode.STORAGE_ERROR, ErrorCode.STORAGE_ERROR.getMessage(), null, null, Map.of(), ex);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Object>> handleResponseStatus(ResponseStatusException ex) {
-        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        int status = ex.getStatusCode().value();
         ErrorCode errorCode = switch (status) {
-            case NOT_FOUND -> ErrorCode.NOT_FOUND;
-            case FORBIDDEN -> ErrorCode.ACCESS_DENIED;
-            case UNAUTHORIZED -> ErrorCode.UNAUTHORIZED;
-            default -> ErrorCode.INVALID_INPUT;
+            case 404 -> ErrorCode.NOT_FOUND;
+            case 403 -> ErrorCode.ACCESS_DENIED;
+            case 401 -> ErrorCode.UNAUTHENTICATED;
+            case 409 -> ErrorCode.RESOURCE_CONFLICT;
+            case 429 -> ErrorCode.TOO_MANY_REQUESTS;
+            case 413 -> ErrorCode.PAYLOAD_TOO_LARGE;
+            case 415 -> ErrorCode.UNSUPPORTED_MEDIA_TYPE;
+            case 405 -> ErrorCode.METHOD_NOT_ALLOWED;
+            case 422 -> ErrorCode.UNPROCESSABLE_ENTITY;
+            default -> status >= 500 ? ErrorCode.UNCATEGORIZED_EXCEPTION : ErrorCode.BAD_REQUEST;
         };
         return buildResponse(errorCode, errorCode.getMessage());
     }
@@ -239,7 +265,19 @@ public class GlobalExceptionHandler {
             Object data,
             Long retryAfterSeconds
     ) {
-        applyTraceIdHeader();
+        return buildResponse(errorCode, message, data, retryAfterSeconds, Map.of(), null);
+    }
+
+    private ResponseEntity<ApiResponse<Object>> buildResponse(
+            ErrorCode errorCode,
+            String message,
+            Object data,
+            Long retryAfterSeconds,
+            Map<String, String> logContext,
+            Throwable diagnosticCause
+    ) {
+        String correlationId = applyCorrelationHeaders();
+        logHandledError(errorCode, correlationId, logContext, diagnosticCause);
         ApiResponse<Object> response = ApiResponse.builder()
                 .timestamp(DateTimeUtil.instantNow())
                 .status(errorCode.getStatus())
@@ -249,6 +287,8 @@ public class GlobalExceptionHandler {
                 .retryAfterSeconds(retryAfterSeconds)
                 .build();
         ResponseEntity.BodyBuilder builder = ResponseEntity.status(HttpStatus.valueOf(errorCode.getStatus()));
+        builder.header(TraceContext.CORRELATION_ID_HEADER, correlationId);
+        builder.header(TraceContext.TRACE_ID_HEADER, correlationId);
         if (retryAfterSeconds != null) {
             builder.header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds));
         }
@@ -270,18 +310,62 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Object>> handleAllExceptions(Exception ex) {
-        log.error("Unhandled Exception traceId={}", TraceContext.getCurrentTraceId(), ex);
-        return buildResponse(ErrorCode.UNCATEGORIZED_EXCEPTION, ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage());
+        return buildResponse(
+                ErrorCode.UNCATEGORIZED_EXCEPTION,
+                ErrorCode.UNCATEGORIZED_EXCEPTION.getMessage(),
+                null,
+                null,
+                Map.of(),
+                ex
+        );
     }
 
-    private void applyTraceIdHeader() {
+    private String applyCorrelationHeaders() {
         RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        String correlationId = TraceContext.getCurrentTraceId();
         if (!(attributes instanceof ServletRequestAttributes servletAttributes)) {
-            return;
+            return TraceContext.ensureCurrentTraceId();
         }
-        String traceId = TraceContext.getCurrentTraceId();
-        if (traceId != null && servletAttributes.getResponse() != null) {
-            servletAttributes.getResponse().setHeader(TraceContext.TRACE_ID_HEADER, traceId);
+
+        HttpServletRequest request = servletAttributes.getRequest();
+        HttpServletResponse response = servletAttributes.getResponse();
+        if (correlationId == null) {
+            correlationId = TraceContext.resolveAndSet(
+                    request.getHeader(TraceContext.CORRELATION_ID_HEADER),
+                    request.getHeader(TraceContext.TRACE_ID_HEADER));
+        }
+        if (response != null) {
+            response.setHeader(TraceContext.CORRELATION_ID_HEADER, correlationId);
+            response.setHeader(TraceContext.TRACE_ID_HEADER, correlationId);
+        }
+        return correlationId;
+    }
+
+    private void logHandledError(
+            ErrorCode errorCode,
+            String correlationId,
+            Map<String, String> logContext,
+            Throwable diagnosticCause
+    ) {
+        RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+        String method = null;
+        String path = null;
+        if (attributes instanceof ServletRequestAttributes servletAttributes) {
+            method = servletAttributes.getRequest().getMethod();
+            path = servletAttributes.getRequest().getRequestURI();
+        }
+        String template = "Handled API error code={} status={} correlationId={} method={} path={} context={}";
+        Object[] arguments = {
+                errorCode.getCode(), errorCode.getStatus(), correlationId, method, path,
+                logContext == null ? Map.of() : logContext
+        };
+        if (diagnosticCause == null) {
+            log.warn(template, arguments);
+        } else {
+            Object[] errorArguments = new Object[arguments.length + 1];
+            System.arraycopy(arguments, 0, errorArguments, 0, arguments.length);
+            errorArguments[arguments.length] = diagnosticCause;
+            log.error(template, errorArguments);
         }
     }
 }

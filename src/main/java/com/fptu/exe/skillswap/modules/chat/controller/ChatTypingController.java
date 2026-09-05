@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.modules.chat.controller;
 
 import com.fptu.exe.skillswap.modules.chat.dto.request.ChatTypingRequest;
 import com.fptu.exe.skillswap.modules.chat.service.ConversationService;
+import com.fptu.exe.skillswap.infrastructure.websocket.StompErrorException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
@@ -23,8 +25,13 @@ public class ChatTypingController {
 
     @MessageMapping("chat/typing")
     public void typing(ChatTypingRequest request, Principal principal) {
+        if (request == null || request.conversationId() == null) {
+            throw new StompErrorException(ErrorCode.CHAT_INVALID_MESSAGE);
+        }
         UUID senderId = UUID.fromString(principal.getName());
-        if (request == null || request.conversationId() == null || !conversationService.isParticipant(request.conversationId(), senderId)) return;
+        if (!conversationService.isParticipant(request.conversationId(), senderId)) {
+            throw new StompErrorException(ErrorCode.CHAT_ACCESS_DENIED);
+        }
         rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BEST_EFFORT, "chat:typing:" + senderId + ":" + request.conversationId(), 20, Duration.ofSeconds(10), "Typing quá nhanh");
         SimpMessagingTemplate template = simpMessagingTemplateProvider.getIfAvailable();
         if (template != null) {

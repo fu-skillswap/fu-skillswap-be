@@ -1,5 +1,9 @@
 package com.fptu.exe.skillswap.infrastructure.filter;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fptu.exe.skillswap.infrastructure.security.SecurityErrorResponseHandler;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -14,7 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LegacyRawWebSocketGoneFilterTest {
 
-    private final LegacyRawWebSocketGoneFilter filter = new LegacyRawWebSocketGoneFilter();
+    private final LegacyRawWebSocketGoneFilter filter = new LegacyRawWebSocketGoneFilter(
+            new SecurityErrorResponseHandler(new ObjectMapper().findAndRegisterModules()));
 
     @Test
     void shouldReturn410ForLegacyRawWebSocketPath() throws ServletException, IOException {
@@ -25,7 +30,11 @@ class LegacyRawWebSocketGoneFilterTest {
         filter.doFilter(request, response, new MockFilterChain());
 
         assertEquals(410, response.getStatus());
-        assertTrue(response.getContentAsString().contains("STOMP /ws-stomp"));
+        JsonNode body = new ObjectMapper().readTree(response.getContentAsString());
+        assertEquals(ErrorCode.LEGACY_WEBSOCKET_GONE.getCode(), body.get("code").asText());
+        assertEquals(410, body.get("status").asInt());
+        assertTrue(body.get("message").asText().contains("STOMP /ws-stomp"));
+        org.junit.jupiter.api.Assertions.assertNotNull(body.get("timestamp"));
     }
 
     @Test

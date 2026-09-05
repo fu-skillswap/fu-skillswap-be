@@ -216,7 +216,9 @@ class CourseR2VideoUploadServiceTest {
         when(enrollmentRepository.findByCourseIdAndStudentUserId(courseId, mentorId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getPlaybackAuthorization(mentorId, courseId, materialId, "127.0.0.1"))
-                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+                .isInstanceOf(com.fptu.exe.skillswap.shared.exception.BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.fptu.exe.skillswap.shared.exception.ErrorCode.COURSE_MATERIAL_LOCKED);
         verify(videoPlaybackTokenService, never()).issue(materialId);
     }
 

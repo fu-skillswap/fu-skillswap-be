@@ -62,7 +62,8 @@ public class LocalFileStorageGatewayImpl implements StorageGateway {
             log.error("Local upload failed: {}", target, ex);
             throw new com.fptu.exe.skillswap.shared.exception.BaseException(
                     com.fptu.exe.skillswap.shared.exception.ErrorCode.STORAGE_ERROR,
-                    "Không thể lưu file cục bộ: " + ex.getMessage()
+                    "Không thể lưu file cục bộ",
+                    ex
             );
         }
     }

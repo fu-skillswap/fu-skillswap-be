@@ -143,7 +143,7 @@ public class ChatMessageService {
     ) {
         MessageRepository activeMessageRepo = messageRepoOverride != null ? messageRepoOverride : messageRepository;
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền gửi tin nhắn trong cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
 
         Conversation conversation = conversationRepository.findByIdForUpdate(conversationId)
@@ -159,7 +159,7 @@ public class ChatMessageService {
 
         String content = request.content() == null ? "" : request.content().trim();
         if (content.isBlank() && (request.attachmentIntentIds() == null || request.attachmentIntentIds().isEmpty())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Tin nhắn cần có nội dung hoặc tệp đính kèm");
+            throw new BaseException(ErrorCode.CHAT_INVALID_MESSAGE, "Tin nhắn cần có nội dung hoặc tệp đính kèm");
         }
 
         String requestHash = requestHash(content, request.replyToMessageId(), request.attachmentIntentIds());
@@ -249,7 +249,7 @@ public class ChatMessageService {
 
     private void authorizeMessageSend(UUID conversationId, UUID userId, UserQueryPort userPortOverride) {
         if (!participantRepository.existsByConversationIdAndUserId(conversationId, userId)) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED, "Bạn không có quyền gửi tin nhắn trong cuộc hội thoại này");
+            throw new BaseException(ErrorCode.CHAT_ACCESS_DENIED);
         }
         Conversation conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cuộc hội thoại"));

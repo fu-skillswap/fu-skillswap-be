@@ -162,8 +162,13 @@ public class S3StorageGatewayImpl implements StorageGateway {
                 .signatureDuration(ttl)
                 .putObjectRequest(PutObjectRequest.builder().bucket(properties.getBucket()).key(objectKey).contentType(contentType).build())
                 .build();
-        PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(request);
-        return new PrivatePresignedUpload(presigned.url().toString(), objectKey, java.time.Instant.now().plus(ttl));
+        try {
+            PresignedPutObjectRequest presigned = s3Presigner.presignPutObject(request);
+            return new PrivatePresignedUpload(presigned.url().toString(), objectKey, java.time.Instant.now().plus(ttl));
+        } catch (RuntimeException ex) {
+            log.error("Không thể tạo private upload URL trên S3/R2. key={}", objectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể tạo liên kết tải lên", ex);
+        }
     }
 
     @Override
@@ -173,8 +178,13 @@ public class S3StorageGatewayImpl implements StorageGateway {
                 .getObjectRequest(GetObjectRequest.builder().bucket(properties.getBucket()).key(objectKey)
                         .responseContentDisposition(contentDisposition).build())
                 .build();
-        PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(request);
-        return new PrivatePresignedDownload(presigned.url().toString(), java.time.Instant.now().plus(ttl));
+        try {
+            PresignedGetObjectRequest presigned = s3Presigner.presignGetObject(request);
+            return new PrivatePresignedDownload(presigned.url().toString(), java.time.Instant.now().plus(ttl));
+        } catch (RuntimeException ex) {
+            log.error("Không thể tạo private download URL trên S3/R2. key={}", objectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể tạo liên kết tải xuống", ex);
+        }
     }
 
     @Override
@@ -201,7 +211,12 @@ public class S3StorageGatewayImpl implements StorageGateway {
 
     @Override
     public InputStream openObject(String objectKey) {
-        return s3Client.getObject(GetObjectRequest.builder().bucket(properties.getBucket()).key(objectKey).build());
+        try {
+            return s3Client.getObject(GetObjectRequest.builder().bucket(properties.getBucket()).key(objectKey).build());
+        } catch (RuntimeException ex) {
+            log.error("Không thể đọc object trên S3/R2. key={}", objectKey, ex);
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Không thể đọc tệp tin", ex);
+        }
     }
 
     private String buildObjectKey(String originalFilename, String subFolder) {

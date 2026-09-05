@@ -4,6 +4,8 @@ import com.fptu.exe.skillswap.infrastructure.bunny.client.BunnyVideoClient;
 import com.fptu.exe.skillswap.infrastructure.bunny.config.BunnyStreamProperties;
 import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyCreateVideoRequest;
 import com.fptu.exe.skillswap.infrastructure.bunny.dto.BunnyCreateVideoResponse;
+import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -53,7 +55,8 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
             return restTemplate.postForObject(url, entity, BunnyCreateVideoResponse.class);
         } catch (Exception e) {
             log.error("Failed to create video on Bunny.net", e);
-            throw new RuntimeException("Error communicating with video provider", e);
+            throw new BaseException(ErrorCode.VIDEO_PROVIDER_ERROR,
+                    ErrorCode.VIDEO_PROVIDER_ERROR.getMessage(), e);
         }
     }
 
@@ -74,7 +77,8 @@ public class BunnyVideoClientImpl implements BunnyVideoClient {
             log.info("Bunny video {} was already deleted", videoId);
         } catch (Exception e) {
             log.error("Failed to delete video on Bunny.net for videoId: {}", videoId, e);
-            throw new RuntimeException("Error deleting video from provider", e);
+            throw new BaseException(ErrorCode.VIDEO_PROVIDER_ERROR,
+                    ErrorCode.VIDEO_PROVIDER_ERROR.getMessage(), e);
         }
     }
 

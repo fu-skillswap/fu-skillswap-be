@@ -1,5 +1,8 @@
 package com.fptu.exe.skillswap.infrastructure.security;
 
+import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.TraceContext;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -26,31 +29,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserAuthLookupPort userAuthLookupPort;
     private final UserBanStatusPort userBanStatusPort;
+    private final SecurityErrorResponseHandler securityErrorResponseHandler;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
         try {
             String jwt = getJwtFromRequest(request);
+            boolean validAccessToken = StringUtils.hasText(jwt) && jwtTokenProvider.validateAccessToken(jwt);
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateAccessToken(jwt)) {
+            if (StringUtils.hasText(jwt) && !validAccessToken
+                    && jwtTokenProvider.isAccessTokenExpired(jwt)) {
+                // Public endpoints remain usable; a protected endpoint will
+                // route this marker through AuthenticationEntryPoint.
+                request.setAttribute(
+                        SecurityErrorResponseHandler.AUTHENTICATION_FAILURE_CODE_ATTRIBUTE,
+                        ErrorCode.SESSION_EXPIRED.getCode());
+            }
+
+            if (validAccessToken) {
                 Claims claims = jwtTokenProvider.getClaimsFromToken(jwt);
                 
                 UUID userId = UUID.fromString(claims.get("userId", String.class));
                 
-        // Chặn ngay user BANNED tại security filter.
+                // Chặn ngay user BANNED tại security filter.
                 if (userBanStatusPort.isBanned(userId)) {
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("application/json");
-                    response.setCharacterEncoding("UTF-8");
-                    response.getWriter().write("{\"code\":\"AUTH_1004\",\"message\":\"Tài khoản của bạn đã bị khóa\"}");
+                    securityErrorResponseHandler.writeError(request, response, ErrorCode.USER_BANNED);
                     return;
                 }
                 
                 var snapshot = userAuthLookupPort.findSnapshotByUserId(userId).orElse(null);
                 if (snapshot == null) {
-                    log.warn("Skipping authentication because user {} was not found in persistence", userId);
+                    log.warn("Skipping authentication because user was not found in persistence correlationId={}",
+                            TraceContext.getCurrentTraceId());
                     filterChain.doFilter(request, response);
+                    return;
+                }
+                if (snapshot.status() == UserStatus.BANNED) {
+                    securityErrorResponseHandler.writeError(request, response, ErrorCode.USER_BANNED);
+                    return;
+                }
+                if (snapshot.status() == UserStatus.INACTIVE) {
+                    securityErrorResponseHandler.writeError(request, response, ErrorCode.USER_INACTIVE);
                     return;
                 }
 
@@ -69,7 +89,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         } catch (Exception ex) {
-            log.error("Could not set user authentication in security context", ex);
+            log.error("Could not set user authentication in security context correlationId={}",
+                    TraceContext.getCurrentTraceId(), ex);
         }
 
         filterChain.doFilter(request, response);
