@@ -14,8 +14,18 @@ Set these variables before starting the application:
 - `CORS_ALLOWED_ORIGIN_PATTERNS`
 - `CURSOR_AES_KEY`
 - `CURSOR_HMAC_KEY`
+- `STORAGE_ENDPOINT`
+- `STORAGE_ACCESS_KEY`
+- `STORAGE_SECRET_KEY`
+- `STORAGE_BUCKET`
 
-Use `SPRING_PROFILES_ACTIVE=prod` and provide any provider credentials documented in `.env.example`.
+Use `SPRING_PROFILES_ACTIVE=prod` and set `VIDEO_STORAGE_PROVIDER=R2` for the
+production video path. R2 storage credentials are required in production.
+
+The Bunny Stream variables in `.env.example` are optional legacy credentials.
+They are required only when `VIDEO_STORAGE_PROVIDER=BUNNY_VIDEO` or when an
+operation must access existing Bunny-backed material. Missing Bunny variables
+must not prevent an R2 deployment from starting.
 
 `CORS_ALLOWED_ORIGIN_PATTERNS` is required in the production environment and must
 contain only the specific HTTPS frontend origin(s). Do not use `localhost`,

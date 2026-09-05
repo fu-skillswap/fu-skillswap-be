@@ -2,8 +2,6 @@ package com.fptu.exe.skillswap.modules.course.service;
 
 import com.fptu.exe.skillswap.infrastructure.config.CourseMaterialProperties;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.infrastructure.storage.VideoStoragePolicy;
-import com.fptu.exe.skillswap.infrastructure.video.VideoPlaybackTokenService;
 import com.fptu.exe.skillswap.modules.course.domain.Course;
 import com.fptu.exe.skillswap.modules.course.domain.CourseChapter;
 import com.fptu.exe.skillswap.modules.course.domain.CourseMaterial;
@@ -11,7 +9,7 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseMaterialType;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
 import com.fptu.exe.skillswap.modules.course.repository.*;
-import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
+import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -39,15 +37,13 @@ class CourseVaultErrorContractTest {
     @Mock private CourseMaterialRepository materialRepository;
     @Mock private BunnyWebhookEventRepository webhookEventRepository;
     @Mock private CourseOutboxEventRepository outboxEventRepository;
-    @Mock private CourseVideoProvider courseVideoProvider;
+    @Mock private VideoStorageProvider videoStorageProvider;
     @Mock private StorageGateway storageGateway;
     @Mock private CourseMaterialProperties materialProperties;
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private MentorOwnershipQueryPort mentorOwnershipQueryPort;
     @Mock private CourseAnnouncementNotificationService notificationService;
     @Mock private TimeProvider timeProvider;
-    @Mock private VideoStoragePolicy videoStoragePolicy;
-    @Mock private VideoPlaybackTokenService videoPlaybackTokenService;
 
     @InjectMocks private CourseVaultServiceImpl courseVaultService;
 

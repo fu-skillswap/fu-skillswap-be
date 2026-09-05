@@ -71,6 +71,9 @@ services:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
       # Defaults fail closed to production; staging can explicitly allow local FE origins.
       - DEPLOY_ENV=${DEPLOY_ENV:-production}
+      # R2 is the default for new videos. Bunny credentials remain optional
+      # unless this provider is explicitly switched to BUNNY_VIDEO.
+      - VIDEO_STORAGE_PROVIDER=${VIDEO_STORAGE_PROVIDER:-R2}
 
       - DATABASE_URL=jdbc:postgresql://postgres-db:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       - DATABASE_USERNAME=${POSTGRES_USER:?POSTGRES_USER is required}

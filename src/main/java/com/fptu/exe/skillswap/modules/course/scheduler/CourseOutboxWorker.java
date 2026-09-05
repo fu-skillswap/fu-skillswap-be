@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-/** Claims local work in short transactions; Bunny calls are deliberately outside them. */
+/** Claims local work in short transactions; provider calls are deliberately outside them. */
 @Component
 @RequiredArgsConstructor
 @Slf4j

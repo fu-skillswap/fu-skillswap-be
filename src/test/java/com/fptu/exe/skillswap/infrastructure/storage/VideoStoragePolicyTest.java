@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -50,5 +51,13 @@ class VideoStoragePolicyTest {
         properties.setVideoPrefix("course-video-assets");
 
         assertEquals("course-video-assets", new VideoStoragePolicy(properties).videoPrefix());
+    }
+
+    @Test
+    void capsVideoUploadIntentTtlAtFifteenMinutes() {
+        StorageProperties properties = new StorageProperties();
+        properties.setPresignedTtlMinutes(60);
+
+        assertEquals(Duration.ofMinutes(15), new VideoStoragePolicy(properties).uploadTtl());
     }
 }

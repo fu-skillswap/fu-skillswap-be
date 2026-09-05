@@ -20,10 +20,13 @@ services:
       # provider credentials are not present in the VPS .env/secret store.
       REALTIME_OUTBOX_ENABLED: "true"
       WEBSOCKET_STOMP_ENABLED: "true"
-      BUNNY_STREAM_API_KEY: ${BUNNY_STREAM_API_KEY:?BUNNY_STREAM_API_KEY is required}
-      BUNNY_STREAM_LIBRARY_ID: ${BUNNY_STREAM_LIBRARY_ID:?BUNNY_STREAM_LIBRARY_ID is required}
-      BUNNY_STREAM_TOKEN_AUTH_KEY: ${BUNNY_STREAM_TOKEN_AUTH_KEY:?BUNNY_STREAM_TOKEN_AUTH_KEY is required}
-      BUNNY_STREAM_WEBHOOK_SECRET: ${BUNNY_STREAM_WEBHOOK_SECRET:?BUNNY_STREAM_WEBHOOK_SECRET is required}
+      VIDEO_STORAGE_PROVIDER: ${VIDEO_STORAGE_PROVIDER:-R2}
+      # Bunny credentials are required only when VIDEO_STORAGE_PROVIDER is
+      # BUNNY_VIDEO; production-preflight and the application validator enforce that.
+      BUNNY_STREAM_API_KEY: ${BUNNY_STREAM_API_KEY:-}
+      BUNNY_STREAM_LIBRARY_ID: ${BUNNY_STREAM_LIBRARY_ID:-}
+      BUNNY_STREAM_TOKEN_AUTH_KEY: ${BUNNY_STREAM_TOKEN_AUTH_KEY:-}
+      BUNNY_STREAM_WEBHOOK_SECRET: ${BUNNY_STREAM_WEBHOOK_SECRET:-}
       # Production origins must be supplied by the VPS environment and are
       # rejected by ops/production-preflight.sh if local or wildcard values.
       CORS_ALLOWED_ORIGIN_PATTERNS: "${CORS_ALLOWED_ORIGIN_PATTERNS:?CORS_ALLOWED_ORIGIN_PATTERNS is required}"

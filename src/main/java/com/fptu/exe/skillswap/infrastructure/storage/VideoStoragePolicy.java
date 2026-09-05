@@ -45,7 +45,7 @@ public class VideoStoragePolicy {
     }
 
     public Duration uploadTtl() {
-        return Duration.ofMinutes(Math.max(1, properties.getPresignedTtlMinutes()));
+        return Duration.ofMinutes(Math.min(Math.max(1, properties.getPresignedTtlMinutes()), 15));
     }
 
     /**

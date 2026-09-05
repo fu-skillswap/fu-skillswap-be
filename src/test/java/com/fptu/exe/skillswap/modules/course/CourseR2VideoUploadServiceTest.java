@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.course;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.infrastructure.storage.VideoStoragePolicy;
-import com.fptu.exe.skillswap.infrastructure.video.VideoPlaybackTokenService;
 import com.fptu.exe.skillswap.modules.course.domain.Course;
 import com.fptu.exe.skillswap.modules.course.domain.CourseChapter;
 import com.fptu.exe.skillswap.modules.course.domain.CourseMaterial;
@@ -20,7 +18,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.course.repository.BunnyWebhookEventRepository;
 import com.fptu.exe.skillswap.modules.course.service.CourseAnnouncementNotificationService;
 import com.fptu.exe.skillswap.modules.course.service.CourseVaultServiceImpl;
-import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
+import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.infrastructure.config.CourseMaterialProperties;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -46,6 +44,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -63,15 +62,13 @@ class CourseR2VideoUploadServiceTest {
     @Mock private CourseMaterialRepository materialRepository;
     @Mock private BunnyWebhookEventRepository webhookEventRepository;
     @Mock private CourseOutboxEventRepository outboxEventRepository;
-    @Mock private CourseVideoProvider courseVideoProvider;
+    @Mock private VideoStorageProvider videoStorageProvider;
     @Mock private StorageGateway storageGateway;
     @Mock private CourseMaterialProperties materialProperties;
     @Mock private TransactionTemplate transactionTemplate;
     @Mock private MentorOwnershipQueryPort mentorOwnershipQueryPort;
     @Mock private CourseAnnouncementNotificationService announcementNotificationService;
     @Mock private TimeProvider timeProvider;
-    @Mock private VideoStoragePolicy videoStoragePolicy;
-    @Mock private VideoPlaybackTokenService videoPlaybackTokenService;
     @InjectMocks private CourseVaultServiceImpl service;
 
     private final UUID mentorId = UUID.randomUUID();
@@ -87,6 +84,7 @@ class CourseR2VideoUploadServiceTest {
         course = Course.builder().id(courseId).mentorUserId(mentorId).build();
         chapter = CourseChapter.builder().id(chapterId).course(course).build();
         when(timeProvider.instant()).thenReturn(now);
+        when(videoStorageProvider.activeProviderType()).thenReturn(StorageProviderType.OBJECT_STORAGE);
         when(chapterRepository.findById(chapterId)).thenReturn(Optional.of(chapter));
         when(courseRepository.findMentorUserIdByCourseId(courseId)).thenReturn(Optional.of(mentorId));
         when(mentorOwnershipQueryPort.isOwnedBy(mentorId, mentorId)).thenReturn(true);
@@ -97,16 +95,16 @@ class CourseR2VideoUploadServiceTest {
             material.setId(materialId);
             return material;
         });
-        when(videoStoragePolicy.normalizeContentType("video/mp4")).thenReturn("video/mp4");
-        when(videoStoragePolicy.objectKey(mentorId, materialId)).thenReturn("course-materials/videos/" + mentorId + "/" + materialId + ".mp4");
-        when(videoStoragePolicy.uploadTtl()).thenReturn(Duration.ofMinutes(15));
     }
 
     @Test
     void validUploadIntentReturnsProviderNeutralContract() {
         Instant expiresAt = now.plusSeconds(900);
-        when(storageGateway.generatePrivateUploadUrl(anyString(), eq("video/mp4"), eq(Duration.ofMinutes(15))))
-                .thenReturn(new StorageGateway.PrivatePresignedUpload("https://r2.example/upload", "internal-key", expiresAt));
+        when(videoStorageProvider.createUploadIntent(any())).thenReturn(new VideoStorageProvider.UploadIntent(
+                StorageProviderType.OBJECT_STORAGE, null, null,
+                "course-materials/videos/" + mentorId + "/" + materialId + ".mp4",
+                "https://r2.example/upload", null, expiresAt, "video/mp4",
+                java.util.Map.of("Content-Type", "video/mp4"), false));
 
         CourseR2VideoUploadIntentResponse response = service.createR2VideoUploadIntent(
                 mentorId, courseId, chapterId, request(50_000_000L));
@@ -126,7 +124,7 @@ class CourseR2VideoUploadServiceTest {
     @Test
     void invalidContentTypeIsRejectedBeforeCreatingMaterial() {
         doThrow(new BaseException(ErrorCode.UNSUPPORTED_MEDIA_TYPE, "MVP chỉ hỗ trợ video/mp4"))
-                .when(videoStoragePolicy).normalizeContentType("video/quicktime");
+                .when(videoStorageProvider).validateUploadRequest(anyString(), anyLong());
 
         assertThatThrownBy(() -> service.createR2VideoUploadIntent(
                 mentorId, courseId, chapterId, new CreateR2VideoUploadIntentRequest(
@@ -139,7 +137,7 @@ class CourseR2VideoUploadServiceTest {
     @Test
     void oversizedVideoIsRejectedBeforeCreatingMaterial() {
         doThrow(new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Video quá lớn"))
-                .when(videoStoragePolicy).validateSize(600_000_000L);
+                .when(videoStorageProvider).validateUploadRequest(anyString(), anyLong());
 
         assertThatThrownBy(() -> service.createR2VideoUploadIntent(
                 mentorId, courseId, chapterId, request(600_000_000L)))
@@ -153,6 +151,8 @@ class CourseR2VideoUploadServiceTest {
         CourseMaterial material = r2Material(now.minusSeconds(1));
         when(materialRepository.findActiveWithCurriculumById(materialId)).thenReturn(Optional.of(material));
 
+        doThrow(new BaseException(ErrorCode.BAD_REQUEST, "Video upload intent đã hết hạn; hãy tạo intent mới"))
+                .when(videoStorageProvider).confirmUpload(any());
         assertThatThrownBy(() -> service.confirmR2VideoUpload(mentorId, courseId, materialId))
                 .isInstanceOf(BaseException.class)
                 .hasMessageContaining("đã hết hạn");
@@ -163,7 +163,7 @@ class CourseR2VideoUploadServiceTest {
     void missingR2ObjectIsRejectedAndMaterialRemainsUploading() {
         CourseMaterial material = r2Material(now.plusSeconds(900));
         when(materialRepository.findActiveWithCurriculumById(materialId)).thenReturn(Optional.of(material));
-        when(storageGateway.headObject(material.getVideoObjectKey()))
+        when(videoStorageProvider.confirmUpload(any()))
                 .thenThrow(new BaseException(ErrorCode.BAD_REQUEST, "File upload chưa tồn tại trên storage"));
 
         assertThatThrownBy(() -> service.confirmR2VideoUpload(mentorId, courseId, materialId))
@@ -176,8 +176,8 @@ class CourseR2VideoUploadServiceTest {
     void successfulConfirmationValidatesMetadataAndMarksMaterialReady() {
         CourseMaterial material = r2Material(now.plusSeconds(900));
         when(materialRepository.findActiveWithCurriculumById(materialId)).thenReturn(Optional.of(material));
-        when(storageGateway.headObject(material.getVideoObjectKey())).thenReturn(
-                new StorageGateway.ObjectMetadata(material.getVideoObjectKey(), "video/mp4", 50_000_000L, Collections.emptyMap()));
+        when(videoStorageProvider.confirmUpload(any())).thenReturn(
+                new VideoStorageProvider.UploadConfirmation(true, "video/mp4", 50_000_000L));
         when(materialRepository.countByChapterCourseIdAndDeletedAtIsNullAndIsPublishedTrue(courseId)).thenReturn(1L);
 
         service.confirmR2VideoUpload(mentorId, courseId, materialId);
@@ -194,16 +194,14 @@ class CourseR2VideoUploadServiceTest {
         material.setStatus(MaterialStatus.READY);
         material.setPreviewable(true);
         when(materialRepository.findActiveWithCurriculumById(materialId)).thenReturn(Optional.of(material));
-        VideoPlaybackTokenService.PlaybackGrant grant = new VideoPlaybackTokenService.PlaybackGrant(
-                materialId, now.plusSeconds(300), "short-lived-token");
-        when(videoPlaybackTokenService.issue(materialId)).thenReturn(grant);
-        when(videoPlaybackTokenService.playbackUrl(materialId, grant)).thenReturn(
-                "/stream/videos/" + materialId + ".mp4?token=short-lived-token");
+        VideoStorageProvider.PlaybackUrl playback = new VideoStorageProvider.PlaybackUrl(
+                "/stream/videos/" + materialId + ".mp4?token=short-lived-token", now.plusSeconds(300));
+        when(videoStorageProvider.generatePlaybackUrl(any(), anyString())).thenReturn(playback);
 
         CourseVideoPlaybackResponse response = service.getPlaybackAuthorization(mentorId, courseId, materialId, "127.0.0.1");
 
         assertThat(response.getPlaybackUrl()).isEqualTo("/stream/videos/" + materialId + ".mp4?token=short-lived-token");
-        assertThat(response.getExpiresAt()).isEqualTo(grant.expiresAt());
+        assertThat(response.getExpiresAt()).isEqualTo(playback.expiresAt());
     }
 
     @Test
@@ -219,7 +217,7 @@ class CourseR2VideoUploadServiceTest {
                 .isInstanceOf(com.fptu.exe.skillswap.shared.exception.BaseException.class)
                 .extracting("errorCode")
                 .isEqualTo(com.fptu.exe.skillswap.shared.exception.ErrorCode.COURSE_MATERIAL_LOCKED);
-        verify(videoPlaybackTokenService, never()).issue(materialId);
+        verify(videoStorageProvider, never()).generatePlaybackUrl(any(), anyString());
     }
 
     private CreateR2VideoUploadIntentRequest request(long sizeBytes) {

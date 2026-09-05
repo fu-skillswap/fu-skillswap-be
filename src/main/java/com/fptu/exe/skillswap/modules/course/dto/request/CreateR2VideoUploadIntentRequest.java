@@ -21,7 +21,7 @@ public record CreateR2VideoUploadIntentRequest(
         @NotNull Integer sortOrder,
         @Schema(description = "Cho phép người chưa có quyền đầy đủ xem trước hay không.", example = "false", nullable = true)
         Boolean previewable,
-        @Schema(description = "Có công bố tài liệu cho người học hay chưa. Nên để false cho đến khi playback R2 được bật ở phase 5.4.", example = "false", nullable = true)
+        @Schema(description = "Có công bố tài liệu cho người học hay chưa. Chỉ material đã READY mới có thể playback.", example = "false", nullable = true)
         Boolean published
 ) {
 }

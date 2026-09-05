@@ -149,14 +149,14 @@ public class ProductionConfigurationValidator implements SmartInitializingSingle
         if ("R2".equals(normalized)) {
             return;
         }
-        if ("BUNNY".equals(normalized)) {
+        if ("BUNNY".equals(normalized) || "BUNNY_VIDEO".equals(normalized)) {
             require(failures, "BUNNY_STREAM_API_KEY", bunnyStreamProperties.getApiKey(), 1);
             require(failures, "BUNNY_STREAM_LIBRARY_ID", bunnyStreamProperties.getLibraryId(), 1);
             require(failures, "BUNNY_STREAM_TOKEN_AUTH_KEY", bunnyStreamProperties.getTokenAuthKey(), 1);
             require(failures, "BUNNY_STREAM_WEBHOOK_SECRET", bunnyStreamProperties.getWebhookSecret(), 1);
             return;
         }
-        failures.add("VIDEO_STORAGE_PROVIDER must be R2 or BUNNY");
+        failures.add("VIDEO_STORAGE_PROVIDER must be R2 or BUNNY_VIDEO");
     }
 
     static void validateProductionCors(List<String> failures, String allowedOrigins) {

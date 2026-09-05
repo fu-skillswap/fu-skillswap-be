@@ -247,11 +247,20 @@ Kết quả phản hồi kỳ vọng: `{"status":"UP"}`
 | `FLYWAY_ENABLED` | No | `true` | Tự động chạy các file SQL migration khi ứng dụng khởi chạy |
 | `HIBERNATE_DDL_AUTO` | No | `validate` | Chế độ kiểm tra schema của Hibernate (`validate` ở prod/dev) |
 | `APPLICATION_SWAGGER_ENABLED` | No | `true` | Bật/tắt các endpoint OpenAPI / Swagger UI |
+| `VIDEO_STORAGE_PROVIDER` | No | `R2` | Provider cho video mới: `R2` hoặc `BUNNY_VIDEO`; Bunny chỉ còn cho video legacy |
 | `PAYOS_CLIENT_ID` | No | - | Client ID cổng thanh toán PayOS |
 | `PAYOS_API_KEY` | No | - | API key cổng thanh toán PayOS |
 | `PAYOS_CHECKSUM_KEY` | No | - | Checksum key để xác minh dữ liệu webhook từ PayOS |
 | `STORAGE_ENABLED` | No | `true` | Bật/tắt tích hợp lưu trữ file Cloudflare R2 |
 | `STORAGE_ENDPOINT` | No | - | URL endpoint dịch vụ Cloudflare R2 |
+| `STORAGE_ACCESS_KEY` | Yes in prod | - | Access key cho Cloudflare R2 |
+| `STORAGE_SECRET_KEY` | Yes in prod | - | Secret key cho Cloudflare R2 |
+| `STORAGE_BUCKET` | Yes in prod | - | Bucket Cloudflare R2 |
+
+Bunny Stream variables (`BUNNY_STREAM_API_KEY`, `BUNNY_STREAM_LIBRARY_ID`,
+`BUNNY_STREAM_TOKEN_AUTH_KEY`, `BUNNY_STREAM_WEBHOOK_SECRET`) are optional in
+production and are required only for `VIDEO_STORAGE_PROVIDER=BUNNY_VIDEO` or
+operations that still access existing Bunny-backed videos.
 
 ## Project Structure
 

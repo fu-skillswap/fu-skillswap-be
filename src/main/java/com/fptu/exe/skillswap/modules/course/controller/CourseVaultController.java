@@ -36,7 +36,7 @@ public class CourseVaultController {
         return ApiResponse.success(courseVaultService.createVideoUpload(principal.getId(), courseId, chapterId, request));
     }
 
-    @Operation(summary = "Mentor khởi tạo upload video lên R2", description = "API mới dùng cho video MP4 provider-neutral. Mentor sở hữu khóa học gọi để nhận presigned upload URL, upload trực tiếp bằng đúng Content-Type, rồi gọi confirm-video-upload. API Bunny cũ vẫn giữ nguyên cho client hiện tại; playback R2 sẽ được triển khai ở phase 5.4.")
+    @Operation(summary = "Mentor khởi tạo upload video lên R2", description = "API dùng cho video MP4 provider-neutral. Mentor sở hữu khóa học gọi để nhận presigned upload URL, upload trực tiếp bằng đúng Content-Type, rồi gọi confirm-video-upload. API Bunny cũ vẫn giữ nguyên cho client hiện tại; video R2 đã sẵn sàng playback qua route streaming của VPS sau khi material chuyển sang READY.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đã tạo upload intent; FE upload trực tiếp bằng uploadUrl trước thời điểm expiresAt."),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Thông tin file hoặc lifecycle upload không hợp lệ."),
@@ -55,7 +55,7 @@ public class CourseVaultController {
 
     @Operation(summary = "Mentor xác nhận upload video R2", description = "Gọi sau khi FE PUT file thành công lên uploadUrl. Backend kiểm tra intent, thời hạn, object tồn tại, MIME type và kích thước rồi chuyển material sang READY. Gọi lại sau khi đã READY là an toàn và không tạo thay đổi mới.")
     @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Video đã được xác nhận và sẵn sàng cho bước playback sau này."),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Video đã được xác nhận và sẵn sàng cho playback."),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Intent hết hạn, object chưa tồn tại hoặc metadata file không hợp lệ."),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "User không sở hữu material."),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy course hoặc material."),

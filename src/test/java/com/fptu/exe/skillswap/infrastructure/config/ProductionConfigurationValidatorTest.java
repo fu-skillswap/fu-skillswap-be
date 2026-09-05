@@ -40,6 +40,24 @@ class ProductionConfigurationValidatorTest {
     }
 
     @Test
+    void bunnyProviderWithoutCredentialsFailsWithEachMissingVariable() {
+        List<String> failures = new ArrayList<>();
+
+        ProductionConfigurationValidator.validateVideoProvider(
+                failures,
+                "BUNNY_VIDEO",
+                new BunnyStreamProperties()
+        );
+
+        assertThat(failures).containsExactly(
+                "BUNNY_STREAM_API_KEY",
+                "BUNNY_STREAM_LIBRARY_ID",
+                "BUNNY_STREAM_TOKEN_AUTH_KEY",
+                "BUNNY_STREAM_WEBHOOK_SECRET"
+        );
+    }
+
+    @Test
     void unknownVideoProviderIsRejected() {
         List<String> failures = new ArrayList<>();
 
@@ -49,7 +67,7 @@ class ProductionConfigurationValidatorTest {
                 new BunnyStreamProperties()
         );
 
-        assertThat(failures).containsExactly("VIDEO_STORAGE_PROVIDER must be R2 or BUNNY");
+        assertThat(failures).containsExactly("VIDEO_STORAGE_PROVIDER must be R2 or BUNNY_VIDEO");
     }
 
     @Test

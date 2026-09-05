@@ -54,11 +54,11 @@ fi
 video_storage_provider="${VIDEO_STORAGE_PROVIDER:-R2}"
 video_storage_provider="${video_storage_provider^^}"
 case "$video_storage_provider" in
-  R2|BUNNY)
+  R2|BUNNY|BUNNY_VIDEO)
     echo "VIDEO_STORAGE_PROVIDER=${video_storage_provider}"
     ;;
   *)
-    echo "::error::VIDEO_STORAGE_PROVIDER must be R2 or BUNNY" >&2
+    echo "::error::VIDEO_STORAGE_PROVIDER must be R2 or BUNNY_VIDEO" >&2
     failures=1
     ;;
 esac
@@ -75,7 +75,7 @@ for name in \
   require_nonempty "$name"
 done
 
-if [[ "$video_storage_provider" == "BUNNY" ]]; then
+if [[ "$video_storage_provider" == "BUNNY" || "$video_storage_provider" == "BUNNY_VIDEO" ]]; then
   for name in BUNNY_STREAM_API_KEY BUNNY_STREAM_LIBRARY_ID BUNNY_STREAM_TOKEN_AUTH_KEY BUNNY_STREAM_WEBHOOK_SECRET; do
     require_nonempty "$name"
   done
@@ -87,7 +87,7 @@ for name in JWT_SECRET_KEY CURSOR_AES_KEY CURSOR_HMAC_KEY GOOGLE_TOKEN_ENCRYPTIO
   reject_placeholder "$name"
 done
 
-if [[ "$video_storage_provider" == "BUNNY" ]]; then
+if [[ "$video_storage_provider" == "BUNNY" || "$video_storage_provider" == "BUNNY_VIDEO" ]]; then
   for name in BUNNY_STREAM_API_KEY BUNNY_STREAM_TOKEN_AUTH_KEY BUNNY_STREAM_WEBHOOK_SECRET; do
     reject_placeholder "$name"
   done

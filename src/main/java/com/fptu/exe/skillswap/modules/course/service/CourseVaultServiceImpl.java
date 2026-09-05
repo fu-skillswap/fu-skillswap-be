@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.course.service;
 
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.infrastructure.storage.VideoStoragePolicy;
-import com.fptu.exe.skillswap.infrastructure.video.VideoPlaybackTokenService;
 import com.fptu.exe.skillswap.infrastructure.config.CourseMaterialProperties;
 import com.fptu.exe.skillswap.modules.course.domain.*;
 import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
@@ -10,7 +8,7 @@ import com.fptu.exe.skillswap.modules.course.dto.request.CreatePdfMaterialUpload
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateR2VideoUploadIntentRequest;
 import com.fptu.exe.skillswap.modules.course.dto.response.*;
-import com.fptu.exe.skillswap.modules.course.port.CourseVideoProvider;
+import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.modules.course.repository.*;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
@@ -47,15 +45,13 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private final CourseMaterialRepository materialRepository;
     private final BunnyWebhookEventRepository webhookEventRepository;
     private final CourseOutboxEventRepository outboxEventRepository;
-    private final CourseVideoProvider courseVideoProvider;
+    private final VideoStorageProvider videoStorageProvider;
     private final StorageGateway storageGateway;
     private final CourseMaterialProperties materialProperties;
     private final TransactionTemplate transactionTemplate;
     private final MentorOwnershipQueryPort mentorOwnershipQueryPort;
     private final CourseAnnouncementNotificationService courseAnnouncementNotificationService;
     private final TimeProvider timeProvider;
-    private final VideoStoragePolicy videoStoragePolicy;
-    private final VideoPlaybackTokenService videoPlaybackTokenService;
 
     @Override
     public CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request) {
@@ -63,13 +59,12 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         return initializeVideoUpload(materialId);
     }
 
-    /** New R2 path; the existing Bunny upload method above remains unchanged. */
+    /** Provider-neutral direct upload path; the legacy Bunny endpoint remains compatible. */
     @Override
     @Transactional
     public CourseR2VideoUploadIntentResponse createR2VideoUploadIntent(UUID mentorUserId, UUID courseId, UUID chapterId,
                                                                         CreateR2VideoUploadIntentRequest request) {
-        String contentType = videoStoragePolicy.normalizeContentType(request.contentType());
-        videoStoragePolicy.validateSize(request.sizeBytes());
+        videoStorageProvider.validateUploadRequest(request.contentType(), request.sizeBytes());
         CourseChapter chapter = ownedChapter(mentorUserId, courseId, chapterId);
         assertUnusedOrder(chapterId, request.sortOrder(), null);
 
@@ -80,24 +75,17 @@ public class CourseVaultServiceImpl implements CourseVaultService {
                 .sortOrder(request.sortOrder())
                 .isPreviewable(Boolean.TRUE.equals(request.previewable()))
                 .isPublished(Boolean.TRUE.equals(request.published()))
-                .storageProviderType(StorageProviderType.OBJECT_STORAGE)
-                .status(MaterialStatus.UPLOADING)
+                .storageProviderType(videoStorageProvider.activeProviderType())
+                .status(MaterialStatus.UPLOADING_INTENT)
                 .uploadedBy(mentorUserId)
                 .uploadedAt(timeProvider.instant())
                 .build());
-        String objectKey = videoStoragePolicy.objectKey(mentorUserId, material.getId());
-        StorageGateway.PrivatePresignedUpload upload = storageGateway.generatePrivateUploadUrl(
-                objectKey, contentType, videoStoragePolicy.uploadTtl());
-        material.setVideoObjectKey(objectKey);
-        material.setVideoContentType(contentType);
-        material.setUploadExpiresAt(upload.expiresAt());
-
-        ProviderNeutralUploadMetadata metadata = new ProviderNeutralUploadMetadata(
-                material.getId(), material.getId(), upload.uploadUrl(), upload.expiresAt(), "COURSE_VIDEO",
-                java.util.Map.of("Content-Type", contentType));
-        return new CourseR2VideoUploadIntentResponse(material.getId(), material.getId(), upload.uploadUrl(),
-                upload.expiresAt(), contentType, MaterialStatus.UPLOADING,
-                java.util.Map.of("Content-Type", contentType), metadata);
+        VideoStorageProvider.UploadIntent intent = videoStorageProvider.createUploadIntent(
+                uploadRequest(mentorUserId, material, request.contentType(), request.sizeBytes()));
+        applyUploadIntent(material, intent);
+        ProviderNeutralUploadMetadata metadata = providerNeutralMetadata(material, intent);
+        return new CourseR2VideoUploadIntentResponse(material.getId(), material.getId(), intent.uploadUrl(),
+                intent.expiresAt(), intent.contentType(), material.getStatus(), intent.requiredHeaders(), metadata);
     }
 
     @Override
@@ -111,16 +99,10 @@ public class CourseVaultServiceImpl implements CourseVaultService {
             if (material.getStatus() == MaterialStatus.READY) return;
             throw new BadRequestException(ErrorCode.RESOURCE_CONFLICT, "Video upload không ở trạng thái có thể xác nhận");
         }
-        Instant now = timeProvider.instant();
-        if (material.getUploadExpiresAt() == null || !now.isBefore(material.getUploadExpiresAt())) {
-            throw new BadRequestException(ErrorCode.BAD_REQUEST, "Video upload intent đã hết hạn; hãy tạo intent mới");
-        }
-
-        StorageGateway.ObjectMetadata object = storageGateway.headObject(material.getVideoObjectKey());
-        String contentType = videoStoragePolicy.normalizeContentType(object.contentType());
-        videoStoragePolicy.validateSize(object.sizeBytes());
-        material.setVideoContentType(contentType);
-        material.setFileSizeBytes(object.sizeBytes());
+        VideoStorageProvider.UploadConfirmation confirmation = videoStorageProvider.confirmUpload(toVideoAsset(material));
+        if (!confirmation.ready()) return;
+        material.setVideoContentType(confirmation.contentType());
+        material.setFileSizeBytes(confirmation.sizeBytes());
         material.setStatus(MaterialStatus.READY);
         material.setUploadExpiresAt(null);
         refreshCourseTotals(material.getChapter().getCourse());
@@ -133,7 +115,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         CourseMaterial material = materialRepository.save(CourseMaterial.builder().chapter(chapter).title(request.getTitle())
                 .materialType(CourseMaterialType.VIDEO).sortOrder(request.getSortOrder())
                 .isPreviewable(Boolean.TRUE.equals(request.getPreviewable())).isPublished(!Boolean.FALSE.equals(request.getPublished()))
-                .storageProviderType(StorageProviderType.BUNNY_VIDEO).status(MaterialStatus.UPLOADING_INTENT)
+                .storageProviderType(videoStorageProvider.activeProviderType()).status(MaterialStatus.UPLOADING_INTENT)
                 .uploadedBy(userId).uploadedAt(timeProvider.instant()).build());
         outboxEventRepository.save(outbox(material.getId(), DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED));
         return material.getId();
@@ -141,21 +123,23 @@ public class CourseVaultServiceImpl implements CourseVaultService {
 
     private CourseVideoUploadInitResponse initializeVideoUpload(UUID materialId) {
         CourseMaterial material = materialRepository.findById(materialId).orElseThrow(() -> new ResourceNotFoundException("Course material not found"));
-        if (material.getStatus() != MaterialStatus.UPLOADING_INTENT) return uploadResponse(material);
-        CourseVideoProvider.CreatedVideo created = courseVideoProvider.createVideo(material.getTitle());
-        long expiry = timeProvider.instant().plus(Duration.ofHours(2)).getEpochSecond();
+        VideoStorageProvider.UploadIntent intent = videoStorageProvider.createUploadIntent(
+                uploadRequest(material.getUploadedBy(), material, null, null));
         try {
             return transactionTemplate.execute(s -> {
                 CourseMaterial locked = materialRepository.findById(materialId).orElseThrow();
                 if (locked.getStatus() == MaterialStatus.UPLOADING_INTENT) {
-                    locked.setBunnyLibraryId(created.libraryId()); locked.setBunnyVideoId(created.videoId()); locked.setStatus(MaterialStatus.UPLOADING);
+                    applyUploadIntent(locked, intent);
                     outboxEventRepository.findActiveByAggregateIdAndEventType(materialId, DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED)
                             .forEach(e -> { e.setStatus("PROCESSED"); e.setProcessingStartedAt(null); e.setNextRetryAt(null); });
                 }
-                return videoUploadResponse(locked, expiry, courseVideoProvider.generateDirectUploadSignature(created.videoId(), expiry));
+                return videoUploadResponse(locked, intent);
             });
         } catch (RuntimeException error) {
-            try { courseVideoProvider.deleteVideo(created.videoId()); } catch (RuntimeException cleanup) { log.warn("Could not delete provisional Bunny video", cleanup); }
+            if (intent.newlyCreated()) {
+                try { videoStorageProvider.deleteVideo(toVideoAsset(intent, material)); }
+                catch (RuntimeException cleanup) { log.warn("Could not delete provisional video asset", cleanup); }
+            }
             throw error;
         }
     }
@@ -198,17 +182,10 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         if (material.getMaterialType() != CourseMaterialType.VIDEO) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Material is not a video");
         assertAvailable(userId, material);
         if (material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.COURSE_INVALID_STATUS);
-        if (material.getStorageProviderType() == StorageProviderType.OBJECT_STORAGE) {
-            if (material.getVideoObjectKey() == null) throw new ResourceNotFoundException("Không tìm thấy video");
-            VideoPlaybackTokenService.PlaybackGrant grant = videoPlaybackTokenService.issue(material.getId());
-            return CourseVideoPlaybackResponse.builder().materialId(material.getId()).title(material.getTitle())
-                    .playbackUrl(videoPlaybackTokenService.playbackUrl(material.getId(), grant))
-                    .thumbnailUrl(material.getThumbnailUrl()).durationSeconds(material.getDurationSeconds()).expiresAt(grant.expiresAt()).build();
-        }
-        long expires = timeProvider.instant().plusSeconds(60).getEpochSecond();
+        VideoStorageProvider.PlaybackUrl playback = videoStorageProvider.generatePlaybackUrl(toVideoAsset(material), clientIp);
         return CourseVideoPlaybackResponse.builder().materialId(material.getId()).title(material.getTitle())
-                .playbackUrl(courseVideoProvider.generateSignedPlaybackUrl(material.getBunnyVideoId(), 60, clientIp))
-                .thumbnailUrl(material.getThumbnailUrl()).durationSeconds(material.getDurationSeconds()).expiresAt(Instant.ofEpochSecond(expires)).build();
+                .playbackUrl(playback.url())
+                .thumbnailUrl(material.getThumbnailUrl()).durationSeconds(material.getDurationSeconds()).expiresAt(playback.expiresAt()).build();
     }
 
     @Override
@@ -235,7 +212,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     @Override @Transactional public void markWebhookEventFailed(UUID id, Throwable cause) { BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow();fail(e, cause); }
     @Override @Transactional public List<UUID> claimCourseOutboxEvents(int limit) { Instant now=timeProvider.instant(); List<UUID> ids=outboxEventRepository.findClaimableIdsForUpdateSkipLocked(now,now.minus(5,ChronoUnit.MINUTES),limit);ids.forEach(id->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSING");e.setProcessingStartedAt(now);e.setLastError(null);});return ids; }
     @Override public void processCourseOutboxEvent(UUID id) { CourseOutboxEvent e=outboxEventRepository.findById(id).orElseThrow();if(!"PROCESSING".equals(e.getStatus()))return;if(DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED.equals(e.getEventType())){initializeVideoUpload(e.getAggregateId());return;}if(DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED.equals(e.getEventType())){processMaterialDeletion(e.getAggregateId());markOutboxProcessed(id);return;}if(DomainEventOutboxEventTypes.COURSE_ANNOUNCEMENT_CREATED.equals(e.getEventType())){courseAnnouncementNotificationService.process(e.getAggregateId());}markOutboxProcessed(id); }
-    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getStorageProviderType()==StorageProviderType.BUNNY_VIDEO&&m.getBunnyVideoId()!=null)courseVideoProvider.deleteVideo(m.getBunnyVideoId());if(m.getStorageProviderType()==StorageProviderType.OBJECT_STORAGE&&m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(timeProvider.instant());refreshCourseTotals(locked.getChapter().getCourse());}); }
+    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getMaterialType()==CourseMaterialType.VIDEO)videoStorageProvider.deleteVideo(toVideoAsset(m));if(m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(timeProvider.instant());refreshCourseTotals(locked.getChapter().getCourse());}); }
     private void markOutboxProcessed(UUID id){transactionTemplate.executeWithoutResult(s->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSED");e.setProcessingStartedAt(null);e.setNextRetryAt(null);e.setLastError(null);});}
     @Override @Transactional public void markCourseOutboxEventFailed(UUID id,Throwable cause){fail(outboxEventRepository.findByIdForUpdate(id).orElseThrow(),cause);}
     private void fail(BunnyWebhookEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}
@@ -261,5 +238,40 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private Duration pdfUploadTtl() { return Duration.ofMinutes(materialProperties.getPdfUploadTtlMinutes()); }
     private Duration pdfDownloadTtl() { return Duration.ofMinutes(materialProperties.getPdfDownloadTtlMinutes()); }
     private long maxPdfBytes() { return Math.multiplyExact((long) materialProperties.getMaxPdfSizeMb(), 1024L * 1024L); }
-    private CourseVideoUploadInitResponse uploadResponse(CourseMaterial m){return videoUploadResponse(m,0,null);} private CourseVideoUploadInitResponse videoUploadResponse(CourseMaterial m,long expiry,String signature){String uploadUrl=m.getBunnyVideoId()==null?null:String.format("https://video.bunnycdn.com/library/%s/videos/%s",m.getBunnyLibraryId(),m.getBunnyVideoId());return CourseVideoUploadInitResponse.builder().materialId(m.getId()).bunnyLibraryId(m.getBunnyLibraryId()).bunnyVideoId(m.getBunnyVideoId()).uploadUrl(uploadUrl).authorizationSignature(signature).expirationTimestamp(expiry).uploadMetadata(new ProviderNeutralUploadMetadata(m.getId(),null,uploadUrl,expiry>0?Instant.ofEpochSecond(expiry):null,"COURSE_VIDEO",java.util.Map.of())).build();}
+    private VideoStorageProvider.UploadRequest uploadRequest(UUID ownerId, CourseMaterial material, String contentType, Long sizeBytes) {
+        return new VideoStorageProvider.UploadRequest(ownerId, material.getId(), material.getTitle(), contentType, sizeBytes,
+                material.getBunnyLibraryId(), material.getBunnyVideoId(), material.getVideoObjectKey());
+    }
+
+    private VideoStorageProvider.VideoAsset toVideoAsset(CourseMaterial material) {
+        return new VideoStorageProvider.VideoAsset(material.getId(), material.getTitle(), material.getStorageProviderType(),
+                material.getBunnyLibraryId(), material.getBunnyVideoId(), material.getVideoObjectKey(), material.getUploadExpiresAt(),
+                material.getVideoContentType(), material.getFileSizeBytes());
+    }
+
+    private VideoStorageProvider.VideoAsset toVideoAsset(VideoStorageProvider.UploadIntent intent, CourseMaterial material) {
+        return new VideoStorageProvider.VideoAsset(material.getId(), material.getTitle(), intent.providerType(),
+                intent.libraryId(), intent.videoId(), intent.objectKey(), intent.expiresAt(), intent.contentType(), material.getFileSizeBytes());
+    }
+
+    private void applyUploadIntent(CourseMaterial material, VideoStorageProvider.UploadIntent intent) {
+        material.setBunnyLibraryId(intent.libraryId());
+        material.setBunnyVideoId(intent.videoId());
+        material.setVideoObjectKey(intent.objectKey());
+        material.setVideoContentType(intent.contentType());
+        material.setUploadExpiresAt(intent.expiresAt());
+        material.setStatus(MaterialStatus.UPLOADING);
+    }
+
+    private ProviderNeutralUploadMetadata providerNeutralMetadata(CourseMaterial material, VideoStorageProvider.UploadIntent intent) {
+        return new ProviderNeutralUploadMetadata(material.getId(), material.getId(), intent.uploadUrl(), intent.expiresAt(),
+                "COURSE_VIDEO", intent.requiredHeaders());
+    }
+
+    private CourseVideoUploadInitResponse videoUploadResponse(CourseMaterial material, VideoStorageProvider.UploadIntent intent) {
+        return CourseVideoUploadInitResponse.builder().materialId(material.getId())
+                .bunnyLibraryId(intent.libraryId()).bunnyVideoId(intent.videoId()).uploadUrl(intent.uploadUrl())
+                .authorizationSignature(intent.authorizationSignature()).expirationTimestamp(intent.expirationTimestamp())
+                .uploadMetadata(providerNeutralMetadata(material, intent)).build();
+    }
 }

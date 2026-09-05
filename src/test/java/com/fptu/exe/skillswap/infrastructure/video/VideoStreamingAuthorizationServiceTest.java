@@ -6,7 +6,9 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseMaterialType;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
 import com.fptu.exe.skillswap.modules.course.repository.CourseMaterialRepository;
+import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
+import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,6 +32,7 @@ class VideoStreamingAuthorizationServiceTest {
     @Mock private CourseMaterialRepository materialRepository;
     @Mock private StorageGateway storageGateway;
     @Mock private VideoPlaybackTokenService tokenService;
+    @Mock private VideoStorageProvider videoStorageProvider;
     @InjectMocks private VideoStreamingAuthorizationService service;
 
     private final UUID assetId = UUID.randomUUID();
@@ -71,12 +74,27 @@ class VideoStreamingAuthorizationServiceTest {
                 .hasMessageContaining("Không tìm thấy video");
     }
 
+    @Test
+    void deletedObjectFailureIsPropagatedWithoutLeakingProviderDetails() {
+        CourseMaterial material = material(MaterialStatus.READY);
+        when(materialRepository.findActiveWithCurriculumById(assetId)).thenReturn(Optional.of(material));
+        when(storageGateway.generatePrivateDownloadUrl(eq(material.getVideoObjectKey()), any(), any()))
+                .thenThrow(new BaseException(ErrorCode.STORAGE_ERROR, "Không thể tạo liên kết tải xuống"));
+
+        assertThatThrownBy(() -> service.authorize(assetId, "valid-token"))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.STORAGE_ERROR)
+                .asString().doesNotContain("S3Exception");
+    }
+
     private CourseMaterial material(MaterialStatus status) {
         return CourseMaterial.builder()
                 .id(assetId)
                 .materialType(CourseMaterialType.VIDEO)
                 .storageProviderType(StorageProviderType.OBJECT_STORAGE)
                 .videoObjectKey("course-materials/videos/asset.mp4")
+                .videoContentType("video/mp4")
+                .fileSizeBytes(100L)
                 .status(status)
                 .build();
     }

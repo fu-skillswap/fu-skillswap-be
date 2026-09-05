@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseMaterialType;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
 import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
 import com.fptu.exe.skillswap.modules.course.repository.CourseMaterialRepository;
+import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
@@ -26,6 +27,7 @@ public class VideoStreamingAuthorizationService {
     private final CourseMaterialRepository materialRepository;
     private final StorageGateway storageGateway;
     private final VideoPlaybackTokenService tokenService;
+    private final VideoStorageProvider videoStorageProvider;
 
     public StreamGrant authorize(UUID assetId, String token) {
         tokenService.validate(assetId, token);
@@ -39,9 +41,13 @@ public class VideoStreamingAuthorizationService {
         if (material.getStatus() != MaterialStatus.READY) {
             throw new BadRequestException(ErrorCode.BAD_REQUEST, "Video chưa sẵn sàng để phát");
         }
+        videoStorageProvider.validateStoredAsset(new VideoStorageProvider.VideoAsset(
+                material.getId(), material.getTitle(), material.getStorageProviderType(),
+                material.getBunnyLibraryId(), material.getBunnyVideoId(), material.getVideoObjectKey(),
+                material.getUploadExpiresAt(), material.getVideoContentType(), material.getFileSizeBytes()));
         StorageGateway.PrivatePresignedDownload source = storageGateway.generatePrivateDownloadUrl(
                 material.getVideoObjectKey(), Duration.ofMinutes(1), "inline; filename=\"course-video.mp4\"");
-        return new StreamGrant(source.downloadUrl(), URI.create(source.downloadUrl()).getHost(), "video/mp4");
+        return new StreamGrant(source.downloadUrl(), URI.create(source.downloadUrl()).getHost(), material.getVideoContentType());
     }
 
     public record StreamGrant(String sourceUrl, String sourceHost, String contentType) {}
