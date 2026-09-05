@@ -241,11 +241,11 @@ class BookingOwnershipIntegrationTest {
 
         BaseException messageReadException = assertThrows(BaseException.class,
                 () -> conversationService.getMessages(conversation.getId(), outsiderUser.getId(), null, 10));
-        assertEquals(ErrorCode.ACCESS_DENIED, messageReadException.getErrorCode());
+        assertEquals(ErrorCode.CHAT_ACCESS_DENIED, messageReadException.getErrorCode());
 
         BaseException sendMessageException = assertThrows(BaseException.class,
                 () -> conversationService.sendMessage(conversation.getId(), outsiderUser.getId(), new SendMessageRequest("Intrude")));
-        assertEquals(ErrorCode.ACCESS_DENIED, sendMessageException.getErrorCode());
+        assertEquals(ErrorCode.CHAT_ACCESS_DENIED, sendMessageException.getErrorCode());
     }
 
     private void completeAcademicProfile(UUID userId, String studentCode) {
