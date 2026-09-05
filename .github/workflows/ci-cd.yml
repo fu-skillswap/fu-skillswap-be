@@ -360,6 +360,19 @@ jobs:
             } >> "$FAILURE_REPORT"
           }
 
+          run_in_deploy_shell() {
+            command="$1"
+            if [ -f "${DEPLOY_DIR}/.env" ]; then
+              # Load the VPS environment inside the child shell. The parent
+              # shell already sources .env for command construction, but
+              # keeping this boundary explicit also covers commands that
+              # reference variables at execution time.
+              bash -lc "set -a; source '${DEPLOY_DIR}/.env'; source_exit=\$?; set +a; if [ \"\$source_exit\" -ne 0 ]; then exit \"\$source_exit\"; fi; ${command}"
+            else
+              bash -lc "$command"
+            fi
+          }
+
           run_step() {
             step_name="$1"
             shift
@@ -372,7 +385,7 @@ jobs:
             echo "started_at=${start_time}"
             echo "command=${safe_command}"
             set +e
-            bash -lc "$command" >"$stdout_file" 2>"$stderr_file"
+            run_in_deploy_shell "$command" >"$stdout_file" 2>"$stderr_file"
             exit_code=$?
             set -e
             end_time="$(date -Is)"
@@ -400,7 +413,7 @@ jobs:
             echo "started_at=${start_time}"
             echo "command=${command}"
             set +e
-            bash -lc "$command" >"$stdout_file" 2>"$stderr_file"
+            run_in_deploy_shell "$command" >"$stdout_file" 2>"$stderr_file"
             exit_code=$?
             set -e
             end_time="$(date -Is)"
@@ -426,7 +439,7 @@ jobs:
             echo "command=${safe_command}"
             set +e
             set +x
-            bash -lc "$actual_command" >"$stdout_file" 2>"$stderr_file"
+            run_in_deploy_shell "$actual_command" >"$stdout_file" 2>"$stderr_file"
             exit_code=$?
             set -e
             end_time="$(date -Is)"
