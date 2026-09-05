@@ -11,8 +11,6 @@ public record FileStorageCapabilityResponse(
         boolean privateFileStorageAvailable,
         @Schema(description = "Có thể upload file đính kèm chat hay không.", example = "true")
         boolean chatAttachmentsAvailable,
-        @Schema(description = "Có thể upload tài nguyên dịch vụ mentor hay không.", example = "true")
-        boolean mentorServiceResourcesAvailable,
         @Schema(description = "Có thể upload asset blog hay không.", example = "true")
         boolean blogAssetUploadsAvailable
 ) {

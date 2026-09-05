@@ -60,7 +60,7 @@ public class FileStorageController {
     @GetMapping("/capabilities")
     public ApiResponse<FileStorageCapabilityResponse> getCapabilities() {
         boolean available = storageGatewayProvider.getIfAvailable() != null;
-        return ApiResponse.success(new FileStorageCapabilityResponse(available, available, available, available));
+        return ApiResponse.success(new FileStorageCapabilityResponse(available, available, available));
     }
 
     @Operation(tags = {"Internal/System"}, summary = "Lấy URL tạm thời để upload file", description = "Internal/System - không dùng cho FE production. Endpoint local trả về objectKey để công cụ kiểm thử hoàn tất upload; các flow nghiệp vụ production phải dùng upload intent của module tương ứng.")
