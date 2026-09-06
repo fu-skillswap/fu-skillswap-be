@@ -74,6 +74,7 @@ public class ForumPostService {
     private final ForumTextPolicy forumTextPolicy;
     private final ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
+    private final ForumActionLogService forumActionLogService;
     private final CursorCodec cursorCodec;
 
     @Transactional(readOnly = true)
@@ -200,7 +201,10 @@ public class ForumPostService {
                 .reportCount(0)
                 .lastActivityAt(DateTimeUtil.now())
                 .build();
-        return toPostResponse(forumPostRepository.save(post), currentUser.getId());
+        ForumPost saved = forumPostRepository.save(post);
+        forumActionLogService.record(currentUser, ForumActionType.CREATE_POST, "POST", saved.getId(),
+                Map.of("status", ForumPostStatus.PUBLISHED.name()));
+        return toPostResponse(saved, currentUser.getId());
     }
 
     @Transactional
@@ -227,6 +231,8 @@ public class ForumPostService {
         forumPostReactionRepository.deleteByPostId(postId);
         forumCommentRepository.softDeleteByPostId(postId);
         forumPostRepository.delete(post);
+        forumActionLogService.record(currentUser, ForumActionType.DELETE_POST, "POST", postId,
+                Map.of("status", "DELETED"));
         return response;
     }
 
@@ -316,6 +322,9 @@ public class ForumPostService {
         post.setCommentCount(safeIncrement(post.getCommentCount()));
         post.setLastActivityAt(DateTimeUtil.now());
         forumPostRepository.save(post);
+        forumActionLogService.record(currentUser, ForumActionType.CREATE_COMMENT, "COMMENT", saved.getId(),
+                Map.of("status", ForumCommentStatus.VISIBLE.name(),
+                        "reply", parentComment != null));
 
         boolean isSelfReply = parentComment != null && currentUser.getId().equals(parentComment.getAuthorUser().getId());
         boolean isSelfComment = currentUser.getId().equals(post.getAuthorUser().getId());
@@ -386,6 +395,8 @@ public class ForumPostService {
             post.setCommentCount(Math.max(0, post.getCommentCount() - removedCount));
             forumPostRepository.save(post);
         }
+        forumActionLogService.record(currentUser, ForumActionType.DELETE_COMMENT, "COMMENT", commentId,
+                Map.of("status", "DELETED", "removedReplyCount", visibleReplies.size()));
         return response;
     }
 
@@ -416,6 +427,8 @@ public class ForumPostService {
             comment.setReactionCount(safeIncrement(comment.getReactionCount()));
             forumCommentRepository.save(comment);
         }
+        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
+                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
         return toCommentResponse(comment, currentUserId);
     }
 
@@ -437,6 +450,8 @@ public class ForumPostService {
                 forumCommentRepository.save(comment);
             }
         });
+        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
+                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
         return toCommentResponse(comment, currentUserId);
     }
 
@@ -463,6 +478,8 @@ public class ForumPostService {
             post.setReactionCount(safeIncrement(post.getReactionCount()));
             forumPostRepository.save(post);
         }
+        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
+                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
         return toPostResponse(post, currentUser.getId());
     }
 
@@ -480,6 +497,8 @@ public class ForumPostService {
                 forumPostRepository.save(post);
             }
         });
+        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
+                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
         return toPostResponse(post, currentUser.getId());
     }
 

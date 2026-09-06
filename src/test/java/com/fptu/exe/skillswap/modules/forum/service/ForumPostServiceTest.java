@@ -83,6 +83,8 @@ class ForumPostServiceTest {
     @Mock
     private ForumAbuseGuardService forumAbuseGuardService;
     @Mock
+    private ForumActionLogService forumActionLogService;
+    @Mock
     private CursorCodec cursorCodec;
     @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
@@ -104,6 +106,7 @@ class ForumPostServiceTest {
                 forumTextPolicy,
                 forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
+                forumActionLogService,
                 cursorCodec
         );
 
@@ -146,6 +149,7 @@ class ForumPostServiceTest {
         assertEquals("Cần hỏi về PRJ301", response.title());
         assertEquals("PUBLISHED", response.status());
         verify(forumAbuseGuardService).checkAndLog(mentee, ForumActionType.CREATE_POST);
+        verify(forumActionLogService).record(eq(mentee), eq(ForumActionType.CREATE_POST), eq("POST"), any(), any());
         verify(forumPostRepository).save(any(ForumPost.class));
     }
 

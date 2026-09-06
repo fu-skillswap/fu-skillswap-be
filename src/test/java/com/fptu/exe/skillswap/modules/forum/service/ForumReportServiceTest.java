@@ -70,6 +70,8 @@ class ForumReportServiceTest {
     @Mock
     private ForumAbuseGuardService forumAbuseGuardService;
     @Mock
+    private ForumActionLogService forumActionLogService;
+    @Mock
     private CursorCodec cursorCodec;
     @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
@@ -92,6 +94,7 @@ class ForumReportServiceTest {
                 forumTextPolicy,
                 forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
+                forumActionLogService,
                 cursorCodec
         );
         forumReportService = new ForumReportService(
@@ -100,7 +103,8 @@ class ForumReportServiceTest {
                 forumCommentRepository,
                 forumReportRepository,
                 forumTextPolicy,
-                forumAbuseGuardService
+                forumAbuseGuardService,
+                forumActionLogService
         );
 
         reporter = User.builder()
@@ -183,6 +187,7 @@ class ForumReportServiceTest {
         assertEquals(1, post.getReportCount());
         assertEquals("OPEN", response.status());
         verify(forumAbuseGuardService).checkAndLog(reporter, ForumActionType.CREATE_REPORT);
+        verify(forumActionLogService).record(eq(reporter), eq(ForumActionType.CREATE_REPORT), eq("REPORT"), any(), any());
         verify(forumPostRepository).save(post);
         verify(forumReportRepository).saveAndFlush(any(ForumReport.class));
     }

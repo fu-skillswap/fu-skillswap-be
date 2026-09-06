@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.strategy.ForumActionPolicy;
 import com.fptu.exe.skillswap.modules.forum.strategy.ForumActionPolicyRegistry;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -14,7 +13,7 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class ForumAbuseGuardService {
 
-    private final InMemoryRateLimitService rateLimitService;
+    private final ForumDatabaseRateLimitService rateLimitService;
     private final ForumActionPolicyRegistry forumActionPolicyRegistry;
 
     public void checkAndLog(User user, ForumActionType actionType) {
@@ -25,6 +24,6 @@ public class ForumAbuseGuardService {
         Duration window = policy != null ? policy.getWindow() : Duration.ofMinutes(10);
         String message = policy != null ? policy.getRateLimitMessage() : "Thao tác quá nhanh, vui lòng thử lại sau";
 
-        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.BUSINESS, key, limit, window, message);
+        rateLimitService.check(key, limit, window, message);
     }
 }

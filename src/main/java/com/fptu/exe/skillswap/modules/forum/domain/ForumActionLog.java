@@ -19,6 +19,8 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -45,6 +47,16 @@ public class ForumActionLog {
     @Enumerated(EnumType.STRING)
     @Column(name = "action_type", nullable = false, length = 30)
     private ForumActionType actionType;
+
+    @Column(name = "target_type", nullable = false, length = 30)
+    private String targetType;
+
+    @Column(name = "target_id")
+    private UUID targetId;
+
+    @Column(name = "metadata", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String metadata;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

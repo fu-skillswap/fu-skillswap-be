@@ -18,6 +18,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,6 +31,7 @@ public class ForumReportService {
     private final ForumReportRepository forumReportRepository;
     private final ForumTextPolicy forumTextPolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
+    private final ForumActionLogService forumActionLogService;
 
     @Transactional
     public ForumReportResponse createReport(UUID currentUserId, ForumReportCreateRequest request) {
@@ -92,6 +94,10 @@ public class ForumReportService {
         } catch (DataIntegrityViolationException ex) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó", ex);
         }
+
+        forumActionLogService.record(reporter, ForumActionType.CREATE_REPORT, "REPORT", report.getId(),
+                Map.of("targetType", request.targetType().name(),
+                        "reasonType", request.reasonType().name()));
 
         return ForumReportResponse.builder()
                 .reportId(report.getId())

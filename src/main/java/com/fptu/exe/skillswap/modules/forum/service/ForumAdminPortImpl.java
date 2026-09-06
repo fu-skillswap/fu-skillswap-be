@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.forum.service;
 
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
+import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPost;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumPostStatus;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumReport;
@@ -78,6 +79,7 @@ public class ForumAdminPortImpl implements ForumAdminPort {
     private final NotificationCommandPort notificationCommandPort;
     private final ForumTextPolicy forumTextPolicy;
     private final CursorCodec cursorCodec;
+    private final ForumActionLogService forumActionLogService;
     private MentorViolationCommandPort mentorViolationCommandPort;
 
     @Autowired(required = false)
@@ -214,6 +216,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         post.setHiddenByUserId(null);
         post.setHiddenReason(null);
         ForumPost saved = forumPostRepository.save(post);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_RESTORE_POST,
+                "POST", postId, Map.of("status", ForumPostStatus.PUBLISHED.name()));
         return postView(toPostResponse(saved, null));
     }
 
@@ -236,6 +240,9 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         post.setCommentCount((post.getCommentCount() == null ? 0 : post.getCommentCount()) + 1 + restoredReplies.size());
         forumPostRepository.save(post);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_RESTORE_COMMENT,
+                "COMMENT", commentId, Map.of("status", ForumCommentStatus.VISIBLE.name(),
+                        "restoredReplyCount", restoredReplies.size()));
         return commentView(toCommentResponse(saved));
     }
 
@@ -255,6 +262,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_CONFIRM_NO_ACTION,
+                "REPORT", report.getId(), Map.of("status", report.getStatus().name()));
     }
 
     private void hideReportedPost(UUID adminUserId, ForumReport report, String reviewNote) {
@@ -277,6 +286,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_HIDE_POST,
+                "POST", post.getId(), Map.of("status", post.getStatus().name()));
 
         recordForumViolationIfMentor(post.getAuthorUser().getId(), post.getId(), adminUserId, reviewNote);
 
@@ -326,6 +337,9 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_HIDE_COMMENT,
+                "COMMENT", comment.getId(), Map.of("status", comment.getStatus().name(),
+                        "hiddenReplyCount", visibleReplies.size()));
 
         recordForumViolationIfMentor(comment.getAuthorUser().getId(), comment.getId(), adminUserId, reviewNote);
 
@@ -354,6 +368,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
         report.setReviewNote(cleanNote(reviewNote));
         report.setResolvedAt(DateTimeUtil.now());
         forumReportRepository.save(report);
+        forumActionLogService.record(adminUserId, ForumActionType.ADMIN_DISMISS_REPORT,
+                "REPORT", report.getId(), Map.of("status", report.getStatus().name()));
     }
 
     private ForumReportResponse toReportResponse(ForumReport report,
