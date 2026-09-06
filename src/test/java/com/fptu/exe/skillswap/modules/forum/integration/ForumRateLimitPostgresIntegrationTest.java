@@ -14,8 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
@@ -58,14 +56,6 @@ class ForumRateLimitPostgresIntegrationTest extends AbstractPostgreSQLIntegratio
 
     @Autowired
     private TimeProvider timeProvider;
-
-    @DynamicPropertySource
-    static void forcePostgresDataSource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", AbstractPostgreSQLIntegrationTest::getPostgresJdbcUrl);
-        registry.add("spring.datasource.username", AbstractPostgreSQLIntegrationTest::getPostgresUsername);
-        registry.add("spring.datasource.password", AbstractPostgreSQLIntegrationTest::getPostgresPassword);
-        registry.add("spring.datasource.driver-class-name", AbstractPostgreSQLIntegrationTest::getPostgresDriverClassName);
-    }
 
     @BeforeEach
     void cleanBuckets() {

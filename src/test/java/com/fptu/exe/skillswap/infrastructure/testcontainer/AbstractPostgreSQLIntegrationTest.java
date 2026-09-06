@@ -45,21 +45,24 @@ public abstract class AbstractPostgreSQLIntegrationTest {
         if (isExternalDbConfigured()) {
             return EXTERNAL_DB_URL;
         }
-        return postgres != null ? postgres.getJdbcUrl() : null;
+        requirePostgresAvailable();
+        return postgres.getJdbcUrl();
     }
 
     public static String getPostgresUsername() {
         if (isExternalDbConfigured()) {
             return EXTERNAL_DB_USER;
         }
-        return postgres != null ? postgres.getUsername() : null;
+        requirePostgresAvailable();
+        return postgres.getUsername();
     }
 
     public static String getPostgresPassword() {
         if (isExternalDbConfigured()) {
             return EXTERNAL_DB_PASSWORD;
         }
-        return postgres != null ? postgres.getPassword() : null;
+        requirePostgresAvailable();
+        return postgres.getPassword();
     }
 
     public static String getPostgresDriverClassName() {
@@ -67,12 +70,17 @@ public abstract class AbstractPostgreSQLIntegrationTest {
     }
 
     @DynamicPropertySource
-    static void setPostgresProperties(DynamicPropertyRegistry registry) {
-        if (isPostgresAvailable()) {
-            registry.add("spring.datasource.url", AbstractPostgreSQLIntegrationTest::getPostgresJdbcUrl);
-            registry.add("spring.datasource.username", AbstractPostgreSQLIntegrationTest::getPostgresUsername);
-            registry.add("spring.datasource.password", AbstractPostgreSQLIntegrationTest::getPostgresPassword);
-            registry.add("spring.datasource.driver-class-name", AbstractPostgreSQLIntegrationTest::getPostgresDriverClassName);
+    public static void setPostgresProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", AbstractPostgreSQLIntegrationTest::getPostgresJdbcUrl);
+        registry.add("spring.datasource.username", AbstractPostgreSQLIntegrationTest::getPostgresUsername);
+        registry.add("spring.datasource.password", AbstractPostgreSQLIntegrationTest::getPostgresPassword);
+        registry.add("spring.datasource.driver-class-name", AbstractPostgreSQLIntegrationTest::getPostgresDriverClassName);
+    }
+
+    private static void requirePostgresAvailable() {
+        if (!isPostgresAvailable()) {
+            throw new IllegalStateException(
+                    "PostgreSQL integration tests require TEST_DATASOURCE_URL or a running Docker environment");
         }
     }
 

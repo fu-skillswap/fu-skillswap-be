@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.*;
@@ -29,9 +30,12 @@ public class GoogleCalendarSyncService {
     private final ApplicationEventPublisher events;
     private final org.springframework.transaction.support.TransactionTemplate tx;
     private final TimeProvider clock;
-    @Transactional public void enqueueCreate(UUID id){enqueue(id,GoogleCalendarSyncJobType.CREATE_BOOKING_EVENT,"BOOKING_CREATE:"+id);}
-    @Transactional public void enqueueUpdate(UUID id,Instant at){enqueue(id,GoogleCalendarSyncJobType.UPDATE_BOOKING_EVENT,"BOOKING_UPDATE:"+id+":"+(at==null?"unknown":at));}
-    @Transactional public void enqueueCancel(UUID id){enqueue(id,GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT,"BOOKING_CANCEL:"+id);}
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void enqueueCreate(UUID id){enqueue(id,GoogleCalendarSyncJobType.CREATE_BOOKING_EVENT,"BOOKING_CREATE:"+id);}
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void enqueueUpdate(UUID id,Instant at){enqueue(id,GoogleCalendarSyncJobType.UPDATE_BOOKING_EVENT,"BOOKING_UPDATE:"+id+":"+(at==null?"unknown":at));}
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void enqueueCancel(UUID id){enqueue(id,GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT,"BOOKING_CANCEL:"+id);}
     public void processDueJobs(){Instant now=clock.instant();List<UUID> ids=tx.execute(x->jobs.findTop20RunnableForUpdateUtc(List.of(GoogleCalendarSyncJobStatus.PENDING,GoogleCalendarSyncJobStatus.RETRYING),now,BusinessTime.fromInstant(now),PageRequest.of(0,20)).stream().map(GoogleCalendarSyncJob::getId).toList());if(ids!=null)ids.forEach(this::processSingleJob);}
     public void processSingleJob(UUID id){Instant now=clock.instant();boolean claimed=Boolean.TRUE.equals(tx.execute(x->jobs.claimForProcessingUtc(id,List.of(GoogleCalendarSyncJobStatus.PENDING,GoogleCalendarSyncJobStatus.RETRYING),GoogleCalendarSyncJobStatus.PROCESSING,now,BusinessTime.fromInstant(now))==1));if(!claimed)return;GoogleCalendarSyncJob job=jobs.findById(id).orElse(null);if(job==null)return;BookingCalendarSnapshot s=null;try{s=calendar.findForCalendarSync(job.getBookingId(),job.getJobType()!=GoogleCalendarSyncJobType.CANCEL_BOOKING_EVENT).orElseThrow(()->new BaseException(ErrorCode.NOT_FOUND,"Calendar booking was not found"));switch(job.getJobType()){case CREATE_BOOKING_EVENT->create(job,s);case UPDATE_BOOKING_EVENT->update(job,s);case CANCEL_BOOKING_EVENT->cancel(job,s);}complete(job);}catch(GoogleCalendarApiClient.GoogleCalendarTransientException e){retry(job,s,e.getErrorCode(),e.getMessage());}catch(GoogleCalendarApiClient.GoogleCalendarApiException|BaseException e){String code=e instanceof GoogleCalendarApiClient.GoogleCalendarApiException a?a.getErrorCode():((BaseException)e).getErrorCode().getCode();fail(job,s,code,e.getMessage());}catch(Exception e){fail(job,s,"INTERNAL_ERROR",e.getMessage());}}
     private void create(GoogleCalendarSyncJob j,BookingCalendarSnapshot s){requireSession(s);if(near(j,s)){abort(j,s);return;}GoogleCalendarConnection c=connections.getActiveConnectionForSync(j.getMentorUserId());if(c==null){state(s,"NOT_CONNECTED",null,null,null,null,false,false);return;}if(c.getConnectionStatus()==GoogleCalendarConnectionStatus.REVOKED){revoked(j,s,c);return;}GoogleCalendarEventLink link=links.findByBookingId(s.bookingId()).orElse(null);if(link!=null){synced(s,c,link.getGoogleMeetUrl());return;}var r=api.createBookingEvent(connections.resolveAccessTokenForSync(c.getId()),c.getCalendarId(),"booking-"+s.bookingId(),s);String meet=manual(s)?s.meetingLink():r.googleMeetUrl();links.save(GoogleCalendarEventLink.builder().bookingId(s.bookingId()).sessionId(s.sessionId()).mentorUserId(j.getMentorUserId()).googleEventId(r.eventId()).googleMeetUrl(meet).etag(r.etag()).eventStatus(GoogleCalendarEventStatus.ACTIVE).build());synced(s,c,meet);}

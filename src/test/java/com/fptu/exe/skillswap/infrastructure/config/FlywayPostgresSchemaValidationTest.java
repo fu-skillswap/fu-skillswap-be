@@ -10,8 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * Runs the production migration chain against PostgreSQL, then lets Hibernate validate every mapped table.
@@ -27,15 +25,6 @@ class FlywayPostgresSchemaValidationTest extends AbstractPostgreSQLIntegrationTe
 
     @Autowired
     private DataSource dataSource;
-
-    /** Keep this on the concrete test: the schema gate must never fall back to H2. */
-    @DynamicPropertySource
-    static void forcePostgresDataSource(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", AbstractPostgreSQLIntegrationTest::getPostgresJdbcUrl);
-        registry.add("spring.datasource.username", AbstractPostgreSQLIntegrationTest::getPostgresUsername);
-        registry.add("spring.datasource.password", AbstractPostgreSQLIntegrationTest::getPostgresPassword);
-        registry.add("spring.datasource.driver-class-name", AbstractPostgreSQLIntegrationTest::getPostgresDriverClassName);
-    }
 
     @Test
     void flywaySchema_shouldMatchAllJpaMappings() throws SQLException {
