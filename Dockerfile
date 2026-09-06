@@ -27,5 +27,5 @@ COPY --from=build /app/target/*.jar app.jar
 RUN chown skillswap:skillswap /app/app.jar
 USER skillswap
 EXPOSE 8080
-ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:+UseG1GC -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=64m -XX:+UseContainerSupport -XX:ActiveProcessorCount=1 -Xss512k -XX:+ExitOnOutOfMemoryError"
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx384m -XX:+UseG1GC -XX:MaxMetaspaceSize=256m -XX:MaxDirectMemorySize=64m -XX:+UseContainerSupport -XX:ActiveProcessorCount=1 -Xss512k -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["java", "-jar", "app.jar"]
