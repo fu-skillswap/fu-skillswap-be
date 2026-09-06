@@ -277,19 +277,45 @@ interface AdminCouponCreateRequest {
 ## 8. Kiểm Duyệt Nội Dung Diễn Đàn & Bộ Lọc Từ Cấm (Content Moderation)
 
 ### 8.1 Xử Lý Báo Cáo Vi Phạm (Forum Reports)
-- **Hàng đợi báo cáo vi phạm**: `GET /api/admin/forum/reports?status=PENDING&page=0&size=20`
+- **Hàng đợi báo cáo vi phạm**: `GET /api/admin/forum/reports?page=0&size=20&status=OPEN`
+- Bộ lọc tùy chọn: `keyword`, `status`, `targetType`.
+- Giá trị `status` hợp lệ: `OPEN`, `RESOLVED_NO_ACTION`, `RESOLVED_ACTION_TAKEN`, `DISMISSED`.
+- Giá trị `targetType` hợp lệ: `POST`, `COMMENT`.
 - **Xem chi tiết báo cáo**: `GET /api/admin/forum/reports/{reportId}`
 - **Xử lý báo cáo**: `POST /api/admin/forum/reports/{reportId}/resolve`
 
+Chỉ report có trạng thái `OPEN` mới được xử lý. Request body dùng đúng tên field backend:
+
 ```typescript
 interface ForumReportResolveRequest {
-  resolutionAction: 
-    | "HIDE_CONTENT"          // Ẩn bài viết hoặc bình luận vi phạm khỏi cộng đồng
-    | "DISMISS_REPORT"        // Bác bỏ báo cáo (nội dung hợp lệ)
-    | "WARN_USER";            // Cảnh cáo người dùng
-  adminNote?: string;
+  action:
+    | "CONFIRM_NO_ACTION"     // Xác nhận không cần hành động
+    | "HIDE_POST"              // Ẩn bài viết bị report
+    | "HIDE_COMMENT"           // Ẩn bình luận bị report
+    | "DISMISS";               // Bác bỏ report
+  reviewNote?: string;         // Tối đa 500 ký tự
 }
 ```
+
+Ví dụ:
+
+```json
+{
+  "action": "HIDE_POST",
+  "reviewNote": "Đã ẩn nội dung spam."
+}
+```
+
+Kết quả xử lý:
+
+| Action | Trạng thái report sau xử lý | Trạng thái target |
+|---|---|---|
+| `CONFIRM_NO_ACTION` | `RESOLVED_NO_ACTION` | Không thay đổi |
+| `HIDE_POST` | `RESOLVED_ACTION_TAKEN` | Post chuyển sang `HIDDEN` |
+| `HIDE_COMMENT` | `RESOLVED_ACTION_TAKEN` | Comment chuyển sang `HIDDEN` |
+| `DISMISS` | `DISMISSED` | Không thay đổi |
+
+Nếu report đã được xử lý, hoặc action không hợp lệ với target, backend trả lỗi theo error contract hiện hành.
 
 ---
 
@@ -299,14 +325,51 @@ interface ForumReportResolveRequest {
 - **Danh sách bình luận (Cursor Page)**: `GET /api/admin/forum/comments?status=HIDDEN&cursor=...`
 - **Khôi phục bình luận**: `POST /api/admin/forum/comments/{commentId}/restore`
 
+Giá trị trạng thái hợp lệ:
+
+- Post: `PUBLISHED`, `HIDDEN`
+- Comment: `VISIBLE`, `HIDDEN`
+
+`cursor` là opaque cursor; FE chỉ truyền lại `nextCursor` từ response trước đó.
+
 ---
 
 ### 8.3 Quản Lý Bộ Lọc Cụm Từ Cấm (Prohibited Phrases)
 Hệ thống tự động chặn người dùng đăng bài chứa các từ ngữ phản cảm hoặc vi phạm tiêu chuẩn cộng đồng.
 
 - **Danh sách từ cấm**: `GET /api/admin/forum/prohibited-phrases?isActive=true`
-- **Thêm từ cấm mới**: `POST /api/admin/forum/prohibited-phrases` (`{ "phrase": string, "category": string, "severity": "BLOCK" | "FLAG" }`)
-- **Cập nhật / Bật tắt**: `PUT /api/admin/forum/prohibited-phrases/{ruleId}` và `PATCH .../active`
+- **Chi tiết từ cấm**: `GET /api/admin/forum/prohibited-phrases/{ruleId}`
+- **Thêm từ cấm mới**: `POST /api/admin/forum/prohibited-phrases`
+
+```json
+{
+  "phrase": "cụm từ cần chặn"
+}
+```
+
+`phrase` là bắt buộc và tối đa 200 ký tự. Backend không nhận `category` hoặc `severity`.
+
+- **Cập nhật phrase**: `PUT /api/admin/forum/prohibited-phrases/{ruleId}`
+
+```json
+{
+  "phrase": "cụm từ mới",
+  "expectedVersion": 0
+}
+```
+
+- **Bật/tắt phrase**: `PATCH /api/admin/forum/prohibited-phrases/{ruleId}/active`
+
+```json
+{
+  "isActive": false,
+  "expectedVersion": 1
+}
+```
+
+`expectedVersion` là bắt buộc, là số nguyên không âm và phải khớp với `version` hiện tại. Version sai trả lỗi conflict; FE cần tải lại rule trước khi thử lại.
+
+Response của prohibited phrase gồm: `ruleId`, `phrase`, `isActive`, `version`, `createdByUserId`, `createdAt`, `updatedAt`.
 
 ---
 
