@@ -75,6 +75,7 @@ public class ForumPostService {
     private final ForumProhibitedPhrasePolicy forumProhibitedPhrasePolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
     private final ForumActionLogService forumActionLogService;
+    private final ForumReactionService forumReactionService;
     private final CursorCodec cursorCodec;
 
     @Transactional(readOnly = true)
@@ -400,106 +401,28 @@ public class ForumPostService {
         return response;
     }
 
-    @Transactional
     public ForumCommentResponse upsertCommentReaction(UUID currentUserId, UUID commentId, ForumReactionRequest request) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
-        if (request.reactionType() != ForumReactionType.LIKE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Forum MVP hiện chỉ hỗ trợ reaction LIKE cho comment");
-        }
-
-        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
-        if (comment.getStatus() != ForumCommentStatus.VISIBLE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể thả reaction cho bình luận đã bị ẩn hoặc xóa");
-        }
-        ensurePostVisible(comment.getPost());
-
-        Optional<ForumCommentReaction> existing =
-                forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId());
-        if (existing.isEmpty()) {
-            ForumCommentReaction reaction = ForumCommentReaction.builder()
-                    .comment(comment)
-                    .user(currentUser)
-                    .reactionType(ForumReactionType.LIKE)
-                    .build();
-            forumCommentReactionRepository.save(reaction);
-            comment.setReactionCount(safeIncrement(comment.getReactionCount()));
-            forumCommentRepository.save(comment);
-        }
-        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
-                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
-        return toCommentResponse(comment, currentUserId);
+        return forumReactionService.upsertCommentReaction(currentUser, commentId, request);
     }
 
-    @Transactional
     public ForumCommentResponse removeCommentReaction(UUID currentUserId, UUID commentId) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
-        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
-        if (comment.getStatus() != ForumCommentStatus.VISIBLE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể thao tác trên bình luận đã bị ẩn hoặc xóa");
-        }
-        ensurePostVisible(comment.getPost());
-        
-        forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId()).ifPresent(reaction -> {
-            forumCommentReactionRepository.delete(reaction);
-            if (comment.getReactionCount() != null && comment.getReactionCount() > 0) {
-                comment.setReactionCount(comment.getReactionCount() - 1);
-                forumCommentRepository.save(comment);
-            }
-        });
-        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
-                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
-        return toCommentResponse(comment, currentUserId);
+        return forumReactionService.removeCommentReaction(currentUser, commentId);
     }
 
-    @Transactional
     public ForumPostResponse upsertReaction(UUID currentUserId, UUID postId, ForumReactionRequest request) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
-        if (request.reactionType() != ForumReactionType.LIKE) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Forum MVP hiện chỉ hỗ trợ reaction LIKE");
-        }
-
-        ForumPost post = forumPostRepository.findByIdForUpdate(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        ensurePostVisible(post);
-
-        Optional<ForumPostReaction> existing = forumPostReactionRepository.findByPostIdAndUserId(postId, currentUser.getId());
-        if (existing.isEmpty()) {
-            ForumPostReaction reaction = ForumPostReaction.builder()
-                    .post(post)
-                    .user(currentUser)
-                    .reactionType(ForumReactionType.LIKE)
-                    .build();
-            forumPostReactionRepository.save(reaction);
-            post.setReactionCount(safeIncrement(post.getReactionCount()));
-            forumPostRepository.save(post);
-        }
-        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
-                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
-        return toPostResponse(post, currentUser.getId());
+        return forumReactionService.upsertPostReaction(currentUser, postId, request);
     }
 
-    @Transactional
     public ForumPostResponse removeReaction(UUID currentUserId, UUID postId) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.TOGGLE_REACTION);
-        ForumPost post = forumPostRepository.findByIdForUpdate(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        ensurePostVisible(post);
-        forumPostReactionRepository.findByPostIdAndUserId(postId, currentUser.getId()).ifPresent(reaction -> {
-            forumPostReactionRepository.delete(reaction);
-            if (post.getReactionCount() != null && post.getReactionCount() > 0) {
-                post.setReactionCount(post.getReactionCount() - 1);
-                forumPostRepository.save(post);
-            }
-        });
-        forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
-                Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
-        return toPostResponse(post, currentUser.getId());
+        return forumReactionService.removePostReaction(currentUser, postId);
     }
 
     User requireForumUser(UUID currentUserId) {

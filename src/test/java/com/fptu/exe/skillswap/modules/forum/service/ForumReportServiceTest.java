@@ -95,6 +95,13 @@ class ForumReportServiceTest {
                 forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
                 forumActionLogService,
+                new ForumReactionService(
+                        forumPostRepository,
+                        forumCommentRepository,
+                        forumPostReactionRepository,
+                        forumCommentReactionRepository,
+                        forumActionLogService
+                ),
                 cursorCodec
         );
         forumReportService = new ForumReportService(

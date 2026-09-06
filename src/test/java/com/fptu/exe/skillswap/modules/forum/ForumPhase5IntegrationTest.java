@@ -26,8 +26,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -176,22 +179,37 @@ class ForumPhase5IntegrationTest {
         int threadCount = 10;
         java.util.concurrent.ExecutorService executorService = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
         java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threadCount);
+        List<Future<?>> futures = new ArrayList<>(threadCount);
 
-        for (int i = 0; i < threadCount; i++) {
-            executorService.execute(() -> {
+        try {
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(executorService.submit(() -> {
+                    try {
+                        forumPostService.upsertCommentReaction(replier.getId(), comment.commentId(), new ForumReactionRequest(ForumReactionType.LIKE));
+                    } finally {
+                        latch.countDown();
+                    }
+                }));
+            }
+
+            boolean completed = latch.await(10, java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(completed, "Threads should finish within timeout");
+
+            List<Throwable> workerFailures = new ArrayList<>();
+            for (Future<?> future : futures) {
                 try {
-                    forumPostService.upsertCommentReaction(replier.getId(), comment.commentId(), new ForumReactionRequest(ForumReactionType.LIKE));
-                } catch (Exception e) {
-                    // Concurrent duplicate requests may hit the unique constraint; the final count is asserted below.
-                } finally {
-                    latch.countDown();
+                    future.get();
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    workerFailures.add(ex);
+                } catch (ExecutionException ex) {
+                    workerFailures.add(ex.getCause());
                 }
-            });
+            }
+            assertTrue(workerFailures.isEmpty(), "Concurrent reaction requests must not fail: " + workerFailures);
+        } finally {
+            executorService.shutdownNow();
         }
-
-        boolean completed = latch.await(10, java.util.concurrent.TimeUnit.SECONDS);
-        assertTrue(completed, "Threads should finish within timeout");
-        executorService.shutdown();
 
         // Query again
         var comments = forumPostService.getComments(postAuthor.getId(), post.postId(), null, 10);

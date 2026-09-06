@@ -107,6 +107,13 @@ class ForumPostServiceTest {
                 forumProhibitedPhrasePolicy,
                 forumAbuseGuardService,
                 forumActionLogService,
+                new ForumReactionService(
+                        forumPostRepository,
+                        forumCommentRepository,
+                        forumPostReactionRepository,
+                        forumCommentReactionRepository,
+                        forumActionLogService
+                ),
                 cursorCodec
         );
 
