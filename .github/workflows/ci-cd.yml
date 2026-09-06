@@ -9,6 +9,11 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  JAVA_TOOL_OPTIONS: >-
+    -Xms64m
+    -Xmx256m
+    -XX:MaxMetaspaceSize=96m
+    -XX:MaxDirectMemorySize=32m
 
 concurrency:
   # Superseded PR/dev runs are cancelled to free runners. Main is deliberately
