@@ -12,7 +12,8 @@ env:
   JAVA_TOOL_OPTIONS: >-
     -Xms64m
     -Xmx256m
-    -XX:MaxMetaspaceSize=96m
+    -XX:MetaspaceSize=256m
+    -XX:MaxMetaspaceSize=512m
     -XX:MaxDirectMemorySize=32m
 
 concurrency:

@@ -279,7 +279,7 @@
                         ArchUnit/Modulith retain a large class graph and several tests boot Spring contexts.
                         Keep the limit explicit and configurable instead of relying on runner defaults.
                     -->
-                    <argLine>-Xms256m -Xmx${test.jvm.heap.max} -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+                    <argLine>-Xms256m -Xmx${test.jvm.heap.max} -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
                     <systemPropertyVariables>
                         <!-- Prevent dozens of distinct Spring test contexts from accumulating in one fork. -->
                         <spring.test.context.cache.maxSize>${test.spring.context.cache.max-size}</spring.test.context.cache.maxSize>
@@ -325,7 +325,7 @@
                 <version>3.2.5</version>
                 <configuration>
                     <forkedProcessTimeoutInSeconds>1200</forkedProcessTimeoutInSeconds>
-                    <argLine>-Xms256m -Xmx${test.jvm.heap.max} -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
+                    <argLine>-Xms256m -Xmx${test.jvm.heap.max} -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
                     <systemPropertyVariables>
                         <spring.test.context.cache.maxSize>${test.spring.context.cache.max-size}</spring.test.context.cache.maxSize>
                     </systemPropertyVariables>
