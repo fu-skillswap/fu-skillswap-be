@@ -2,6 +2,8 @@ package com.fptu.exe.skillswap.infrastructure.config;
 
 import com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,24 @@ class FlywayPostgresSchemaValidationTest extends AbstractPostgreSQLIntegrationTe
             org.junit.jupiter.api.Assertions.assertTrue(columns.containsAll(Set.of(
                     "original_filename", "content_type", "size_bytes", "file_url")),
                     "V124 verification metadata columns are missing: " + columns);
+        }
+    }
+
+    @Test
+    void v135ForumActionLogColumns_shouldRemainNullableDuringRollingDeployment() throws SQLException {
+        try (var connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var result = statement.executeQuery("select column_name, is_nullable from information_schema.columns "
+                     + "where table_schema = current_schema() and table_name = 'forum_action_logs' "
+                     + "and column_name in ('target_type', 'metadata')")) {
+            Map<String, String> nullability = new HashMap<>();
+            while (result.next()) {
+                nullability.put(result.getString("column_name"), result.getString("is_nullable"));
+            }
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    Map.of("target_type", "YES", "metadata", "YES"),
+                    nullability,
+                    "V135 must keep new audit columns nullable until the later contract deployment");
         }
     }
 }

@@ -38,7 +38,8 @@ allow the local frontend origins.
 Build and start with:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+docker compose --env-file "${DEPLOY_DIR:-/var/opt/fu-skillswap-be}/.env" \
+  -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 The application listens on port `8080`.

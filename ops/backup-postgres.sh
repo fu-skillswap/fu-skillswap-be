@@ -4,7 +4,8 @@ set -eu
 : "${POSTGRES_DB:?POSTGRES_DB is required}"
 : "${POSTGRES_USER:?POSTGRES_USER is required}"
 
-BACKUP_DIR="${BACKUP_DIR:-/opt/skillswap/backups}"
+DEPLOY_DIR="${DEPLOY_DIR:-/var/opt/fu-skillswap-be}"
+BACKUP_DIR="${BACKUP_DIR:-${DEPLOY_DIR}/backups}"
 # Backup-specific credentials may be supplied for least privilege. When absent,
 # reuse the configured R2 storage account used by the application.
 BACKUP_BUCKET="${BACKUP_BUCKET:-${STORAGE_BUCKET:-}}"

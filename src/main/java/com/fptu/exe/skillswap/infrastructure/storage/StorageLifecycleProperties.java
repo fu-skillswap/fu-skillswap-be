@@ -54,5 +54,10 @@ public class StorageLifecycleProperties {
 
     private int chatAttachmentDeleteGraceDays = 7;
 
+    /** Thời gian giữ bucket rate-limit sau khi cửa sổ đã hết hạn (ngày). */
+    private int forumRateLimitRetentionDays = 1;
+
+    private String forumRateLimitCleanupCron = "0 */10 * * * *";
+
     private int cleanupBatchSize = 500;
 }

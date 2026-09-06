@@ -22,7 +22,28 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-    mem_limit: 512m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.30"
+          memory: 256M
+    # Keep compatibility with Docker Compose versions that do not apply
+    # deploy.resources outside Swarm mode.
+    cpus: "0.30"
+    mem_limit: 256m
+
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - effective_cache_size=128MB
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -46,9 +67,18 @@ services:
     volumes:
       # The STOMP relay is required for the browser WebSocket endpoint; AMQP is not public.
       - ./ops/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./ops/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - rabbitmq_data:/var/lib/rabbitmq
 
-    mem_limit: 384m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.20"
+          memory: 256M
+    # Keep compatibility with Docker Compose versions that do not apply
+    # deploy.resources outside Swarm mode.
+    cpus: "0.20"
+    mem_limit: 256m
 
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
@@ -64,12 +94,21 @@ services:
     build: .
     container_name: skillswap-backend
     restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
 
     ports:
       - "127.0.0.1:8080:8080"
 
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
+      # Keep JVM sizing explicit and compatible with the 512 MiB container limit.
+      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xms128m -Xmx384m -XX:+UseG1GC -XX:MaxMetaspaceSize=128m -XX:MaxDirectMemorySize=64m -XX:+UseContainerSupport -XX:ActiveProcessorCount=1 -Xss512k -XX:+ExitOnOutOfMemoryError}
+      - TZ=UTC
+      - SPRING_SHUTDOWN_TIMEOUT=${SPRING_SHUTDOWN_TIMEOUT:-30s}
+      # Keep the connection pool below PostgreSQL's low-memory connection cap.
+      - DB_POOL_MAX_SIZE=${DB_POOL_MAX_SIZE:-8}
+      - DB_POOL_MIN_IDLE=${DB_POOL_MIN_IDLE:-1}
       # Defaults fail closed to production; staging can explicitly allow local FE origins.
       - DEPLOY_ENV=${DEPLOY_ENV:-production}
       # R2 is the default for new videos. Bunny credentials remain optional
@@ -162,7 +201,15 @@ services:
       rabbitmq:
         condition: service_healthy
 
-    mem_limit: 768m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.70"
+          memory: 512M
+    # Keep compatibility with Docker Compose versions that do not apply
+    # deploy.resources outside Swarm mode.
+    cpus: "0.70"
+    mem_limit: 512m
 
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 || exit 1"]
