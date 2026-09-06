@@ -23,7 +23,12 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(
         classes = ProjectApplication.class,
-        properties = "application.realtime.outbox.cleanup-enabled=true"
+        properties = {
+                "spring.flyway.enabled=true",
+                "spring.jpa.hibernate.ddl-auto=validate",
+                "spring.test.database.replace=none",
+                "application.realtime.outbox.cleanup-enabled=true"
+        }
 )
 class DomainEventOutboxCleanupIntegrationTest extends AbstractPostgreSQLIntegrationTest {
 

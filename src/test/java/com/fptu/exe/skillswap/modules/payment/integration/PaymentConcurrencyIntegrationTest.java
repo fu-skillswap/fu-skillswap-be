@@ -45,7 +45,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
+@SpringBootTest(properties = {
+        "spring.flyway.enabled=true",
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.test.database.replace=none"
+})
 @ActiveProfiles("test")
 public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegrationTest {
 
