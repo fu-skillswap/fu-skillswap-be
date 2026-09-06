@@ -72,8 +72,9 @@ class ForumRateLimitPostgresIntegrationTest extends AbstractPostgreSQLIntegratio
         String key = "forum:concurrency-user:CREATE_POST";
         int limit = 25;
         int requestCount = 100;
-        ExecutorService executor = Executors.newFixedThreadPool(20);
-        CountDownLatch ready = new CountDownLatch(requestCount);
+        int parallelism = 20;
+        ExecutorService executor = Executors.newFixedThreadPool(parallelism);
+        CountDownLatch ready = new CountDownLatch(parallelism);
         CountDownLatch start = new CountDownLatch(1);
         List<Future<Boolean>> futures = new ArrayList<>();
 
