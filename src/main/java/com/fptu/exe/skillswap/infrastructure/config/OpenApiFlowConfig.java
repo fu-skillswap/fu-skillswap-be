@@ -88,14 +88,104 @@ public class OpenApiFlowConfig {
             tag("Admin - Audit Logs", "Internal / System", "Internal/System - không dùng cho FE người dùng. Chỉ vận hành dùng."),
             tag("System Admin - Roles", "Quản trị hệ thống - Phân quyền", "Cấp hoặc thu hồi quyền admin."),
             tag("Webhooks", "Internal / System", "Internal/System - không dùng cho FE. Nhận callback từ dịch vụ bên ngoài."),
+            tag("File Upload", "Internal / System", "Internal/System - không dùng cho FE. Tải tệp lên hệ thống."),
+            tag("Mentor Violation", "Hồ sơ mentor", "Xem lịch sử vi phạm nội bộ của mentor."),
+            tag("Internal/System - Video streaming", "Internal / System", "Internal/System - không dùng cho FE. Phục vụ phát video."),
+            tag("Internal/System", "Internal / System", "Internal/System - không dùng cho FE. Webhook và dịch vụ nội bộ."),
             tag("System", "Internal / System", "Internal/System - không dùng cho FE. Kiểm tra tình trạng dịch vụ.")
+    );
+
+    private record ReplacementRule(Pattern pattern, String replacement) {}
+
+    private static ReplacementRule prefixRule(String english, String vietnamese) {
+        return new ReplacementRule(
+                Pattern.compile("(?i)^" + Pattern.quote(english) + "\\b"),
+                Matcher.quoteReplacement(vietnamese)
+        );
+    }
+
+    private static ReplacementRule phraseRule(String english, String vietnamese) {
+        return new ReplacementRule(
+                Pattern.compile(Pattern.quote(english), Pattern.CASE_INSENSITIVE),
+                Matcher.quoteReplacement(vietnamese)
+        );
+    }
+
+    private static final List<ReplacementRule> PREFIX_RULES = List.of(
+            prefixRule("Soft delete", "Xóa"),
+            prefixRule("Create", "Tạo"),
+            prefixRule("Get", "Lấy"),
+            prefixRule("List", "Lấy danh sách"),
+            prefixRule("Update", "Cập nhật"),
+            prefixRule("Delete", "Xóa"),
+            prefixRule("Restore", "Khôi phục"),
+            prefixRule("Archive", "Lưu trữ"),
+            prefixRule("Publish", "Xuất bản"),
+            prefixRule("Preview", "Xem trước"),
+            prefixRule("Confirm", "Xác nhận"),
+            prefixRule("Initialize", "Khởi tạo"),
+            prefixRule("Record", "Ghi nhận"),
+            prefixRule("Resolve", "Xử lý"),
+            prefixRule("Handle", "Xử lý"),
+            prefixRule("Pause", "Tạm dừng"),
+            prefixRule("Resume", "Tiếp tục"),
+            prefixRule("Skip", "Bỏ qua"),
+            prefixRule("Share", "Chia sẻ"),
+            prefixRule("Unfollow", "Bỏ theo dõi"),
+            prefixRule("Follow", "Theo dõi"),
+            prefixRule("Bookmark", "Lưu"),
+            prefixRule("Remove", "Bỏ"),
+            prefixRule("Mark", "Đánh dấu"),
+            prefixRule("Like", "Thích")
+    );
+
+    private static final List<ReplacementRule> PHRASE_RULES = List.of(
+            phraseRule("availability templates", "mẫu lịch rảnh"),
+            phraseRule("availability template", "mẫu lịch rảnh"),
+            phraseRule("course curriculum", "chương trình khóa học"),
+            phraseRule("course chapters", "chương khóa học"),
+            phraseRule("course chapter", "chương khóa học"),
+            phraseRule("mentor blog posts", "bài viết blog của mentor"),
+            phraseRule("mentor blog post", "bài viết blog của mentor"),
+            phraseRule("payment orders", "đơn thanh toán"),
+            phraseRule("payout requests", "yêu cầu rút tiền"),
+            phraseRule("payout profile", "tài khoản nhận tiền"),
+            phraseRule("booking quote", "báo giá booking"),
+            phraseRule("blog posts", "bài viết blog"),
+            phraseRule("blog post", "bài viết blog"),
+            phraseRule("chat attachment", "tệp trong cuộc trò chuyện"),
+            phraseRule("course materials", "tài liệu khóa học"),
+            phraseRule("course video", "video khóa học"),
+            phraseRule("download URL", "đường dẫn tải tệp"),
+            phraseRule("playback URL", "đường dẫn xem video"),
+            phraseRule("upload intent", "lượt tải tệp"),
+            phraseRule("mentor discovery funnel event", "sự kiện tìm mentor"),
+            phraseRule("with cursor pagination", "có phân trang"),
+            phraseRule(". Idempotent.", "")
     );
 
     private static final Map<String, TagRule> TAGS_BY_ORIGINAL_NAME = buildTagIndex();
 
     @Bean
     public GroupedOpenApi allApis() {
-        return group("00-all", "Tất cả API", "/**");
+        return GroupedOpenApi.builder()
+                .group("00-all")
+                .displayName("Tất cả API")
+                .pathsToMatch("/api/**")
+                .pathsToExclude(
+                        "/error",
+                        "/actuator/**",
+                        "/api/internal/**",
+                        "/api/webhooks/**",
+                        "/api/payments/webhook/**",
+                        "/api/courses/webhook/**",
+                        "/api/files/**",
+                        "/api/system/**",
+                        "/api/admin/email-outbox/**",
+                        "/api/admin/audit-logs/**"
+                )
+                .addOpenApiCustomizer(beginnerFriendlyOpenApi())
+                .build();
     }
 
     @Bean
@@ -114,37 +204,15 @@ public class OpenApiFlowConfig {
     }
 
     @Bean
-    public GroupedOpenApi mentorApplicationFlowApis() {
+    public GroupedOpenApi mentorFlowApis() {
         return group(
-                "02-mentor-application",
-                "2. Đăng ký mentor",
+                "02-mentor",
+                "2. Khu vực mentor & Đăng ký",
                 "/api/me/mentor-profile/**",
                 "/api/me/mentor-projects/**",
                 "/api/me/mentor-achievements/**",
-                "/api/me/mentor-verification/**"
-        );
-    }
-
-    @Bean
-    public GroupedOpenApi bookingFlowApis() {
-        return group(
-                "03-booking",
-                "3. Tìm mentor và đặt lịch",
-                "/api/mentors/**",
-                "/api/mentor-discovery/**",
-                "/api/mentor-services/*/pricing-preview",
-                "/api/bookings/**",
-                "/api/me/bookings/**",
-                "/api/me/payment-orders/**",
-                "/api/me/credit-wallet"
-        );
-    }
-
-    @Bean
-    public GroupedOpenApi mentorWorkspaceFlowApis() {
-        return group(
-                "04-mentor-workspace",
-                "4. Khu vực mentor",
+                "/api/me/mentor-verification/**",
+                "/api/me/mentor-violations",
                 "/api/me/mentor-services/**",
                 "/api/me/availability-slots/**",
                 "/api/me/availability-templates/**",
@@ -160,16 +228,32 @@ public class OpenApiFlowConfig {
     }
 
     @Bean
+    public GroupedOpenApi bookingFlowApis() {
+        return group(
+                "03-booking",
+                "3. Tìm mentor và đặt lịch",
+                "/api/mentors/**",
+                "/api/mentor-discovery/**",
+                "/api/mentor-services/**",
+                "/api/bookings/**",
+                "/api/me/bookings/**",
+                "/api/me/payment-orders/**",
+                "/api/me/credit-wallet"
+        );
+    }
+
+    @Bean
     public GroupedOpenApi communityFlowApis() {
         return group(
-                "05-community",
-                "5. Trò chuyện và cộng đồng",
+                "04-community",
+                "4. Trò chuyện và cộng đồng",
                 "/api/me/conversations/**",
                 "/api/me/chat-attachments/**",
                 "/api/me/notifications/**",
                 "/api/forum/**",
                 "/api/blog/**",
                 "/api/me/blog/**",
+                "/api/courses/**",
                 "/api/me/courses/**"
         );
     }
@@ -177,19 +261,18 @@ public class OpenApiFlowConfig {
     @Bean
     public GroupedOpenApi adminFlowApis() {
         return group(
-                "06-admin",
-                "6. Khu vực quản trị",
+                "05-admin",
+                "5. Khu vực quản trị",
                 "/api/admin/**",
-                "/api/system/**",
-                "/api/internal/video-streaming/**"
+                "/api/system/**"
         );
     }
 
     @Bean
     public GroupedOpenApi integrationApis() {
         return group(
-                "07-integrations",
-                "7. Kết nối bên ngoài",
+                "06-integration",
+                "6. Kết nối bên ngoài",
                 "/api/webhooks/**",
                 "/api/payments/webhook/**",
                 "/share/**",
@@ -201,14 +284,11 @@ public class OpenApiFlowConfig {
     @Bean
     public GroupedOpenApi internalSystemApis() {
         return group(
-                "08-internal-system",
-                "8. Internal/System - không dùng cho FE",
+                "07-internal",
+                "7. Internal/System - không dùng cho FE",
                 "/health",
                 "/api/files/**",
-                "/api/private-download/**",
-                "/api/admin/email-outbox/**",
-                "/api/admin/audit-logs/**",
-                "/api/system/**"
+                "/api/internal/**"
         );
     }
 
@@ -242,6 +322,7 @@ public class OpenApiFlowConfig {
                 .group(id)
                 .displayName(displayName)
                 .pathsToMatch(paths)
+                .pathsToExclude("/error", "/actuator/**")
                 .addOpenApiCustomizer(beginnerFriendlyOpenApi())
                 .build();
     }
@@ -282,66 +363,18 @@ public class OpenApiFlowConfig {
             source = source.substring("Admin ".length());
         }
         String value = source;
-        value = replaceFirst(value, "Soft delete", "Xóa");
-        value = replaceFirst(value, "Create", "Tạo");
-        value = replaceFirst(value, "Get", "Lấy");
-        value = replaceFirst(value, "List", "Lấy danh sách");
-        value = replaceFirst(value, "Update", "Cập nhật");
-        value = replaceFirst(value, "Delete", "Xóa");
-        value = replaceFirst(value, "Restore", "Khôi phục");
-        value = replaceFirst(value, "Archive", "Lưu trữ");
-        value = replaceFirst(value, "Publish", "Xuất bản");
-        value = replaceFirst(value, "Preview", "Xem trước");
-        value = replaceFirst(value, "Confirm", "Xác nhận");
-        value = replaceFirst(value, "Initialize", "Khởi tạo");
-        value = replaceFirst(value, "Record", "Ghi nhận");
-        value = replaceFirst(value, "Resolve", "Xử lý");
-        value = replaceFirst(value, "Handle", "Xử lý");
-        value = replaceFirst(value, "Pause", "Tạm dừng");
-        value = replaceFirst(value, "Resume", "Tiếp tục");
-        value = replaceFirst(value, "Skip", "Bỏ qua");
-        value = replaceFirst(value, "Share", "Chia sẻ");
-        value = replaceFirst(value, "Unfollow", "Bỏ theo dõi");
-        value = replaceFirst(value, "Follow", "Theo dõi");
-        value = replaceFirst(value, "Bookmark", "Lưu");
-        value = replaceFirst(value, "Remove", "Bỏ");
-        value = replaceFirst(value, "Mark", "Đánh dấu");
-        value = replaceFirst(value, "Like", "Thích");
-
-        value = replaceIgnoreCase(value, "availability templates", "mẫu lịch rảnh");
-        value = replaceIgnoreCase(value, "availability template", "mẫu lịch rảnh");
-        value = replaceIgnoreCase(value, "course curriculum", "chương trình khóa học");
-        value = replaceIgnoreCase(value, "course chapters", "chương khóa học");
-        value = replaceIgnoreCase(value, "course chapter", "chương khóa học");
-        value = replaceIgnoreCase(value, "mentor blog posts", "bài viết blog của mentor");
-        value = replaceIgnoreCase(value, "mentor blog post", "bài viết blog của mentor");
-        value = replaceIgnoreCase(value, "payment orders", "đơn thanh toán");
-        value = replaceIgnoreCase(value, "payout requests", "yêu cầu rút tiền");
-        value = replaceIgnoreCase(value, "payout profile", "tài khoản nhận tiền");
-        value = replaceIgnoreCase(value, "booking quote", "báo giá booking");
-        value = replaceIgnoreCase(value, "blog posts", "bài viết blog");
-        value = replaceIgnoreCase(value, "blog post", "bài viết blog");
-        value = replaceIgnoreCase(value, "chat attachment", "tệp trong cuộc trò chuyện");
-        value = replaceIgnoreCase(value, "course materials", "tài liệu khóa học");
-        value = replaceIgnoreCase(value, "course video", "video khóa học");
-        value = replaceIgnoreCase(value, "download URL", "đường dẫn tải tệp");
-        value = replaceIgnoreCase(value, "playback URL", "đường dẫn xem video");
-        value = replaceIgnoreCase(value, "upload intent", "lượt tải tệp");
-        value = replaceIgnoreCase(value, "mentor discovery funnel event", "sự kiện tìm mentor");
-        value = replaceIgnoreCase(value, "with cursor pagination", "có phân trang");
-        value = replaceIgnoreCase(value, ". Idempotent.", "");
+        for (ReplacementRule rule : PREFIX_RULES) {
+            Matcher matcher = rule.pattern().matcher(value);
+            if (matcher.find()) {
+                value = matcher.replaceFirst(rule.replacement());
+                break;
+            }
+        }
+        for (ReplacementRule rule : PHRASE_RULES) {
+            value = rule.pattern().matcher(value).replaceAll(rule.replacement());
+        }
         value = value.trim();
         return adminOperation ? "Quản trị - " + value : value;
-    }
-
-    private static String replaceFirst(String source, String english, String vietnamese) {
-        return source.replaceFirst("(?i)^" + Pattern.quote(english) + "\\b", Matcher.quoteReplacement(vietnamese));
-    }
-
-    private static String replaceIgnoreCase(String source, String english, String vietnamese) {
-        return Pattern.compile(Pattern.quote(english), Pattern.CASE_INSENSITIVE)
-                .matcher(source)
-                .replaceAll(Matcher.quoteReplacement(vietnamese));
     }
 
     private static String shorten(String description) {

@@ -105,8 +105,8 @@ class SwaggerExposureEnabledIntegrationTest {
 
     @Test
     @WithMockUser(roles = "MENTEE")
-    void mentorApplicationDocs_shouldOnlyShowTheMentorApplicationFlow() throws Exception {
-        String json = mockMvc.perform(get("/v3/api-docs/02-mentor-application"))
+    void mentorDocs_shouldOnlyShowTheMentorFlow() throws Exception {
+        String json = mockMvc.perform(get("/v3/api-docs/02-mentor"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
         JsonNode document = objectMapper.readTree(json);
@@ -118,5 +118,43 @@ class SwaggerExposureEnabledIntegrationTest {
         java.util.Set<String> tagNames = new java.util.LinkedHashSet<>();
         document.path("tags").forEach(tag -> tagNames.add(tag.path("name").asText()));
         assertThat(tagNames).contains("Hồ sơ mentor", "Đăng ký mentor");
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void allConfiguredOpenApiGroups_shouldReturnHttp200AndValidContract() throws Exception {
+        java.util.List<String> groups = java.util.List.of(
+                "00-all",
+                "01-identity",
+                "02-mentor",
+                "03-booking",
+                "04-community",
+                "05-admin",
+                "06-integration",
+                "07-internal"
+        );
+
+        for (String group : groups) {
+            long startTime = System.currentTimeMillis();
+            String json = mockMvc.perform(get("/v3/api-docs/" + group))
+                    .andExpect(status().isOk())
+                    .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            assertThat(durationMs)
+                    .as("OpenAPI generation for group %s exceeded 10 seconds: %d ms", group, durationMs)
+                    .isLessThan(10_000L);
+
+            JsonNode document = objectMapper.readTree(json);
+            assertThat(document.path("openapi").asText())
+                    .as("group %s should produce valid OpenAPI 3.x document", group)
+                    .startsWith("3.");
+            assertThat(document.path("paths").isObject())
+                    .as("group %s should have paths object", group)
+                    .isTrue();
+            assertThat(document.path("paths").size())
+                    .as("group %s should contain at least one mapped path", group)
+                    .isGreaterThan(0);
+        }
     }
 }

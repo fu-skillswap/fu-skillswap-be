@@ -65,6 +65,12 @@ springdoc:
     doc-expansion: none
     display-request-duration: true
     persist-authorization: true
+    groups-order: ASC
+    tags-sorter: alpha
+    operations-sorter: alpha
+  paths-to-exclude:
+    - /error
+    - /actuator/**
 
 server:
   forward-headers-strategy: framework
