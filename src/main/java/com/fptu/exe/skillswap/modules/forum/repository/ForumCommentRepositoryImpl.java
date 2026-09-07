@@ -48,7 +48,80 @@ public class ForumCommentRepositoryImpl implements ForumCommentRepositoryCustom 
                 .setParameter("status", status)
                 .setMaxResults(fetchLimit);
         if (cursorCreatedAt != null && cursorCommentId != null) {
-            query.setParameter("cursorCreatedAt", cursorCreatedAt);
+            query.setParameter("cursorCreatedAt", cursorCreatedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+            query.setParameter("cursorCommentId", cursorCommentId);
+        }
+        return query.getResultList();
+    }
+
+    @Override
+    public List<ForumComment> findVisibleRootCommentsWindow(UUID postId,
+                                                            ForumCommentStatus status,
+                                                            LocalDateTime cursorCreatedAt,
+                                                            UUID cursorCommentId,
+                                                            int fetchLimit) {
+        StringBuilder jpql = new StringBuilder("""
+                select c
+                from ForumComment c
+                join fetch c.authorUser author
+                join fetch c.post post
+                join fetch post.forumTopic forumTopic
+                where post.id = :postId
+                  and c.status = :status
+                  and c.replyToCommentId is null
+                """);
+        if (cursorCreatedAt != null && cursorCommentId != null) {
+            jpql.append("""
+                      and (
+                            c.createdAt > :cursorCreatedAt
+                            or (c.createdAt = :cursorCreatedAt and c.id > :cursorCommentId)
+                      )
+                    """);
+        }
+        jpql.append(" order by c.createdAt asc, c.id asc");
+
+        TypedQuery<ForumComment> query = entityManager.createQuery(jpql.toString(), ForumComment.class)
+                .setParameter("postId", postId)
+                .setParameter("status", status)
+                .setMaxResults(fetchLimit);
+        if (cursorCreatedAt != null && cursorCommentId != null) {
+            query.setParameter("cursorCreatedAt", cursorCreatedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
+            query.setParameter("cursorCommentId", cursorCommentId);
+        }
+        return query.getResultList();
+    }
+
+    @Override
+    public List<ForumComment> findVisibleRepliesWindow(UUID parentCommentId,
+                                                       ForumCommentStatus status,
+                                                       LocalDateTime cursorCreatedAt,
+                                                       UUID cursorCommentId,
+                                                       int fetchLimit) {
+        StringBuilder jpql = new StringBuilder("""
+                select c
+                from ForumComment c
+                join fetch c.authorUser author
+                join fetch c.post post
+                join fetch post.forumTopic forumTopic
+                where c.replyToCommentId = :parentCommentId
+                  and c.status = :status
+                """);
+        if (cursorCreatedAt != null && cursorCommentId != null) {
+            jpql.append("""
+                      and (
+                            c.createdAt > :cursorCreatedAt
+                            or (c.createdAt = :cursorCreatedAt and c.id > :cursorCommentId)
+                      )
+                    """);
+        }
+        jpql.append(" order by c.createdAt asc, c.id asc");
+
+        TypedQuery<ForumComment> query = entityManager.createQuery(jpql.toString(), ForumComment.class)
+                .setParameter("parentCommentId", parentCommentId)
+                .setParameter("status", status)
+                .setMaxResults(fetchLimit);
+        if (cursorCreatedAt != null && cursorCommentId != null) {
+            query.setParameter("cursorCreatedAt", cursorCreatedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS));
             query.setParameter("cursorCommentId", cursorCommentId);
         }
         return query.getResultList();

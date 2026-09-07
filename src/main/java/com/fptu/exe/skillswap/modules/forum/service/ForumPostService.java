@@ -55,6 +55,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -248,7 +249,7 @@ public class ForumPostService {
         int resolvedLimit = defaultLimit(limit);
         String filterHash = buildUserCommentFilterHash(postId);
         DecodedCommentCursor decodedCursor = decodeCommentCursor(cursor, filterHash, "comment");
-        List<ForumComment> commentWindow = forumCommentRepository.findVisibleCommentsWindow(
+        List<ForumComment> commentWindow = forumCommentRepository.findVisibleRootCommentsWindow(
                 post.getId(),
                 ForumCommentStatus.VISIBLE,
                 decodedCursor.createdAt(),
@@ -257,16 +258,77 @@ public class ForumPostService {
         );
         boolean hasNext = commentWindow.size() > resolvedLimit;
         List<ForumComment> visibleComments = hasNext ? new ArrayList<>(commentWindow.subList(0, resolvedLimit)) : commentWindow;
+        List<UUID> rootCommentIds = visibleComments.stream().map(ForumComment::getId).toList();
         Set<UUID> reactedCommentIds = loadReactedCommentIds(
                 currentUserId,
-                visibleComments.stream().map(ForumComment::getId).toList()
+                rootCommentIds
         );
+        Map<UUID, Integer> replyCountsByParentId = loadReplyCountsByParentIds(rootCommentIds);
         Map<UUID, ForumComment> replyParentsById = loadReplyParentsById(visibleComments);
         List<ForumCommentResponse> items = visibleComments.stream()
-                .map(comment -> toCommentResponse(comment, reactedCommentIds.contains(comment.getId()), replyParentsById))
+                .map(comment -> toCommentResponse(
+                        comment,
+                        reactedCommentIds.contains(comment.getId()),
+                        replyParentsById,
+                        replyCountsByParentId.getOrDefault(comment.getId(), 0)
+                ))
                 .toList();
         String nextCursor = hasNext && !visibleComments.isEmpty()
                 ? encodeNextCommentCursor(visibleComments.get(visibleComments.size() - 1), filterHash)
+                : null;
+        return CursorPageResponse.<ForumCommentResponse>builder()
+                .items(items)
+                .nextCursor(nextCursor)
+                .prevCursor(null)
+                .hasNext(hasNext)
+                .hasPrev(false)
+                .limit(resolvedLimit)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public CursorPageResponse<ForumCommentResponse> getCommentReplies(UUID currentUserId, UUID commentId, String cursor, Integer limit) {
+        findForumUser(currentUserId);
+        ForumComment parentComment = forumCommentRepository.findById(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
+        if (parentComment.getStatus() != ForumCommentStatus.VISIBLE) {
+            throw new ResourceNotFoundException("Không tìm thấy bình luận forum");
+        }
+        if (parentComment.getReplyToCommentId() != null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Bình luận này là phản hồi, không có danh sách phản hồi con");
+        }
+        ForumPost post = parentComment.getPost();
+        if (post.getStatus() != ForumPostStatus.PUBLISHED) {
+            throw new ResourceNotFoundException("Không tìm thấy bài viết forum");
+        }
+
+        int resolvedLimit = defaultLimit(limit);
+        String filterHash = buildUserCommentRepliesFilterHash(commentId);
+        DecodedCommentCursor decodedCursor = decodeCommentCursor(cursor, filterHash, "reply");
+        List<ForumComment> replyWindow = forumCommentRepository.findVisibleRepliesWindow(
+                parentComment.getId(),
+                ForumCommentStatus.VISIBLE,
+                decodedCursor.createdAt(),
+                decodedCursor.commentId(),
+                resolvedLimit + 1
+        );
+        boolean hasNext = replyWindow.size() > resolvedLimit;
+        List<ForumComment> visibleReplies = hasNext ? new ArrayList<>(replyWindow.subList(0, resolvedLimit)) : replyWindow;
+        Set<UUID> reactedCommentIds = loadReactedCommentIds(
+                currentUserId,
+                visibleReplies.stream().map(ForumComment::getId).toList()
+        );
+        Map<UUID, ForumComment> replyParentsById = Map.of(parentComment.getId(), parentComment);
+        List<ForumCommentResponse> items = visibleReplies.stream()
+                .map(reply -> toCommentResponse(
+                        reply,
+                        reactedCommentIds.contains(reply.getId()),
+                        replyParentsById,
+                        0
+                ))
+                .toList();
+        String nextCursor = hasNext && !visibleReplies.isEmpty()
+                ? encodeNextCommentCursor(visibleReplies.get(visibleReplies.size() - 1), filterHash)
                 : null;
         return CursorPageResponse.<ForumCommentResponse>builder()
                 .items(items)
@@ -370,7 +432,7 @@ public class ForumPostService {
             Map<UUID, ForumComment> replyParentsById = parentComment == null
                     ? Map.of()
                     : Map.of(parentComment.getId(), parentComment);
-            return toCommentResponse(saved, false, replyParentsById);
+            return toCommentResponse(saved, false, replyParentsById, 0);
         });
     }
 
@@ -580,12 +642,25 @@ public class ForumPostService {
         Optional<ForumCommentReaction> reaction = currentUserId == null
                 ? Optional.empty()
                 : forumCommentReactionRepository.findByCommentIdAndUserId(comment.getId(), currentUserId);
-        return toCommentResponse(comment, reaction.isPresent(), loadReplyParentsById(List.of(comment)));
+        int replyCount = comment.getReplyToCommentId() == null
+                ? forumCommentRepository.countByReplyToCommentIdAndStatus(comment.getId(), ForumCommentStatus.VISIBLE)
+                : 0;
+        return toCommentResponse(comment, reaction.isPresent(), loadReplyParentsById(List.of(comment)), replyCount);
     }
 
     private ForumCommentResponse toCommentResponse(ForumComment comment,
                                                    boolean reactedByCurrentUser,
                                                    Map<UUID, ForumComment> replyParentsById) {
+        int replyCount = comment.getReplyToCommentId() == null
+                ? forumCommentRepository.countByReplyToCommentIdAndStatus(comment.getId(), ForumCommentStatus.VISIBLE)
+                : 0;
+        return toCommentResponse(comment, reactedByCurrentUser, replyParentsById, replyCount);
+    }
+
+    private ForumCommentResponse toCommentResponse(ForumComment comment,
+                                                   boolean reactedByCurrentUser,
+                                                   Map<UUID, ForumComment> replyParentsById,
+                                                   Integer replyCount) {
         ForumComment replyParent = comment.getReplyToCommentId() == null
                 ? null
                 : replyParentsById.get(comment.getReplyToCommentId());
@@ -605,10 +680,25 @@ public class ForumPostService {
                 .replyToCommentId(comment.getReplyToCommentId())
                 .replyToUserId(replyParent == null ? null : replyParent.getAuthorUser().getId())
                 .replyToUserName(replyParent == null ? null : replyParent.getAuthorUser().getFullName())
+                .replyCount(replyCount != null ? replyCount : 0)
                 .createdAt(comment.getCreatedAt())
                 .updatedAt(comment.getUpdatedAt())
                 .imageUrls(comment.getImageUrls())
                 .build();
+    }
+
+    private Map<UUID, Integer> loadReplyCountsByParentIds(Collection<UUID> parentCommentIds) {
+        if (parentCommentIds == null || parentCommentIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Object[]> rows = forumCommentRepository.countRepliesByParentCommentIds(parentCommentIds, ForumCommentStatus.VISIBLE);
+        Map<UUID, Integer> counts = new HashMap<>();
+        for (Object[] row : rows) {
+            if (row != null && row.length >= 2 && row[0] instanceof UUID parentId && row[1] instanceof Number count) {
+                counts.put(parentId, count.intValue());
+            }
+        }
+        return counts;
     }
 
     private Map<UUID, ForumComment> loadReplyParentsById(Collection<ForumComment> comments) {
@@ -681,6 +771,11 @@ public class ForumPostService {
 
     private String buildUserCommentFilterHash(UUID postId) {
         return "forum-comments:user|postId=" + normalizeFilterValue(postId)
+                + "|status=" + ForumCommentStatus.VISIBLE.name();
+    }
+
+    private String buildUserCommentRepliesFilterHash(UUID parentCommentId) {
+        return "forum-comment-replies:user|parentCommentId=" + normalizeFilterValue(parentCommentId)
                 + "|status=" + ForumCommentStatus.VISIBLE.name();
     }
 
@@ -780,8 +875,11 @@ public class ForumPostService {
     }
 
     private String encodeNextCommentCursor(ForumComment comment, String filterHash) {
+        LocalDateTime createdAt = comment.getCreatedAt() != null
+                ? comment.getCreatedAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+                : DateTimeUtil.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         return cursorCodec.encode(CursorTokenPayload.builder()
-                .sortKey(comment.getCreatedAt().toString())
+                .sortKey(createdAt.toString())
                 .secondaryKey(comment.getId().toString())
                 .direction("NEXT")
                 .filterHash(filterHash)

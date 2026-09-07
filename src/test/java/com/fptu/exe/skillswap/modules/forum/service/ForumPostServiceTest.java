@@ -119,7 +119,8 @@ class ForumPostServiceTest {
                         forumCommentRepository,
                         forumPostReactionRepository,
                         forumCommentReactionRepository,
-                        forumActionLogService
+                        forumActionLogService,
+                        transactionTemplate
                 ),
                 cursorCodec,
                 transactionTemplate
@@ -433,13 +434,15 @@ class ForumPostServiceTest {
                 .build();
 
         when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(forumPostRepository.findByIdForUpdate(post.getId())).thenReturn(Optional.of(post));
-        when(forumPostReactionRepository.findByPostIdAndUserId(post.getId(), mentee.getId())).thenReturn(Optional.of(reaction));
+        when(forumPostRepository.findById(post.getId())).thenReturn(Optional.of(post));
+        when(forumPostReactionRepository.findByPostIdAndUserId(post.getId(), mentee.getId()))
+                .thenReturn(Optional.of(reaction));
+        when(forumPostRepository.getReactionCountById(post.getId())).thenReturn(1);
 
         var response = forumPostService.upsertReaction(mentee.getId(), post.getId(), new ForumReactionRequest(ForumReactionType.LIKE));
 
         assertEquals(1, response.reactionCount());
-        verify(forumPostReactionRepository, never()).save(any(ForumPostReaction.class));
+        verify(forumPostRepository, never()).incrementReactionCount(any());
     }
 
     @Test

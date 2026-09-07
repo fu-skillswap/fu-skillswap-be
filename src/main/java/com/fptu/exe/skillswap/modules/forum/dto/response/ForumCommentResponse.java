@@ -30,6 +30,13 @@ public record ForumCommentResponse(
         String replyToUserName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        java.util.List<String> imageUrls
+        java.util.List<String> imageUrls,
+        @Schema(description = "Số lượng câu trả lời (replies) của bình luận gốc. Bằng 0 nếu là phản hồi hoặc chưa có người phản hồi.", example = "3")
+        Integer replyCount
 ) {
+    public ForumCommentResponse {
+        if (replyCount == null) {
+            replyCount = 0;
+        }
+    }
 }

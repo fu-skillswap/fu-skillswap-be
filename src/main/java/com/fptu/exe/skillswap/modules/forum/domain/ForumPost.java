@@ -10,6 +10,7 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Index;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -48,16 +49,16 @@ public class ForumPost {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "author_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_forum_posts_author"))
     private User authorUser;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "forum_topic_id", nullable = false, foreignKey = @ForeignKey(name = "fk_forum_posts_forum_topic"))
     private ForumTopic forumTopic;
 
     /** Academic program snapshot of the author when the post was created. */
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_program_id", foreignKey = @ForeignKey(name = "fk_forum_posts_author_program"))
     private AcademicProgram authorProgram;
 

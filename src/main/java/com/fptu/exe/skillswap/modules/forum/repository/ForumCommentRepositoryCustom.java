@@ -17,6 +17,22 @@ public interface ForumCommentRepositoryCustom {
             int fetchLimit
     );
 
+    List<ForumComment> findVisibleRootCommentsWindow(
+            UUID postId,
+            ForumCommentStatus status,
+            LocalDateTime cursorCreatedAt,
+            UUID cursorCommentId,
+            int fetchLimit
+    );
+
+    List<ForumComment> findVisibleRepliesWindow(
+            UUID parentCommentId,
+            ForumCommentStatus status,
+            LocalDateTime cursorCreatedAt,
+            UUID cursorCommentId,
+            int fetchLimit
+    );
+
     List<ForumComment> findAdminCommentsWindow(
             ForumCommentStatus status,
             UUID postId,

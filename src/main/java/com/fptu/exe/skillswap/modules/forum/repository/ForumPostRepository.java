@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,6 +33,21 @@ public interface ForumPostRepository extends JpaRepository<ForumPost, UUID>, Jpa
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from ForumPost p where p.id = :id")
     Optional<ForumPost> findByIdForUpdate(@Param("id") UUID id);
+
+    @Modifying
+    @Query("update ForumPost p set p.reactionCount = coalesce(p.reactionCount, 0) + 1 where p.id = :postId")
+    int incrementReactionCount(@Param("postId") UUID postId);
+
+    @Modifying
+    @Query("""
+            update ForumPost p
+            set p.reactionCount = case when coalesce(p.reactionCount, 0) > 0 then coalesce(p.reactionCount, 0) - 1 else 0 end
+            where p.id = :postId
+            """)
+    int decrementReactionCount(@Param("postId") UUID postId);
+
+    @Query("select coalesce(p.reactionCount, 0) from ForumPost p where p.id = :postId")
+    int getReactionCountById(@Param("postId") UUID postId);
 
     @Query("""
             select count(p.id) > 0

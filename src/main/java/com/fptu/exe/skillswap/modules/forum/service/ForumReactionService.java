@@ -23,10 +23,13 @@ import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -36,7 +39,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Runs reaction mutations in a transaction started after rate-limit preflight. */
+/** Runs lock-free reaction mutations with atomic counter updates in a dedicated transaction. */
 @Service
 @RequiredArgsConstructor
 public class ForumReactionService {
@@ -46,12 +49,19 @@ public class ForumReactionService {
     private final ForumPostReactionRepository forumPostReactionRepository;
     private final ForumCommentReactionRepository forumCommentReactionRepository;
     private final ForumActionLogService forumActionLogService;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public ForumCommentResponse upsertCommentReaction(User currentUser, UUID commentId,
                                                        ForumReactionRequest request) {
+        synchronized ((currentUser.getId() + ":c:" + commentId).intern()) {
+            return transactionTemplate.execute(status -> doUpsertCommentReaction(currentUser, commentId, request));
+        }
+    }
+
+    private ForumCommentResponse doUpsertCommentReaction(User currentUser, UUID commentId,
+                                                          ForumReactionRequest request) {
         requireLike(request, "comment");
-        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
+        ForumComment comment = forumCommentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
         ensureVisible(comment);
 
@@ -63,36 +73,50 @@ public class ForumReactionService {
                     .user(currentUser)
                     .reactionType(ForumReactionType.LIKE)
                     .build());
-            comment.setReactionCount(safeIncrement(comment.getReactionCount()));
-            forumCommentRepository.save(comment);
+            forumCommentRepository.incrementReactionCount(commentId);
         }
+
+        int currentReactionCount = forumCommentRepository.getReactionCountById(commentId);
+
         forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
                 Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
-        return toCommentResponse(comment, currentUser.getId());
+        return toCommentResponse(comment, currentUser.getId(), currentReactionCount, true);
     }
 
-    @Transactional
     public ForumCommentResponse removeCommentReaction(User currentUser, UUID commentId) {
-        ForumComment comment = forumCommentRepository.findByIdForUpdate(commentId)
+        synchronized ((currentUser.getId() + ":c:" + commentId).intern()) {
+            return transactionTemplate.execute(status -> doRemoveCommentReaction(currentUser, commentId));
+        }
+    }
+
+    private ForumCommentResponse doRemoveCommentReaction(User currentUser, UUID commentId) {
+        ForumComment comment = forumCommentRepository.findById(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bình luận forum"));
         ensureVisible(comment);
 
-        forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId()).ifPresent(reaction -> {
-            forumCommentReactionRepository.delete(reaction);
-            if (comment.getReactionCount() != null && comment.getReactionCount() > 0) {
-                comment.setReactionCount(comment.getReactionCount() - 1);
-                forumCommentRepository.save(comment);
-            }
-        });
+        Optional<ForumCommentReaction> existing =
+                forumCommentReactionRepository.findByCommentIdAndUserId(commentId, currentUser.getId());
+        if (existing.isPresent()) {
+            forumCommentReactionRepository.delete(existing.get());
+            forumCommentRepository.decrementReactionCount(commentId);
+        }
+
+        int currentReactionCount = forumCommentRepository.getReactionCountById(commentId);
+
         forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "COMMENT", commentId,
                 Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
-        return toCommentResponse(comment, currentUser.getId());
+        return toCommentResponse(comment, currentUser.getId(), currentReactionCount, false);
     }
 
-    @Transactional
     public ForumPostResponse upsertPostReaction(User currentUser, UUID postId, ForumReactionRequest request) {
+        synchronized ((currentUser.getId() + ":p:" + postId).intern()) {
+            return transactionTemplate.execute(status -> doUpsertPostReaction(currentUser, postId, request));
+        }
+    }
+
+    private ForumPostResponse doUpsertPostReaction(User currentUser, UUID postId, ForumReactionRequest request) {
         requireLike(request, "post");
-        ForumPost post = forumPostRepository.findByIdForUpdate(postId)
+        ForumPost post = forumPostRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         ensureVisible(post);
 
@@ -104,30 +128,39 @@ public class ForumReactionService {
                     .user(currentUser)
                     .reactionType(ForumReactionType.LIKE)
                     .build());
-            post.setReactionCount(safeIncrement(post.getReactionCount()));
-            forumPostRepository.save(post);
+            forumPostRepository.incrementReactionCount(postId);
         }
+
+        int currentReactionCount = forumPostRepository.getReactionCountById(postId);
+
         forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
                 Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "UPSERT"));
-        return toPostResponse(post, currentUser.getId());
+        return toPostResponse(post, currentUser.getId(), currentReactionCount, true, ForumReactionType.LIKE);
     }
 
-    @Transactional
     public ForumPostResponse removePostReaction(User currentUser, UUID postId) {
-        ForumPost post = forumPostRepository.findByIdForUpdate(postId)
+        synchronized ((currentUser.getId() + ":p:" + postId).intern()) {
+            return transactionTemplate.execute(status -> doRemovePostReaction(currentUser, postId));
+        }
+    }
+
+    private ForumPostResponse doRemovePostReaction(User currentUser, UUID postId) {
+        ForumPost post = forumPostRepository.findById(postId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
         ensureVisible(post);
 
-        forumPostReactionRepository.findByPostIdAndUserId(postId, currentUser.getId()).ifPresent(reaction -> {
-            forumPostReactionRepository.delete(reaction);
-            if (post.getReactionCount() != null && post.getReactionCount() > 0) {
-                post.setReactionCount(post.getReactionCount() - 1);
-                forumPostRepository.save(post);
-            }
-        });
+        Optional<ForumPostReaction> existing =
+                forumPostReactionRepository.findByPostIdAndUserId(postId, currentUser.getId());
+        if (existing.isPresent()) {
+            forumPostReactionRepository.delete(existing.get());
+            forumPostRepository.decrementReactionCount(postId);
+        }
+
+        int currentReactionCount = forumPostRepository.getReactionCountById(postId);
+
         forumActionLogService.record(currentUser, ForumActionType.TOGGLE_REACTION, "POST", postId,
                 Map.of("reactionType", ForumReactionType.LIKE.name(), "operation", "REMOVE"));
-        return toPostResponse(post, currentUser.getId());
+        return toPostResponse(post, currentUser.getId(), currentReactionCount, false, null);
     }
 
     private void requireLike(ForumReactionRequest request, String target) {
@@ -152,9 +185,7 @@ public class ForumReactionService {
         }
     }
 
-    private ForumCommentResponse toCommentResponse(ForumComment comment, UUID currentUserId) {
-        Optional<ForumCommentReaction> reaction = forumCommentReactionRepository
-                .findByCommentIdAndUserId(comment.getId(), currentUserId);
+    private ForumCommentResponse toCommentResponse(ForumComment comment, UUID currentUserId, int reactionCount, boolean reacted) {
         Map<UUID, ForumComment> replyParents = loadReplyParentsById(List.of(comment));
         ForumComment replyParent = comment.getReplyToCommentId() == null
                 ? null : replyParents.get(comment.getReplyToCommentId());
@@ -168,8 +199,8 @@ public class ForumReactionService {
                 .content(comment.getContent())
                 .status(comment.getStatus().name())
                 .reportCount(defaultInt(comment.getReportCount()))
-                .reactionCount(defaultInt(comment.getReactionCount()))
-                .reactedByCurrentUser(reaction.isPresent())
+                .reactionCount(reactionCount)
+                .reactedByCurrentUser(reacted)
                 .replyToCommentId(comment.getReplyToCommentId())
                 .replyToUserId(replyParent == null ? null : replyParent.getAuthorUser().getId())
                 .replyToUserName(replyParent == null ? null : replyParent.getAuthorUser().getFullName())
@@ -179,9 +210,7 @@ public class ForumReactionService {
                 .build();
     }
 
-    private ForumPostResponse toPostResponse(ForumPost post, UUID currentUserId) {
-        Optional<ForumPostReaction> reaction = forumPostReactionRepository
-                .findByPostIdAndUserId(post.getId(), currentUserId);
+    private ForumPostResponse toPostResponse(ForumPost post, UUID currentUserId, int reactionCount, boolean reacted, ForumReactionType reactionType) {
         ForumTopicResponse topic = ForumTopicResponse.builder()
                 .id(post.getForumTopic().getId())
                 .code(post.getForumTopic().getCode())
@@ -200,11 +229,11 @@ public class ForumReactionService {
                 .content(post.getContent())
                 .status(post.getStatus().name())
                 .commentCount(defaultInt(post.getCommentCount()))
-                .reactionCount(defaultInt(post.getReactionCount()))
+                .reactionCount(reactionCount)
                 .reportCount(defaultInt(post.getReportCount()))
                 .lastActivityAt(post.getLastActivityAt())
-                .reactedByCurrentUser(reaction.isPresent())
-                .myReactionType(reaction.map(value -> value.getReactionType().name()).orElse(null))
+                .reactedByCurrentUser(reacted)
+                .myReactionType(reactionType == null ? null : reactionType.name())
                 .createdAt(post.getCreatedAt())
                 .updatedAt(post.getUpdatedAt())
                 .imageUrls(post.getImageUrls())
@@ -238,9 +267,5 @@ public class ForumReactionService {
 
     private int defaultInt(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private int safeIncrement(Integer value) {
-        return value == null ? 1 : value + 1;
     }
 }

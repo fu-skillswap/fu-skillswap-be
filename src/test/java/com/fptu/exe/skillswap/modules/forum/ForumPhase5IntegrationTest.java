@@ -216,6 +216,63 @@ class ForumPhase5IntegrationTest {
         assertEquals(1, comments.items().getFirst().reactionCount(), "Reaction count must be exactly 1 despite concurrent requests");
     }
 
+    @Test
+    void concurrentPostReaction_fromMultipleUsers_shouldCountAccuratelyWithoutDeadlock() throws InterruptedException {
+        var post = forumPostService.createPost(postAuthor.getId(), new ForumPostUpsertRequest(
+                "Concurrent Multi-User Post", "Content", helpTopic.getId(), List.of()
+        ));
+
+        // Commit transaction so worker threads can see the post
+        org.springframework.test.context.transaction.TestTransaction.flagForCommit();
+        org.springframework.test.context.transaction.TestTransaction.end();
+
+        int userCount = 30;
+        List<User> reactors = new ArrayList<>(userCount);
+        for (int i = 0; i < userCount; i++) {
+            reactors.add(createForumUser("reactor-" + i + "-" + UUID.randomUUID() + "@test.com", "Reactor " + i));
+        }
+
+        java.util.concurrent.ExecutorService executorService = java.util.concurrent.Executors.newFixedThreadPool(userCount);
+        java.util.concurrent.CountDownLatch readyLatch = new java.util.concurrent.CountDownLatch(userCount);
+        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>(userCount);
+
+        try {
+            for (User reactor : reactors) {
+                futures.add(executorService.submit(() -> {
+                    readyLatch.countDown();
+                    try {
+                        startLatch.await();
+                        forumPostService.upsertReaction(reactor.getId(), post.postId(), new ForumReactionRequest(ForumReactionType.LIKE));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }));
+            }
+
+            assertTrue(readyLatch.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            startLatch.countDown(); // release all threads simultaneously
+
+            List<Throwable> workerFailures = new ArrayList<>();
+            for (Future<?> future : futures) {
+                try {
+                    future.get(15, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (ExecutionException ex) {
+                    workerFailures.add(ex.getCause());
+                } catch (Exception ex) {
+                    workerFailures.add(ex);
+                }
+            }
+            assertTrue(workerFailures.isEmpty(), "Concurrent post reaction requests must not fail: " + workerFailures);
+        } finally {
+            executorService.shutdownNow();
+        }
+
+        // Query again to verify count
+        var refreshedPost = forumPostService.getPostDetail(postAuthor.getId(), post.postId());
+        assertEquals(userCount, refreshedPost.reactionCount(), "Final reaction count must exactly equal number of reactors");
+    }
+
     private User createForumUser(String email, String fullName) {
         return userRepository.save(User.builder()
                 .email(email)

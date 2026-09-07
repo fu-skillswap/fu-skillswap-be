@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -32,6 +33,21 @@ public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID
     @Query("select c from ForumComment c where c.id = :id")
     Optional<ForumComment> findByIdForUpdate(@Param("id") UUID id);
 
+    @Modifying
+    @Query("update ForumComment c set c.reactionCount = coalesce(c.reactionCount, 0) + 1 where c.id = :commentId")
+    int incrementReactionCount(@Param("commentId") UUID commentId);
+
+    @Modifying
+    @Query("""
+            update ForumComment c
+            set c.reactionCount = case when coalesce(c.reactionCount, 0) > 0 then coalesce(c.reactionCount, 0) - 1 else 0 end
+            where c.id = :commentId
+            """)
+    int decrementReactionCount(@Param("commentId") UUID commentId);
+
+    @Query("select coalesce(c.reactionCount, 0) from ForumComment c where c.id = :commentId")
+    int getReactionCountById(@Param("commentId") UUID commentId);
+
     @Query("""
             select count(c.id) > 0
             from ForumComment c
@@ -46,7 +62,22 @@ public interface ForumCommentRepository extends JpaRepository<ForumComment, UUID
             @Param("content") String content,
             @Param("createdAfter") LocalDateTime createdAfter
     );
+
     @org.springframework.data.jpa.repository.Modifying
     @Query("update ForumComment c set c.deletedAt = current_timestamp where c.post.id = :postId")
     void softDeleteByPostId(@Param("postId") UUID postId);
+
+    @Query("""
+            select c.replyToCommentId, count(c.id)
+            from ForumComment c
+            where c.replyToCommentId in :parentCommentIds
+              and c.status = :status
+            group by c.replyToCommentId
+            """)
+    List<Object[]> countRepliesByParentCommentIds(
+            @Param("parentCommentIds") Collection<UUID> parentCommentIds,
+            @Param("status") ForumCommentStatus status
+    );
+
+    int countByReplyToCommentIdAndStatus(UUID replyToCommentId, ForumCommentStatus status);
 }

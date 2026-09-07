@@ -107,7 +107,8 @@ class ForumReportServiceTest {
                         forumCommentRepository,
                         forumPostReactionRepository,
                         forumCommentReactionRepository,
-                        forumActionLogService
+                        forumActionLogService,
+                        transactionTemplate
                 ),
                 cursorCodec,
                 transactionTemplate

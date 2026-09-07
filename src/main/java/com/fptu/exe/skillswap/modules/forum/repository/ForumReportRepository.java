@@ -44,6 +44,7 @@ public interface ForumReportRepository extends JpaRepository<ForumReport, UUID> 
     @EntityGraph(attributePaths = {"reporterUser"})
     Optional<ForumReport> findById(UUID id);
 
+    @EntityGraph(attributePaths = {"reporterUser"})
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ForumReport r where r.id = :id")
     Optional<ForumReport> findByIdForUpdate(@Param("id") UUID id);

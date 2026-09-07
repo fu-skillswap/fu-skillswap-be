@@ -7,6 +7,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ForeignKey;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
@@ -46,11 +47,11 @@ public class ForumComment {
     @GeneratedUuidV7
     private UUID id;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "post_id", nullable = false, foreignKey = @ForeignKey(name = "fk_forum_comments_post"))
     private ForumPost post;
 
-    @ManyToOne(optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "author_user_id", nullable = false, foreignKey = @ForeignKey(name = "fk_forum_comments_author"))
     private User authorUser;
 
@@ -98,17 +99,21 @@ public class ForumComment {
 
     @PrePersist
     protected void onCreate() {
-        LocalDateTime now = DateTimeUtil.now();
+        LocalDateTime now = DateTimeUtil.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         if (createdAt == null) {
             createdAt = now;
+        } else {
+            createdAt = createdAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         }
         if (updatedAt == null) {
             updatedAt = now;
+        } else {
+            updatedAt = updatedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = DateTimeUtil.now();
+        updatedAt = DateTimeUtil.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
     }
 }

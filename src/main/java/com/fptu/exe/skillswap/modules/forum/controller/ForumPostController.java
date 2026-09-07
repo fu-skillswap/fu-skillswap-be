@@ -200,14 +200,14 @@ public class ForumPostController {
     }
 
     @GetMapping("/posts/{postId}/comments")
-    @Operation(summary = "Lấy comment của bài viết forum", description = "Danh sách comment theo thứ tự cũ nhất trước. Nếu bài viết chưa có comment, `data.items` là mảng rỗng và không phải lỗi.")
+    @Operation(summary = "Lấy danh sách bình luận gốc của bài viết forum", description = "Danh sách bình luận gốc (root comments) theo thứ tự cũ nhất trước. Không bao gồm các phản hồi con (replies). Mỗi comment có trường `replyCount` để FE hiển thị số lượng câu trả lời. Nếu bài viết chưa có comment, `data.items` là mảng rỗng và không phải lỗi.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Danh sách comment",
+                    description = "Danh sách root comments",
                     content = @Content(mediaType = "application/json", examples = {
                             @ExampleObject(name = "Comments", value = """
-                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[{"commentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","authorUserId":"019f7234-aaaa-bbbb-cccc-1234567890ab","authorFullName":"Nguyen Van A","content":"Mình cũng đang ôn phần này.","status":"VISIBLE","reactionCount":1,"reactedByCurrentUser":false,"createdAt":"2026-09-04T03:25:00","updatedAt":"2026-09-04T03:25:00","imageUrls":[]}],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[{"commentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","authorUserId":"019f7234-aaaa-bbbb-cccc-1234567890ab","authorFullName":"Nguyen Van A","content":"Mình cũng đang ôn phần này.","status":"VISIBLE","reactionCount":1,"reactedByCurrentUser":false,"replyCount":2,"createdAt":"2026-09-04T03:25:00","updatedAt":"2026-09-04T03:25:00","imageUrls":[]}],"nextCursor":null,"hasNext":false,"limit":20}}
                                     """),
                             @ExampleObject(name = "EmptyComments", value = """
                                     {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[],"nextCursor":null,"hasNext":false,"limit":20}}
@@ -228,6 +228,44 @@ public class ForumPostController {
             @RequestParam(defaultValue = "20") Integer limit
     ) {
         return ApiResponse.success(forumPostService.getComments(principal == null ? null : principal.getPublicId(), postId, cursor, limit));
+    }
+
+    @GetMapping("/comments/{commentId}/replies")
+    @Operation(
+            summary = "Lấy danh sách câu trả lời (replies) của một bình luận gốc",
+            description = """
+                    Trả về danh sách các phản hồi (replies) thuộc về một bình luận gốc theo cursor pagination.
+                    FE sử dụng API này khi người dùng bấm mở rộng xem phản hồi của một comment gốc.
+                    """
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200",
+                    description = "Danh sách replies thành công",
+                    content = @Content(mediaType = "application/json", examples = {
+                            @ExampleObject(name = "Replies", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[{"commentId":"019f6234-bbbb-cccc-dddd-1234567890cd","postId":"019f5234-aaaa-bbbb-cccc-1234567890ab","authorUserId":"019f7234-aaaa-bbbb-cccc-1234567890ab","authorFullName":"Nguyen Van B","content":"Mình đồng ý với bạn.","status":"VISIBLE","reactionCount":0,"reactedByCurrentUser":false,"replyToCommentId":"019f6234-aaaa-bbbb-cccc-1234567890ab","replyToUserId":"019f7234-aaaa-bbbb-cccc-1234567890aa","replyToUserName":"Nguyen Van A","replyCount":0,"createdAt":"2026-09-07T08:00:00","updatedAt":"2026-09-07T08:00:00","imageUrls":[]}],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    """),
+                            @ExampleObject(name = "EmptyReplies", value = """
+                                    {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"items":[],"nextCursor":null,"hasNext":false,"limit":20}}
+                                    """)
+                    })
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Comment ID không phải là bình luận gốc"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy bình luận hoặc bài viết")
+    })
+    public ApiResponse<CursorPageResponse<ForumCommentResponse>> getCommentReplies(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID commentId,
+            @Parameter(
+                    description = "Opaque cursor string. Lấy từ nextCursor của response trước đó.",
+                    example = "djEuQmFzZTY0VXJsSWYuLi5PcGFxdWVDdXJzb3I"
+            )
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "Số lượng reply mong muốn lấy. Mặc định 20, tối đa 50.", example = "20")
+            @RequestParam(defaultValue = "20") Integer limit
+    ) {
+        return ApiResponse.success(forumPostService.getCommentReplies(principal == null ? null : principal.getPublicId(), commentId, cursor, limit));
     }
 
     @PostMapping("/posts/{postId}/comments")
