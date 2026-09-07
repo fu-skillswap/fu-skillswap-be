@@ -229,6 +229,7 @@ class MentorVerificationServiceUploadTest {
                 new MentorVerificationDocumentUploadIntentRequest("proof.jpg", "image/jpeg", 123L));
 
         assertThat(response.uploadIntentId()).isNotNull();
+        assertThat(response.uploadIntentId().version()).isEqualTo(7);
         assertThat(response.uploadUrl()).isEqualTo("https://private-upload.example/test");
         assertThat(response.requiredHeaders()).containsEntry("Content-Type", "image/jpeg");
         verify(storageGateway).generatePrivateUploadUrl(any(), eq("image/jpeg"), any());

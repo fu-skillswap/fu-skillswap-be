@@ -26,6 +26,7 @@ import com.fptu.exe.skillswap.modules.booking.repository.BookingRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,18 +70,19 @@ public class BookingIssueEvidenceService implements BookingIssueEvidencePort {
         validateFileRequest(request);
 
         Instant now = timeProvider.instant();
-        UUID intentId = UUID.randomUUID();
+        UUID intentId = UuidUtil.generateUuidV7();
         String contentType = normalizeContentType(request.contentType());
         String storageKey = "booking-disputes/staging/" + bookingId + "/" + intentId + extensionFor(contentType);
-        BookingIssueEvidenceUploadIntent intent = BookingIssueEvidenceUploadIntent.builder()
-                .id(intentId).booking(booking).ownerUserId(actorUserId).stagingStorageKey(storageKey)
-                .originalFilename(request.filename().trim()).contentType(contentType).expectedSizeBytes(request.sizeBytes())
-                .expiresAtUtc(now.plus(Duration.ofMinutes(properties.getUploadIntentTtlMinutes())))
-                .createdAtUtc(now).build();
-        intentRepository.save(intent);
+        BookingIssueEvidenceUploadIntent intent = intentRepository.save(
+                BookingIssueEvidenceUploadIntent.builder()
+                        .id(intentId).booking(booking).ownerUserId(actorUserId).stagingStorageKey(storageKey)
+                        .originalFilename(request.filename().trim()).contentType(contentType).expectedSizeBytes(request.sizeBytes())
+                        .expiresAtUtc(now.plus(Duration.ofMinutes(properties.getUploadIntentTtlMinutes())))
+                        .createdAtUtc(now).build()
+        );
         StorageGateway.PrivatePresignedUpload upload = storageGateway.generatePrivateUploadUrl(
                 storageKey, contentType, Duration.ofMinutes(properties.getUploadIntentTtlMinutes()));
-        return new BookingIssueEvidenceUploadIntentResponse(intentId, upload.uploadUrl(),
+        return new BookingIssueEvidenceUploadIntentResponse(intent.getId(), upload.uploadUrl(),
                 BookingTime.toOffsetDateTime(upload.expiresAt()), contentType);
     }
 

@@ -38,7 +38,6 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.modules.mentor.domain.VerificationDocumentStatus;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationDocumentRepository;
 import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
-import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationUploadIntentRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -95,9 +94,6 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private MentorVerificationDocumentRepository mentorVerificationDocumentRepository;
-
-    @Autowired
-    private MentorVerificationUploadIntentRepository uploadIntentRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -650,17 +646,11 @@ class MentorVerificationFlowIntegrationTest {
     private MentorVerificationRequestResponse uploadVerificationDocument(
             UUID mentorId, VerificationDocumentType type, String filename, long sizeBytes
     ) {
-        mentorVerificationService.createDocumentUploadIntent(mentorId,
+        var uploadIntentResponse = mentorVerificationService.createDocumentUploadIntent(mentorId,
                 new com.fptu.exe.skillswap.modules.mentor.dto.request.MentorVerificationDocumentUploadIntentRequest(
                         filename, "image/png", sizeBytes));
         entityManager.flush();
-        UUID persistedIntentId = uploadIntentRepository.findAll().stream()
-                .filter(candidate -> mentorId.equals(candidate.getOwnerUserId()))
-                .filter(candidate -> filename.equals(candidate.getOriginalFilename()))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("created verification upload intent should be persisted before upload"))
-                .getId();
         return mentorVerificationService.uploadDocument(mentorId,
-                new MentorVerificationDocumentUploadRequest(type, persistedIntentId));
+                new MentorVerificationDocumentUploadRequest(type, uploadIntentResponse.uploadIntentId()));
     }
 }

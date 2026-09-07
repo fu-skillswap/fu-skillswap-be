@@ -41,6 +41,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationUpload
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import com.fptu.exe.skillswap.shared.util.UuidUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -249,22 +250,23 @@ public class MentorVerificationService {
         findEditableRequestForUpdate(userId);
 
         StorageGateway storageGateway = getRequiredStorageGateway();
-        UUID intentId = UUID.randomUUID();
+        UUID intentId = UuidUtil.generateUuidV7();
         String extension = extensionOf(filename);
         String storageKey = documentsPrefix + "/" + userId + "/" + intentId + extension;
         LocalDateTime expiresAt = DateTimeUtil.now().plusMinutes(15);
 
-        MentorVerificationUploadIntent intent = MentorVerificationUploadIntent.builder()
-                .id(intentId)
-                .ownerUserId(userId)
-                .storageKey(storageKey)
-                .originalFilename(filename)
-                .expectedContentType(contentType)
-                .expectedSizeBytes(request.sizeBytes())
-                .status(MentorVerificationUploadIntentStatus.PENDING_UPLOAD)
-                .expiresAt(expiresAt)
-                .build();
-        uploadIntentRepository.save(intent);
+        MentorVerificationUploadIntent intent = uploadIntentRepository.save(
+                MentorVerificationUploadIntent.builder()
+                        .id(intentId)
+                        .ownerUserId(userId)
+                        .storageKey(storageKey)
+                        .originalFilename(filename)
+                        .expectedContentType(contentType)
+                        .expectedSizeBytes(request.sizeBytes())
+                        .status(MentorVerificationUploadIntentStatus.PENDING_UPLOAD)
+                        .expiresAt(expiresAt)
+                        .build()
+        );
 
         StorageGateway.PrivatePresignedUpload uploadAuth = storageGateway.generatePrivateUploadUrl(storageKey, contentType, Duration.ofMinutes(15));
         return new MentorVerificationDocumentUploadIntentResponse(
@@ -610,6 +612,7 @@ public class MentorVerificationService {
         MentorVerificationUploadIntent intent = uploadIntentRepository.findByIdForUpdate(request.uploadIntentId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
         if (!intent.getOwnerUserId().equals(userId)) {
+            log.warn("User {} attempted to confirm upload intent {} owned by {}", userId, request.uploadIntentId(), intent.getOwnerUserId());
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
         }
         if (intent.getStatus() == MentorVerificationUploadIntentStatus.CONFIRMED || intent.getConfirmedStoredFileId() != null) {

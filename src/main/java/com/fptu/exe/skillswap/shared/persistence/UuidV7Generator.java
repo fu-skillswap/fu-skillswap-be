@@ -12,6 +12,9 @@ public class UuidV7Generator implements BeforeExecutionGenerator {
 
     @Override
     public UUID generate(SharedSessionContractImplementor session, Object owner, Object currentValue, EventType eventType) {
+        if (currentValue instanceof UUID existing && existing != null) {
+            return existing;
+        }
         return UuidUtil.generateUuidV7();
     }
 
