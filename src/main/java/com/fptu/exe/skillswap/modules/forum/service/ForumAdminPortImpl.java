@@ -620,7 +620,7 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 topic == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.TopicView(
                         topic.id(), topic.code() == null ? null : topic.code().name(), topic.nameVi(), topic.nameEn(), topic.displayOrder()),
                 value.title(), value.content(), value.status(), value.commentCount(), value.reactionCount(), value.reportCount(),
-                value.lastActivityAt(), value.reactedByCurrentUser(), value.myReactionType(), value.createdAt(), value.updatedAt(), value.imageUrls(), value.replyCount());
+                value.lastActivityAt(), value.reactedByCurrentUser(), value.myReactionType(), value.createdAt(), value.updatedAt(), value.imageUrls());
     }
 
     private CommentView commentView(ForumCommentResponse value) {
