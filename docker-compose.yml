@@ -26,24 +26,24 @@ services:
       resources:
         limits:
           cpus: "0.30"
-          memory: 192M
+          memory: 256M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
     cpus: "0.30"
-    mem_limit: 192m
+    mem_limit: 256m
 
     command:
       - postgres
       - -c
-      - shared_buffers=48MB
+      - shared_buffers=64MB
       - -c
       - max_connections=20
       - -c
-      - work_mem=1MB
+      - work_mem=2MB
       - -c
-      - maintenance_work_mem=16MB
+      - maintenance_work_mem=24MB
       - -c
-      - effective_cache_size=96MB
+      - effective_cache_size=128MB
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -74,11 +74,11 @@ services:
       resources:
         limits:
           cpus: "0.20"
-          memory: 160M
+          memory: 128M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
     cpus: "0.20"
-    mem_limit: 160m
+    mem_limit: 128m
 
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
@@ -102,8 +102,9 @@ services:
 
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
-      # Keep JVM sizing explicit and strictly bounded within the 448 MiB container limit.
-      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xms96m -Xmx224m -XX:+UseG1GC -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=32m -XX:+UseContainerSupport -XX:ActiveProcessorCount=1 -Xss512k -XX:+ExitOnOutOfMemoryError}
+      # Keep JVM sizing explicit and strictly bounded within the 768 MiB container limit.
+      # Heap: 512m · Metaspace: 192m · Direct: 48m · Threads/Native: ~16m → total ≈ 768m
+      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xms128m -Xmx512m -XX:+UseG1GC -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=48m -XX:+UseContainerSupport -XX:ActiveProcessorCount=2 -Xss512k -XX:+ExitOnOutOfMemoryError}
       - TZ=UTC
       - SPRING_SHUTDOWN_TIMEOUT=${SPRING_SHUTDOWN_TIMEOUT:-30s}
       - TOMCAT_MAX_THREADS=${TOMCAT_MAX_THREADS:-25}
@@ -206,11 +207,11 @@ services:
       resources:
         limits:
           cpus: "0.70"
-          memory: 448M
+          memory: 768M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
     cpus: "0.70"
-    mem_limit: 448m
+    mem_limit: 768m
 
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 || exit 1"]

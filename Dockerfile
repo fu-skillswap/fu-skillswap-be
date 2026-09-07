@@ -27,5 +27,6 @@ COPY --from=build /app/target/*.jar app.jar
 RUN chown skillswap:skillswap /app/app.jar
 USER skillswap
 EXPOSE 8080
-ENV JAVA_TOOL_OPTIONS="-Xms96m -Xmx224m -XX:+UseG1GC -XX:MaxMetaspaceSize=160m -XX:MaxDirectMemorySize=32m -XX:+UseContainerSupport -XX:ActiveProcessorCount=1 -Xss512k -XX:+ExitOnOutOfMemoryError"
+# Heap: 512m · Metaspace: 192m · Direct: 48m · Threads/Native: ~16m → total ≈ 768m
+ENV JAVA_TOOL_OPTIONS="-Xms128m -Xmx512m -XX:+UseG1GC -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=48m -XX:+UseContainerSupport -XX:ActiveProcessorCount=2 -Xss512k -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["java", "-jar", "app.jar"]
