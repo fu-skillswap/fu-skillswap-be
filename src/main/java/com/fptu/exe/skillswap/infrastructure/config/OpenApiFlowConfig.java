@@ -5,6 +5,7 @@ import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.tags.Tag;
 import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springdoc.core.models.GroupedOpenApi;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -167,6 +168,11 @@ public class OpenApiFlowConfig {
     private static final Map<String, TagRule> TAGS_BY_ORIGINAL_NAME = buildTagIndex();
 
     @Bean
+    @ConditionalOnProperty(
+            name = "application.openapi.include-all-group",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     public GroupedOpenApi allApis() {
         return GroupedOpenApi.builder()
                 .group("00-all")
@@ -437,5 +443,25 @@ public class OpenApiFlowConfig {
     }
 
     private record TagRule(String originalName, String displayName, String description) {
+    }
+
+    @org.springframework.web.bind.annotation.RestControllerAdvice(assignableTypes = {
+            org.springdoc.webmvc.api.MultipleOpenApiWebMvcResource.class,
+            org.springdoc.webmvc.api.OpenApiWebMvcResource.class
+    })
+    public static class OpenApiExceptionHandler {
+
+        @org.springframework.web.bind.annotation.ExceptionHandler(org.springdoc.api.OpenApiResourceNotFoundException.class)
+        public org.springframework.http.ResponseEntity<com.fptu.exe.skillswap.shared.dto.response.ApiResponse<Object>> handleOpenApiNotFound(
+                org.springdoc.api.OpenApiResourceNotFoundException ex
+        ) {
+            return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.NOT_FOUND)
+                    .body(com.fptu.exe.skillswap.shared.dto.response.ApiResponse.builder()
+                            .timestamp(com.fptu.exe.skillswap.shared.util.DateTimeUtil.instantNow())
+                            .status(org.springframework.http.HttpStatus.NOT_FOUND.value())
+                            .code(com.fptu.exe.skillswap.shared.exception.ErrorCode.NOT_FOUND.getCode())
+                            .message(ex.getMessage())
+                            .build());
+        }
     }
 }

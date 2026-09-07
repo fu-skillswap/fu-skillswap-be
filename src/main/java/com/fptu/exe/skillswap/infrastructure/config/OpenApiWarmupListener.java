@@ -24,8 +24,8 @@ import java.util.Locale;
  * triggering Cloudflare 504 Gateway Timeout on VPS deployments with limited resources.
  *
  * <p>To prevent blocking Spring Boot readiness probes and container health checks on deployment,
- * this listener runs asynchronously by default on a background daemon thread, warming up `00-all`
- * first to populate Jackson and Springdoc schema reflection caches, with gentle yielding between groups.
+ * this listener runs asynchronously by default on a background daemon thread, warming up available
+ * OpenAPI groups dynamically with gentle yielding between groups.
  */
 @Component
 @Slf4j
@@ -105,13 +105,9 @@ public class OpenApiWarmupListener {
         Locale targetLocale = Locale.ENGLISH;
 
         if (multipleResource != null && groups != null) {
-            // Sort to ensure '00-all' is warmed up FIRST, priming all DTO schemas for subsequent groups
+            // Sort available groups dynamically by group identifier
             List<GroupedOpenApi> sortedGroups = groups.stream()
-                    .sorted((g1, g2) -> {
-                        if ("00-all".equals(g1.getGroup())) return -1;
-                        if ("00-all".equals(g2.getGroup())) return 1;
-                        return g1.getGroup().compareTo(g2.getGroup());
-                    })
+                    .sorted(java.util.Comparator.comparing(GroupedOpenApi::getGroup))
                     .toList();
 
             for (GroupedOpenApi group : sortedGroups) {

@@ -19,6 +19,8 @@ spring:
     password: ${SPRING_MAIL_PASSWORD:}
 
 application:
+  openapi:
+    include-all-group: ${APPLICATION_OPENAPI_INCLUDE_ALL_GROUP:false}
   production-validation:
     # Production defaults to strict validation. The official Compose overlay
     # pins this marker to true; only explicit non-production tests may override it.

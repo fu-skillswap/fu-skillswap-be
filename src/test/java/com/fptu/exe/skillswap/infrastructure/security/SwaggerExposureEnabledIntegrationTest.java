@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "springdoc.api-docs.enabled=true",
         "springdoc.swagger-ui.enabled=true",
         "application.openapi.version=0.1.0-beta",
+        "application.openapi.include-all-group=true",
         "application.openapi.warmup.async=false",
         "application.openapi.warmup.initial-delay-ms=0",
         "application.openapi.warmup.group-delay-ms=0"

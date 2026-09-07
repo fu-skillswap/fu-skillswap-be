@@ -24,6 +24,8 @@ spring:
       mail.smtp.starttls.enable: false
 
 application:
+  openapi:
+    include-all-group: true
   group-sessions:
     enabled: true
   cors:

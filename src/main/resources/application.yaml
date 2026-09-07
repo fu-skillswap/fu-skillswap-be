@@ -105,6 +105,7 @@ management:
 application:
   openapi:
     version: ${APPLICATION_OPENAPI_VERSION:0.1.0-beta}
+    include-all-group: ${APPLICATION_OPENAPI_INCLUDE_ALL_GROUP:true}
     warmup:
       enabled: ${APPLICATION_OPENAPI_WARMUP_ENABLED:true}
       async: ${APPLICATION_OPENAPI_WARMUP_ASYNC:true}

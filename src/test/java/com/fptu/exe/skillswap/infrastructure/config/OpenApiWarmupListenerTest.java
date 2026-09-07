@@ -61,8 +61,8 @@ class OpenApiWarmupListenerTest {
     }
 
     @Test
-    @DisplayName("Should warm up 00-all first and then remaining groups in sync mode")
-    void whenEnabledSync_shouldWarmUp00AllFirst() throws Exception {
+    @DisplayName("Should warm up available groups dynamically in sorted order when 00-all is not present")
+    void whenEnabledSync_without00All_shouldWarmUpDynamicallyInSortedOrder() throws Exception {
         @SuppressWarnings("unchecked")
         ObjectProvider<MultipleOpenApiWebMvcResource> multipleProvider = mock(ObjectProvider.class);
         @SuppressWarnings("unchecked")
@@ -73,14 +73,14 @@ class OpenApiWarmupListenerTest {
         MultipleOpenApiWebMvcResource multipleResource = mock(MultipleOpenApiWebMvcResource.class);
         OpenApiWebMvcResource defaultResource = mock(OpenApiWebMvcResource.class);
 
-        GroupedOpenApi group1 = GroupedOpenApi.builder().group("01-identity").pathsToMatch("/api/auth/**").build();
-        GroupedOpenApi group0 = GroupedOpenApi.builder().group("00-all").pathsToMatch("/api/**").build();
         GroupedOpenApi group2 = GroupedOpenApi.builder().group("02-mentor").pathsToMatch("/api/me/mentor/**").build();
+        GroupedOpenApi group1 = GroupedOpenApi.builder().group("01-identity").pathsToMatch("/api/auth/**").build();
+        GroupedOpenApi group3 = GroupedOpenApi.builder().group("03-booking").pathsToMatch("/api/bookings/**").build();
 
         when(multipleProvider.getIfAvailable()).thenReturn(multipleResource);
         when(defaultProvider.getIfAvailable()).thenReturn(defaultResource);
-        // deliberately pass in unordered: 01-identity, 02-mentor, 00-all
-        when(groupsProvider.getIfAvailable()).thenReturn(List.of(group1, group2, group0));
+        // deliberately pass in unordered: 02-mentor, 01-identity, 03-booking
+        when(groupsProvider.getIfAvailable()).thenReturn(List.of(group2, group1, group3));
 
         OpenApiWarmupListener listener = new OpenApiWarmupListener(
                 multipleProvider, defaultProvider, groupsProvider,
@@ -90,11 +90,41 @@ class OpenApiWarmupListenerTest {
         listener.performWarmup();
 
         InOrder inOrder = inOrder(multipleResource, defaultResource);
-        // 00-all must be warmed up first!
-        inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("00-all"), eq(Locale.ENGLISH));
         inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("01-identity"), eq(Locale.ENGLISH));
         inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("02-mentor"), eq(Locale.ENGLISH));
+        inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("03-booking"), eq(Locale.ENGLISH));
         inOrder.verify(defaultResource).openapiJson(any(), eq("/v3/api-docs"), eq(Locale.ENGLISH));
+    }
+
+    @Test
+    @DisplayName("Should warm up 00-all naturally first when present")
+    void whenEnabledSync_with00AllPresent_shouldWarmUp00AllNaturallyFirst() throws Exception {
+        @SuppressWarnings("unchecked")
+        ObjectProvider<MultipleOpenApiWebMvcResource> multipleProvider = mock(ObjectProvider.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<OpenApiWebMvcResource> defaultProvider = mock(ObjectProvider.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<List<GroupedOpenApi>> groupsProvider = mock(ObjectProvider.class);
+
+        MultipleOpenApiWebMvcResource multipleResource = mock(MultipleOpenApiWebMvcResource.class);
+
+        GroupedOpenApi group1 = GroupedOpenApi.builder().group("01-identity").pathsToMatch("/api/auth/**").build();
+        GroupedOpenApi group0 = GroupedOpenApi.builder().group("00-all").pathsToMatch("/api/**").build();
+
+        when(multipleProvider.getIfAvailable()).thenReturn(multipleResource);
+        when(defaultProvider.getIfAvailable()).thenReturn(null);
+        when(groupsProvider.getIfAvailable()).thenReturn(List.of(group1, group0));
+
+        OpenApiWarmupListener listener = new OpenApiWarmupListener(
+                multipleProvider, defaultProvider, groupsProvider,
+                true, false, 0, 0
+        );
+
+        listener.performWarmup();
+
+        InOrder inOrder = inOrder(multipleResource);
+        inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("00-all"), eq(Locale.ENGLISH));
+        inOrder.verify(multipleResource).openapiJson(any(), eq("/v3/api-docs"), eq("01-identity"), eq(Locale.ENGLISH));
     }
 
     @Test
@@ -111,7 +141,7 @@ class OpenApiWarmupListenerTest {
         when(multipleProvider.getIfAvailable()).thenReturn(multipleResource);
         when(defaultProvider.getIfAvailable()).thenReturn(null);
         when(groupsProvider.getIfAvailable()).thenReturn(List.of(
-                GroupedOpenApi.builder().group("00-all").pathsToMatch("/api/**").build()
+                GroupedOpenApi.builder().group("01-identity").pathsToMatch("/api/auth/**").build()
         ));
 
         OpenApiWarmupListener listener = new OpenApiWarmupListener(
@@ -124,6 +154,6 @@ class OpenApiWarmupListenerTest {
         // Give async thread a brief moment to run
         Thread.sleep(150);
 
-        verify(multipleResource, atLeastOnce()).openapiJson(any(), eq("/v3/api-docs"), eq("00-all"), eq(Locale.ENGLISH));
+        verify(multipleResource, atLeastOnce()).openapiJson(any(), eq("/v3/api-docs"), eq("01-identity"), eq(Locale.ENGLISH));
     }
 }
