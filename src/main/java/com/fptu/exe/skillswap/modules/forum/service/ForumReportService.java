@@ -16,7 +16,7 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Map;
 import java.util.UUID;
@@ -32,89 +32,91 @@ public class ForumReportService {
     private final ForumTextPolicy forumTextPolicy;
     private final ForumAbuseGuardService forumAbuseGuardService;
     private final ForumActionLogService forumActionLogService;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
     public ForumReportResponse createReport(UUID currentUserId, ForumReportCreateRequest request) {
         User reporter = forumPostService.requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(reporter, ForumActionType.CREATE_REPORT);
-        if (forumReportRepository.existsByReporterUserIdAndTargetTypeAndTargetId(
-                reporter.getId(),
-                request.targetType(),
-                request.targetId()
-        )) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó");
-        }
-
-        String targetStatus;
-        String targetTitle;
-        String targetPreview;
-        UUID targetAuthorId;
-        String targetAuthorName;
-
-        switch (request.targetType()) {
-            case POST -> {
-                ForumPost post = forumPostService.requireVisiblePost(request.targetId());
-                if (post.getAuthorUser().getId().equals(reporter.getId())) {
-                    throw new BaseException(ErrorCode.BAD_REQUEST, "Bạn không thể report bài viết của chính mình");
-                }
-                post.setReportCount((post.getReportCount() == null ? 0 : post.getReportCount()) + 1);
-                forumPostRepository.save(post);
-                targetStatus = post.getStatus().name();
-                targetTitle = post.getTitle();
-                targetPreview = trimPreview(post.getContent());
-                targetAuthorId = post.getAuthorUser().getId();
-                targetAuthorName = post.getAuthorUser().getFullName();
+        return transactionTemplate.execute(txStatus -> {
+            if (forumReportRepository.existsByReporterUserIdAndTargetTypeAndTargetId(
+                    reporter.getId(),
+                    request.targetType(),
+                    request.targetId()
+            )) {
+                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó");
             }
-            case COMMENT -> {
-                ForumComment comment = forumPostService.requireVisibleComment(request.targetId());
-                if (comment.getAuthorUser().getId().equals(reporter.getId())) {
-                    throw new BaseException(ErrorCode.BAD_REQUEST, "Bạn không thể report bình luận của chính mình");
+
+            String targetStatus;
+            String targetTitle;
+            String targetPreview;
+            UUID targetAuthorId;
+            String targetAuthorName;
+
+            switch (request.targetType()) {
+                case POST -> {
+                    ForumPost post = forumPostService.requireVisiblePost(request.targetId());
+                    if (post.getAuthorUser().getId().equals(reporter.getId())) {
+                        throw new BaseException(ErrorCode.BAD_REQUEST, "Bạn không thể report bài viết của chính mình");
+                    }
+                    post.setReportCount((post.getReportCount() == null ? 0 : post.getReportCount()) + 1);
+                    forumPostRepository.save(post);
+                    targetStatus = post.getStatus().name();
+                    targetTitle = post.getTitle();
+                    targetPreview = trimPreview(post.getContent());
+                    targetAuthorId = post.getAuthorUser().getId();
+                    targetAuthorName = post.getAuthorUser().getFullName();
                 }
-                comment.setReportCount((comment.getReportCount() == null ? 0 : comment.getReportCount()) + 1);
-                forumCommentRepository.save(comment);
-                targetStatus = comment.getStatus().name();
-                targetTitle = null;
-                targetPreview = trimPreview(comment.getContent());
-                targetAuthorId = comment.getAuthorUser().getId();
-                targetAuthorName = comment.getAuthorUser().getFullName();
+                case COMMENT -> {
+                    ForumComment comment = forumPostService.requireVisibleComment(request.targetId());
+                    if (comment.getAuthorUser().getId().equals(reporter.getId())) {
+                        throw new BaseException(ErrorCode.BAD_REQUEST, "Bạn không thể report bình luận của chính mình");
+                    }
+                    comment.setReportCount((comment.getReportCount() == null ? 0 : comment.getReportCount()) + 1);
+                    forumCommentRepository.save(comment);
+                    targetStatus = comment.getStatus().name();
+                    targetTitle = null;
+                    targetPreview = trimPreview(comment.getContent());
+                    targetAuthorId = comment.getAuthorUser().getId();
+                    targetAuthorName = comment.getAuthorUser().getFullName();
+                }
+                default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Loại target report không được hỗ trợ");
             }
-            default -> throw new BaseException(ErrorCode.BAD_REQUEST, "Loại target report không được hỗ trợ");
-        }
 
-        ForumReport report;
-        try {
-            report = forumReportRepository.saveAndFlush(ForumReport.builder()
-                    .reporterUser(reporter)
-                    .targetType(request.targetType())
-                    .targetId(request.targetId())
-                    .reasonType(request.reasonType())
-                    .description(forumTextPolicy.normalizeOptionalPlainText(request.description(), "Mô tả report"))
-                    .status(ForumReportStatus.OPEN)
-                    .build());
-        } catch (DataIntegrityViolationException ex) {
-            throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó", ex);
-        }
+            ForumReport report;
+            try {
+                report = forumReportRepository.saveAndFlush(ForumReport.builder()
+                        .reporterUser(reporter)
+                        .targetType(request.targetType())
+                        .targetId(request.targetId())
+                        .reasonType(request.reasonType())
+                        .description(forumTextPolicy.normalizeOptionalPlainText(request.description(), "Mô tả report"))
+                        .status(ForumReportStatus.OPEN)
+                        .build());
+            } catch (DataIntegrityViolationException ex) {
+                throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã report nội dung này trước đó", ex);
+            }
 
-        forumActionLogService.record(reporter, ForumActionType.CREATE_REPORT, "REPORT", report.getId(),
-                Map.of("targetType", request.targetType().name(),
-                        "reasonType", request.reasonType().name()));
+            forumActionLogService.record(reporter, ForumActionType.CREATE_REPORT, "REPORT", report.getId(),
+                    Map.of("targetType", request.targetType().name(),
+                            "reasonType", request.reasonType().name()));
 
-        return ForumReportResponse.builder()
-                .reportId(report.getId())
-                .targetType(report.getTargetType().name())
-                .targetId(report.getTargetId())
-                .targetStatus(targetStatus)
-                .targetTitle(targetTitle)
-                .targetContentPreview(targetPreview)
-                .targetAuthorUserId(targetAuthorId)
-                .targetAuthorFullName(targetAuthorName)
-                .reporterUserId(reporter.getId())
-                .reporterFullName(reporter.getFullName())
-                .reasonType(report.getReasonType().name())
-                .description(report.getDescription())
-                .status(report.getStatus().name())
-                .createdAt(report.getCreatedAt())
-                .build();
+            return ForumReportResponse.builder()
+                    .reportId(report.getId())
+                    .targetType(report.getTargetType().name())
+                    .targetId(report.getTargetId())
+                    .targetStatus(targetStatus)
+                    .targetTitle(targetTitle)
+                    .targetContentPreview(targetPreview)
+                    .targetAuthorUserId(targetAuthorId)
+                    .targetAuthorFullName(targetAuthorName)
+                    .reporterUserId(reporter.getId())
+                    .reporterFullName(reporter.getFullName())
+                    .reasonType(report.getReasonType().name())
+                    .description(report.getDescription())
+                    .status(report.getStatus().name())
+                    .createdAt(report.getCreatedAt())
+                    .build();
+        });
     }
 
     private String trimPreview(String raw) {

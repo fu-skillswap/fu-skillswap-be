@@ -75,6 +75,8 @@ class ForumReportServiceTest {
     private CursorCodec cursorCodec;
     @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
+    @Mock
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     private ForumReportService forumReportService;
     private User reporter;
@@ -83,6 +85,11 @@ class ForumReportServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
         ForumPostService forumPostService = new ForumPostService(
                 forumPostRepository,
                 forumCommentRepository,
@@ -102,7 +109,8 @@ class ForumReportServiceTest {
                         forumCommentReactionRepository,
                         forumActionLogService
                 ),
-                cursorCodec
+                cursorCodec,
+                transactionTemplate
         );
         forumReportService = new ForumReportService(
                 forumPostService,
@@ -111,7 +119,8 @@ class ForumReportServiceTest {
                 forumReportRepository,
                 forumTextPolicy,
                 forumAbuseGuardService,
-                forumActionLogService
+                forumActionLogService,
+                transactionTemplate
         );
 
         reporter = User.builder()

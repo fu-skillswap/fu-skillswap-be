@@ -43,6 +43,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -77,6 +78,7 @@ public class ForumPostService {
     private final ForumActionLogService forumActionLogService;
     private final ForumReactionService forumReactionService;
     private final CursorCodec cursorCodec;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID forumTopicId, Boolean mine) {
@@ -172,40 +174,41 @@ public class ForumPostService {
                 .toList();
     }
 
-    @Transactional
     public ForumPostResponse createPost(UUID currentUserId, ForumPostUpsertRequest request) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.CREATE_POST);
-        ForumTopic forumTopic = requireForumTopic(request.forumTopicId());
-        String normalizedTitle = forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết");
-        String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết");
-        forumProhibitedPhrasePolicy.rejectPost(normalizedTitle, normalizedContent);
-        if (forumPostRepository.existsRecentDuplicatePost(
-                currentUser.getId(),
-                normalizedTitle,
-                normalizedContent,
-                DateTimeUtil.now().minusMinutes(15)
-        )) {
-            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa đăng nội dung này rồi, vui lòng tránh đăng trùng lặp");
-        }
-        java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
-        ForumPost post = ForumPost.builder()
-                .authorUser(currentUser)
-                .authorProgram(resolveAuthorProgram(currentUser.getId()))
-                .forumTopic(forumTopic)
-                .title(normalizedTitle)
-                .content(normalizedContent)
-                .imageUrls(cleanedImages)
-                .status(ForumPostStatus.PUBLISHED)
-                .commentCount(0)
-                .reactionCount(0)
-                .reportCount(0)
-                .lastActivityAt(DateTimeUtil.now())
-                .build();
-        ForumPost saved = forumPostRepository.save(post);
-        forumActionLogService.record(currentUser, ForumActionType.CREATE_POST, "POST", saved.getId(),
-                Map.of("status", ForumPostStatus.PUBLISHED.name()));
-        return toPostResponse(saved, currentUser.getId());
+        return transactionTemplate.execute(status -> {
+            ForumTopic forumTopic = requireForumTopic(request.forumTopicId());
+            String normalizedTitle = forumTextPolicy.requirePlainText(request.title(), "Tiêu đề bài viết");
+            String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bài viết");
+            forumProhibitedPhrasePolicy.rejectPost(normalizedTitle, normalizedContent);
+            if (forumPostRepository.existsRecentDuplicatePost(
+                    currentUser.getId(),
+                    normalizedTitle,
+                    normalizedContent,
+                    DateTimeUtil.now().minusMinutes(15)
+            )) {
+                throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa đăng nội dung này rồi, vui lòng tránh đăng trùng lặp");
+            }
+            java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
+            ForumPost post = ForumPost.builder()
+                    .authorUser(currentUser)
+                    .authorProgram(resolveAuthorProgram(currentUser.getId()))
+                    .forumTopic(forumTopic)
+                    .title(normalizedTitle)
+                    .content(normalizedContent)
+                    .imageUrls(cleanedImages)
+                    .status(ForumPostStatus.PUBLISHED)
+                    .commentCount(0)
+                    .reactionCount(0)
+                    .reportCount(0)
+                    .lastActivityAt(DateTimeUtil.now())
+                    .build();
+            ForumPost saved = forumPostRepository.save(post);
+            forumActionLogService.record(currentUser, ForumActionType.CREATE_POST, "POST", saved.getId(),
+                    Map.of("status", ForumPostStatus.PUBLISHED.name()));
+            return toPostResponse(saved, currentUser.getId());
+        });
     }
 
     @Transactional
@@ -275,99 +278,100 @@ public class ForumPostService {
                 .build();
     }
 
-    @Transactional
     public ForumCommentResponse createComment(UUID currentUserId, UUID postId, ForumCommentUpsertRequest request) {
         User currentUser = requireForumUser(currentUserId);
         forumAbuseGuardService.checkAndLog(currentUser, ForumActionType.CREATE_COMMENT);
-        ForumPost post = forumPostRepository.findByIdForUpdate(postId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
-        ensurePostVisible(post);
-        String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận");
-        forumProhibitedPhrasePolicy.rejectComment(normalizedContent);
-        if (forumCommentRepository.existsRecentDuplicateComment(
-                post.getId(),
-                currentUser.getId(),
-                normalizedContent,
-                DateTimeUtil.now().minusMinutes(5)
-        )) {
-            throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa gửi bình luận này rồi, vui lòng tránh spam lặp nội dung");
-        }
-
-        ForumComment parentComment = null;
-        if (request.replyToCommentId() != null) {
-            parentComment = forumCommentRepository.findById(request.replyToCommentId())
-                    .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không tồn tại"));
-            if (parentComment.getStatus() != ForumCommentStatus.VISIBLE) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể reply bình luận đã bị ẩn hoặc xóa");
+        return transactionTemplate.execute(status -> {
+            ForumPost post = forumPostRepository.findByIdForUpdate(postId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bài viết forum"));
+            ensurePostVisible(post);
+            String normalizedContent = forumTextPolicy.requirePlainText(request.content(), "Nội dung bình luận");
+            forumProhibitedPhrasePolicy.rejectComment(normalizedContent);
+            if (forumCommentRepository.existsRecentDuplicateComment(
+                    post.getId(),
+                    currentUser.getId(),
+                    normalizedContent,
+                    DateTimeUtil.now().minusMinutes(5)
+            )) {
+                throw new BaseException(ErrorCode.TOO_MANY_REQUESTS, "Bạn vừa gửi bình luận này rồi, vui lòng tránh spam lặp nội dung");
             }
-            if (!parentComment.getPost().getId().equals(post.getId())) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không thuộc bài viết này");
-            }
-            if (parentComment.getReplyToCommentId() != null) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ trả lời bình luận 1 cấp (Không thể reply một reply)");
-            }
-        }
 
-        java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
-        ForumComment comment = ForumComment.builder()
-                .post(post)
-                .authorUser(currentUser)
-                .content(normalizedContent)
-                .imageUrls(cleanedImages)
-                .status(ForumCommentStatus.VISIBLE)
-                .reportCount(0)
-                .reactionCount(0)
-                .replyToCommentId(parentComment != null ? parentComment.getId() : null)
-                .build();
-        ForumComment saved = forumCommentRepository.save(comment);
-        post.setCommentCount(safeIncrement(post.getCommentCount()));
-        post.setLastActivityAt(DateTimeUtil.now());
-        forumPostRepository.save(post);
-        forumActionLogService.record(currentUser, ForumActionType.CREATE_COMMENT, "COMMENT", saved.getId(),
-                Map.of("status", ForumCommentStatus.VISIBLE.name(),
-                        "reply", parentComment != null));
-
-        boolean isSelfReply = parentComment != null && currentUser.getId().equals(parentComment.getAuthorUser().getId());
-        boolean isSelfComment = currentUser.getId().equals(post.getAuthorUser().getId());
-
-        if (parentComment != null) {
-            if (!isSelfReply) {
-                try {
-                    notificationCommandPort.publish(new NotificationIntent(
-                            parentComment.getAuthorUser().getId(),
-                            NotificationType.FORUM_COMMENT_REPLY.name(),
-                            "Bình luận của bạn có người trả lời",
-                            currentUser.getFullName() + " vừa trả lời bình luận của bạn trong bài viết forum.",
-                            "FORUM_POST",
-                            post.getId(),
-                            null
-                    ));
-                } catch (RuntimeException ex) {
-                    log.warn("Không thể tạo notification cho forum reply commentId={}: {}", saved.getId(), ex.getMessage());
+            ForumComment parentComment = null;
+            if (request.replyToCommentId() != null) {
+                parentComment = forumCommentRepository.findById(request.replyToCommentId())
+                        .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không tồn tại"));
+                if (parentComment.getStatus() != ForumCommentStatus.VISIBLE) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể reply bình luận đã bị ẩn hoặc xóa");
+                }
+                if (!parentComment.getPost().getId().equals(post.getId())) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Bình luận gốc không thuộc bài viết này");
+                }
+                if (parentComment.getReplyToCommentId() != null) {
+                    throw new BaseException(ErrorCode.BAD_REQUEST, "Chỉ hỗ trợ trả lời bình luận 1 cấp (Không thể reply một reply)");
                 }
             }
-        } else {
-            if (!isSelfComment) {
-                try {
-                    notificationCommandPort.publish(new NotificationIntent(
-                            post.getAuthorUser().getId(),
-                            NotificationType.FORUM_POST_COMMENTED.name(),
-                            "Bài viết của bạn có bình luận mới",
-                            currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
-                            "FORUM_POST",
-                            post.getId(),
-                            null
-                    ));
-                } catch (RuntimeException ex) {
-                    log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
+
+            java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
+            ForumComment comment = ForumComment.builder()
+                    .post(post)
+                    .authorUser(currentUser)
+                    .content(normalizedContent)
+                    .imageUrls(cleanedImages)
+                    .status(ForumCommentStatus.VISIBLE)
+                    .reportCount(0)
+                    .reactionCount(0)
+                    .replyToCommentId(parentComment != null ? parentComment.getId() : null)
+                    .build();
+            ForumComment saved = forumCommentRepository.save(comment);
+            post.setCommentCount(safeIncrement(post.getCommentCount()));
+            post.setLastActivityAt(DateTimeUtil.now());
+            forumPostRepository.save(post);
+            forumActionLogService.record(currentUser, ForumActionType.CREATE_COMMENT, "COMMENT", saved.getId(),
+                    Map.of("status", ForumCommentStatus.VISIBLE.name(),
+                            "reply", parentComment != null));
+
+            boolean isSelfReply = parentComment != null && currentUser.getId().equals(parentComment.getAuthorUser().getId());
+            boolean isSelfComment = currentUser.getId().equals(post.getAuthorUser().getId());
+
+            if (parentComment != null) {
+                if (!isSelfReply) {
+                    try {
+                        notificationCommandPort.publish(new NotificationIntent(
+                                parentComment.getAuthorUser().getId(),
+                                NotificationType.FORUM_COMMENT_REPLY.name(),
+                                "Bình luận của bạn có người trả lời",
+                                currentUser.getFullName() + " vừa trả lời bình luận của bạn trong bài viết forum.",
+                                "FORUM_POST",
+                                post.getId(),
+                                null
+                        ));
+                    } catch (RuntimeException ex) {
+                        log.warn("Không thể tạo notification cho forum reply commentId={}: {}", saved.getId(), ex.getMessage());
+                    }
+                }
+            } else {
+                if (!isSelfComment) {
+                    try {
+                        notificationCommandPort.publish(new NotificationIntent(
+                                post.getAuthorUser().getId(),
+                                NotificationType.FORUM_POST_COMMENTED.name(),
+                                "Bài viết của bạn có bình luận mới",
+                                currentUser.getFullName() + " vừa bình luận vào bài viết forum của bạn.",
+                                "FORUM_POST",
+                                post.getId(),
+                                null
+                        ));
+                    } catch (RuntimeException ex) {
+                        log.warn("Không thể tạo notification cho comment forum postId={}: {}", post.getId(), ex.getMessage());
+                    }
                 }
             }
-        }
 
-        Map<UUID, ForumComment> replyParentsById = parentComment == null
-                ? Map.of()
-                : Map.of(parentComment.getId(), parentComment);
-        return toCommentResponse(saved, false, replyParentsById);
+            Map<UUID, ForumComment> replyParentsById = parentComment == null
+                    ? Map.of()
+                    : Map.of(parentComment.getId(), parentComment);
+            return toCommentResponse(saved, false, replyParentsById);
+        });
     }
 
     @Transactional

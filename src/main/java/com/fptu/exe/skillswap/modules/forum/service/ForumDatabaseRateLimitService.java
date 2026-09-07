@@ -34,6 +34,16 @@ public class ForumDatabaseRateLimitService {
         }
     }
 
+    /**
+     * Checks and updates the rate-limit bucket in an independent transaction.
+     * <p>
+     * NOTE: Uses Propagation.REQUIRES_NEW so that:
+     * 1) Rate limit increments commit independently of caller transaction success or rollback.
+     * 2) {@link Retryable} on {@link DataIntegrityViolationException} can start a fresh transaction.
+     * <p>
+     * IMPORTANT: Callers MUST invoke this method BEFORE opening any business write transactions
+     * (e.g. as a preflight check outside TransactionTemplate) to avoid HikariCP connection pool starvation.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @Retryable(
             retryFor = DataIntegrityViolationException.class,

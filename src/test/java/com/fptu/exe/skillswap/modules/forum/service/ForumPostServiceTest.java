@@ -88,6 +88,8 @@ class ForumPostServiceTest {
     private CursorCodec cursorCodec;
     @Mock
     private ForumCommentReactionRepository forumCommentReactionRepository;
+    @Mock
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
 
     private ForumPostService forumPostService;
     private User mentee;
@@ -95,6 +97,11 @@ class ForumPostServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+
         forumPostService = new ForumPostService(
                 forumPostRepository,
                 forumCommentRepository,
@@ -114,7 +121,8 @@ class ForumPostServiceTest {
                         forumCommentReactionRepository,
                         forumActionLogService
                 ),
-                cursorCodec
+                cursorCodec,
+                transactionTemplate
         );
 
         mentee = User.builder()
