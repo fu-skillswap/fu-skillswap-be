@@ -105,6 +105,11 @@ management:
 application:
   openapi:
     version: ${APPLICATION_OPENAPI_VERSION:0.1.0-beta}
+    warmup:
+      enabled: ${APPLICATION_OPENAPI_WARMUP_ENABLED:true}
+      async: ${APPLICATION_OPENAPI_WARMUP_ASYNC:true}
+      initial-delay-ms: ${APPLICATION_OPENAPI_WARMUP_INITIAL_DELAY_MS:1000}
+      group-delay-ms: ${APPLICATION_OPENAPI_WARMUP_GROUP_DELAY_MS:100}
   scheduling:
     enabled: ${APPLICATION_SCHEDULING_ENABLED:true}
   availability:
