@@ -27,6 +27,8 @@ public record AdminForumCommentResponse(
         String replyToUserName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        List<String> imageUrls
+        List<String> imageUrls,
+        @Schema(description = "Số lượng câu trả lời (replies) của bình luận gốc. Bằng 0 nếu là phản hồi hoặc chưa có người phản hồi.", example = "3")
+        Integer replyCount
 ) {
 }

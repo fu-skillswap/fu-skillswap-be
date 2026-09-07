@@ -48,7 +48,7 @@ public final class AdminForumResponseMapper {
                 value.commentId(), value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
                 value.authorRole(), value.content(), value.status(), value.reportCount(), value.reactionCount(),
                 value.reactedByCurrentUser(), value.replyToCommentId(), value.replyToUserId(), value.replyToUserName(),
-                value.createdAt(), value.updatedAt(), value.imageUrls());
+                value.createdAt(), value.updatedAt(), value.imageUrls(), value.replyCount());
     }
 
     public static CursorPageResponse<AdminForumPostResponse> posts(CursorPageResponse<PostView> page) {

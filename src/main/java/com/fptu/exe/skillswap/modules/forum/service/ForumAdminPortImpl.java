@@ -620,14 +620,14 @@ public class ForumAdminPortImpl implements ForumAdminPort {
                 topic == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.TopicView(
                         topic.id(), topic.code() == null ? null : topic.code().name(), topic.nameVi(), topic.nameEn(), topic.displayOrder()),
                 value.title(), value.content(), value.status(), value.commentCount(), value.reactionCount(), value.reportCount(),
-                value.lastActivityAt(), value.reactedByCurrentUser(), value.myReactionType(), value.createdAt(), value.updatedAt(), value.imageUrls());
+                value.lastActivityAt(), value.reactedByCurrentUser(), value.myReactionType(), value.createdAt(), value.updatedAt(), value.imageUrls(), value.replyCount());
     }
 
     private CommentView commentView(ForumCommentResponse value) {
         return new CommentView(value.commentId(), value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
                 value.authorRole(), value.content(), value.status(), value.reportCount(), value.reactionCount(),
                 value.reactedByCurrentUser(), value.replyToCommentId(), value.replyToUserId(), value.replyToUserName(),
-                value.createdAt(), value.updatedAt(), value.imageUrls());
+                value.createdAt(), value.updatedAt(), value.imageUrls(), value.replyCount());
     }
 
     private String trimPreview(String raw) {

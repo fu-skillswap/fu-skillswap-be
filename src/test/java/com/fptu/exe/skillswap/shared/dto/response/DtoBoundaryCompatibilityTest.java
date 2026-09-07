@@ -73,7 +73,8 @@ class DtoBoundaryCompatibilityTest {
                 publicComment.authorAvatarUrl(), publicComment.authorRole(), publicComment.content(), publicComment.status(),
                 publicComment.reportCount(), publicComment.reactionCount(), publicComment.reactedByCurrentUser(),
                 publicComment.replyToCommentId(), publicComment.replyToUserId(), publicComment.replyToUserName(),
-                publicComment.createdAt(), publicComment.updatedAt(), publicComment.imageUrls());
+                publicComment.createdAt(), publicComment.updatedAt(), publicComment.imageUrls(),
+                publicComment.replyCount());
 
         assertEquals(objectMapper.readTree(objectMapper.writeValueAsString(publicComment)),
                 objectMapper.readTree(objectMapper.writeValueAsString(adminComment)));

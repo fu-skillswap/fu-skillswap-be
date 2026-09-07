@@ -51,7 +51,7 @@ public final class ForumAdminPortModels {
             UUID commentId, UUID postId, UUID authorUserId, String authorFullName, String authorAvatarUrl,
             String authorRole, String content, String status, Integer reportCount, Integer reactionCount,
             Boolean reactedByCurrentUser, UUID replyToCommentId, UUID replyToUserId, String replyToUserName,
-            LocalDateTime createdAt, LocalDateTime updatedAt, List<String> imageUrls
+            LocalDateTime createdAt, LocalDateTime updatedAt, List<String> imageUrls, Integer replyCount
     ) {
     }
 }
