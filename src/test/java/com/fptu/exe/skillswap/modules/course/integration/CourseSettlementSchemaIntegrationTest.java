@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -42,11 +43,12 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
         UUID courseId = UUID.randomUUID();
         UUID studentId = UUID.randomUUID();
         Instant now = Instant.now();
+        Timestamp sqlNow = Timestamp.from(now);
 
         jdbcTemplate.update("""
                 INSERT INTO users (id, email, full_name, status, created_at, updated_at)
                 VALUES (?, ?, ?, 'ACTIVE', ?, ?)
-                """, studentId, "settlement-test-" + studentId + "@example.com", "Settlement Student", now, now);
+                """, studentId, "settlement-test-" + studentId + "@example.com", "Settlement Student", sqlNow, sqlNow);
         jdbcTemplate.update("""
                 INSERT INTO mentor_profiles (
                     user_id, status, session_duration, average_rating, total_reviews,
@@ -54,7 +56,7 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
                     total_accepted_bookings, total_mentor_cancelled_bookings, is_available,
                     created_at, updated_at
                 ) VALUES (?, 'ACTIVE', 60, 0.00, 0, 0, 0, 0, 0, 0, TRUE, ?, ?)
-                """, studentId, now, now);
+                """, studentId, sqlNow, sqlNow);
         jdbcTemplate.update("""
                 INSERT INTO courses (
                     id, mentor_profile_id, subject_code, title, description,
@@ -64,14 +66,14 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
                     average_rating, review_count, enrolled_count, total_materials
                 ) VALUES (?, ?, 'SPRING', 'Settlement schema test', NULL, 0, 0, 100,
                           0, 0, 'PUBLISHED', 0, ?, ?, 0, 0, 0, 0.00, 0, 0, 0)
-                """, courseId, studentId, now, now);
+                """, courseId, studentId, sqlNow, sqlNow);
         jdbcTemplate.update("""
                 INSERT INTO course_enrollments (
                     id, course_id, student_user_id, paid_amount_scoin, status,
                     version, enrolled_at, updated_at, base_price_scoin, buyer_fee_scoin,
                     mentor_commission_scoin, mentor_payout_scoin
                 ) VALUES (?, ?, ?, 100, 'ACTIVE', 0, ?, ?, 100, 0, 0, 100)
-                """, enrollmentId, courseId, studentId, now, now);
+                """, enrollmentId, courseId, studentId, sqlNow, sqlNow);
 
         var enrollment = enrollmentRepository.getReferenceById(enrollmentId);
         CourseEnrollmentSettlement settlement = CourseEnrollmentSettlement.builder()
