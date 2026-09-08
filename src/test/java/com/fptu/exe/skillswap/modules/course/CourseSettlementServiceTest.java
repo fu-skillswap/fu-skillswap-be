@@ -26,6 +26,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.inOrder;
+import org.mockito.InOrder;
 
 @ExtendWith(MockitoExtension.class)
 class CourseSettlementServiceTest {
@@ -91,5 +93,34 @@ class CourseSettlementServiceTest {
         assertEquals(EnrollmentStatus.REFUNDED, enrollment.getStatus());
         assertEquals(CourseSettlementStatus.REFUNDED, allocation.getStatus());
         verify(eventPublisher).publishEvent(any(com.fptu.exe.skillswap.modules.course.event.CourseEnrollmentEndedEvent.class));
+    }
+
+    @Test
+    void releaseEligibleAllocationUsesEnrollmentThenSettlementLockOrder() {
+        Instant now = Instant.parse("2026-01-08T00:00:00Z");
+        allocation.setStatus(CourseSettlementStatus.ELIGIBLE);
+        allocation.setEligibleAt(Instant.parse("2026-01-01T00:00:00Z"));
+        when(settlementRepository.findById(allocation.getId())).thenReturn(Optional.of(allocation));
+        when(enrollmentRepository.findByIdForUpdate(enrollmentId)).thenReturn(Optional.of(enrollment));
+        when(settlementRepository.findByIdForUpdate(allocation.getId())).thenReturn(Optional.of(allocation));
+
+        boolean released = courseSettlementService.releaseEligibleAllocation(allocation.getId(), now);
+
+        assertEquals(true, released);
+        InOrder order = inOrder(enrollmentRepository, settlementRepository);
+        order.verify(enrollmentRepository).findByIdForUpdate(enrollmentId);
+        order.verify(settlementRepository).findByIdForUpdate(allocation.getId());
+    }
+
+    @Test
+    void refundUnreleasedAllocationsUsesEnrollmentThenSettlementLockOrder() {
+        when(enrollmentRepository.findByIdForUpdate(enrollmentId)).thenReturn(Optional.of(enrollment));
+        when(settlementRepository.findByEnrollmentIdForUpdate(enrollmentId)).thenReturn(Optional.of(allocation));
+
+        courseSettlementService.refundUnreleasedAllocations(enrollmentId, "STUDENT_REQUEST");
+
+        InOrder order = inOrder(enrollmentRepository, settlementRepository);
+        order.verify(enrollmentRepository).findByIdForUpdate(enrollmentId);
+        order.verify(settlementRepository).findByEnrollmentIdForUpdate(enrollmentId);
     }
 }

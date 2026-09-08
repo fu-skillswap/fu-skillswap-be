@@ -131,8 +131,7 @@ class CourseConversationServiceTest {
         assertNotEquals(courseId, conversation.getSourceId());
         assertEquals(null, conversation.getMentorUserId());
         assertEquals(null, conversation.getMenteeUserId());
-        verify(chatRoomService).addParticipantIfAbsent(conversation, mentor);
-        verify(chatRoomService).addParticipantIfAbsent(conversation, mentee);
+        verify(chatRoomService).synchronizeCourseDirectParticipants(conversation, mentor, mentee);
     }
 
     @Test

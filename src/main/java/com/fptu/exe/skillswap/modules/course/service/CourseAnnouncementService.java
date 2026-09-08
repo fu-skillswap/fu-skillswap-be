@@ -10,10 +10,7 @@ import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentReposito
 import com.fptu.exe.skillswap.modules.course.repository.CourseRepository;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
-import com.fptu.exe.skillswap.shared.outbox.DomainEventOutboxEventTypes;
 import com.fptu.exe.skillswap.modules.course.domain.CourseStatus;
-import com.fptu.exe.skillswap.modules.course.domain.CourseOutboxEvent;
-import com.fptu.exe.skillswap.modules.course.repository.CourseOutboxEventRepository;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -40,7 +37,6 @@ public class CourseAnnouncementService {
     private final CourseAnnouncementRepository announcementRepository;
     private final CourseRepository courseRepository;
     private final CourseEnrollmentRepository enrollmentRepository;
-    private final CourseOutboxEventRepository outboxEventRepository;
     private final UserQueryPort userQueryPort;
     private final com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort mentorOwnershipQueryPort;
     private final TimeProvider timeProvider;
@@ -82,15 +78,7 @@ public class CourseAnnouncementService {
                 .publishedAt(now)
                 .build();
 
-        CourseAnnouncement saved = announcementRepository.save(announcement);
-        outboxEventRepository.save(CourseOutboxEvent.builder()
-                .aggregateType("CourseAnnouncement")
-                .aggregateId(saved.getId())
-                .eventType(DomainEventOutboxEventTypes.COURSE_ANNOUNCEMENT_CREATED)
-                .payloadJson("{}")
-                .status("PENDING")
-                .build());
-        return toResponse(saved);
+        return toResponse(announcementRepository.save(announcement));
     }
 
     private Course getCourse(UUID courseId) {

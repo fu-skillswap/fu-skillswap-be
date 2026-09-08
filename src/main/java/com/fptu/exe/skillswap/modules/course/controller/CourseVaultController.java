@@ -64,8 +64,9 @@ public class CourseVaultController {
     @PostMapping("/me/mentor/courses/{courseId}/materials/{materialId}/confirm-video-upload")
     public ApiResponse<Void> confirmR2VideoUpload(@AuthenticationPrincipal UserPrincipal principal,
                                                    @PathVariable UUID courseId,
-                                                   @PathVariable UUID materialId) {
-        courseVaultService.confirmR2VideoUpload(principal.getId(), courseId, materialId);
+                                                   @PathVariable UUID materialId,
+                                                   @Valid @RequestBody ConfirmCourseVideoUploadRequest request) {
+        courseVaultService.confirmR2VideoUpload(principal.getId(), courseId, materialId, request.durationSeconds());
         return ApiResponse.success(null);
     }
 

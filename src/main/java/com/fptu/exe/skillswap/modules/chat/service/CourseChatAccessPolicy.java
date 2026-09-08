@@ -25,6 +25,24 @@ public class CourseChatAccessPolicy {
     private final ConversationParticipantRepository participantRepository;
     private final CourseConversationContextRepository contextRepository;
 
+    public boolean isCurrentCourseDirectParticipant(Conversation conversation, UUID userId) {
+        if (conversation == null
+                || userId == null
+                || conversation.getSourceType() != com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType.COURSE
+                || conversation.getType() != ConversationType.DIRECT) {
+            return false;
+        }
+        var context = contextRepository.findByConversationId(conversation.getId()).orElse(null);
+        if (context == null) {
+            return false;
+        }
+        UUID currentMentorUserId = courseQueryPort.findCourseChatContext(context.getCourseId())
+                .map(CourseQueryPort.CourseChatContext::mentorUserId)
+                .orElse(null);
+        return Objects.equals(userId, currentMentorUserId)
+                || Objects.equals(userId, context.getMenteeUserId());
+    }
+
     public Access resolve(Conversation conversation, UUID userId) {
         if (conversation == null || userId == null) {
             return Access.readOnly(ChatReadOnlyReason.NO_EFFECTIVE_BOOKING);

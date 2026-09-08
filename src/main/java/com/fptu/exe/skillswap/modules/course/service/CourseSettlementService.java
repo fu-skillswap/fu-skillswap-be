@@ -86,12 +86,18 @@ public class CourseSettlementService {
 
     @Transactional
     public boolean releaseEligibleAllocation(UUID allocationId, Instant now) {
+        CourseEnrollmentSettlement allocationReference = settlementRepository.findById(allocationId).orElse(null);
+        if (allocationReference == null) {
+            return false;
+        }
+
+        // Canonical Course settlement lock order: enrollment -> allocation.
+        CourseEnrollment enrollment = enrollmentRepository.findByIdForUpdate(allocationReference.getEnrollment().getId()).orElseThrow();
         CourseEnrollmentSettlement allocation = settlementRepository.findByIdForUpdate(allocationId).orElse(null);
         if (allocation == null || allocation.getStatus() != CourseSettlementStatus.ELIGIBLE
                 || allocation.getEligibleAt() == null || allocation.getEligibleAt().isAfter(now)) {
             return false;
         }
-        CourseEnrollment enrollment = enrollmentRepository.findByIdForUpdate(allocation.getEnrollment().getId()).orElseThrow();
         if (enrollment.getStatus() != EnrollmentStatus.ACTIVE && enrollment.getStatus() != EnrollmentStatus.COMPLETED) {
             return false;
         }

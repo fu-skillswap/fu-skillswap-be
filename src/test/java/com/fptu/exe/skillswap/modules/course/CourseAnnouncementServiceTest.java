@@ -91,7 +91,7 @@ class CourseAnnouncementServiceTest {
     }
 
     @Test
-    void mentorCanCreateAnnouncement() {
+    void createAnnouncementDoesNotCreateNotification() {
         when(announcementRepository.save(any(CourseAnnouncement.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -103,7 +103,7 @@ class CourseAnnouncementServiceTest {
         assertEquals("Lesson", response.title());
         assertEquals("New content", response.content());
         verify(announcementRepository).save(any(CourseAnnouncement.class));
-        verify(outboxEventRepository).save(any());
+        verifyNoInteractions(outboxEventRepository);
     }
 
     @Test

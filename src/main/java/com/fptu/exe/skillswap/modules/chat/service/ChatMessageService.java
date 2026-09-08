@@ -332,6 +332,10 @@ public class ChatMessageService {
                 .filter(p -> p.getAccessState() != ConversationParticipantAccess.REVOKED)
                 .filter(p -> p.getUser() != null && p.getUser().getId() != null)
                 .filter(p -> activeRecipientIds == null || activeRecipientIds.contains(p.getUser().getId()))
+                .filter(p -> conversation.getSourceType() != com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType.COURSE
+                        || conversation.getType() != ConversationType.DIRECT
+                        || chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(
+                        conversation, p.getUser().getId()))
                 .filter(p -> senderId == null || !p.getUser().getId().equals(senderId))
                 .map(p -> new ChatMessageRealtimeDelivery(
                         p.getUser().getId(),

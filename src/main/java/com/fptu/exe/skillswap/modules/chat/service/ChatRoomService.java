@@ -102,6 +102,41 @@ public class ChatRoomService {
         }
     }
 
+    @Transactional
+    public void synchronizeCourseDirectParticipants(Conversation conversation, User mentor, User mentee) {
+        if (conversation == null
+                || conversation.getSourceType() != ConversationSourceType.COURSE
+                || conversation.getType() != ConversationType.DIRECT
+                || mentor == null
+                || mentee == null) {
+            throw new IllegalArgumentException("Conversation không phải COURSE_DIRECT hợp lệ");
+        }
+
+        UUID mentorUserId = mentor.getId();
+        UUID menteeUserId = mentee.getId();
+        participantRepository.findByConversationId(conversation.getId()).forEach(participant -> {
+            UUID participantUserId = participant.getUser() == null ? null : participant.getUser().getId();
+            if (!mentorUserId.equals(participantUserId) && !menteeUserId.equals(participantUserId)
+                    && participant.getAccessState() != ConversationParticipantAccess.REVOKED) {
+                participant.setAccessState(ConversationParticipantAccess.REVOKED);
+                participantRepository.save(participant);
+            }
+        });
+
+        ensureActiveParticipant(conversation, mentor);
+        ensureActiveParticipant(conversation, mentee);
+    }
+
+    private void ensureActiveParticipant(Conversation conversation, User user) {
+        participantRepository.findByConversationIdAndUserId(conversation.getId(), user.getId())
+                .ifPresentOrElse(participant -> {
+                    if (participant.getAccessState() != ConversationParticipantAccess.ACTIVE) {
+                        participant.setAccessState(ConversationParticipantAccess.ACTIVE);
+                        participantRepository.save(participant);
+                    }
+                }, () -> addParticipantIfAbsent(conversation, user));
+    }
+
     @Transactional(readOnly = true)
     public Conversation findByBookingId(UUID bookingId) {
         return conversationRepository.findBySourceTypeAndSourceId(ConversationSourceType.BOOKING, bookingId)

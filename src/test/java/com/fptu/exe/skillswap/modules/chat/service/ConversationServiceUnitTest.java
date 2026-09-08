@@ -628,6 +628,120 @@ class ConversationServiceUnitTest {
     }
 
     @Test
+    void oldMentorDoesNotReceiveRealtimeDelivery() {
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID menteeId = UUID.randomUUID();
+        UUID oldMentorId = UUID.randomUUID();
+        UUID currentMentorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId).sourceType(ConversationSourceType.COURSE)
+                .sourceId(UUID.randomUUID()).type(ConversationType.DIRECT).build();
+        User mentee = user(menteeId, "Mentee");
+        Message message = Message.builder().id(messageId).conversation(conversation).sender(mentee)
+                .sequence(1L).content("hello").createdAt(LocalDateTime.now()).build();
+        User oldMentor = user(oldMentorId, "Old mentor");
+        User currentMentor = user(currentMentorId, "Current mentor");
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                participant(conversation, mentee), participant(conversation, oldMentor),
+                participant(conversation, currentMentor)));
+        when(chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(conversation, menteeId)).thenReturn(true);
+        when(chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(conversation, oldMentorId)).thenReturn(false);
+        when(chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(conversation, currentMentorId)).thenReturn(true);
+
+        var deliveries = conversationService.buildChatMessageDeliveries(conversationId, messageId, menteeId);
+
+        assertEquals(List.of(currentMentorId), deliveries.stream()
+                .map(delivery -> delivery.recipientUserId()).toList());
+    }
+
+    @Test
+    void currentMentorReceivesRealtimeDelivery() {
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID menteeId = UUID.randomUUID();
+        UUID currentMentorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId).sourceType(ConversationSourceType.COURSE)
+                .sourceId(UUID.randomUUID()).type(ConversationType.DIRECT).build();
+        User mentee = user(menteeId, "Mentee");
+        User currentMentor = user(currentMentorId, "Current mentor");
+        Message message = Message.builder().id(messageId).conversation(conversation).sender(mentee)
+                .sequence(1L).content("hello").createdAt(LocalDateTime.now()).build();
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                participant(conversation, mentee), participant(conversation, currentMentor)));
+        when(chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(conversation, menteeId)).thenReturn(true);
+        when(chatAccessResolutionService.isEligibleCourseDirectRealtimeRecipient(conversation, currentMentorId)).thenReturn(true);
+
+        var deliveries = conversationService.buildChatMessageDeliveries(conversationId, messageId, menteeId);
+
+        assertEquals(List.of(currentMentorId), deliveries.stream()
+                .map(delivery -> delivery.recipientUserId()).toList());
+    }
+
+    @Test
+    void readOnlyCourseParticipantStillReceivesRealtimeDelivery() {
+        UUID conversationId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        UUID menteeId = UUID.randomUUID();
+        UUID currentMentorId = UUID.randomUUID();
+        Conversation conversation = Conversation.builder()
+                .id(conversationId).sourceType(ConversationSourceType.COURSE)
+                .sourceId(UUID.randomUUID()).type(ConversationType.DIRECT).build();
+        User mentee = user(menteeId, "Mentee");
+        User currentMentor = user(currentMentorId, "Current mentor");
+        Message message = Message.builder().id(messageId).conversation(conversation).sender(mentee)
+                .sequence(1L).content("hello").createdAt(LocalDateTime.now()).build();
+        when(messageRepository.findById(messageId)).thenReturn(Optional.of(message));
+        when(conversationRepository.findById(conversationId)).thenReturn(Optional.of(conversation));
+        when(participantRepository.findByConversationId(conversationId)).thenReturn(List.of(
+                participant(conversation, mentee), participant(conversation, currentMentor)));
+
+        var readOnlyAccess = new BookingChatAccessPolicy.Access(
+                com.fptu.exe.skillswap.modules.chat.domain.ChatMessagingAccess.READ_ONLY,
+                false, false, true,
+                com.fptu.exe.skillswap.modules.chat.domain.ChatReadOnlyReason.CHAT_WINDOW_EXPIRED,
+                null, false);
+        var coursePolicy = mock(CourseChatAccessPolicy.class);
+        var coursePolicyProvider = mock(ObjectProvider.class);
+        when(coursePolicyProvider.getIfAvailable()).thenReturn(coursePolicy);
+        when(coursePolicy.isCurrentCourseDirectParticipant(conversation, menteeId)).thenReturn(true);
+        when(coursePolicy.resolve(conversation, menteeId)).thenReturn(readOnlyAccess);
+        when(coursePolicy.isCurrentCourseDirectParticipant(conversation, currentMentorId)).thenReturn(true);
+        when(coursePolicy.resolve(conversation, currentMentorId)).thenReturn(readOnlyAccess);
+        when(conversationSafetyPolicy.apply(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
+        var realAccessResolutionService = new ChatAccessResolutionService(
+                null, conversationSafetyPolicy, coursePolicyProvider);
+        ChatMessageService directChatMessageService = new ChatMessageService(
+                messageRepository, conversationRepository, participantRepository,
+                chatAttachmentRepository, chatAttachmentService, realAccessResolutionService,
+                new ChatResponseMapper(cursorCodec, chatAttachmentRepository, participantRepository),
+                domainEventOutboxService, realtimeOutboxProperties,
+                groupChatFanoutDispatcherProvider, userQueryPortProvider);
+
+        var deliveries = directChatMessageService.buildChatMessageDeliveries(
+                conversationId, messageId, menteeId);
+
+        assertEquals(List.of(currentMentorId), deliveries.stream()
+                .map(delivery -> delivery.recipientUserId()).toList());
+    }
+
+    private User user(UUID id, String name) {
+        User user = new User();
+        user.setId(id);
+        user.setFullName(name);
+        return user;
+    }
+
+    private ConversationParticipant participant(Conversation conversation, User user) {
+        return ConversationParticipant.builder().conversation(conversation).user(user).build();
+    }
+
+    @Test
     void messagePageMapping_shouldBatchAttachmentsAndReadReceipts() {
         UUID userId = UUID.randomUUID();
         Conversation conversation = Conversation.builder()

@@ -146,8 +146,8 @@ public class CourseConversationService {
     }
 
     private void ensureParticipants(Conversation conversation, CourseChatActors actors) {
-        chatRoomService.addParticipantIfAbsent(conversation, actors.mentor());
-        chatRoomService.addParticipantIfAbsent(conversation, actors.mentee());
+        chatRoomService.synchronizeCourseDirectParticipants(
+                conversation, actors.mentor(), actors.mentee());
     }
 
     private CourseConversationResponse toResponse(CourseConversationContext context, CourseChatActors actors) {

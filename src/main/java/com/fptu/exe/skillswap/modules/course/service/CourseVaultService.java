@@ -15,7 +15,7 @@ public interface CourseVaultService {
     
     CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request);
     CourseR2VideoUploadIntentResponse createR2VideoUploadIntent(UUID mentorUserId, UUID courseId, UUID chapterId, CreateR2VideoUploadIntentRequest request);
-    void confirmR2VideoUpload(UUID mentorUserId, UUID courseId, UUID materialId);
+    void confirmR2VideoUpload(UUID mentorUserId, UUID courseId, UUID materialId, Integer durationSeconds);
     com.fptu.exe.skillswap.modules.course.dto.response.CoursePdfUploadInitResponse createPdfUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreatePdfMaterialUploadRequest request);
     void confirmPdfUpload(UUID mentorUserId, UUID courseId, UUID materialId, String objectKey);
     com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId);

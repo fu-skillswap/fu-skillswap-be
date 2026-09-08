@@ -48,4 +48,19 @@ public class ChatAccessResolutionService {
         }
         return ErrorCode.CHAT_CONVERSATION_READ_ONLY;
     }
+
+    public boolean isEligibleCourseDirectRealtimeRecipient(Conversation conversation, UUID userId) {
+        if (conversation == null || conversation.getSourceType() != ConversationSourceType.COURSE
+                || conversation.getType() != com.fptu.exe.skillswap.modules.chat.domain.ConversationType.DIRECT) {
+            return true;
+        }
+        var coursePolicy = courseChatAccessPolicyProvider.getIfAvailable();
+        if (coursePolicy == null || !coursePolicy.isCurrentCourseDirectParticipant(conversation, userId)) {
+            return false;
+        }
+        var access = resolveMessagingAccess(conversation, userId);
+        // READ_ONLY still permits reading history and receiving new realtime events.
+        // GROUP_MEMBERSHIP_REVOKED is the course policy's explicit access denial.
+        return access != null && access.readOnlyReason() != ChatReadOnlyReason.GROUP_MEMBERSHIP_REVOKED;
+    }
 }
