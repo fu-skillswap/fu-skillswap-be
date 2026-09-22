@@ -15,7 +15,6 @@ class EnrichedMentorCandidateTest {
         MentorDiscoveryQueryRow row = new MentorDiscoveryQueryRow(
                 UUID.randomUUID(), "Mentor", null, "Headline", "Expertise", "Bio",
                 1, 1, 1, true, null, 0, 0, null,
-                null, null, null, null, null, null, null, false,
                 0, 0, 0, null, null
         );
 

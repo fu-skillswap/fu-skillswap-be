@@ -63,7 +63,7 @@ public class MentorProfileController {
 
     @Operation(
             summary = "Lưu hồ sơ mentor của tôi",
-            description = "Tạo mới hoặc cập nhật hồ sơ mentor của user hiện tại. FE dùng trước khi user nộp mentor verification và trước khi mentor đủ điều kiện xuất hiện trên discovery để booking. Request gồm headline, expertiseDescription, subjectResults, 3 support levels, GitHub/portfolio optional, phoneNumber và trạng thái isAvailable."
+            description = "Tạo mới hoặc cập nhật hồ sơ mentor của user hiện tại. Hỗ trợ trường đào tạo từ Catalog (institutionId) hoặc trường ngoài kèm tỉnh (customInstitutionName, customInstitutionProvinceId) hoặc đơn vị công tác (companyOrOrganization), cùng nhóm ngành chuyên môn chính (primaryFieldGroupId)."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ mentor thành công"),

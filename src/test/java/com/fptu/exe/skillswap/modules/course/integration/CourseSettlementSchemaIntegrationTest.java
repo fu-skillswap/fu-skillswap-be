@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseEnrollmentSettlement;
 import com.fptu.exe.skillswap.modules.course.domain.CourseSettlementStatus;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentSettlementRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -125,5 +126,12 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
 
         assertThrows(DataIntegrityViolationException.class,
                 () -> settlementRepository.saveAndFlush(duplicate));
+    }
+
+    @AfterEach
+    void tearDown() {
+        settlementRepository.deleteAll();
+        jdbcTemplate.execute("DELETE FROM course_enrollments");
+        jdbcTemplate.execute("DELETE FROM courses");
     }
 }

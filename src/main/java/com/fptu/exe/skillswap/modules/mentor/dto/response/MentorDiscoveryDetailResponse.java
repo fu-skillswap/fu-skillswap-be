@@ -17,6 +17,8 @@ public record MentorDiscoveryDetailResponse(
         List<MentorServiceResponse> services,
         MentorEvidenceResponse evidence,
         MentorReputationResponse reputation,
-        MentorAvailabilityResponse availability
+        MentorAvailabilityResponse availability,
+        @Schema(nullable = true, description = "Canonical type-aware public education summary. Null for legacy profiles.")
+        PublicMentorEducationResponse education
 ) {
 }

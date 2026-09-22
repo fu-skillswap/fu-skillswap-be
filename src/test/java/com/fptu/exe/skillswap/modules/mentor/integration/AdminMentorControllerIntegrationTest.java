@@ -1,8 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.integration;
 
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -47,22 +45,11 @@ class AdminMentorControllerIntegrationTest {
     @Autowired
     private StudentProfileRepository studentProfileRepository;
 
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
     private UUID activeMentorId;
     private UUID draftMentorId;
 
     @BeforeEach
     void setUp() {
-        AcademicProgram program = academicProgramRepository.findByCode("CNTT")
-                .orElseGet(() -> academicProgramRepository.save(AcademicProgram.builder()
-                        .code("CNTT")
-                        .nameVi("Công nghệ thông tin")
-                        .nameEn("IT")
-                        .isActive(true)
-                        .build()));
-
         // 1. Seed Active Mentor
         User user1 = User.builder()
                 .email("active.mentor@test.com")
@@ -76,9 +63,8 @@ class AdminMentorControllerIntegrationTest {
 
         StudentProfile sp1 = StudentProfile.builder()
                 .user(user1)
-                .program(program)
-                .semester(5)
-                .intakeYear(2022)
+                .profileType(com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType.SCHOOL_STUDENT)
+                .onboardingCompleted(true)
                 .build();
         studentProfileRepository.save(sp1);
 
@@ -135,7 +121,6 @@ class AdminMentorControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.content[0].displayName").exists())
                 .andExpect(jsonPath("$.data.content[0].email").exists())
                 .andExpect(jsonPath("$.data.content[0].avatarUrl").exists())
-                .andExpect(jsonPath("$.data.content[0].primaryLabel").value("CNTT"))
                 .andExpect(jsonPath("$.data.content[0].completedSessions").exists())
                 .andExpect(jsonPath("$.data.content[0].ratingAverage").exists())
                 .andExpect(jsonPath("$.data.content[0].mentorStatus").value("ACTIVE"))
@@ -175,7 +160,6 @@ class AdminMentorControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.email").value("active.mentor@test.com"))
                 .andExpect(jsonPath("$.data.displayName").value("Active Mentor"))
                 .andExpect(jsonPath("$.data.headline").value("IT Headline"))
-                .andExpect(jsonPath("$.data.primaryLabel").value("CNTT"))
                 .andExpect(jsonPath("$.data.isAvailable").value(true))
                 .andExpect(jsonPath("$.data.sessionDuration").value(60))
                 .andExpect(jsonPath("$.data.createdAt").exists())

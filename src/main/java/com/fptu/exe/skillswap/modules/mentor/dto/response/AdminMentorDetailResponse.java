@@ -99,9 +99,6 @@ public record AdminMentorDetailResponse(
         @Schema(description = "Mentor's GitHub profile URL", example = "https://github.com/mentor-demo", nullable = true)
         String githubUrl,
 
-        @Schema(description = "Primary label badge, usually maps to AcademicProgram code", example = "CNTT", nullable = true)
-        String primaryLabel,
-
         @Schema(description = "Timestamp when the mentor profile was verified", example = "2026-06-22T21:20:25", nullable = true)
         LocalDateTime verifiedAt,
 

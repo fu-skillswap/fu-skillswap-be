@@ -35,11 +35,7 @@ public interface UserQueryPort {
 
     Optional<UserSummaryRecord> findUserSummaryById(UUID userId);
 
-    Optional<StudentProfileRecord> findStudentProfileRecordByUserId(UUID userId);
-
     java.util.Map<UUID, UserSummaryRecord> findUserSummariesByIdIn(java.util.Collection<UUID> userIds);
-
-    java.util.Map<UUID, StudentProfileRecord> findStudentProfileRecordsByIdIn(java.util.Collection<UUID> userIds);
 
     void grantMentorRole(UUID userId);
 }

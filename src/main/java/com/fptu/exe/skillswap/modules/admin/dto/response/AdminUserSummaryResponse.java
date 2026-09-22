@@ -1,6 +1,5 @@
 package com.fptu.exe.skillswap.modules.admin.dto.response;
 
-import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AcademicProfileSummary;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminUserSummaryMentorProfileResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -26,8 +25,6 @@ public record AdminUserSummaryResponse(
         LocalDateTime lastLoginAt,
         @Schema(description = "Thời điểm tạo tài khoản", example = "2026-07-02T10:15:30")
         LocalDateTime createdAt,
-        @Schema(description = "Tóm tắt academic profile nếu có")
-        AcademicProfileSummary academicProfile,
         @Schema(description = "Tóm tắt mentor profile")
         AdminUserSummaryMentorProfileResponse mentorProfile,
         @Schema(description = "Tóm tắt activity counts")

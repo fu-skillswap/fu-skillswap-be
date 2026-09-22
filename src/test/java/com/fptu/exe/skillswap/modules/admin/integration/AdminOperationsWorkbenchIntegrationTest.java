@@ -84,6 +84,7 @@ class AdminOperationsWorkbenchIntegrationTest {
     private EmailOutbox sentEmailOutbox;
     private MentorVerificationRequest lockedVerificationRequest;
     private MentorVerificationRequest secondLockedVerificationRequest;
+    private AdminNote bookingAdminNote;
 
     @BeforeEach
     void setUp() {
@@ -153,7 +154,7 @@ class AdminOperationsWorkbenchIntegrationTest {
                 .lockExpiresAt(LocalDateTime.of(2026, 7, 1, 9, 40))
                 .build());
 
-        adminNoteRepository.save(AdminNote.builder()
+        bookingAdminNote = adminNoteRepository.save(AdminNote.builder()
                 .targetType("BOOKING")
                 .targetId(underReviewBooking.getId())
                 .adminUserId(adminUser.getId())
@@ -161,6 +162,7 @@ class AdminOperationsWorkbenchIntegrationTest {
                 .build());
 
         entityManager.flush();
+        updateAdminNoteCreatedAt(bookingAdminNote.getId(), LocalDateTime.of(2025, 7, 1, 9, 0));
         entityManager.clear();
     }
 
@@ -229,6 +231,33 @@ class AdminOperationsWorkbenchIntegrationTest {
                 .andExpect(jsonPath("$.data.content", hasSize(2)))
                 .andExpect(jsonPath("$.data.content[0].eventType").value("CASE_ASSIGNMENT"))
                 .andExpect(jsonPath("$.data.content[1].eventType").value("ADMIN_NOTE"));
+    }
+
+    @Test
+    void activity_shouldUseEventTypeAsStableTieBreakerWhenTimestampsMatch() throws Exception {
+        mockMvc.perform(post("/api/admin/cases/BOOKING/{caseId}/assign", underReviewBooking.getId())
+                        .with(adminAuth()))
+                .andExpect(status().isOk());
+
+        LocalDateTime sameTimestamp = LocalDateTime.of(2026, 7, 1, 11, 0);
+        updateAdminNoteCreatedAt(bookingAdminNote.getId(), sameTimestamp);
+        entityManager.createNativeQuery("""
+                update audit_logs
+                set created_at = :timestamp
+                where entity_type = 'BOOKING' and entity_id = :id
+                """)
+                .setParameter("timestamp", sameTimestamp)
+                .setParameter("id", underReviewBooking.getId())
+                .executeUpdate();
+        entityManager.flush();
+        entityManager.clear();
+
+        mockMvc.perform(get("/api/admin/cases/BOOKING/{caseId}/activity", underReviewBooking.getId())
+                        .with(adminAuth()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.content", hasSize(2)))
+                .andExpect(jsonPath("$.data.content[0].eventType").value("ADMIN_NOTE"))
+                .andExpect(jsonPath("$.data.content[1].eventType").value("CASE_ASSIGNMENT"));
     }
 
     @Test
@@ -309,6 +338,17 @@ class AdminOperationsWorkbenchIntegrationTest {
                 """)
                 .setParameter("createdAt", createdAt)
                 .setParameter("sentAt", sentAt)
+                .setParameter("id", id)
+                .executeUpdate();
+    }
+
+    private void updateAdminNoteCreatedAt(UUID id, LocalDateTime timestamp) {
+        entityManager.createNativeQuery("""
+                update admin_notes
+                set created_at = :timestamp
+                where id = :id
+                """)
+                .setParameter("timestamp", timestamp)
                 .setParameter("id", id)
                 .executeUpdate();
     }

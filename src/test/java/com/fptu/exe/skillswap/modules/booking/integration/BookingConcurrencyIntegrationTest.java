@@ -1,9 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.integration;
 
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
@@ -33,9 +32,13 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
@@ -55,7 +58,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-@SpringBootTest
+@ActiveProfiles("test")
+@SpringBootTest(properties = {
+        "spring.flyway.enabled=true",
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.test.database.replace=none"
+})
 class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest {
 
     @Autowired
@@ -79,14 +87,11 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
     @Autowired
     private AcademicService academicService;
 
-    @Autowired
-    private CampusRepository campusRepository;
+
+
 
     @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
-    @Autowired
-    private SpecializationRepository specializationRepository;
+    private AdministrativeProvinceRepository provinceRepository;
 
     @Autowired
     private MentorServiceRepository mentorServiceRepository;
@@ -105,6 +110,32 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
     @Autowired
     private com.fptu.exe.skillswap.modules.feedback.repository.SessionFeedbackRepository sessionFeedbackRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeEach
+    @AfterEach
+    void cleanDatabase() {
+        jdbcTemplate.execute("DELETE FROM session_feedbacks");
+        jdbcTemplate.execute("DELETE FROM email_outbox");
+        jdbcTemplate.execute("DELETE FROM notifications");
+        jdbcTemplate.execute("DELETE FROM conversation_booking_links");
+        jdbcTemplate.execute("DELETE FROM conversation_participants");
+        jdbcTemplate.execute("DELETE FROM messages");
+        jdbcTemplate.execute("DELETE FROM conversations");
+        jdbcTemplate.execute("DELETE FROM sessions");
+        jdbcTemplate.execute("DELETE FROM booking_events");
+        jdbcTemplate.execute("DELETE FROM bookings");
+        jdbcTemplate.execute("DELETE FROM availability_slot_services");
+        jdbcTemplate.execute("DELETE FROM mentor_availability_slots");
+        jdbcTemplate.execute("DELETE FROM mentor_availability_rules");
+        jdbcTemplate.execute("DELETE FROM mentor_services");
+        jdbcTemplate.execute("DELETE FROM mentor_subject_results");
+        jdbcTemplate.execute("DELETE FROM student_profiles WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@test.com')");
+        jdbcTemplate.execute("DELETE FROM mentor_profiles WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@test.com')");
+        jdbcTemplate.execute("DELETE FROM users WHERE email LIKE '%@test.com'");
+    }
 
     @Test
     void mentorAccept_concurrentAcceptSameSlot_onlyOneSucceeds() throws Exception {
@@ -126,8 +157,8 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .status(UserStatus.ACTIVE)
                     .build());
 
-            completeAcademicProfile(menteeA.getId(), "SE" + randomSixDigits());
-            completeAcademicProfile(menteeB.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(menteeA.getId());
+            completeAcademicProfile(menteeB.getId());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .userId(mentorUser.getId())
@@ -171,6 +202,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile)
                     .title("Spring Transaction Mentoring")
                     .description("Support Java backend and transaction handling")
+                    .expectedOutcome("Checklist hanh dong ro rang de tu cai thien")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)
@@ -261,7 +293,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .fullName("Mentor Pending Quota")
                     .status(UserStatus.ACTIVE)
                     .build());
-            completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee.getId());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .userId(mentorUser.getId())
@@ -288,7 +320,6 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
 
             LocalDateTime base = DateTimeUtil.now().plusDays(5)
                     .withMinute(0).withSecond(0).withNano(0);
-            MentorAvailabilitySlot existingSlot = createSlot(mentorProfile, base, base.plusHours(1));
             MentorAvailabilitySlot firstSlot = createSlot(mentorProfile, base.plusDays(1), base.plusDays(1).plusHours(1));
             MentorAvailabilitySlot secondSlot = createSlot(mentorProfile, base.plusDays(2), base.plusDays(2).plusHours(1));
 
@@ -297,6 +328,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                             .mentorProfile(mentorProfile)
                             .title("Pending quota service")
                             .description("Service dùng cho concurrency quota test")
+                            .expectedOutcome("Checklist hanh dong ro rang de tu cai thien")
                             .durationMinutes(60)
                             .isFree(false)
                             .priceScoin(30_000)
@@ -306,17 +338,19 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             linkSlotToService(secondSlot, service);
 
             for (int index = 0; index < 4; index++) {
-                bookingRepository.save( com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
+                LocalDateTime slotStart = base.plusDays(10 + index);
+                MentorAvailabilitySlot quotaSlot = createSlot(mentorProfile, slotStart, slotStart.plusHours(1));
+                bookingRepository.save(com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                         .menteeUserId(mentee.getId())
                         .mentorUserId(mentorProfile.getUserId())
-                        .slot(existingSlot)
+                        .slot(quotaSlot)
                         .status(BookingStatus.PENDING)
                         .learningGoalTitle("Existing pending " + index)
                         .learningGoalDescription("Existing pending booking")
-                        .requestedStartTime(existingSlot.getStartTime())
-                        .requestedEndTime(existingSlot.getEndTime())
-                        .selectedStartTime(existingSlot.getStartTime())
-                        .selectedEndTime(existingSlot.getEndTime())
+                        .requestedStartTime(quotaSlot.getStartTime())
+                        .requestedEndTime(quotaSlot.getEndTime())
+                        .selectedStartTime(quotaSlot.getStartTime())
+                        .selectedEndTime(quotaSlot.getEndTime())
                         .build());
             }
             bookingRepository.flush();
@@ -393,7 +427,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .status(UserStatus.ACTIVE)
                     .build());
 
-            completeAcademicProfile(mentee.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee.getId());
 
             MentorProfile mentorProfile1 = mentorProfileRepository.save(MentorProfile.builder()
                     .userId(mentorUser1.getId())
@@ -471,6 +505,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile1)
                     .title("Service 1")
                     .description("Desc 1")
+                    .expectedOutcome("Checklist hanh dong ro rang de tu cai thien")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)
@@ -481,6 +516,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile2)
                     .title("Service 2")
                     .description("Desc 2")
+                    .expectedOutcome("Checklist hanh dong ro rang de tu cai thien")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)
@@ -548,20 +584,11 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
         }
     }
 
-    private void completeAcademicProfile(UUID userId, String studentCode) {
-        var campus = campusRepository.findAll().stream().findFirst().orElseThrow();
-        var program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).stream().findFirst().orElseThrow();
-
+    private void completeAcademicProfile(UUID userId) {
         academicService.updateStudentProfile(userId, StudentProfileRequest.builder()
-                .studentCode(studentCode)
-                .campusId(campus.getId())
-                .programId(program.getId())
-                .specializationId(specialization.getId())
-                .semester(5)
-                .intakeYear(2022)
-                .isAlumni(false)
-                .bio("Concurrency test profile")
+                .profileType(StudentProfileType.SCHOOL_STUDENT)
+                .customInstitutionName("Test secondary school")
+                .customInstitutionProvinceId(provinceRepository.findByCode("01").orElseThrow().getId())
                 .build());
     }
 
@@ -599,9 +626,9 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .status(UserStatus.ACTIVE)
                     .build());
 
-            completeAcademicProfile(mentee1.getId(), "SE" + randomSixDigits());
-            completeAcademicProfile(mentee2.getId(), "SE" + randomSixDigits());
-            completeAcademicProfile(mentee3.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee1.getId());
+            completeAcademicProfile(mentee2.getId());
+            completeAcademicProfile(mentee3.getId());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .userId(mentorUser.getId())
@@ -746,8 +773,8 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .status(UserStatus.ACTIVE)
                     .build());
 
-            completeAcademicProfile(mentee1.getId(), "SE" + randomSixDigits());
-            completeAcademicProfile(mentee2.getId(), "SE" + randomSixDigits());
+            completeAcademicProfile(mentee1.getId());
+            completeAcademicProfile(mentee2.getId());
 
             MentorProfile mentorProfile = mentorProfileRepository.save(MentorProfile.builder()
                     .userId(mentorUser.getId())

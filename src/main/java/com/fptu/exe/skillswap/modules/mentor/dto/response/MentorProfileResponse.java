@@ -18,7 +18,7 @@ public record MentorProfileResponse(
         boolean requiredFieldsCompleted,
         @Schema(description = "Current user ID", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
         UUID userId,
-        @Schema(description = "Current user email", example = "mentor@fpt.edu.vn")
+        @Schema(description = "Current user email", example = "mentor@example.com")
         String email,
         @Schema(description = "Display name shown to mentees", example = "Nguyen Van B")
         String displayName,
@@ -66,6 +66,16 @@ public record MentorProfileResponse(
         Integer reviewCount,
         @Schema(description = "Total completed mentoring sessions counted for this mentor", example = "18")
         Integer completedSessions,
+        @Schema(description = "ID trường đại học/học viện từ Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID institutionId,
+        @Schema(description = "Tên trường ngoài Catalog", nullable = true, example = "Trường Đại học Ngoại ngữ Tin học TP.HCM")
+        String customInstitutionName,
+        @Schema(description = "ID tỉnh/thành phố của trường ngoài Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID customInstitutionProvinceId,
+        @Schema(description = "Tên doanh nghiệp / tổ chức công tác", nullable = true, example = "FPT Software")
+        String companyOrOrganization,
+        @Schema(description = "ID nhóm ngành/lĩnh vực cố vấn chính từ Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID primaryFieldGroupId,
         @Schema(description = "Profile creation time", example = "2026-06-10T08:00:00")
         LocalDateTime createdAt,
         @Schema(description = "Latest profile update time", example = "2026-06-24T10:30:00")
@@ -84,6 +94,11 @@ public record MentorProfileResponse(
                 .subjectResults(List.of())
                 .featuredProjects(List.of())
                 .achievements(List.of())
+                .institutionId(null)
+                .customInstitutionName(null)
+                .customInstitutionProvinceId(null)
+                .companyOrOrganization(null)
+                .primaryFieldGroupId(null)
                 .build();
     }
 }

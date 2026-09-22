@@ -16,13 +16,10 @@ public final class IdentityAdminPortModels {
     ) {
     }
 
-    public record UserAcademicProfile(String claimedStudentCode) {
-    }
-
     public record UserListItem(
             UUID userId, String email, String fullName, String avatarUrl,
             String status, List<String> roles, LocalDateTime lastLoginAt,
-            LocalDateTime createdAt, UserAcademicProfile academicProfile
+            LocalDateTime createdAt
     ) {
     }
 
@@ -35,7 +32,7 @@ public final class IdentityAdminPortModels {
     public record SystemUserView(
             UUID userId, String email, String fullName, String avatarUrl,
             String status, List<String> roles, LocalDateTime lastLoginAt,
-            LocalDateTime createdAt, UserAcademicProfile academicProfile
+            LocalDateTime createdAt
     ) {
     }
 
@@ -45,10 +42,4 @@ public final class IdentityAdminPortModels {
     ) {
     }
 
-    public record AcademicProfileSummary(
-            String studentCode, String campusCode, String campusName,
-            String programCode, String programName, String specializationCode,
-            String specializationName, Integer semester, Boolean isAlumni
-    ) {
-    }
 }

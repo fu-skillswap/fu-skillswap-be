@@ -71,8 +71,33 @@ public record MentorProfileUpsertRequest(
 
         @Schema(description = "Timezone áp dụng cho policy đặt lịch", example = "Asia/Ho_Chi_Minh")
         @Size(max = 64, message = "Timezone không được quá 64 ký tự")
-        String bookingTimezone
+        String bookingTimezone,
+
+        @Schema(description = "ID trường đại học/học viện từ Catalog", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        java.util.UUID institutionId,
+
+        @Schema(description = "Tên trường đào tạo ngoài Catalog", example = "Trường Đại học Ngoại ngữ Tin học TP.HCM")
+        @Size(max = 200, message = "Tên trường ngoài không được quá 200 ký tự")
+        String customInstitutionName,
+
+        @Schema(description = "ID tỉnh/thành phố của trường ngoài Catalog", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        java.util.UUID customInstitutionProvinceId,
+
+        @Schema(description = "Tên doanh nghiệp hoặc tổ chức công tác (dành cho Mentor đi làm)", example = "FPT Software")
+        @Size(max = 200, message = "Tên tổ chức công tác không được quá 200 ký tự")
+        String companyOrOrganization,
+
+        @Schema(description = "ID nhóm ngành/lĩnh vực cố vấn chính từ Catalog", example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        java.util.UUID primaryFieldGroupId
 ) {
+
+    public boolean hasAffiliationOrFieldGroupSpecified() {
+        return institutionId != null
+                || (customInstitutionName != null && !customInstitutionName.isBlank())
+                || customInstitutionProvinceId != null
+                || (companyOrOrganization != null && !companyOrOrganization.isBlank())
+                || primaryFieldGroupId != null;
+    }
 
     public MentorProfileUpsertRequest(
             String headline,
@@ -98,6 +123,83 @@ public record MentorProfileUpsertRequest(
                 phoneNumber,
                 null,
                 null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 null);
+    }
+
+    public MentorProfileUpsertRequest(
+            String headline,
+            String expertiseDescription,
+            Boolean isAvailable,
+            List<@Valid MentorSubjectResultRequest> subjectResults,
+            Integer foundationSupportLevel,
+            Integer outputReviewSupportLevel,
+            Integer directionSupportLevel,
+            String githubUrl,
+            String portfolioUrl,
+            String phoneNumber,
+            Integer minimumBookingLeadTimeMinutes,
+            Integer maximumBookingHorizonDays,
+            String bookingTimezone
+    ) {
+        this(headline,
+                expertiseDescription,
+                isAvailable,
+                subjectResults,
+                foundationSupportLevel,
+                outputReviewSupportLevel,
+                directionSupportLevel,
+                githubUrl,
+                portfolioUrl,
+                phoneNumber,
+                minimumBookingLeadTimeMinutes,
+                maximumBookingHorizonDays,
+                bookingTimezone,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    public MentorProfileUpsertRequest(
+            String headline,
+            String expertiseDescription,
+            Boolean isAvailable,
+            List<@Valid MentorSubjectResultRequest> subjectResults,
+            Integer foundationSupportLevel,
+            Integer outputReviewSupportLevel,
+            Integer directionSupportLevel,
+            String githubUrl,
+            String portfolioUrl,
+            String phoneNumber,
+            java.util.UUID institutionId,
+            String customInstitutionName,
+            java.util.UUID customInstitutionProvinceId,
+            String companyOrOrganization,
+            java.util.UUID primaryFieldGroupId
+    ) {
+        this(headline,
+                expertiseDescription,
+                isAvailable,
+                subjectResults,
+                foundationSupportLevel,
+                outputReviewSupportLevel,
+                directionSupportLevel,
+                githubUrl,
+                portfolioUrl,
+                phoneNumber,
+                null,
+                null,
+                null,
+                institutionId,
+                customInstitutionName,
+                customInstitutionProvinceId,
+                companyOrOrganization,
+                primaryFieldGroupId);
     }
 }

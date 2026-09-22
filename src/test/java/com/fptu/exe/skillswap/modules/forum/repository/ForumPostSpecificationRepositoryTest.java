@@ -91,7 +91,7 @@ class ForumPostSpecificationRepositoryTest {
     @Test
     void isBeforeCursor_shouldApplyTupleComparison() {
         User author = persistUser("cursor-author@test.com", "Cursor Author");
-        ForumTopic helpTopic = persistHelpTopic("FILTER_TOPIC_4", "Thích nghi FPTU & campus life");
+        ForumTopic helpTopic = persistHelpTopic("FILTER_TOPIC_4", "Thích nghi môi trường đại học");
 
         UUID cursorId = UUID.fromString("00000000-0000-7000-8000-000000000003");
         UUID smallerSameTimeId = UUID.fromString("00000000-0000-7000-8000-000000000002");

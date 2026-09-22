@@ -1,13 +1,11 @@
 package com.fptu.exe.skillswap.modules.mentor.integration;
 
-import com.fptu.exe.skillswap.modules.identity.domain.Campus;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
+import com.fptu.exe.skillswap.infrastructure.testcontainer.AbstractPostgreSQLIntegrationTest;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
@@ -35,7 +33,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.springframework.test.context.ActiveProfiles;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,25 +52,17 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
+@SpringBootTest(properties = {"spring.flyway.enabled=true", "spring.jpa.hibernate.ddl-auto=validate", "spring.test.database.replace=none"})
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
 @Transactional
-class MentorDiscoveryFlowIntegrationTest {
+class MentorDiscoveryFlowIntegrationTest extends AbstractPostgreSQLIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
 
     @Autowired
     private StudentProfileRepository studentProfileRepository;
-
-    @Autowired
-    private CampusRepository campusRepository;
-
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
-    @Autowired
-    private SpecializationRepository specializationRepository;
-
     @Autowired
     private TagRepository tagRepository;
 
@@ -77,20 +78,22 @@ class MentorDiscoveryFlowIntegrationTest {
     @Autowired
     private MentorDiscoveryService mentorDiscoveryService;
 
+    @Autowired private EducationalInstitutionRepository institutionRepository;
+    @Autowired private EducationFieldGroupRepository fieldGroupRepository;
+    @Autowired private ObjectMapper objectMapper;
+    @Autowired private MockMvc mockMvc;
+    @Autowired private EntityManagerFactory entityManagerFactory;
+
     private User menteeUser;
     private User mentor1User;
     private User mentor2User;
 
-    private Campus campus1;
-    private AcademicProgram program1;
-    private Specialization spec1;
     private Tag helpTopicTag;
 
     @BeforeEach
     void setUp() {
-        campus1 = campusRepository.findAll().stream().findFirst().orElseThrow();
-        program1 = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
-        spec1 = specializationRepository.findAll().stream().findFirst().orElseThrow();
+        var institution = institutionRepository.findAll().stream().filter(i -> i.isActive()).findFirst().orElseThrow();
+        var fieldGroup = fieldGroupRepository.findAll().stream().filter(g -> g.isActive()).findFirst().orElseThrow();
 
         // Ensure tag of type HELP_TOPIC exists
         helpTopicTag = tagRepository.save(Tag.builder()
@@ -108,15 +111,14 @@ class MentorDiscoveryFlowIntegrationTest {
                 .build());
         studentProfileRepository.save(StudentProfile.builder()
                 .user(menteeUser)
-                .claimedStudentCode("SE2001")
-                .campus(campus1)
-                .program(program1)
-                .specialization(spec1)
-                .semester(5)
-                .intakeYear(2022)
+                .profileType(StudentProfileType.UNIVERSITY_STUDENT)
+                .institutionId(institution.getId())
+                .fieldGroupId(fieldGroup.getId())
+                .majorName("Computer science")
+                .onboardingCompleted(true)
                 .build());
 
-        // Setup Mentor 1 (Matches Specialization & Campus)
+        // Setup school-type mentor.
         mentor1User = userRepository.save(User.builder()
                 .email("mentor1-disc@test.com")
                 .fullName("Expert Java Mentor")
@@ -125,12 +127,10 @@ class MentorDiscoveryFlowIntegrationTest {
                 .build());
         studentProfileRepository.save(StudentProfile.builder()
                 .user(mentor1User)
-                .claimedStudentCode("SE1001")
-                .campus(campus1)
-                .program(program1)
-                .specialization(spec1)
-                .semester(8)
-                .intakeYear(2021)
+                .profileType(StudentProfileType.SCHOOL_STUDENT)
+                .customInstitutionName("Demo Secondary School")
+                .customInstitutionProvinceId(institution.getProvince().getId())
+                .onboardingCompleted(true)
                 .build());
         MentorProfile profile1 = mentorProfileRepository.save(MentorProfile.builder()
                 .userId(mentor1User.getId())
@@ -149,7 +149,7 @@ class MentorDiscoveryFlowIntegrationTest {
                 .build());
         mentorServiceRepository.save(activeOneToOneService(profile1, "Java va Spring Boot 1:1"));
 
-        // Setup Mentor 2 (Matches Program but different Specialization & Campus)
+        // Setup alumni mentor with canonical catalog relations.
         mentor2User = userRepository.save(User.builder()
                 .email("mentor2-disc@test.com")
                 .fullName("General Tech Mentor")
@@ -158,11 +158,12 @@ class MentorDiscoveryFlowIntegrationTest {
                 .build());
         studentProfileRepository.save(StudentProfile.builder()
                 .user(mentor2User)
-                .claimedStudentCode("SE1002")
-                .campus(campus1)
-                .program(program1)
-                .semester(7)
-                .intakeYear(2021)
+                .profileType(StudentProfileType.ALUMNI)
+                .institutionId(institution.getId())
+                .fieldGroupId(fieldGroup.getId())
+                .majorName("Information systems")
+                .graduationYear(2023)
+                .onboardingCompleted(true)
                 .build());
         MentorProfile profile2 = mentorProfileRepository.save(MentorProfile.builder()
                 .userId(mentor2User.getId())
@@ -209,7 +210,7 @@ class MentorDiscoveryFlowIntegrationTest {
 
         assertNotNull(searchResults);
         assertFalse(searchResults.getContent().isEmpty());
-        // Mentor 1 should be first because of keyword and specialization match
+        // Mentor 1 is first because its mentoring content matches the keyword.
         assertEquals("Expert Java Mentor", searchResults.getContent().getFirst().displayName());
 
         // 2. Fetch recommendations
@@ -218,20 +219,151 @@ class MentorDiscoveryFlowIntegrationTest {
         );
 
         assertNotNull(recommendations);
-        assertEquals(2, recommendations.size());
+        assertEquals(2, recommendations.size());        assertTrue(recommendations.stream().allMatch(recommendation -> recommendation.matchScore() != null));
+    }
 
-        // Mentor 1 has specialization match (+40) and program match (+18) and campus match (+10) -> higher score
-        // Mentor 2 has only program match (+18) and campus match (+10)
-        double score1 = recommendations.stream()
-                .filter(r -> r.mentor().mentorUserId().equals(mentor1User.getId()))
-                .map(r -> r.matchScore().doubleValue())
-                .findFirst().orElse(0.0);
+    @Test
+    void unfilteredDiscoveryIncludesCanonicalTypesAndOptionalProfiles() throws Exception {
+        var institution = institutionRepository.findAll().stream().findFirst().orElseThrow();
+        var fieldGroup = fieldGroupRepository.findAll().stream().findFirst().orElseThrow();
+        User canonicalUser = userRepository.save(User.builder().email("mentor-canonical-disc@test.com")
+                .fullName("Canonical Mentor").roles(java.util.Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE,
+                        com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)).status(UserStatus.ACTIVE).build());
+        studentProfileRepository.save(StudentProfile.builder().user(canonicalUser)
+                .profileType(StudentProfileType.UNIVERSITY_STUDENT).institutionId(institution.getId())
+                .fieldGroupId(fieldGroup.getId()).majorName("Computer Science").onboardingCompleted(true).build());
+        MentorProfile canonicalMentor = mentorProfileRepository.save(MentorProfile.builder().userId(canonicalUser.getId())
+                .status(MentorStatus.ACTIVE).headline("Canonical education mentor")
+                .expertiseDescription("Mentoring with canonical education data").isAvailable(true)
+                .sessionDuration(60).teachingMode(TeachingMode.HYBRID).verifiedAt(LocalDateTime.now().minusDays(2)).build());
+        mentorServiceRepository.save(activeOneToOneService(canonicalMentor, "Canonical mentor service"));
 
-        double score2 = recommendations.stream()
-                .filter(r -> r.mentor().mentorUserId().equals(mentor2User.getId()))
-                .map(r -> r.matchScore().doubleValue())
-                .findFirst().orElse(0.0);
+        User schoolUser = userRepository.save(User.builder().email("mentor-school-disc@test.com")
+                .fullName("School Mentor").roles(java.util.Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE,
+                        com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)).status(UserStatus.ACTIVE).build());
+        studentProfileRepository.save(StudentProfile.builder().user(schoolUser)
+                .profileType(StudentProfileType.SCHOOL_STUDENT).customInstitutionName("Hanoi High School")
+                .customInstitutionProvinceId(institution.getProvince().getId()).onboardingCompleted(true).build());
+        MentorProfile schoolMentor = mentorProfileRepository.save(MentorProfile.builder().userId(schoolUser.getId())
+                .status(MentorStatus.ACTIVE).headline("School mentor")
+                .expertiseDescription("School mentoring with canonical school data").isAvailable(true)
+                .sessionDuration(60).teachingMode(TeachingMode.HYBRID).verifiedAt(LocalDateTime.now().minusDays(3)).build());
+        mentorServiceRepository.save(activeOneToOneService(schoolMentor, "School mentor service"));
 
-        assertTrue(score1 > score2, "Mentor 1 match score (" + score1 + ") should be higher than Mentor 2 (" + score2 + ")");
+        User alumniUser = userRepository.save(User.builder().email("mentor-alumni-disc@test.com")
+                .fullName("Alumni Mentor").roles(java.util.Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE,
+                        com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)).status(UserStatus.ACTIVE).build());
+        studentProfileRepository.save(StudentProfile.builder().user(alumniUser).profileType(StudentProfileType.ALUMNI)
+                .institutionId(institution.getId()).fieldGroupId(fieldGroup.getId()).majorName("Computer Science")
+                .graduationYear(2024).onboardingCompleted(true).build());
+        MentorProfile alumniMentor = mentorProfileRepository.save(MentorProfile.builder().userId(alumniUser.getId())
+                .status(MentorStatus.ACTIVE).headline("Alumni mentor")
+                .expertiseDescription("Mentoring from canonical alumni data").isAvailable(true)
+                .sessionDuration(60).teachingMode(TeachingMode.HYBRID).verifiedAt(LocalDateTime.now().minusDays(4)).build());
+        mentorServiceRepository.save(activeOneToOneService(alumniMentor, "Alumni mentor service"));
+
+        User noEducationUser = userRepository.save(User.builder().email("mentor-no-education-disc@test.com")
+                .fullName("Mentor Without Education").roles(java.util.Set.of(com.fptu.exe.skillswap.shared.constant.RoleCode.MENTEE,
+                        com.fptu.exe.skillswap.shared.constant.RoleCode.MENTOR)).status(UserStatus.ACTIVE).build());
+        MentorProfile noEducationMentor = mentorProfileRepository.save(MentorProfile.builder().userId(noEducationUser.getId())
+                .status(MentorStatus.ACTIVE).headline("Mentor with optional education omitted")
+                .expertiseDescription("No education information provided").isAvailable(true)
+                .sessionDuration(60).teachingMode(TeachingMode.HYBRID).verifiedAt(LocalDateTime.now().minusDays(1)).build());
+        mentorServiceRepository.save(activeOneToOneService(noEducationMentor, "Mentor without education service"));
+
+        MentorDiscoverySearchRequest allRequest = new MentorDiscoverySearchRequest();
+        allRequest.setSize(50);
+        var all = mentorDiscoveryService.searchMentors(menteeUser.getId(), allRequest);
+        assertTrue(all.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(canonicalUser.getId())));
+        assertTrue(all.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(schoolUser.getId())));
+        assertTrue(all.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(alumniUser.getId())));
+        assertTrue(all.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(noEducationUser.getId())));
+        JsonNode schoolEducation = detailJson(schoolUser.getId()).path("education");
+        assertEquals("SCHOOL_STUDENT", schoolEducation.path("type").asText());
+        assertEquals("Hanoi High School", schoolEducation.path("schoolName").asText());
+        assertEquals(institution.getProvince().getId().toString(), schoolEducation.path("province").path("id").asText());
+        assertTrue(schoolEducation.path("institution").isNull());
+        assertTrue(schoolEducation.path("fieldGroup").isNull());
+        assertTrue(schoolEducation.path("major").isNull());
+
+        JsonNode universityEducation = detailJson(canonicalUser.getId()).path("education");
+        assertEquals("UNIVERSITY_STUDENT", universityEducation.path("type").asText());
+        assertTrue(universityEducation.path("schoolName").isNull());
+        assertTrue(universityEducation.path("province").isNull());
+        assertEquals(institution.getId().toString(), universityEducation.path("institution").path("id").asText());
+        assertEquals(fieldGroup.getId().toString(), universityEducation.path("fieldGroup").path("id").asText());
+        assertEquals("Computer Science", universityEducation.path("major").asText());
+
+        JsonNode alumniEducation = detailJson(alumniUser.getId()).path("education");
+        assertEquals("ALUMNI", alumniEducation.path("type").asText());
+        assertTrue(alumniEducation.path("schoolName").isNull());
+        assertTrue(alumniEducation.path("province").isNull());
+        assertEquals(institution.getId().toString(), alumniEducation.path("institution").path("id").asText());
+        assertEquals(fieldGroup.getId().toString(), alumniEducation.path("fieldGroup").path("id").asText());
+        assertEquals("Computer Science", alumniEducation.path("major").asText());
+
+        JsonNode privateEducation = detailJson(canonicalUser.getId());
+assertEquals("Canonical Mentor", objectMapper.treeToValue(privateEducation, com.fptu.exe.skillswap.modules.mentor.dto.response.MentorDiscoveryDetailResponse.class).identity().displayName());
+        assertTrue(detailJson(noEducationUser.getId()).path("education").isNull());
+
+        MentorDiscoverySearchRequest unfiltered = new MentorDiscoverySearchRequest();
+        unfiltered.setSize(50);
+        var allEducationTypes = mentorDiscoveryService.searchMentors(menteeUser.getId(), unfiltered);
+        assertTrue(allEducationTypes.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(mentor1User.getId())));
+        assertTrue(allEducationTypes.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(canonicalUser.getId())));
+        assertTrue(allEducationTypes.getContent().stream().anyMatch(card -> card.identity().mentorUserId().equals(alumniUser.getId())));
+        assertTrue(allEducationTypes.getTotalElements() >= 4);
+    }
+
+
+    @Test
+    void discoveryQueryCountDoesNotGrowPerReturnedMentor() {
+        SessionFactory sessionFactory = entityManagerFactory.unwrap(SessionFactory.class);
+        Statistics statistics = sessionFactory.getStatistics();
+        statistics.setStatisticsEnabled(true);
+
+        MentorDiscoverySearchRequest smallPageRequest = new MentorDiscoverySearchRequest();
+        smallPageRequest.setSize(1);
+        statistics.clear();
+        mentorDiscoveryService.searchMentors(null, smallPageRequest);
+        long oneRowQueryCount = statistics.getQueryExecutionCount();
+
+        MentorDiscoverySearchRequest fullPageRequest = new MentorDiscoverySearchRequest();
+        fullPageRequest.setSize(50);
+        statistics.clear();
+        mentorDiscoveryService.searchMentors(null, fullPageRequest);
+        long allRowsQueryCount = statistics.getQueryExecutionCount();
+
+        assertTrue(oneRowQueryCount > 0);
+        assertTrue(allRowsQueryCount <= oneRowQueryCount + 2,
+                "query count must remain bounded as the page result grows; one row=" + oneRowQueryCount + ", full page=" + allRowsQueryCount);
+    }
+
+    private JsonNode detailJson(UUID mentorUserId) {
+        return objectMapper.valueToTree(mentorDiscoveryService.getMentorDetail(mentorUserId));
+    }
+
+    @Test
+    void discoveryPaginationUsesStablePagesAndExactTotals() {
+        MentorDiscoverySearchRequest firstRequest = new MentorDiscoverySearchRequest();
+        firstRequest.setSize(1);
+        firstRequest.setPage(0);
+        MentorDiscoverySearchRequest secondRequest = new MentorDiscoverySearchRequest();
+        secondRequest.setSize(1);
+        secondRequest.setPage(1);
+        var first = mentorDiscoveryService.searchMentors(menteeUser.getId(), firstRequest);
+        var repeatedFirstPage = mentorDiscoveryService.searchMentors(menteeUser.getId(), firstRequest);
+        var second = mentorDiscoveryService.searchMentors(menteeUser.getId(), secondRequest);
+        assertEquals(first.getContent().getFirst().identity().mentorUserId(),
+                repeatedFirstPage.getContent().getFirst().identity().mentorUserId());
+        assertEquals(2, first.getTotalElements());
+        assertEquals(2, first.getTotalPages());
+        assertEquals(1, first.getContent().size());
+        assertEquals(1, second.getContent().size());
+        assertNotEquals(first.getContent().getFirst().identity().mentorUserId(), second.getContent().getFirst().identity().mentorUserId());
+        secondRequest.setPage(99);
+        var outOfRange = mentorDiscoveryService.searchMentors(menteeUser.getId(), secondRequest);
+        assertTrue(outOfRange.getContent().isEmpty());
+        assertEquals(2, outOfRange.getTotalElements());
     }
 }

@@ -1,7 +1,5 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumCommentStatus;
@@ -17,7 +15,6 @@ import com.fptu.exe.skillswap.modules.forum.dto.request.ForumPostUpsertRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProgramResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
@@ -118,22 +115,16 @@ public class ForumPostService {
                 .build();
     }
 
-    /** Same-program posts are newest-first, followed by the newest global fallback posts. */
+    /** Public feed is newest-first with the post ID as a stable tie-breaker. */
     @Transactional(readOnly = true)
     public CursorPageResponse<ForumPostResponse> getFeed(UUID currentUserId, String cursor, Integer limit) {
         User currentUser = requireForumUser(currentUserId);
         int resolvedLimit = defaultLimit(limit);
-        UUID programId = resolveCurrentProgramId(currentUser.getId());
-        String filterHash = "forum-feed:user|programId=" + normalizeFilterValue(programId)
-                + "|status=" + ForumPostStatus.PUBLISHED.name();
-        DecodedFeedCursor decodedCursor = decodeFeedCursor(cursor, filterHash);
-        List<ForumPost> postWindow = forumPostRepository.findProgramPrioritizedWindow(
-                programId,
-                decodedCursor.priority(),
-                decodedCursor.lastActivityAt(),
-                decodedCursor.postId(),
-                resolvedLimit + 1
-        );
+        String filterHash = "forum-feed:user|status=" + ForumPostStatus.PUBLISHED.name();
+        DecodedPostCursor decodedCursor = decodePostCursor(cursor, filterHash);
+        List<ForumPost> postWindow = forumPostRepository.findWindow(
+                buildUserPostSpecification(currentUser.getId(), null, null, null, decodedCursor),
+                resolvedLimit + 1);
         boolean hasNext = postWindow.size() > resolvedLimit;
         List<ForumPost> visiblePosts = hasNext ? new ArrayList<>(postWindow.subList(0, resolvedLimit)) : postWindow;
         Set<UUID> reactedPostIds = loadReactedPostIds(
@@ -148,7 +139,7 @@ public class ForumPostService {
                 ))
                 .toList();
         String nextCursor = hasNext && !visiblePosts.isEmpty()
-                ? encodeNextFeedCursor(visiblePosts.get(visiblePosts.size() - 1), programId, filterHash)
+                ? encodeNextCursor(visiblePosts.get(visiblePosts.size() - 1), filterHash)
                 : null;
         return CursorPageResponse.<ForumPostResponse>builder()
                 .items(items)
@@ -194,7 +185,6 @@ public class ForumPostService {
             java.util.List<String> cleanedImages = cleanImageUrls(request.imageUrls());
             ForumPost post = ForumPost.builder()
                     .authorUser(currentUser)
-                    .authorProgram(resolveAuthorProgram(currentUser.getId()))
                     .forumTopic(forumTopic)
                     .title(normalizedTitle)
                     .content(normalizedContent)
@@ -594,7 +584,6 @@ public class ForumPostService {
                 .authorUserId(post.getAuthorUser().getId())
                 .authorFullName(post.getAuthorUser().getFullName())
                 .authorAvatarUrl(post.getAuthorUser().getAvatarUrl())
-                .authorProgram(toProgramResponse(post.getAuthorProgram()))
                 .forumTopic(toForumTopicResponse(post.getForumTopic()))
                 .title(post.getTitle())
                 .content(post.getContent())
@@ -727,29 +716,6 @@ public class ForumPostService {
                 .build();
     }
 
-    private ForumProgramResponse toProgramResponse(AcademicProgram program) {
-        if (program == null) {
-            return null;
-        }
-        return new ForumProgramResponse(
-                program.getId(),
-                program.getCode(),
-                program.getNameVi(),
-                program.getNameEn()
-        );
-    }
-
-    private AcademicProgram resolveAuthorProgram(UUID userId) {
-        return userQueryPort.findStudentProfileWithDetailsByUserId(userId)
-                .map(StudentProfile::getProgram)
-                .orElse(null);
-    }
-
-    private UUID resolveCurrentProgramId(UUID userId) {
-        AcademicProgram program = resolveAuthorProgram(userId);
-        return program != null && program.isActive() ? program.getId() : null;
-    }
-
     private int defaultLimit(Integer limit) {
         int resolved = limit == null || limit <= 0 ? 20 : limit;
         return Math.min(resolved, 50);
@@ -777,43 +743,6 @@ public class ForumPostService {
     private String buildUserCommentRepliesFilterHash(UUID parentCommentId) {
         return "forum-comment-replies:user|parentCommentId=" + normalizeFilterValue(parentCommentId)
                 + "|status=" + ForumCommentStatus.VISIBLE.name();
-    }
-
-    private DecodedFeedCursor decodeFeedCursor(String cursor, String expectedFilterHash) {
-        if (cursor == null || cursor.isBlank()) {
-            return DecodedFeedCursor.empty();
-        }
-        CursorTokenPayload payload = cursorCodec.decode(cursor);
-        if (!Objects.equals(expectedFilterHash, payload.filterHash())
-                || payload.sortKey() == null || payload.secondaryKey() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor không khớp với newsfeed hiện tại");
-        }
-        String[] sortParts = payload.sortKey().split("\\|", 2);
-        if (sortParts.length != 2) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor newsfeed không hợp lệ");
-        }
-        try {
-            int priority = Integer.parseInt(sortParts[0]);
-            if (priority != 0 && priority != 1) {
-                throw new NumberFormatException("priority");
-            }
-            return new DecodedFeedCursor(priority, parseCursorDateTime(sortParts[1]), parseCursorPostId(payload.secondaryKey()));
-        } catch (NumberFormatException ex) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cursor newsfeed không hợp lệ", ex);
-        }
-    }
-
-    private String encodeNextFeedCursor(ForumPost post, UUID viewerProgramId, String filterHash) {
-        int priority = viewerProgramId != null
-                && post.getAuthorProgram() != null
-                && viewerProgramId.equals(post.getAuthorProgram().getId()) ? 0 : 1;
-        return cursorCodec.encode(CursorTokenPayload.builder()
-                .sortKey(priority + "|" + post.getLastActivityAt())
-                .secondaryKey(post.getId().toString())
-                .direction("NEXT")
-                .filterHash(filterHash)
-                .issuedAt(Instant.now())
-                .build());
     }
 
     private Specification<ForumPost> buildUserPostSpecification(UUID currentUserId,
@@ -944,12 +873,6 @@ public class ForumPostService {
     private record DecodedPostCursor(LocalDateTime lastActivityAt, UUID postId) {
         private static DecodedPostCursor empty() {
             return new DecodedPostCursor(null, null);
-        }
-    }
-
-    private record DecodedFeedCursor(Integer priority, LocalDateTime lastActivityAt, UUID postId) {
-        private static DecodedFeedCursor empty() {
-            return new DecodedFeedCursor(null, null, null);
         }
     }
 

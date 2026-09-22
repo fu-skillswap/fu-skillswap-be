@@ -42,7 +42,7 @@
             <dependency>
                 <groupId>org.testcontainers</groupId>
                 <artifactId>testcontainers-bom</artifactId>
-                <version>1.19.7</version>
+                <version>1.21.4</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -274,7 +274,8 @@
                 <version>3.2.5</version>
                 <configuration>
                     <skip>${skipUnitTests}</skip>
-                    <forkedProcessTimeoutInSeconds>1200</forkedProcessTimeoutInSeconds>
+                    <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>120</forkedProcessExitTimeoutInSeconds>
                     <!--
                         ArchUnit/Modulith retain a large class graph and several tests boot Spring contexts.
                         Keep the limit explicit and configurable instead of relying on runner defaults.
@@ -325,6 +326,7 @@
                 <version>3.2.5</version>
                 <configuration>
                     <forkedProcessTimeoutInSeconds>1200</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>120</forkedProcessExitTimeoutInSeconds>
                     <argLine>-Xms256m -Xmx${test.jvm.heap.max} -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m -Djdk.net.URLClassPath.disableClassPathURLCheck=true</argLine>
                     <systemPropertyVariables>
                         <spring.test.context.cache.maxSize>${test.spring.context.cache.max-size}</spring.test.context.cache.maxSize>

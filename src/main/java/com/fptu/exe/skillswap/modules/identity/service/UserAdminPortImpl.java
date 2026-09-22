@@ -1,20 +1,16 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.event.UserStatusChangedEvent;
 import com.fptu.exe.skillswap.modules.identity.port.UserAdminPort;
 import com.fptu.exe.skillswap.modules.identity.port.AdminUserReference;
-import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AcademicProfileSummary;
 import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AdminUserListQuery;
 import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.AdminUserView;
 import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.SystemUserView;
-import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserAcademicProfile;
 import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.UserListItem;
 import com.fptu.exe.skillswap.modules.identity.port.IdentityAdminPortModels.VisibleUserSummary;
-import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.notification.NotificationType;
@@ -44,7 +40,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -55,7 +50,6 @@ public class UserAdminPortImpl implements UserAdminPort {
 
     private final UserRepository userRepository;
     private final UserSessionRepository userSessionRepository;
-    private final StudentProfileRepository studentProfileRepository;
     private final NotificationCommandPort notificationCommandPort;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -92,13 +86,8 @@ public class UserAdminPortImpl implements UserAdminPort {
         );
 
         List<User> users = page.getContent();
-        List<UUID> userIds = users.stream().map(User::getId).toList();
-        List<StudentProfile> profiles = studentProfileRepository.findByUserIdIn(userIds);
-        Map<UUID, StudentProfile> profileMap = profiles.stream()
-                .collect(Collectors.toMap(StudentProfile::getUserId, p -> p));
-
         return PageResponse.<UserListItem>builder()
-                .content(users.stream().map(user -> toAdminUserListItem(user, profileMap.get(user.getId()))).toList())
+                .content(users.stream().map(this::toAdminUserListItem).toList())
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
@@ -151,10 +140,8 @@ public class UserAdminPortImpl implements UserAdminPort {
             notifyAccountUnlockedSafely(userId);
         }
 
-        StudentProfile profile = studentProfileRepository.findById(userId).orElse(null);
         return new SystemUserView(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
-                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt(),
-                buildAcademicResponse(profile));
+                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt());
     }
 
     @Override
@@ -236,26 +223,6 @@ public class UserAdminPortImpl implements UserAdminPort {
                 .map(user -> new VisibleUserSummary(user.getId(), user.getEmail(), user.getFullName(),
                         user.getAvatarUrl(), user.getStatus().name(), roleNames(user.getRoles()),
                         user.getLastLoginAt(), user.getCreatedAt()));
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public AcademicProfileSummary getAcademicProfileSummary(UUID userId) {
-        StudentProfile profile = studentProfileRepository.findWithDetailsByUserId(userId).orElse(null);
-        if (profile == null) {
-            return null;
-        }
-        return new AcademicProfileSummary(
-                profile.getClaimedStudentCode(),
-                profile.getCampus() == null || profile.getCampus().getCode() == null ? null : profile.getCampus().getCode().name(),
-                profile.getCampus() == null ? null : profile.getCampus().getName(),
-                profile.getProgram() == null ? null : profile.getProgram().getCode(),
-                profile.getProgram() == null ? null : profile.getProgram().getNameVi(),
-                profile.getSpecialization() == null ? null : profile.getSpecialization().getCode(),
-                profile.getSpecialization() == null ? null : profile.getSpecialization().getNameVi(),
-                profile.getSemester(),
-                profile.isAlumni()
-        );
     }
 
     private void notifyAccountUnlockedSafely(UUID userId) {
@@ -374,7 +341,7 @@ public class UserAdminPortImpl implements UserAdminPort {
         }
     }
 
-    private UserListItem toAdminUserListItem(User user, StudentProfile profile) {
+    private UserListItem toAdminUserListItem(User user) {
         List<RoleCode> visibleRoles = new ArrayList<>();
         if (user.getRoles() != null) {
             if (user.getRoles().contains(RoleCode.MENTEE)) {
@@ -386,15 +353,7 @@ public class UserAdminPortImpl implements UserAdminPort {
         }
 
         return new UserListItem(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
-                user.getStatus().name(), roleNames(visibleRoles), user.getLastLoginAt(), user.getCreatedAt(),
-                buildAcademicResponse(profile));
-    }
-
-    private UserAcademicProfile buildAcademicResponse(StudentProfile profile) {
-        if (profile == null) {
-            return null;
-        }
-        return new UserAcademicProfile(profile.getClaimedStudentCode());
+                user.getStatus().name(), roleNames(visibleRoles), user.getLastLoginAt(), user.getCreatedAt());
     }
 
     private User findTargetUser(String email) {
@@ -428,7 +387,7 @@ public class UserAdminPortImpl implements UserAdminPort {
 
     private SystemUserView toSystemUserResponse(User user, List<RoleCode> roles) {
         return new SystemUserView(user.getId(), user.getEmail(), user.getFullName(), user.getAvatarUrl(),
-                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt(), null);
+                user.getStatus().name(), roleNames(roles), user.getLastLoginAt(), user.getCreatedAt());
     }
 
     private List<String> roleNames(java.util.Collection<RoleCode> roles) {

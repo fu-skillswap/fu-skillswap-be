@@ -64,7 +64,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Tìm kiếm mentor",
-            description = "Trả về danh sách mentor phù hợp theo bộ lọc. Người chưa đăng nhập có thể xem kết quả công khai; một số luồng gợi ý cần đăng nhập. FE truyền `page` bắt đầu từ 0 và `size` tối đa 50. Kết quả không có dữ liệu vẫn trả danh sách rỗng, không phải lỗi. Có thể lọc theo keyword, campus và specialization."
+            description = "Trả về danh sách mentor phù hợp theo bộ lọc. Người chưa đăng nhập có thể xem kết quả công khai; một số luồng gợi ý cần đăng nhập. FE truyền `page` bắt đầu từ 0 và `size` tối đa 50. Kết quả không có dữ liệu vẫn trả danh sách rỗng, không phải lỗi. Có thể tìm theo keyword; education không phải filter discovery."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -78,8 +78,7 @@ public class MentorDiscoveryController {
                                     {"status":200,"code":"SUCCESS_0200","message":"Thành công","data":{"content":[],"page":0,"size":12,"totalElements":0,"totalPages":0,"last":true}}
                                     """)
                     })
-            ),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Bộ lọc không hợp lệ; kiểm tra page, size, sortBy hoặc ID filter")
+            )
     })
     @GetMapping
     public ApiResponse<PageResponse<MentorDiscoveryCardResponse>> searchMentors(
@@ -91,7 +90,7 @@ public class MentorDiscoveryController {
 
     @Operation(
             summary = "Lấy chi tiết mentor",
-            description = "Trả về thông tin public chi tiết của một mentor đang ở trạng thái discoverable. FE dùng sau khi user chọn một mentor card và cần xem profile, services và review trước khi chọn slot."
+            description = "Trả về thông tin public chi tiết của một mentor đang ở trạng thái discoverable. Education canonical chỉ chứa field phù hợp profile type; legacy profile trả education=null. FE dùng sau khi user chọn một mentor card và cần xem profile, services và review trước khi chọn slot."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -103,7 +102,7 @@ public class MentorDiscoveryController {
                                     value = "{\"status\":200,\"code\":\"SUCCESS\",\"data\":{\"reputation\":{\"ratingState\":\"NO_REVIEWS\",\"ratingAverage\":null,\"reviewCount\":0}}}"),
                             @io.swagger.v3.oas.annotations.media.ExampleObject(
                                     name = "Rated mentor",
-                                    value = "{\"status\":200,\"code\":\"SUCCESS\",\"data\":{\"reputation\":{\"ratingState\":\"RATED\",\"ratingAverage\":4.85,\"reviewCount\":27}}}")
+                                    value = "{\"status\":200,\"code\":\"SUCCESS\",\"data\":{\"education\":{\"type\":\"UNIVERSITY_STUDENT\",\"schoolName\":null,\"province\":null,\"institution\":{\"id\":\"019f5234-aaaa-bbbb-cccc-1234567890ab\",\"name\":\"Example University\"},\"fieldGroup\":{\"id\":\"019f5234-aaaa-bbbb-cccc-1234567890ac\",\"name\":\"Computer Science\"},\"major\":\"Software Engineering\"},\"reputation\":{\"ratingState\":\"RATED\",\"ratingAverage\":4.85,\"reviewCount\":27}}}")
                     })
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy mentor")

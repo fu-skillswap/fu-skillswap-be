@@ -73,7 +73,6 @@ class CampaignServiceTest {
                 .build();
 
         when(userQueryPort.findUserSummaryById(userId)).thenReturn(Optional.of(user));
-        when(userQueryPort.findStudentProfileRecordByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findByIdForUpdate(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));
@@ -116,7 +115,6 @@ class CampaignServiceTest {
                 .build();
 
         when(userQueryPort.findUserSummaryById(userId)).thenReturn(Optional.of(user));
-        when(userQueryPort.findStudentProfileRecordByUserId(userId)).thenReturn(Optional.empty());
         when(campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)).thenReturn(List.of(campaignId));
         when(campaignRepository.findById(campaignId)).thenReturn(Optional.of(campaign));
         when(campaignBenefitRepository.findByCampaignIdAndActiveTrue(campaignId)).thenReturn(List.of(benefit));

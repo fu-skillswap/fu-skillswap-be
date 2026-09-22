@@ -245,7 +245,7 @@ class BookingDecisionServiceTest {
         when(googleCalendarConnectionPort.hasActiveConnection(mentorId)).thenReturn(false);
 
         AcceptBookingRequest request = new AcceptBookingRequest(
-                "Gặp tại campus FPTU",
+                "Meet at the agreed location",
                 MeetingPlatform.OFFLINE,
                 null,
                 "Thư viện FPTU HCM - Tầng 2 Bàn 12"

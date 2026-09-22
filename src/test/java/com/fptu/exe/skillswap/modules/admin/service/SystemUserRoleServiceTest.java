@@ -80,7 +80,7 @@ class SystemUserRoleServiceTest {
     @Test
     void getAllUsers_delegatesToPort() {
         SystemUserView sysUser = new SystemUserView(UUID.randomUUID(), "user@test.com", null, null, "ACTIVE",
-                List.of(RoleCode.MENTEE.name()), null, null, null);
+                List.of(RoleCode.MENTEE.name()), null, null);
         PageResponse<SystemUserView> mockPage = PageResponse.<SystemUserView>builder()
                 .content(List.of(sysUser))
                 .page(0).size(20).totalElements(1).totalPages(1)

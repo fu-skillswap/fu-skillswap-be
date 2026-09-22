@@ -108,7 +108,9 @@ public enum ErrorCode {
     BOOKING_ISSUE_EVIDENCE_HIDDEN(404, "BOOKING_4503", "error.booking.issue_evidence_hidden", "File minh chứng hiện không khả dụng"),
 
     // Kiểm tra dữ liệu.
-    INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ");
+    INVALID_INPUT(400, "VAL_3001", "error.val.invalid_input", "Dữ liệu đầu vào không hợp lệ"),
+    LEGACY_PROFILE_PAYLOAD_NOT_ALLOWED(409, "IDENTITY_2401", "error.identity.legacy_profile_payload_not_allowed", "Hồ sơ đã được nâng cấp. Vui lòng gửi payload theo loại hồ sơ mới."),
+    CONCURRENT_PROFILE_UPDATE(409, "CONCURRENT_PROFILE_UPDATE", "error.identity.concurrent_profile_update", "Hồ sơ vừa được cập nhật ở nơi khác. Vui lòng tải lại hồ sơ trước khi gửi lại.");
 
     private final int status;
     private final String code;

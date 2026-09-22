@@ -209,55 +209,7 @@ interface UserMeResponse {
 
 ---
 
-## 4. Danh Mục Học Thuật (Academic Catalog APIs)
-
-Các API này là **công khai (Public)**, không yêu cầu Token xác thực và có header `Cache-Control: public, max-age=86400`.
-
-### 4.1 Lấy Danh Sách Cơ Sở FPT (`GET /api/campuses`)
-- **Endpoint**: `GET /api/campuses`
-- **Response**: `ApiResponse<CampusResponse[]>`
-
-```typescript
-interface CampusResponse {
-  id: string;        // UUID của Cơ sở (dùng để chọn khi tạo student profile)
-  code: "HCM" | "HL" | "DN" | "CT" | "QNH";
-  name: string;      // Ví dụ: "FPT University Hồ Chí Minh"
-  city: string;      // Ví dụ: "Hồ Chí Minh"
-}
-```
-
-### 4.2 Lấy Danh Sách Ngành Học (`GET /api/academic-programs`)
-- **Endpoint**: `GET /api/academic-programs`
-- **Response**: `ApiResponse<AcademicProgramResponse[]>`
-
-```typescript
-interface AcademicProgramResponse {
-  id: string;        // UUID Ngành học
-  code: string;      // Mã ngành (ví dụ: "CNTT")
-  nameVi: string;    // Tên tiếng Việt
-  nameEn: string;    // Tên tiếng Anh
-}
-```
-
-### 4.3 Lấy Danh Sách Chuyên Ngành Theo Ngành Học (`GET /api/academic-programs/{programId}/specializations`)
-- **Endpoint**: `GET /api/academic-programs/{programId}/specializations`
-- **Response**: `ApiResponse<SpecializationResponse[]>`
-
-```typescript
-interface SpecializationResponse {
-  id: string;        // UUID Chuyên ngành
-  programId: string; // UUID Ngành học cha
-  code: string;      // Mã chuyên ngành (ví dụ: "KTPM", "IA")
-  nameVi: string;    // Tên tiếng Việt
-  nameEn: string;    // Tên tiếng Anh
-  isExpected: boolean;
-  isOther: boolean;
-}
-```
-
----
-
-## 5. Hồ Sơ Sinh Viên & Điều Hướng Onboarding (Student Profile & Onboarding)
+## 4. Danh mục học thuật\n\nCác lựa chọn học tập hiện dùng API canonical dưới /api/catalog/ (province, institution và education field group). Không còn API campus/program/specialization dành riêng cho FPTU.\n\n---\n\n## 5. Hồ Sơ Sinh Viên & Điều Hướng Onboarding (Student Profile & Onboarding)
 
 ### 5.1 Lấy Hồ Sơ Sinh Viên Của Tôi (`GET /api/me/student-profile`)
 - **Endpoint**: `GET /api/me/student-profile`
@@ -269,22 +221,24 @@ interface SpecializationResponse {
 
 ```typescript
 interface StudentProfileResponse {
+  id: string;
   userId: string;
-  email: string;
-  studentCode: string;
-  displayName: string;
-  avatarUrl: string | null;
-  campus: CampusResponse | null;
-  program: AcademicProgramResponse | null;
-  specialization: SpecializationResponse | null;
-  semester: number | null;
-  intakeYear: number | null;
-  isAlumni: boolean;
+  profileType: "SCHOOL_STUDENT" | "UNIVERSITY_STUDENT" | "ALUMNI" | null;
+  institutionId: string | null;
+  customInstitutionName: string | null;
+  customInstitutionProvinceId: string | null;
+  fieldGroupId: string | null;
+  majorName: string | null;
+  enrollmentYear: number | null;
+  onboardingCompleted: boolean;
+  onboardingCompletedAt: string | null;  /** @deprecated One-release compatibility only; absent for migrated profiles. */
+  bio?: string | null;
   graduationYear: number | null;
-  bio: string | null;
   createdAt: string;
   updatedAt: string;
 }
+
+`profileType: null` luôn có nghĩa là cần nâng cấp, kể cả khi các field legacy đã đầy đủ. Response profile không chứa email, tên hoặc avatar của user.
 ```
 
 ---
@@ -296,19 +250,21 @@ interface StudentProfileResponse {
 
 ```typescript
 interface StudentProfileRequest {
-  studentCode: string;      // Bắt buộc. Regex không phân biệt hoa/thường: ^[HSDQC][ESA](0[1-9]|1[0-9]|2[0-2])\d{4}$
-  displayName?: string;     // Tối đa 150 ký tự
+  profileType: "SCHOOL_STUDENT" | "UNIVERSITY_STUDENT" | "ALUMNI";
+  institutionId?: string;
+  customInstitutionName?: string;
+  customInstitutionProvinceId?: string;
+  fieldGroupId?: string;
+  majorName?: string;
+  enrollmentYear?: number;
+  graduationYear?: number;
+  // Legacy-only fields are deprecated and accepted for one release only while profileType is omitted.  bio?: string;
+  displayName?: string;
   avatarUrl?: string;
-  campusId: string;         // UUID Cơ sở
-  programId: string;        // UUID Ngành học
-  specializationId: string; // UUID Chuyên ngành (phải thuộc programId)
-  semester: number;         // Học kỳ từ 0 đến 9
-  intakeYear: number;       // Năm nhập học (ví dụ: 2021)
-  isAlumni: boolean;        // true nếu đã tốt nghiệp
-  graduationYear?: number;  // Bắt buộc nếu isAlumni = true (phải >= intakeYear + 2)
-  bio?: string;
 }
 ```
+
+Requests must include `profileType`; the backend validates only fields compatible with that type. `profileType: null` means the profile is incomplete and must be migrated. Legacy education and student-code properties are no longer part of this API contract.
 
 ---
 

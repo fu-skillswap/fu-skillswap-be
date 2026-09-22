@@ -11,13 +11,11 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumReactionType;
 import com.fptu.exe.skillswap.modules.forum.dto.request.ForumReactionRequest;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProgramResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -223,7 +221,6 @@ public class ForumReactionService {
                 .authorUserId(post.getAuthorUser().getId())
                 .authorFullName(post.getAuthorUser().getFullName())
                 .authorAvatarUrl(post.getAuthorUser().getAvatarUrl())
-                .authorProgram(toProgramResponse(post.getAuthorProgram()))
                 .forumTopic(topic)
                 .title(post.getTitle())
                 .content(post.getContent())
@@ -251,11 +248,6 @@ public class ForumReactionService {
         }
         return forumCommentRepository.findByIdIn(parentIds).stream()
                 .collect(Collectors.toMap(ForumComment::getId, Function.identity()));
-    }
-
-    private ForumProgramResponse toProgramResponse(AcademicProgram program) {
-        return program == null ? null : new ForumProgramResponse(
-                program.getId(), program.getCode(), program.getNameVi(), program.getNameEn());
     }
 
     private String determineAuthorRole(Set<RoleCode> roles) {

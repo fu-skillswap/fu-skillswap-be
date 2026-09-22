@@ -612,11 +612,8 @@ public class ForumAdminPortImpl implements ForumAdminPort {
     }
 
     private PostView postView(ForumPostResponse value) {
-        var program = value.authorProgram();
         var topic = value.forumTopic();
         return new PostView(value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
-                program == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.ProgramView(
-                        program.id(), program.code(), program.nameVi(), program.nameEn()),
                 topic == null ? null : new com.fptu.exe.skillswap.modules.forum.port.ForumAdminPortModels.TopicView(
                         topic.id(), topic.code() == null ? null : topic.code().name(), topic.nameVi(), topic.nameEn(), topic.displayOrder()),
                 value.title(), value.content(), value.status(), value.commentCount(), value.reactionCount(), value.reportCount(),

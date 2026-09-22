@@ -3,7 +3,6 @@ package com.fptu.exe.skillswap.modules.identity.service;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
-import com.fptu.exe.skillswap.modules.identity.port.StudentProfileRecord;
 import com.fptu.exe.skillswap.modules.identity.port.UserLockPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
@@ -121,26 +120,12 @@ public class UserQueryPortImpl implements UserQueryPort, UserLockPort, PublicUse
     }
 
     @Override
-    public Optional<StudentProfileRecord> findStudentProfileRecordByUserId(UUID userId) {
-        return findStudentProfileWithDetailsByUserId(userId).map(this::toStudentProfileRecord);
-    }
-
-    @Override
     public Map<UUID, UserSummaryRecord> findUserSummariesByIdIn(Collection<UUID> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Map.of();
         }
         return userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, this::toUserSummaryRecord));
-    }
-
-    @Override
-    public Map<UUID, StudentProfileRecord> findStudentProfileRecordsByIdIn(Collection<UUID> userIds) {
-        if (userIds == null || userIds.isEmpty() || studentProfileRepository == null) {
-            return Map.of();
-        }
-        return studentProfileRepository.findByUserIdIn(List.copyOf(userIds)).stream()
-                .collect(Collectors.toMap(StudentProfile::getUserId, this::toStudentProfileRecord));
     }
 
     @Override
@@ -166,22 +151,4 @@ public class UserQueryPortImpl implements UserQueryPort, UserLockPort, PublicUse
         );
     }
 
-    private StudentProfileRecord toStudentProfileRecord(StudentProfile profile) {
-        return new StudentProfileRecord(
-                profile.getUserId(),
-                profile.getClaimedStudentCode(),
-                profile.getCampus() != null ? profile.getCampus().getId() : null,
-                profile.getCampus() != null ? profile.getCampus().getName() : null,
-                profile.getProgram() != null ? profile.getProgram().getId() : null,
-                profile.getProgram() != null ? profile.getProgram().getCode() : null,
-                profile.getProgram() != null ? profile.getProgram().getNameVi() : null,
-                profile.getSpecialization() != null ? profile.getSpecialization().getId() : null,
-                profile.getSpecialization() != null ? profile.getSpecialization().getCode() : null,
-                profile.getSpecialization() != null ? profile.getSpecialization().getNameVi() : null,
-                profile.getSemester(),
-                profile.getIntakeYear(),
-                profile.isAlumni(),
-                profile.getBio()
-        );
-    }
 }

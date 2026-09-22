@@ -39,9 +39,7 @@ public record MentorDiscoveryCardResponse(
                             Integer outputReviewSupportLevel, Integer directionSupportLevel) {
     }
 
-    public record Evidence(UUID campusId, String campusName, UUID programId, String programName,
-                           UUID specializationId, String specializationName,
-                           List<MentorSubjectResultResponse> subjectHighlights,
+    public record Evidence(List<MentorSubjectResultResponse> subjectHighlights,
                            List<MentorFeaturedProjectResponse> featuredProjects,
                            List<MentorAchievementResponse> achievements) {
         public Evidence {

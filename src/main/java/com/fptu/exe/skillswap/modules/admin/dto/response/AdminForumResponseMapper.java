@@ -27,12 +27,9 @@ public final class AdminForumResponseMapper {
         if (value == null) {
             return null;
         }
-        var program = value.authorProgram();
         var topic = value.forumTopic();
         return new AdminForumPostResponse(
                 value.postId(), value.authorUserId(), value.authorFullName(), value.authorAvatarUrl(),
-                program == null ? null : new AdminForumProgramResponse(
-                        program.id(), program.code(), program.nameVi(), program.nameEn()),
                 topic == null ? null : new AdminForumTopicResponse(
                         topic.id(), topic.code(), topic.nameVi(), topic.nameEn(), topic.displayOrder()),
                 value.title(), value.content(), value.status(), value.commentCount(), value.reactionCount(), value.reportCount(),

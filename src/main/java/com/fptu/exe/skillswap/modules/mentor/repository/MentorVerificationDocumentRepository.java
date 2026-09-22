@@ -25,5 +25,7 @@ public interface MentorVerificationDocumentRepository extends JpaRepository<Ment
 
     long countByRequestIdAndDocumentTypeAndIsActiveTrue(UUID requestId, VerificationDocumentType documentType);
 
+    long countByRequestIdAndDocumentTypeInAndIsActiveTrue(UUID requestId, java.util.Collection<VerificationDocumentType> types);
+
     List<MentorVerificationDocument> findByRequestIdAndDocumentTypeInAndIsActiveTrue(UUID requestId, java.util.Collection<VerificationDocumentType> types);
 }

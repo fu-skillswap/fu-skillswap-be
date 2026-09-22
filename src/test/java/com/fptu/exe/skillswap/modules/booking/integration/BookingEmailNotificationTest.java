@@ -1,9 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.integration;
 
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CancelBookingRequest;
@@ -58,12 +57,10 @@ class BookingEmailNotificationTest {
     private MentorProfileRepository mentorProfileRepository;
     @Autowired
     private AcademicService academicService;
-    @Autowired
-    private CampusRepository campusRepository;
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-    @Autowired
-    private SpecializationRepository specializationRepository;
+
+
+
+    @Autowired private AdministrativeProvinceRepository provinceRepository;
     @Autowired
     private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
     @Autowired
@@ -91,7 +88,7 @@ class BookingEmailNotificationTest {
     @BeforeEach
     void setUp() {
         String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-        menteeUser = createMentee("email-mentee-" + uniqueSuffix + "@test.com", "Email Mentee", "SE" + uniqueSuffix);
+        menteeUser = createMentee("email-mentee-" + uniqueSuffix + "@test.com", "Email Mentee");
         
         mentorUser = userRepository.save(User.builder()
                 .email("email-mentor-" + uniqueSuffix + "@test.com")
@@ -165,26 +162,17 @@ class BookingEmailNotificationTest {
                 .thenReturn(UUID.randomUUID());
     }
 
-    private User createMentee(String email, String name, String code) {
+    private User createMentee(String email, String name) {
         User user = userRepository.save(User.builder()
                 .email(email)
                 .fullName(name)
                 .status(UserStatus.ACTIVE)
                 .build());
         
-        var campus = campusRepository.findAll().stream().findFirst().orElseThrow();
-        var program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).stream().findFirst().orElseThrow();
-
         academicService.updateStudentProfile(user.getId(), StudentProfileRequest.builder()
-                .studentCode(code)
-                .campusId(campus.getId())
-                .programId(program.getId())
-                .specializationId(specialization.getId())
-                .semester(5)
-                .intakeYear(2022)
-                .isAlumni(false)
-                .bio("Integration test profile")
+                .profileType(StudentProfileType.SCHOOL_STUDENT)
+                .customInstitutionName("Test secondary school")
+                .customInstitutionProvinceId(provinceRepository.findByCode("01").orElseThrow().getId())
                 .build());
         return user;
     }

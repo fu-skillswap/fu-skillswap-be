@@ -23,17 +23,17 @@ class StudentProfileRepositoryTest {
     private UserRepository userRepository;
 
     @Test
-    void migration_shouldAllowDuplicateClaimedStudentCode() {
+    void profilesWithoutProfileTypeRemainIncomplete() {
         User user1 = createUser("user1@test.com");
         User user2 = createUser("user2@test.com");
 
         StudentProfile profile1 = new StudentProfile();
         profile1.setUser(user1);
-        profile1.setClaimedStudentCode("SE123456");
+        assertFalse(profile1.isOnboardingComplete());
 
         StudentProfile profile2 = new StudentProfile();
         profile2.setUser(user2);
-        profile2.setClaimedStudentCode("SE123456"); // Same claimed code
+        assertFalse(profile2.isOnboardingComplete());
 
         assertDoesNotThrow(() -> {
             studentProfileRepository.saveAndFlush(profile1);
@@ -44,17 +44,17 @@ class StudentProfileRepositoryTest {
     }
 
     @Test
-    void migration_shouldAllowDuplicateClaimedStudentCodeAcrossMultipleProfiles() {
+    void profilesWithCanonicalTypeCanExistForDifferentUsers() {
         User user1 = createUser("user3@test.com");
         User user2 = createUser("user4@test.com");
 
         StudentProfile profile1 = new StudentProfile();
         profile1.setUser(user1);
-        profile1.setClaimedStudentCode("SE111");
+        profile1.setProfileType(com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType.SCHOOL_STUDENT);
 
         StudentProfile profile2 = new StudentProfile();
         profile2.setUser(user2);
-        profile2.setClaimedStudentCode("SE111");
+        profile2.setProfileType(com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType.ALUMNI);
 
         assertDoesNotThrow(() -> {
             studentProfileRepository.saveAndFlush(profile1);

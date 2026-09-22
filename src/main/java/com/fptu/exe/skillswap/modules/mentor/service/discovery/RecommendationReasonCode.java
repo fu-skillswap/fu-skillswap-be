@@ -1,12 +1,6 @@
 package com.fptu.exe.skillswap.modules.mentor.service.discovery;
 
 public enum RecommendationReasonCode {
-    SAME_PROGRAM,
-    SAME_SPECIALIZATION,
-    SAME_CAMPUS,
-    MENTOR_ALUMNI,
-    HIGHER_SEMESTER,
-    SAME_SEMESTER,
     HIGH_RATING,
     TRUSTED_REVIEW_VOLUME,
     MENTORING_EXPERIENCE,
@@ -17,7 +11,6 @@ public enum RecommendationReasonCode {
     HAS_AVAILABILITY,
     PREFERRED_DURATION_AVAILABLE,
     SUBJECT_FIT,
-    ALUMNI_OJT_FIT,
     SIMILAR_MENTORING_EXPERIENCE,
     DECLARED_NEEDS_MATCH,
     COMPLETED_SESSION,

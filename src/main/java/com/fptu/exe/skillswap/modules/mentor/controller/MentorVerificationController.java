@@ -233,7 +233,7 @@ public class MentorVerificationController {
 
     @Operation(
             summary = "Bước 4 - Nộp hồ sơ để admin duyệt",
-            description = "Chỉ nộp được khi hồ sơ, minh chứng và điều khoản đã đầy đủ. Request hợp lệ dùng `termsAccepted: true`; sau khi nộp FE chuyển sang màn hình chờ và đọc lại status bằng GET request/progress."
+            description = "Nộp hồ sơ xét duyệt mentor với minh chứng cơ sở đào tạo, đơn vị công tác hoặc chuyên môn phù hợp. Cho phép gửi kèm danh sách minh chứng trong request. Yêu cầu termsAccepted: true."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
@@ -250,7 +250,7 @@ public class MentorVerificationController {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "409", description = "Hồ sơ đang ở trạng thái không cho phép nộp lại")
     })
-    @PostMapping("/submit")
+    @PostMapping({"", "/submit"})
     public ApiResponse<MentorVerificationRequestResponse> submit(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody MentorVerificationSubmitRequest request

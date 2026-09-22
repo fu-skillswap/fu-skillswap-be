@@ -11,7 +11,6 @@ import com.fptu.exe.skillswap.modules.filestorage.dto.response.InternalStorageUp
 import com.fptu.exe.skillswap.modules.filestorage.dto.response.PresignedUploadResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumCommentResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumPostResponse;
-import com.fptu.exe.skillswap.modules.forum.dto.response.ForumProgramResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumReportResponse;
 import com.fptu.exe.skillswap.modules.forum.dto.response.ForumTopicResponse;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
@@ -37,12 +36,11 @@ class DtoBoundaryCompatibilityTest {
     void adminForumPostAndCommentBoundariesKeepExistingJsonNames() throws Exception {
         UUID postId = UUID.randomUUID();
         UUID commentId = UUID.randomUUID();
-        ForumProgramResponse publicProgram = new ForumProgramResponse(UUID.randomUUID(), "PROGRAM", "Chương trình", "Program");
         ForumTopicResponse publicTopic = new ForumTopicResponse(UUID.randomUUID(), ForumTopicCode.QUESTION, "Hỏi đáp", "Question", 1);
 
         ForumPostResponse publicPost = ForumPostResponse.builder()
                 .postId(postId).authorUserId(UUID.randomUUID()).authorFullName("User").authorAvatarUrl("avatar")
-                .authorProgram(publicProgram).forumTopic(publicTopic).title("Title").content("Content")
+                .forumTopic(publicTopic).title("Title").content("Content")
                 .status("PUBLISHED").commentCount(2).reactionCount(3).reportCount(1)
                 .lastActivityAt(LocalDateTime.of(2026, 9, 4, 10, 0)).reactedByCurrentUser(true).myReactionType("LIKE")
                 .createdAt(LocalDateTime.of(2026, 9, 4, 9, 0)).updatedAt(LocalDateTime.of(2026, 9, 4, 9, 30))
@@ -50,8 +48,6 @@ class DtoBoundaryCompatibilityTest {
                 .build();
         AdminForumPostResponse adminPost = new AdminForumPostResponse(
                 publicPost.postId(), publicPost.authorUserId(), publicPost.authorFullName(), publicPost.authorAvatarUrl(),
-                new com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumProgramResponse(
-                        publicProgram.id(), publicProgram.code(), publicProgram.nameVi(), publicProgram.nameEn()),
                 new com.fptu.exe.skillswap.modules.admin.dto.response.AdminForumTopicResponse(
                         publicTopic.id(), publicTopic.code().name(), publicTopic.nameVi(), publicTopic.nameEn(), publicTopic.displayOrder()),
                 publicPost.title(), publicPost.content(), publicPost.status(), publicPost.commentCount(), publicPost.reactionCount(),

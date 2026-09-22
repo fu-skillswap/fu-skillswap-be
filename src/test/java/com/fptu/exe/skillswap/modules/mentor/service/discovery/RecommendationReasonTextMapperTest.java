@@ -19,9 +19,9 @@ class RecommendationReasonTextMapperTest {
     @Test
     void shouldMapStableReasonText() {
         assertEquals(
-                "Cùng chương trình học",
+                "Được đánh giá cao từ mentee",
                 RecommendationReasonTextMapper.toVietnamese(
-                        RecommendationReason.of(RecommendationReasonCode.SAME_PROGRAM)
+                        RecommendationReason.of(RecommendationReasonCode.HIGH_RATING)
                 )
         );
     }

@@ -1,172 +1,55 @@
 package com.fptu.exe.skillswap.modules.identity.integration;
 
+import com.fptu.exe.skillswap.modules.catalog.repository.*;
+import com.fptu.exe.skillswap.modules.identity.domain.*;
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
-import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
-import com.fptu.exe.skillswap.modules.identity.domain.User;
-import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import static org.junit.jupiter.api.Assertions.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-@SpringBootTest
-@Transactional
+@SpringBootTest @Transactional
 class AcademicProfileFlowIntegrationTest {
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private AcademicService academicService;
-
-    @Autowired
-    private CampusRepository campusRepository;
-
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
-    @Autowired
-    private SpecializationRepository specializationRepository;
-
-    @Autowired
-    private StudentProfileRepository studentProfileRepository;
-
-    @Autowired
-    private com.fptu.exe.skillswap.modules.identity.seeder.AcademicDataSeeder academicDataSeeder;
-
+    @Autowired UserRepository userRepository;
+    @Autowired AcademicService academicService;
+    @Autowired StudentProfileRepository profileRepository;
+    @Autowired AdministrativeProvinceRepository provinceRepository;
+    @Autowired EducationalInstitutionRepository institutionRepository;
+    @Autowired EducationFieldGroupRepository fieldGroupRepository;
     private User user;
+    @BeforeEach void setUp(){ user=userRepository.save(User.builder().email("academic-flow@test.com").fullName("Academic Flow User").status(UserStatus.ACTIVE).build()); }
 
-    @BeforeEach
-    void setUp() {
-        academicDataSeeder.run();
-        user = userRepository.save(User.builder()
-                .email("academic-flow@test.com")
-                .fullName("Academic Flow User")
-                .status(UserStatus.ACTIVE)
-                .build());
-    }
-
-    @Test
-    void updateThenGetProfile_shouldPersistNormalizedAcademicProfile() {
-        var campus = campusRepository.findAll().getFirst();
-        var program = academicProgramRepository.findAll().getFirst();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
-
-        StudentProfileResponse updated = academicService.updateStudentProfile(user.getId(), StudentProfileRequest.builder()
-                .studentCode(" se190123 ")
-                .displayName("Updated Academic User")
-                .avatarUrl("https://example.com/avatar.png")
-                .campusId(campus.getId())
-                .programId(program.getId())
-                .specializationId(specialization.getId())
-                .semester(5)
-                .intakeYear(2022)
-                .isAlumni(false)
-                .bio("Backend integration acceptance flow")
-                .build());
-
-        assertEquals(user.getId(), updated.getUserId());
-        assertEquals("SE190123", updated.getStudentCode());
-        assertEquals("Updated Academic User", updated.getDisplayName());
-        assertEquals(campus.getId(), updated.getCampus().getId());
-        assertEquals(program.getId(), updated.getProgram().getId());
-        assertEquals(specialization.getId(), updated.getSpecialization().getId());
+    @Test void schoolUniversityAndAlumniProfilesAreSupportedAndSwitchCleanly(){
+        var hanoi=provinceRepository.findByCode("01").orElseThrow();
+        var hust=institutionRepository.findBySlug("hust").orElseThrow();
+        var field=fieldGroupRepository.findByOfficialCode("748").orElseThrow();
+        var school=academicService.updateStudentProfile(user.getId(),StudentProfileRequest.builder().profileType(StudentProfileType.SCHOOL_STUDENT).customInstitutionName("THPT Example").customInstitutionProvinceId(hanoi.getId()).build());
+        assertEquals(StudentProfileType.SCHOOL_STUDENT,school.getProfileType());
+        var university=academicService.updateStudentProfile(user.getId(),StudentProfileRequest.builder().profileType(StudentProfileType.UNIVERSITY_STUDENT).institutionId(hust.getId()).fieldGroupId(field.getId()).majorName("Khoa học máy tính").enrollmentYear(2024).build());
+        assertEquals(StudentProfileType.UNIVERSITY_STUDENT,university.getProfileType()); assertNull(university.getCustomInstitutionName()); assertNull(university.getCustomInstitutionProvinceId());
+        var alumni=academicService.updateStudentProfile(user.getId(),StudentProfileRequest.builder().profileType(StudentProfileType.ALUMNI).institutionId(hust.getId()).fieldGroupId(field.getId()).majorName("Khoa học máy tính").graduationYear(2025).build());
+        assertEquals(StudentProfileType.ALUMNI,alumni.getProfileType()); assertEquals(2025,alumni.getGraduationYear());
+        var stored=profileRepository.findById(user.getId()).orElseThrow(); assertTrue(stored.isOnboardingCompleted()); assertNull(stored.getCustomInstitutionName());
         assertTrue(academicService.hasCompletedStudentProfile(user.getId()));
-
-        StudentProfileResponse fetched = academicService.getStudentProfile(user.getId());
-        assertEquals(updated.getUserId(), fetched.getUserId());
-        assertEquals(updated.getStudentCode(), fetched.getStudentCode());
-        assertEquals(updated.getDisplayName(), fetched.getDisplayName());
-        assertEquals(updated.getAvatarUrl(), fetched.getAvatarUrl());
-        assertEquals(updated.getBio(), fetched.getBio());
     }
 
-    @Test
-    void incrementEligibleSemesters_shouldSkipPreparatoryAlumniAndCappedProfiles() {
-        var campus = campusRepository.findAll().getFirst();
-        var program = academicProgramRepository.findAll().getFirst();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
-
-        User preparatory = createUser("semester-zero@test.com");
-        User active = createUser("semester-eight@test.com");
-        User capped = createUser("semester-nine@test.com");
-        User alumni = createUser("semester-alumni@test.com");
-
-        academicService.updateStudentProfile(preparatory.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190124", 0, false));
-        academicService.updateStudentProfile(active.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190125", 8, false));
-        academicService.updateStudentProfile(capped.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190126", 9, false));
-        academicService.updateStudentProfile(alumni.getId(), profileRequest(campus.getId(), program.getId(), specialization.getId(), "SE190127", 5, true));
-        int updatedCount = academicService.incrementEligibleSemesters();
-        assertTrue(updatedCount >= 1);
-        assertEquals(0, studentProfileRepository.findById(preparatory.getId()).orElseThrow().getSemester());
-        assertEquals(9, studentProfileRepository.findById(active.getId()).orElseThrow().getSemester());
-        assertEquals(9, studentProfileRepository.findById(capped.getId()).orElseThrow().getSemester());
-        // Alumni profiles are normalized to the terminal semester by the academic policy.
-        assertEquals(9, studentProfileRepository.findById(alumni.getId()).orElseThrow().getSemester());
+    @Test void newOnboardingUsesCanonicalProfileData(){
+        var province=provinceRepository.findByCode("01").orElseThrow();
+        var response=academicService.updateStudentProfile(user.getId(),StudentProfileRequest.builder().profileType(StudentProfileType.SCHOOL_STUDENT).customInstitutionName("School").customInstitutionProvinceId(province.getId()).build());
+        assertTrue(response.isOnboardingCompleted());
     }
 
-    @Test
-    void updateStudentProfile_shouldRejectGraduationYearLessThanIntakePlusTwoYears() {
-        var campus = campusRepository.findAll().getFirst();
-        var program = academicProgramRepository.findAll().getFirst();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
-
-        BaseException exception = assertThrows(BaseException.class, () -> academicService.updateStudentProfile(
-                user.getId(),
-                StudentProfileRequest.builder()
-                        .studentCode("SE190128")
-                        .campusId(campus.getId())
-                        .programId(program.getId())
-                        .specializationId(specialization.getId())
-                        .semester(9)
-                        .intakeYear(2024)
-                        .isAlumni(true)
-                        .graduationYear(2025)
-                        .bio("Invalid graduation timeline")
-                        .build()
-        ));
-
-        assertEquals("Năm tốt nghiệp phải lớn hơn năm nhập học ít nhất 2 năm", exception.getMessage());
-    }
-
-    private User createUser(String email) {
-        return userRepository.save(User.builder()
-                .email(email)
-                .fullName(email)
-                .status(UserStatus.ACTIVE)
-                .build());
-    }
-
-    private StudentProfileRequest profileRequest(
-            java.util.UUID campusId,
-            java.util.UUID programId,
-            java.util.UUID specializationId,
-            String studentCode,
-            int semester,
-            boolean alumni
-    ) {
-        return StudentProfileRequest.builder()
-                .studentCode(studentCode)
-                .campusId(campusId)
-                .programId(programId)
-                .specializationId(specializationId)
-                .semester(semester)
-                .intakeYear(2022)
-                .isAlumni(alumni)
-                .graduationYear(alumni ? 2025 : null)
-                .bio("Semester increment test")
-                .build();
+    @Test void unknownAndIncompatibleFieldsAreRejected(){
+        var province=provinceRepository.findByCode("01").orElseThrow();
+        var request=StudentProfileRequest.builder().profileType(StudentProfileType.SCHOOL_STUDENT).customInstitutionName("School").customInstitutionProvinceId(province.getId()).build();
+        request.getUnsupportedFields().put("majorName","should not be accepted through unknown legacy input");
+        assertThrows(BaseException.class,()->academicService.updateStudentProfile(user.getId(),request));
+        assertTrue(profileRepository.findById(user.getId()).isEmpty());
     }
 }

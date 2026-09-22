@@ -546,7 +546,8 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
         boolean mentorProfileEligible = !requireCompletedMentorProfile || hasMentorProfile;
         boolean hasAffiliationProof = documents.stream()
                 .anyMatch(document -> document.isActive()
-                        && document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF);
+                        && (document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF
+                                || document.documentType() == VerificationDocumentType.AFFILIATION_PROOF));
         boolean hasExpertiseProof = documents.stream()
                 .anyMatch(document -> document.isActive()
                         && document.documentType() == VerificationDocumentType.EXPERTISE_PROOF);

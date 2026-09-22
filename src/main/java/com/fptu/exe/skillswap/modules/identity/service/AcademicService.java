@@ -1,17 +1,9 @@
 package com.fptu.exe.skillswap.modules.identity.service;
 
-import com.fptu.exe.skillswap.modules.identity.domain.Campus;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
-import com.fptu.exe.skillswap.modules.identity.dto.response.CampusResponse;
-import com.fptu.exe.skillswap.modules.identity.dto.response.AcademicProgramResponse;
-import com.fptu.exe.skillswap.modules.identity.dto.response.SpecializationResponse;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
@@ -23,7 +15,6 @@ import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,19 +23,21 @@ import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.time.Clock;
 import java.time.Year;
-import java.util.List;
 import java.util.UUID;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AcademicService implements AcademicEligibilityQuery {
 
-    private final CampusRepository campusRepository;
-    private final AcademicProgramRepository academicProgramRepository;
-    private final SpecializationRepository specializationRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
+    private final AdministrativeProvinceRepository provinceRepository;
+    private final EducationalInstitutionRepository institutionRepository;
+    private final EducationFieldGroupRepository fieldGroupRepository;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -52,76 +45,6 @@ public class AcademicService implements AcademicEligibilityQuery {
         if (timeProvider != null) {
             this.timeProvider = timeProvider;
         }
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "catalog", key = "'campuses'")
-    public List<CampusResponse> getAllCampuses() {
-        return campusRepository.findByIsActiveTrue()
-                .stream()
-                .map(this::mapToCampusResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "catalog", key = "'programs'")
-    public List<AcademicProgramResponse> getAllAcademicPrograms() {
-        return academicProgramRepository.findByIsActiveTrue()
-                .stream()
-                .map(this::mapToAcademicProgramResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "catalog", key = "'specializations'")
-    public List<SpecializationResponse> getAllSpecializations() {
-        return specializationRepository.findByIsActiveTrue()
-                .stream()
-                .map(this::mapToSpecializationResponse)
-                .toList();
-    }
-
-    @Transactional(readOnly = true)
-    @Cacheable(cacheNames = "catalog", key = "'specializationsByProgram:' + #programId")
-    public List<SpecializationResponse> getSpecializationsByProgram(UUID programId) {
-        requireId(programId, "Ngành học");
-        if (!academicProgramRepository.existsByIdAndIsActiveTrue(programId)) {
-            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học liên kết");
-        }
-        return specializationRepository.findByProgramIdAndIsActiveTrue(programId)
-                .stream()
-                .map(this::mapToSpecializationResponse)
-                .toList();
-    }
-
-    private CampusResponse mapToCampusResponse(Campus campus) {
-        return CampusResponse.builder()
-                .id(campus.getId())
-                .code(campus.getCode())
-                .name(campus.getName())
-                .city(campus.getCity())
-                .build();
-    }
-
-    private AcademicProgramResponse mapToAcademicProgramResponse(AcademicProgram program) {
-        return AcademicProgramResponse.builder()
-                .id(program.getId())
-                .code(program.getCode())
-                .nameVi(program.getNameVi())
-                .nameEn(program.getNameEn())
-                .build();
-    }
-
-    private SpecializationResponse mapToSpecializationResponse(Specialization spec) {
-        return SpecializationResponse.builder()
-                .id(spec.getId())
-                .programId(spec.getProgram().getId())
-                .code(spec.getCode())
-                .nameVi(spec.getNameVi())
-                .nameEn(spec.getNameEn())
-                .isExpected(spec.isExpected())
-                .isOther(spec.getCode().endsWith("_OTHER"))
-                .build();
     }
 
     @Transactional(readOnly = true)
@@ -145,62 +68,36 @@ public class AcademicService implements AcademicEligibilityQuery {
     public StudentProfileResponse updateStudentProfile(UUID userId, StudentProfileRequest request) {
         requireId(userId, "Người dùng");
         requireStudentProfileRequest(request);
-        validateAcademicTimeline(request);
-        Campus campus = campusRepository.findByIdAndIsActiveTrue(request.getCampusId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy cơ sở học tập"));
-        AcademicProgram program = academicProgramRepository.findByIdAndIsActiveTrue(request.getProgramId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy ngành học"));
-        Specialization specialization = specializationRepository.findByIdAndIsActiveTrue(request.getSpecializationId())
-                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy chuyên ngành"));
-        validateAcademicRelation(program, specialization);
+
+        StudentProfile profile = studentProfileRepository.findById(userId).orElse(null);
+        if (request.getProfileType() == null) throw new BaseException(ErrorCode.BAD_REQUEST, "profileType is required");
+
+        validateNewProfileRequest(request);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
-        // Normalize student code
-        String normalizedStudentCode = request.getStudentCode().trim().toUpperCase();
-
-        // Update user fields if provided
-        if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
-            user.setFullName(request.getDisplayName().trim());
+        if (profile == null) {
+            profile = new StudentProfile();
+            profile.setId(userId);
+            profile.setUser(user);
         }
-        if (request.getAvatarUrl() != null && !request.getAvatarUrl().trim().isEmpty()) {
-            user.setAvatarUrl(request.getAvatarUrl().trim());
-        }
-        userRepository.save(user);
 
-        // Update or create StudentProfile
-        StudentProfile profile = studentProfileRepository.findById(userId)
-                .orElseGet(() -> {
-                    StudentProfile studentProfile = new StudentProfile();
-                    studentProfile.setUser(user);
-                    return studentProfile;
-                });
-
-        profile.setClaimedStudentCode(normalizedStudentCode);
-        profile.setCampus(campus);
-        profile.setProgram(program);
-        profile.setSpecialization(specialization);
-        boolean alumni = Boolean.TRUE.equals(request.getIsAlumni());
-        profile.setSemester(resolveSemester(request.getSemester(), alumni));
-        profile.setIntakeYear(request.getIntakeYear());
-        profile.setAlumni(alumni);
+        // The request is fully validated above before changing the discriminator or completion state.
+        profile.setProfileType(request.getProfileType());
+        profile.setInstitutionId(request.getInstitutionId());
+        profile.setCustomInstitutionName(clean(request.getCustomInstitutionName()));
+        profile.setCustomInstitutionProvinceId(request.getInstitutionId() == null ? request.getCustomInstitutionProvinceId() : null);
+        profile.setFieldGroupId(request.getFieldGroupId());
+        profile.setMajorName(clean(request.getMajorName()));
+        profile.setEnrollmentYear(request.getEnrollmentYear());
         profile.setGraduationYear(request.getGraduationYear());
         profile.setBio(request.getBio());
+        profile.setOnboardingCompleted(true);
+        profile.setOnboardingCompletedAt(timeProvider.nowBusiness());
 
         StudentProfile savedProfile = studentProfileRepository.save(profile);
         return mapToStudentProfileResponse(savedProfile);
-    }
-
-    @Transactional
-    public int incrementEligibleSemesters() {
-        int updatedCount = studentProfileRepository.incrementEligibleSemesters(timeProvider.nowBusiness());
-        if (updatedCount > 0) {
-            log.info("Incremented semester for {} eligible student profiles", updatedCount);
-        } else {
-            log.info("No eligible student profiles for semester increment");
-        }
-        return updatedCount;
     }
 
     /**
@@ -213,21 +110,20 @@ public class AcademicService implements AcademicEligibilityQuery {
     }
 
     private StudentProfileResponse mapToStudentProfileResponse(StudentProfile profile) {
-        User user = profile.getUser();
         return StudentProfileResponse.builder()
+                .id(profile.getId())
                 .userId(profile.getUserId())
-                .email(user.getEmail())
-                .studentCode(profile.getClaimedStudentCode())
-                .displayName(user.getFullName())
-                .avatarUrl(user.getAvatarUrl())
-                .campus(profile.getCampus() == null ? null : mapToCampusResponse(profile.getCampus()))
-                .program(profile.getProgram() == null ? null : mapToAcademicProgramResponse(profile.getProgram()))
-                .specialization(profile.getSpecialization() == null ? null : mapToSpecializationResponse(profile.getSpecialization()))
-                .semester(profile.getSemester())
-                .intakeYear(profile.getIntakeYear())
-                .isAlumni(profile.isAlumni())
-                .graduationYear(profile.getGraduationYear())
+                .profileType(profile.getProfileType())
+                .institutionId(profile.getInstitutionId())
+                .customInstitutionName(profile.getCustomInstitutionName())
+                .customInstitutionProvinceId(profile.getCustomInstitutionProvinceId())
+                .fieldGroupId(profile.getFieldGroupId())
+                .majorName(profile.getMajorName())
+                .enrollmentYear(profile.getEnrollmentYear())
+                .onboardingCompleted(profile.isOnboardingComplete())
+                .onboardingCompletedAt(profile.getOnboardingCompletedAt())
                 .bio(profile.getBio())
+                .graduationYear(profile.getGraduationYear())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
                 .build();
@@ -245,71 +141,71 @@ public class AcademicService implements AcademicEligibilityQuery {
         }
     }
 
-    private void validateAcademicRelation(AcademicProgram program, Specialization specialization) {
-        if (program == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Ngành học không được để trống");
-        }
-        if (specialization == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không được để trống");
-        }
-        if (specialization.getProgram() == null || !specialization.getProgram().getId().equals(program.getId())) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Chuyên ngành không thuộc ngành học đã chọn");
-        }
-    }
-
     private boolean isProfileCompleted(StudentProfile profile) {
-        if (profile == null) {
-            return false;
-        }
-        if (profile.getCampus() == null
-                || profile.getProgram() == null
-                || profile.getSpecialization() == null
-                || profile.getSemester() == null
-                || profile.getIntakeYear() == null
-                || profile.getClaimedStudentCode() == null
-                || profile.getClaimedStudentCode().isBlank()) {
-            return false;
-        }
-        return !profile.isAlumni() || profile.getGraduationYear() != null;
+        return profile != null && profile.isOnboardingComplete();
     }
 
-    private void validateAcademicTimeline(StudentProfileRequest request) {
-        int currentYear = Year.now().getValue();
-
-        if (request.getSemester() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được để trống");
+    private void validateNewProfileRequest(StudentProfileRequest request) {
+        if (request.getUnsupportedFields() != null && !request.getUnsupportedFields().isEmpty()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Field không được hỗ trợ trong hồ sơ mới: " + request.getUnsupportedFields().keySet());
         }
-        if (request.getSemester() != null && request.getSemester() < 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được nhỏ hơn 0");
-        }
-        if (request.getSemester() != null && request.getSemester() > 9) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Học kỳ không được lớn hơn 9");
-        }
-
-        if (request.getIntakeYear() != null
-                && (request.getIntakeYear() < 2000 || request.getIntakeYear() > currentYear)) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Năm nhập học không hợp lệ");
-        }
-
-        if (Boolean.TRUE.equals(request.getIsAlumni()) && request.getGraduationYear() == null) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cựu sinh viên bắt buộc phải có năm tốt nghiệp");
-        }
-
-        if (request.getGraduationYear() != null) {
-            if (request.getGraduationYear() < 2000 || request.getGraduationYear() > currentYear) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp không hợp lệ");
+        validateLength(request.getCustomInstitutionName(), 200, "customInstitutionName");
+        validateLength(request.getMajorName(), 200, "majorName");
+        validateCurrentModelYear(request.getEnrollmentYear(), "enrollmentYear");
+        validateCurrentModelYear(request.getGraduationYear(), "graduationYear");
+        switch (request.getProfileType()) {
+            case SCHOOL_STUDENT -> {
+                requireText(request.getCustomInstitutionName(), "customInstitutionName");
+                requireId(request.getCustomInstitutionProvinceId(), "customInstitutionProvinceId");
+                reject(request.getInstitutionId(), "institutionId", request.getFieldGroupId(), "fieldGroupId", request.getMajorName(), "majorName", request.getEnrollmentYear(), "enrollmentYear", request.getGraduationYear(), "graduationYear");
+                if (provinceRepository.findById(request.getCustomInstitutionProvinceId()).filter(com.fptu.exe.skillswap.modules.catalog.domain.AdministrativeProvince::isActive).isEmpty()) throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tỉnh/thành đang hoạt động");
             }
-            if (request.getIntakeYear() != null && request.getGraduationYear() < request.getIntakeYear() + 2) {
-                throw new BaseException(ErrorCode.BAD_REQUEST, "Năm tốt nghiệp phải lớn hơn năm nhập học ít nhất 2 năm");
+            case UNIVERSITY_STUDENT, ALUMNI -> {
+                boolean catalog = request.getInstitutionId() != null;
+                boolean customName = request.getCustomInstitutionName() != null && !request.getCustomInstitutionName().isBlank();
+                boolean customProvince = request.getCustomInstitutionProvinceId() != null;
+                if (catalog == (customName || customProvince)) throw new BaseException(ErrorCode.BAD_REQUEST, "Chọn đúng một trường trong danh mục hoặc nhập tên trường cùng tỉnh/thành");
+                if (customName != customProvince) throw new BaseException(ErrorCode.BAD_REQUEST, "Trường tự nhập cần cả tên trường và tỉnh/thành");
+                if (catalog && (customName || customProvince)) throw new BaseException(ErrorCode.BAD_REQUEST, "Không gửi trường tự nhập khi đã chọn institutionId");
+                if (catalog && institutionRepository.findById(request.getInstitutionId()).filter(com.fptu.exe.skillswap.modules.catalog.domain.EducationalInstitution::isActive).isEmpty()) throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy trường đang hoạt động");
+                if (customProvince && provinceRepository.findById(request.getCustomInstitutionProvinceId()).filter(com.fptu.exe.skillswap.modules.catalog.domain.AdministrativeProvince::isActive).isEmpty()) throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tỉnh/thành đang hoạt động");
+                requireId(request.getFieldGroupId(), "fieldGroupId");
+                requireText(request.getMajorName(), "majorName");
+                if (fieldGroupRepository.findById(request.getFieldGroupId()).filter(com.fptu.exe.skillswap.modules.catalog.domain.EducationFieldGroup::isActive).isEmpty()) throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy nhóm ngành đang hoạt động");
+                if (request.getProfileType() == StudentProfileType.UNIVERSITY_STUDENT && request.getGraduationYear() != null) throw new BaseException(ErrorCode.BAD_REQUEST, "graduationYear phải để trống với UNIVERSITY_STUDENT");
+                if (request.getProfileType() == StudentProfileType.ALUMNI && request.getGraduationYear() == null) throw new BaseException(ErrorCode.BAD_REQUEST, "ALUMNI bắt buộc có graduationYear");
             }
         }
     }
 
-    private int resolveSemester(Integer requestedSemester, boolean alumni) {
-        if (alumni) {
-            return 9;
+    private void requireText(String value, String field) { if (value == null || value.isBlank()) throw new BaseException(ErrorCode.BAD_REQUEST, field + " không được để trống"); }
+    private String clean(String value) { return value == null || value.isBlank() ? null : value.trim(); }
+    private void requireValue(Integer value, String field) { if (value == null) throw new BaseException(ErrorCode.BAD_REQUEST, field + " không được để trống"); }
+    private void reject(Object a, String aName, Object b, String bName, Object c, String cName, Object d, String dName, Object e, String eName) {
+        if (a != null) throw new BaseException(ErrorCode.BAD_REQUEST, aName + " không tương thích với profileType");
+        if (b != null) throw new BaseException(ErrorCode.BAD_REQUEST, bName + " không tương thích với profileType");
+        if (c != null) throw new BaseException(ErrorCode.BAD_REQUEST, cName + " không tương thích với profileType");
+        if (d != null) throw new BaseException(ErrorCode.BAD_REQUEST, dName + " không tương thích với profileType");
+        if (e != null) throw new BaseException(ErrorCode.BAD_REQUEST, eName + " không tương thích với profileType");
+    }
+
+    private void validateCurrentModelYear(Integer year, String field) {
+        if (year != null && (year < 1900 || year > 2200)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, field + " phải nằm trong khoảng 1900 đến 2200");
         }
-        return requestedSemester;
+        if (year != null && year > Year.now().getValue()) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, field + " không được lớn hơn năm hiện tại");
+        }
+    }
+
+    private void validateLength(String value, int max, String field) {
+        if (value != null && value.length() > max) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, field + " không được vượt quá " + max + " ký tự");
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     @EventListener

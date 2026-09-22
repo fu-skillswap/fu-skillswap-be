@@ -15,7 +15,6 @@ public interface UserAdminPort {
     PageResponse<IdentityAdminPortModels.SystemUserView> getAllUsers(BasePageRequest pageRequest);
 
     Optional<IdentityAdminPortModels.VisibleUserSummary> findVisibleUserSummary(UUID userId);
-    IdentityAdminPortModels.AcademicProfileSummary getAcademicProfileSummary(UUID userId);
     AdminUserReference requireAdminReference(UUID userId);
     java.util.Optional<AdminUserReference> findReference(UUID userId);
 }

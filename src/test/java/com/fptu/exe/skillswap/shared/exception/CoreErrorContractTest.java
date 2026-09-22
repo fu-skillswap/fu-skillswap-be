@@ -71,6 +71,16 @@ class CoreErrorContractTest {
                 500, ErrorCode.UNCATEGORIZED_EXCEPTION);
     }
 
+    @Test
+    void staleStudentProfileUpdatesHaveStableConflictContractWithoutPersistenceDetails() {
+        ResponseEntity<ApiResponse<Object>> response = handler.handleOptimisticLockingFailure(
+                new org.springframework.dao.OptimisticLockingFailureException("Hibernate internal SQL detail"));
+        assertEquals(409, response.getStatusCode().value());
+        assertEquals("CONCURRENT_PROFILE_UPDATE", response.getBody().getCode());
+        assertTrue(response.getBody().getMessage().contains("tải lại hồ sơ"));
+        assertFalse(response.getBody().toString().contains("Hibernate internal SQL detail"));
+    }
+
     private void assertError(ResponseEntity<ApiResponse<Object>> response, int status, ErrorCode errorCode) {
         assertEquals(status, response.getStatusCode().value());
         assertEquals(status, response.getBody().getStatus());

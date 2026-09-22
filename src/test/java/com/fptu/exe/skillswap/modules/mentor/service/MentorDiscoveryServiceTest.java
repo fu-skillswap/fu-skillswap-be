@@ -5,15 +5,16 @@ import com.fptu.exe.skillswap.infrastructure.config.PaymentProperties;
 import com.fptu.exe.skillswap.infrastructure.telemetry.InternalTelemetryService;
 import com.fptu.exe.skillswap.modules.blog.port.BlogQueryPort;
 import com.fptu.exe.skillswap.modules.blog.port.BlogMentorArticlePreview;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AvailabilityQueryRequest;
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.feedback.dto.response.MentorReviewResponse;
 import com.fptu.exe.skillswap.modules.feedback.port.FeedbackQueryPort;
 import com.fptu.exe.skillswap.modules.feedback.repository.query.MentorReviewQueryRow;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.Campus;
-import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
@@ -32,7 +33,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceResponse;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.discovery.CandidateWindow;
+import com.fptu.exe.skillswap.modules.mentor.service.discovery.CandidatePage;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryCandidateProvider;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryEnrichmentService;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryKeywordSupport;
@@ -65,6 +66,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -72,6 +74,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -110,13 +113,16 @@ class MentorDiscoveryServiceTest {
     private MentorBookingPolicyService mentorBookingPolicyService;
     @Mock
     private BlogQueryPort blogQueryPort;
+    @Mock
+    private AdministrativeProvinceRepository administrativeProvinceRepository;
+    @Mock
+    private EducationalInstitutionRepository educationalInstitutionRepository;
+    @Mock
+    private EducationFieldGroupRepository educationFieldGroupRepository;
 
     private MentorDiscoveryService mentorDiscoveryService;
 
     private StudentProfile studentProfile;
-    private Campus campus;
-    private AcademicProgram program;
-    private Specialization specialization;
     private MentorProfile mentorProfile;
 
     private MentorRecommendationFacade mentorRecommendationFacade;
@@ -142,31 +148,16 @@ class MentorDiscoveryServiceTest {
                 discoveryKeywordSupport,
                 discoveryEnrichmentService,
                 discoveryCandidateProvider,
-                discoveryRankingService,
                 discoveryMapper,
                 new DiscoveryProperties(100, "structured-v1"),
                 mentorRecommendationFacade,
                 mentorBookingPolicyService,
-                blogQueryPort
+                blogQueryPort,
+                administrativeProvinceRepository,
+                educationalInstitutionRepository,
+                educationFieldGroupRepository
         );
-        campus = new Campus();
-        campus.setId(UUID.fromString("018f3abf-0a22-7f52-9748-6cf000c47b6e"));
-        campus.setName("HCM");
-
-        program = new AcademicProgram();
-        program.setId(UUID.fromString("018f3abf-0a22-7f72-9748-6cf000c47b6e"));
-        program.setNameVi("Software Engineering");
-
-        specialization = new Specialization();
-        specialization.setId(UUID.fromString("018f3abf-0a22-7f92-9748-6cf000c47b6e"));
-        specialization.setNameVi("Backend");
-
-        studentProfile = new StudentProfile();
-        studentProfile.setUserId(USER_ID);
-        studentProfile.setCampus(campus);
-        studentProfile.setProgram(program);
-        studentProfile.setSpecialization(specialization);
-        studentProfile.setSemester(5);
+        studentProfile = StudentProfile.builder().userId(USER_ID).profileType(StudentProfileType.UNIVERSITY_STUDENT).institutionId(UUID.randomUUID()).fieldGroupId(UUID.randomUUID()).build();
 
         User mentorUser = new User();
         mentorUser.setId(MENTOR_USER_ID);
@@ -203,129 +194,47 @@ class MentorDiscoveryServiceTest {
     }
 
     @Test
-    void searchMentors_anonymous_shouldUseNonPersonalizedDiscovery() {
+    void searchMentors_usesDatabasePageWithoutJavaRanking() {
         MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
         request.setPage(0);
         request.setSize(5);
-        when(discoveryKeywordSupport.normalizeSearchText(nullable(String.class))).thenReturn("");
-        when(discoveryKeywordSupport.toLikePattern(nullable(String.class))).thenReturn(null);
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq(""), isNull(), isNull(), eq(true), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(), 0));
+        request.setKeyword("spring boot");
+        when(discoveryKeywordSupport.normalizeSearchText("spring boot")).thenReturn("spring boot");
+        when(discoveryKeywordSupport.toLikePattern("spring boot")).thenReturn("%spring boot%");
+        MentorDiscoveryQueryRow row = discoveryRow(MENTOR_USER_ID, "Spring Boot mentor");
+        when(discoveryCandidateProvider.searchPage(eq(request), eq("%spring boot%"), eq("%spring boot%"), anyList(), any()))
+                .thenReturn(new CandidatePage(List.of(MENTOR_USER_ID), 1));
+        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(MENTOR_USER_ID))).thenReturn(List.of(row));
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
+                .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
+        when(discoveryMapper.toCardResponseFromEnriched(eq(row), any(), isNull()))
+                .thenReturn(MentorDiscoveryCardResponse.builder().mentorUserId(MENTOR_USER_ID).matchScore(null).build());
 
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(null, request);
 
-        assertTrue(response.getContent().isEmpty());
-        verify(userQueryPort, never()).findStudentProfileWithDetailsByUserId(any());
+        assertEquals(1, response.getContent().size());
+        assertEquals(1, response.getTotalElements());
+        assertNull(response.getContent().getFirst().matchScore());
+        verify(discoveryCandidateProvider).searchPage(eq(request), eq("%spring boot%"), eq("%spring boot%"), anyList(), any());
+        verifyNoInteractions(discoveryRankingService);
+        verify(discoveryEnrichmentService).loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class));
     }
 
     @Test
-    void searchMentors_shouldCapPageSizeAtFifty() {
+    void searchMentors_capsPageSizeAtFiftyAndReportsDatabaseTotal() {
         MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setPage(0);
         request.setSize(999);
         when(discoveryKeywordSupport.normalizeSearchText(nullable(String.class))).thenReturn("");
         when(discoveryKeywordSupport.toLikePattern(nullable(String.class))).thenReturn(null);
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq(""), isNull(), isNull(), eq(true), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(), 100));
+        when(discoveryCandidateProvider.searchPage(eq(request), isNull(), isNull(), anyList(), any()))
+                .thenReturn(new CandidatePage(List.of(), 101));
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of()), any(LocalDateTime.class))).thenReturn(Map.of());
 
         PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(null, request);
 
         assertEquals(50, response.getSize());
-        assertEquals(2, response.getTotalPages());
-    }
-
-    @Test
-    void searchMentors_relevanceSort_shouldDelegateToCollaborators() {
-        stubSearchContext();
-
-        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setKeyword("spring boot");
-        request.setSortBy("relevance");
-        request.setPage(0);
-        request.setSize(5);
-
-        MentorDiscoveryQueryRow row = discoveryRow(MENTOR_USER_ID, "Spring Boot mentor");
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq("spring boot"), eq("%spring boot%"), eq("%spring boot%"), eq(true), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(MENTOR_USER_ID), 1));
-        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(MENTOR_USER_ID))).thenReturn(List.of(row));
-        Map<UUID, MentorEnrichedData> enriched = Map.of(MENTOR_USER_ID, MentorEnrichedData.empty());
-        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
-                .thenReturn(enriched);
-        when(discoveryRankingService.rankSearchCandidates(eq(List.of(row)), eq(studentProfile), eq("spring boot"), eq(enriched), any(LocalDateTime.class)))
-                .thenReturn(List.of(new DiscoveryRankingService.RankedSearchCandidate(row, MentorEnrichedData.empty(), new BigDecimal("80.00"), new BigDecimal("88.00"))));
-        when(discoveryMapper.toCardResponseFromEnriched(any(), any(), any())).thenReturn(MentorDiscoveryCardResponse.builder()
-                .mentorUserId(MENTOR_USER_ID)
-                .matchScore(new BigDecimal("88.00"))
-                .build());
-
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(USER_ID, request);
-
-        assertEquals(1, response.getContent().size());
-        assertEquals(MENTOR_USER_ID, response.getContent().getFirst().mentorUserId());
-        assertEquals(new BigDecimal("88.00"), response.getContent().getFirst().matchScore());
-        verify(discoveryKeywordSupport).normalizeSearchText("spring boot");
-        verify(discoveryCandidateProvider).recallForSearch(eq(request), eq("spring boot"), eq("%spring boot%"), eq("%spring boot%"), eq(true), anyList(), any(), anyInt());
-        verify(discoveryEnrichmentService).loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class));
-        verify(discoveryRankingService).rankSearchCandidates(eq(List.of(row)), eq(studentProfile), eq("spring boot"), eq(enriched), any(LocalDateTime.class));
-    }
-
-    @Test
-    void searchMentors_zeroResultShouldUseCorrectedKeywordAndRecordTelemetry() {
-        stubSearchContext();
-
-        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setKeyword("springbot");
-        request.setSortBy("relevance");
-
-        when(discoveryKeywordSupport.normalizeSearchText("springbot")).thenReturn("springbot");
-        when(discoveryKeywordSupport.toLikePattern("springbot")).thenReturn("%springbot%");
-        when(discoveryKeywordSupport.correctSpelling("springbot")).thenReturn("spring boot");
-        when(discoveryKeywordSupport.toLikePattern("spring boot")).thenReturn("%spring boot%");
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq("springbot"), eq("%springbot%"), eq("%springbot%"), eq(true), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(), 0));
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq("spring boot"), eq("%spring boot%"), eq("%spring boot%"), eq(true), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(), 0));
-
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(USER_ID, request);
-
-        assertTrue(response.getContent().isEmpty());
-        verify(discoveryKeywordSupport).correctSpelling("springbot");
-        verify(internalTelemetryService).record(eq("MENTOR_SEARCH_ZERO_RESULT"), eq(USER_ID), eq("MENTOR_SEARCH"), isNull(), any());
-    }
-
-    @Test
-    void searchMentors_nonRelevanceSort_shouldEnrichOnlyPageRows() {
-        stubSearchContext();
-
-        MentorDiscoverySearchRequest request = new MentorDiscoverySearchRequest();
-        request.setSortBy("ratingAverage");
-        request.setDirection(Sort.Direction.DESC);
-        request.setPage(0);
-        request.setSize(1);
-
-        MentorDiscoveryQueryRow first = discoveryRow(MENTOR_USER_ID, "First mentor");
-        MentorDiscoveryQueryRow second = discoveryRow(SECOND_MENTOR_USER_ID, "Second mentor");
-        when(discoveryCandidateProvider.recallForSearch(eq(request), eq(""), isNull(), isNull(), eq(false), anyList(), any(), anyInt()))
-                .thenReturn(new CandidateWindow(List.of(MENTOR_USER_ID, SECOND_MENTOR_USER_ID), 2));
-        when(mentorProfileRepository.findDiscoveryRowsByMentorUserIds(List.of(MENTOR_USER_ID, SECOND_MENTOR_USER_ID))).thenReturn(List.of(first, second));
-        when(discoveryRankingService.sortRowsForRequestedSort(eq(List.of(first, second)), eq("ratingAverage"), eq(Sort.Direction.DESC)))
-                .thenReturn(List.of(second, first));
-        Map<UUID, MentorEnrichedData> enriched = Map.of(SECOND_MENTOR_USER_ID, MentorEnrichedData.empty());
-        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(SECOND_MENTOR_USER_ID)), any(LocalDateTime.class)))
-                .thenReturn(enriched);
-        when(discoveryRankingService.rankSearchCandidates(eq(List.of(second)), eq(studentProfile), eq(""), eq(enriched), any(LocalDateTime.class)))
-                .thenReturn(List.of(new DiscoveryRankingService.RankedSearchCandidate(second, MentorEnrichedData.empty(), new BigDecimal("50.00"), new BigDecimal("61.00"))));
-        when(discoveryMapper.toCardResponseFromEnriched(any(), any(), any())).thenReturn(MentorDiscoveryCardResponse.builder()
-                .mentorUserId(SECOND_MENTOR_USER_ID)
-                .matchScore(new BigDecimal("61.00"))
-                .build());
-
-        PageResponse<MentorDiscoveryCardResponse> response = mentorDiscoveryService.searchMentors(USER_ID, request);
-
-        assertEquals(1, response.getContent().size());
-        assertEquals(SECOND_MENTOR_USER_ID, response.getContent().getFirst().mentorUserId());
-        verify(discoveryEnrichmentService).loadMentorEnrichedData(eq(List.of(SECOND_MENTOR_USER_ID)), any(LocalDateTime.class));
-        verify(discoveryRankingService).sortRowsForRequestedSort(eq(List.of(first, second)), eq("ratingAverage"), eq(Sort.Direction.DESC));
+        assertEquals(3, response.getTotalPages());
+        assertEquals(101, response.getTotalElements());
     }
 
     @Test
@@ -333,7 +242,7 @@ class MentorDiscoveryServiceTest {
         stubSearchContext();
 
         MentorDiscoveryQueryRow row = discoveryRow(MENTOR_USER_ID, "Recommendation mentor");
-        when(discoveryCandidateProvider.recallForRecommendation(eq(USER_ID), eq(true), eq(3), any(LocalDateTime.class), anyInt()))
+        when(discoveryCandidateProvider.recallForRecommendation(eq(USER_ID), anyBoolean(), anyInt(), any(LocalDateTime.class), anyInt()))
                 .thenReturn(List.of(row));
         when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
                 .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
@@ -349,7 +258,7 @@ class MentorDiscoveryServiceTest {
 
         assertEquals(1, recommendations.size());
         assertEquals(new BigDecimal("77.00"), recommendations.getFirst().matchScore());
-        verify(discoveryCandidateProvider).recallForRecommendation(eq(USER_ID), eq(true), eq(3), any(LocalDateTime.class), anyInt());
+        verify(discoveryCandidateProvider).recallForRecommendation(eq(USER_ID), anyBoolean(), anyInt(), any(LocalDateTime.class), anyInt());
         verify(discoveryRankingService).scoreRecommendation(eq(row), eq(MentorEnrichedData.empty()), eq(studentProfile), any(LocalDateTime.class));
     }
 
@@ -360,7 +269,7 @@ class MentorDiscoveryServiceTest {
         MentorDiscoveryQueryRow noReviews = discoveryRow(MENTOR_USER_ID, "New mentor", new BigDecimal("5.00"), 0, 12);
         DiscoveryRankingService.RecommendationScore score = new DiscoveryRankingService.RecommendationScore(new BigDecimal("77.00"), List.of());
 
-        when(discoveryCandidateProvider.recallForRecommendation(eq(USER_ID), eq(true), eq(2), any(LocalDateTime.class), anyInt()))
+        when(discoveryCandidateProvider.recallForRecommendation(eq(USER_ID), anyBoolean(), anyInt(), any(LocalDateTime.class), anyInt()))
                 .thenReturn(List.of(rated, noReviews));
         when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(SECOND_MENTOR_USER_ID, MENTOR_USER_ID)), any(LocalDateTime.class)))
                 .thenReturn(Map.of(SECOND_MENTOR_USER_ID, MentorEnrichedData.empty(), MENTOR_USER_ID, MentorEnrichedData.empty()));
@@ -422,6 +331,23 @@ class MentorDiscoveryServiceTest {
         assertTrue(response.evidence().authorityContent().recentPublicArticles().isEmpty());
         assertTrue(response.availability().canRequestBooking());
         verify(mentorBookingPolicyService).isPublicBookingOfferAvailable(eq(mentorProfile), eq(true), any(LocalDateTime.class));
+    }
+
+    @Test
+    void getMentorDetail_currentSchoolProfileDoesNotProjectLegacyUniversityFields() {
+        when(mentorProfileRepository.findWithUserByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(mentorProfile));
+        when(userQueryPort.findStudentProfileWithDetailsByUserId(MENTOR_USER_ID)).thenReturn(Optional.of(StudentProfile.builder()
+                .userId(MENTOR_USER_ID).profileType(StudentProfileType.SCHOOL_STUDENT)
+                .customInstitutionName("THPT Example").build()));
+        when(discoveryEnrichmentService.loadMentorEnrichedData(eq(List.of(MENTOR_USER_ID)), any(LocalDateTime.class)))
+                .thenReturn(Map.of(MENTOR_USER_ID, MentorEnrichedData.empty()));
+        when(mentorServiceRepository.findByMentorProfileUserIdAndIsActiveTrueOrderByCreatedAtAsc(MENTOR_USER_ID)).thenReturn(List.of());
+        when(mentorBookingPolicyService.isPublicBookingOfferAvailable(eq(mentorProfile), eq(false), any(LocalDateTime.class)))
+                .thenReturn(false);
+        when(blogQueryPort.findMentorPublicProfilePreviews(eq(MENTOR_USER_ID), eq(3))).thenReturn(List.of());
+
+        MentorDiscoveryDetailResponse response = mentorDiscoveryService.getMentorDetail(MENTOR_USER_ID);
+
     }
 
     @Test
@@ -556,14 +482,6 @@ class MentorDiscoveryServiceTest {
                 reviewCount,
                 completedSessions,
                 LocalDateTime.now().minusDays(5),
-                campus.getId(),
-                campus.getName(),
-                program.getId(),
-                program.getNameVi(),
-                specialization.getId(),
-                specialization.getNameVi(),
-                8,
-                false,
                 12,
                 2,
                 0,

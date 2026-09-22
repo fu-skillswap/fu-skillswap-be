@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.forum.domain.ForumTopic;
 
 import com.fptu.exe.skillswap.modules.forum.domain.ForumTopicCode;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumComment;
@@ -167,64 +166,6 @@ class ForumPostServiceTest {
         verify(forumAbuseGuardService).checkAndLog(mentee, ForumActionType.CREATE_POST);
         verify(forumActionLogService).record(eq(mentee), eq(ForumActionType.CREATE_POST), eq("POST"), any(), any());
         verify(forumPostRepository).save(any(ForumPost.class));
-    }
-
-    @Test
-    void createPost_snapshotsAuthorsCurrentProgram() {
-        AcademicProgram program = AcademicProgram.builder()
-                .id(UUID.randomUUID())
-                .code("CNTT")
-                .nameVi("Công nghệ thông tin")
-                .isActive(true)
-                .build();
-        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(forumTopicRepository.findById(helpTopic.getId())).thenReturn(Optional.of(helpTopic));
-        when(studentProfileRepository.findWithDetailsByUserId(mentee.getId()))
-                .thenReturn(Optional.of(StudentProfile.builder().program(program).build()));
-        when(forumPostRepository.save(any(ForumPost.class))).thenAnswer(invocation -> {
-            ForumPost post = invocation.getArgument(0);
-            post.setId(UUID.randomUUID());
-            return post;
-        });
-
-        ForumPostResponse response = forumPostService.createPost(mentee.getId(), new ForumPostUpsertRequest(
-                "Hỏi về Java", "Nội dung", helpTopic.getId(), List.of()
-        ));
-
-        assertEquals(program.getId(), response.authorProgram().id());
-    }
-
-    @Test
-    void feed_prioritizesTheViewersProgramThroughRepositoryQuery() {
-        AcademicProgram program = AcademicProgram.builder()
-                .id(UUID.randomUUID())
-                .code("CNTT")
-                .nameVi("Công nghệ thông tin")
-                .isActive(true)
-                .build();
-        ForumPost sameProgramPost = ForumPost.builder()
-                .id(UUID.randomUUID())
-                .authorUser(mentee)
-                .authorProgram(program)
-                .forumTopic(helpTopic)
-                .title("Cùng ngành")
-                .content("Nội dung")
-                .status(ForumPostStatus.PUBLISHED)
-                .lastActivityAt(LocalDateTime.of(2026, 7, 24, 10, 0))
-                .build();
-        when(userRepository.findById(mentee.getId())).thenReturn(Optional.of(mentee));
-        when(studentProfileRepository.findWithDetailsByUserId(mentee.getId()))
-                .thenReturn(Optional.of(StudentProfile.builder().program(program).build()));
-        when(forumPostRepository.findProgramPrioritizedWindow(eq(program.getId()), isNull(), isNull(), isNull(), eq(21)))
-                .thenReturn(List.of(sameProgramPost));
-        when(forumPostReactionRepository.findReactedPostIdsByUserIdAndPostIdIn(eq(mentee.getId()), any()))
-                .thenReturn(List.of());
-
-        CursorPageResponse<ForumPostResponse> page = forumPostService.getFeed(mentee.getId(), null, 20);
-
-        assertEquals(1, page.items().size());
-        assertEquals(program.getId(), page.items().get(0).authorProgram().id());
-        verify(forumPostRepository).findProgramPrioritizedWindow(eq(program.getId()), isNull(), isNull(), isNull(), eq(21));
     }
 
     @Test

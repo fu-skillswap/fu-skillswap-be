@@ -35,7 +35,7 @@ Danh sách Discovery (Duyệt/Tìm kiếm)
 
 ## 2. Tìm Kiếm & Lọc Mentor (Discovery Search APIs)
 
-API `GET /api/mentors` là **công khai (Public)**. Có thể đính kèm Bearer token nếu người dùng đã đăng nhập để backend tính toán thêm điểm phù hợp (matching context); tuy nhiên token không bắt buộc để xem danh sách.
+API `GET /api/mentors` là **công khai (Public)**. Có thể đính kèm Bearer token; token không bắt buộc để xem danh sách.
 
 - **Endpoint**: `GET /api/mentors`
 - **Query Parameters**:
@@ -44,9 +44,7 @@ API `GET /api/mentors` là **công khai (Public)**. Có thể đính kèm Bearer
 |---|---|---|---|
 | `page` | number | `0` | Trang bắt đầu từ `0` (Backend giới hạn deep pagination tối đa 20 trang đầu: `0` đến `19`) |
 | `size` | number | `12` | Kích thước trang (Backend giới hạn từ `1` đến `50`). FE có thể lấy tối đa 50 mentor/lần rồi tự chia cách hiển thị trong dữ liệu đã tải. |
-| `keyword` | string | - | Tìm kiếm theo họ tên, headline, bio, môn học, dự án và thành tích |
-| `campusId` | UUID | - | Lọc theo cơ sở đào tạo (FPTU Campus) |
-| `specializationId` | UUID | - | Lọc theo chuyên ngành học |
+| `keyword` | string | - | Tìm theo tên, headline, bio, skills/category, môn học mentoring, project, achievement và service; không tìm education legacy |
 | `sortBy` | string | `relevance` | Các tùy chọn: `relevance`, `ratingAverage`, `reviewCount`, `completedSessions`, `updatedAt` |
 | `direction` | `"ASC"` \| `"DESC"` | `DESC` | Áp dụng cho các kiểu sắp xếp khác `relevance` |
 
@@ -77,14 +75,7 @@ interface MentorDiscoveryCardResponse {
     outputReviewSupportLevel: number | null;
     directionSupportLevel: number | null;
   };
-  evidence: {
-    campusId: string | null;
-    campusName: string | null;
-    programId: string | null;
-    programName: string | null;
-    specializationId: string | null;
-    specializationName: string | null;
-    subjectHighlights: MentorSubjectResult[]; // Tối đa 2 item nổi bật
+  evidence: {    subjectHighlights: MentorSubjectResult[]; // Tối đa 2 item nổi bật
     featuredProjects: MentorFeaturedProject[]; // Tối đa 2 item nổi bật
     achievements: MentorAchievement[];         // Tối đa 2 item nổi bật
   };
@@ -105,8 +96,14 @@ interface MentorDiscoveryCardResponse {
 
 > [!NOTE]
 > - Nếu `ratingState === "NO_REVIEWS"`, trường `ratingAverage` luôn là `null`. Frontend **không tự ý hiển thị mặc định 5.0**.
-> - `match.score` có thể là `null`, đặc biệt khi người dùng chọn sort khác `relevance`. Không coi score là trường bắt buộc phải có để render card.
+> - `match.score` hiện là `null` trên search list. Không coi score là trường bắt buộc phải có để render card.
 > - Tất cả mentor xuất hiện trong kết quả discovery đều đã được xác thực (`isVerified = true`), có profile hợp lệ và sở hữu ít nhất một dịch vụ `ONE_TO_ONE` đang mở (`isActive = true`).
+
+### Quy tắc education trong discovery
+
+- Discovery không dùng education để lọc hoặc ranking mặc định. Legacy `campusId` và `specializationId` đã bị loại khỏi request contract; nếu gửi một trong hai, API trả HTTP 400 với code `LEGACY_EDUCATION_FILTER_REMOVED` và yêu cầu client bỏ filter.
+- Keyword search không dựa vào campus, program, specialization, semester hoặc `isAlumni` legacy (kể cả search document tổng hợp cũ). Keyword vẫn tìm các nội dung mentoring có giá trị như tên, headline, bio, skills/category, môn mentoring, project, achievement và service.
+- Education canonical chỉ xem ở public mentor detail (`GET /api/mentors/{mentorUserId}`). Discovery hiện chưa có public education filter. Không suy diễn education bị thiếu hoặc profile type từ dữ liệu legacy.
 
 ---
 
@@ -136,8 +133,18 @@ interface MentorDiscoveryDetailResponse {
     };
   };
   services: MentorServiceResponse[];
+  /** Canonical education summary. Null for legacy profiles; fields incompatible with type are null. */
+  education: {
+    type: "SCHOOL_STUDENT" | "UNIVERSITY_STUDENT" | "ALUMNI";
+    schoolName: string | null;
+    province: { id: string; name: string } | null;
+    institution: { id: string; name: string } | null;
+    fieldGroup: { id: string; name: string } | null;
+    major: string | null;
+  } | null;
   evidence: {
     education: {
+      /** Deprecated compatibility fields; use the top-level canonical education summary. */
       campusId: string | null;
       campusName: string | null;
       programId: string | null;
@@ -230,6 +237,17 @@ interface MentorAchievement {
   createdAt: string;
   updatedAt: string;
 }
+```
+
+The top-level `education` is canonical and type-aware. Legacy (`profileType = null`) profiles return `null`; no canonical institution or field group is inferred from campus/program/specialization. School profiles expose only school name and province. University and alumni profiles expose only institution, field group, and major. Missing or inactive catalog relations are `null`.
+
+Examples (`education`):
+
+```json
+{"education":null}
+{"education":{"type":"SCHOOL_STUDENT","schoolName":"Nguyen Trai High School","province":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ab","name":"Ha Noi"},"institution":null,"fieldGroup":null,"major":null}}
+{"education":{"type":"UNIVERSITY_STUDENT","schoolName":null,"province":null,"institution":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ac","name":"Example University"},"fieldGroup":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ad","name":"Computer Science"},"major":"Software Engineering"}}
+{"education":{"type":"ALUMNI","schoolName":null,"province":null,"institution":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ac","name":"Example University"},"fieldGroup":{"id":"019f5234-aaaa-bbbb-cccc-1234567890ad","name":"Computer Science"},"major":"Software Engineering"}}
 ```
 
 > [!IMPORTANT]

@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
@@ -42,17 +41,17 @@ public class StudentProfileController {
         return ApiResponse.success(response);
     }
 
-    @Operation(summary = "Lưu hồ sơ học thuật của tôi", description = "Tạo mới hoặc cập nhật hồ sơ học thuật của user hiện tại. FE dùng trong onboarding trước khi cho user vào dashboard chính, hoặc khi cần cập nhật lại dữ liệu academic ảnh hưởng tới eligibility của các tính năng. Các rule validate như student code và quan hệ program/specialization sẽ do backend kiểm tra.")
+    @Operation(summary = "Lưu hồ sơ người học của tôi", description = "Tạo hoặc cập nhật hồ sơ SCHOOL_STUDENT, UNIVERSITY_STUDENT hoặc ALUMNI. Chọn trường bằng institutionId hoặc nhập customInstitutionName kèm customInstitutionProvinceId; các field không phù hợp với profileType bị từ chối.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Lưu hồ sơ thành công"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu không hợp lệ: sai format MSSV hoặc chuyên ngành không thuộc ngành"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Dữ liệu hồ sơ không hợp lệ với profileType"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Cơ sở / Ngành học / Chuyên ngành không tồn tại")
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Tỉnh/thành, trường hoặc nhóm ngành không tồn tại")
     })
     @PutMapping
     public ApiResponse<StudentProfileResponse> updateStudentProfile(
             @AuthenticationPrincipal UserPrincipal principal,
-            @Valid @RequestBody StudentProfileRequest request) {
+            @RequestBody StudentProfileRequest request) {
         if (principal == null) {
             throw new BaseException(ErrorCode.UNAUTHENTICATED, "Chưa xác thực người dùng");
         }

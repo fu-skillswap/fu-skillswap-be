@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 import java.util.Set;
-import java.util.UUID;
 
 @Schema(description = "Request cập nhật campaign cho admin (partial update).")
 public record AdminCampaignUpdateRequest(
@@ -32,15 +31,6 @@ public record AdminCampaignUpdateRequest(
         Integer budgetScoin,
 
         @Schema(description = "Tập hợp mã vai trò áp dụng")
-        Set<String> audienceRoleCodes,
-
-        @Schema(description = "Tập hợp campus ID áp dụng")
-        Set<UUID> audienceCampusIds,
-
-        @Schema(description = "Tập hợp program ID áp dụng")
-        Set<UUID> audienceProgramIds,
-
-        @Schema(description = "Tập hợp specialization ID áp dụng")
-        Set<UUID> audienceSpecializationIds
+        Set<String> audienceRoleCodes
 ) {
 }

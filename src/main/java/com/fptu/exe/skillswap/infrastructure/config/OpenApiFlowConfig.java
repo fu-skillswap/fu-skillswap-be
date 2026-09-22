@@ -44,7 +44,6 @@ public class OpenApiFlowConfig {
 
     private static final List<TagRule> TAG_RULES = List.of(
             tag("Authentication", "Đăng nhập", "Đăng nhập Google, làm mới phiên và lấy thông tin người dùng hiện tại."),
-            tag("Academic Catalog", "Dữ liệu học tập", "Danh sách campus, ngành và chuyên ngành dùng trong biểu mẫu."),
             tag("Catalog", "Dữ liệu biểu mẫu", "Các lựa chọn có sẵn để FE hiển thị trong biểu mẫu."),
             tag("Onboarding", "Trạng thái bắt đầu", "Cho FE biết người dùng cần hoàn thành bước nào tiếp theo."),
             tag("Academic Profile", "Hồ sơ sinh viên", "Xem và cập nhật thông tin học tập của người dùng."),
@@ -200,9 +199,6 @@ public class OpenApiFlowConfig {
                 "01-identity",
                 "1. Đăng nhập và hồ sơ",
                 "/api/auth/**",
-                "/api/campuses",
-                "/api/academic-programs/**",
-                "/api/specializations",
                 "/api/catalog/**",
                 "/api/me/onboarding-status",
                 "/api/me/student-profile/**"

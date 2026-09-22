@@ -50,9 +50,8 @@ public class MentorDiscoveryRepositoryTest {
     private MentorProfile createDiscoverableProfile(User user, String headline, String supportingSubjects) {
         StudentProfile sp = StudentProfile.builder()
                 .user(user)
-                .claimedStudentCode("SC" + UUID.randomUUID().toString().substring(0, 5))
-                .semester(5)
-                .intakeYear(2022)
+                .profileType(com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType.UNIVERSITY_STUDENT)
+                .onboardingCompleted(true)
                 .build();
         entityManager.persist(sp);
 
@@ -89,7 +88,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -101,7 +100,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertEquals(1, result.getContent().size());
         assertEquals(user.getId(), result.getContent().get(0));
@@ -114,7 +113,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -126,7 +125,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -138,7 +137,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, "", "", "", "", LocalDateTime.now(), PageRequest.of(0, 10)
         );
         assertTrue(result.getContent().isEmpty());
     }
@@ -150,7 +149,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
-                MentorStatus.ACTIVE, null, null, LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, LocalDateTime.now(), PageRequest.of(0, 10)
         );
 
         assertTrue(result.getContent().isEmpty());
@@ -163,7 +162,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIds(
-                MentorStatus.ACTIVE, null, null, LocalDateTime.now(), PageRequest.of(0, 10)
+                MentorStatus.ACTIVE, LocalDateTime.now(), PageRequest.of(0, 10)
         );
 
         assertTrue(result.getContent().isEmpty());
@@ -176,7 +175,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null,
+                MentorStatus.ACTIVE,
                 "%huong dan mon hoc%", "%huong dan mon hoc%",
                 "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
                 "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",
@@ -204,7 +203,7 @@ public class MentorDiscoveryRepositoryTest {
         entityManager.flush();
 
         Page<UUID> result = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                MentorStatus.ACTIVE, null, null,
+                MentorStatus.ACTIVE,
                 "%swp391%", "%swp391%",
                 "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ",
                 "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy",

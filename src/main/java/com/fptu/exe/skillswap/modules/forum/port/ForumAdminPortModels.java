@@ -24,9 +24,6 @@ public final class ForumAdminPortModels {
     public record ResolveReportCommand(@NotBlank String action, @Size(max = 500) String reviewNote) {
     }
 
-    public record ProgramView(UUID id, String code, String nameVi, String nameEn) {
-    }
-
     public record TopicView(UUID id, String code, String nameVi, String nameEn, Integer displayOrder) {
     }
 
@@ -40,7 +37,7 @@ public final class ForumAdminPortModels {
 
     public record PostView(
             UUID postId, UUID authorUserId, String authorFullName, String authorAvatarUrl,
-            ProgramView authorProgram, TopicView forumTopic, String title, String content, String status,
+            TopicView forumTopic, String title, String content, String status,
             Integer commentCount, Integer reactionCount, Integer reportCount, LocalDateTime lastActivityAt,
             boolean reactedByCurrentUser, String myReactionType, LocalDateTime createdAt, LocalDateTime updatedAt,
             List<String> imageUrls

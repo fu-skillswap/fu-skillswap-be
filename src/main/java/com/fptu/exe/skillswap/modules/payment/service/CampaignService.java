@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
-import com.fptu.exe.skillswap.modules.identity.port.StudentProfileRecord;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
@@ -71,7 +70,6 @@ public class CampaignService {
 
         UserSummaryRecord user = userQueryPort.findUserSummaryById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy người dùng để áp campaign"));
-        StudentProfileRecord studentProfile = userQueryPort.findStudentProfileRecordByUserId(userId).orElse(null);
 
         CampaignCreditApplication bestMatch = CampaignCreditApplication.none();
         for (UUID campaignId : campaignRepository.findIdsByStatusOrderByIdAsc(CampaignStatus.ACTIVE)) {
@@ -81,7 +79,7 @@ public class CampaignService {
             if (campaign == null) {
                 continue;
             }
-            if (!isWithinWindow(campaign) || !matchesAudience(campaign, user, studentProfile, booking)) {
+            if (!isWithinWindow(campaign) || !matchesAudience(campaign, user, booking)) {
                 continue;
             }
 
@@ -118,24 +116,9 @@ public class CampaignService {
         return campaign.getEndAt() == null || !timeProvider.nowBusiness().isAfter(campaign.getEndAt());
     }
 
-    private boolean matchesAudience(Campaign campaign, UserSummaryRecord user, StudentProfileRecord studentProfile, BookingCheckoutSnapshot booking) {
+    private boolean matchesAudience(Campaign campaign, UserSummaryRecord user, BookingCheckoutSnapshot booking) {
         if (!campaign.getAudienceRoleCodes().isEmpty()
                 && (user.roles() == null || user.roles().stream().map(Enum::name).noneMatch(campaign.getAudienceRoleCodes()::contains))) {
-            return false;
-        }
-        if (!campaign.getAudienceCampusIds().isEmpty()
-                && (studentProfile == null || studentProfile.campusId() == null
-                || !campaign.getAudienceCampusIds().contains(studentProfile.campusId()))) {
-            return false;
-        }
-        if (!campaign.getAudienceProgramIds().isEmpty()
-                && (studentProfile == null || studentProfile.programId() == null
-                || !campaign.getAudienceProgramIds().contains(studentProfile.programId()))) {
-            return false;
-        }
-        if (!campaign.getAudienceSpecializationIds().isEmpty()
-                && (studentProfile == null || studentProfile.specializationId() == null
-                || !campaign.getAudienceSpecializationIds().contains(studentProfile.specializationId()))) {
             return false;
         }
         return true;

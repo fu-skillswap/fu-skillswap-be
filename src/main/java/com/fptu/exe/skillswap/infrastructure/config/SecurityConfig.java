@@ -84,11 +84,10 @@ public class SecurityConfig {
                             ).permitAll();
                     auth
                             .requestMatchers(HttpMethod.GET,
-                                    "/api/campuses",
-                                    "/api/academic-programs",
-                                    "/api/academic-programs/*/specializations",
-                                    "/api/specializations",
                                     "/api/catalog/mentor-profile-options",
+                                    "/api/catalog/provinces",
+                                    "/api/catalog/institutions",
+                                    "/api/catalog/education-field-groups",
                                     "/api/forum/topics",
                                     "/api/forum/posts",
                                     "/api/forum/posts/*",

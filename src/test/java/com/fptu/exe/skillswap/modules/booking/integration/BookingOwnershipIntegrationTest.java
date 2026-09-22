@@ -1,9 +1,8 @@
 package com.fptu.exe.skillswap.modules.booking.integration;
 
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
@@ -71,14 +70,9 @@ class BookingOwnershipIntegrationTest {
     @Autowired
     private AcademicService academicService;
 
-    @Autowired
-    private CampusRepository campusRepository;
 
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
 
-    @Autowired
-    private SpecializationRepository specializationRepository;
+    @Autowired private AdministrativeProvinceRepository provinceRepository;
 
     @Autowired
     private MentorAvailabilityRuleRepository mentorAvailabilityRuleRepository;
@@ -129,7 +123,7 @@ class BookingOwnershipIntegrationTest {
                 .fullName("Ownership Mentee")
                 .status(UserStatus.ACTIVE)
                 .build());
-        completeAcademicProfile(menteeUser.getId(), "SE290001");
+        completeAcademicProfile(menteeUser.getId() );
         creditLedgerService.issueCredit(
                 menteeUser.getId(),
                 com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType.MANUAL,
@@ -248,20 +242,11 @@ class BookingOwnershipIntegrationTest {
         assertEquals(ErrorCode.CHAT_ACCESS_DENIED, sendMessageException.getErrorCode());
     }
 
-    private void completeAcademicProfile(UUID userId, String studentCode) {
-        var campus = campusRepository.findAll().getFirst();
-        var program = academicProgramRepository.findAll().getFirst();
-        var specialization = specializationRepository.findByProgramIdAndIsActiveTrue(program.getId()).getFirst();
-
+    private void completeAcademicProfile(UUID userId) {
         academicService.updateStudentProfile(userId, StudentProfileRequest.builder()
-                .studentCode(studentCode)
-                .campusId(campus.getId())
-                .programId(program.getId())
-                .specializationId(specialization.getId())
-                .semester(5)
-                .intakeYear(2022)
-                .isAlumni(false)
-                .bio("Ownership integration profile")
+                .profileType(StudentProfileType.SCHOOL_STUDENT)
+                .customInstitutionName("Test secondary school")
+                .customInstitutionProvinceId(provinceRepository.findByCode("01").orElseThrow().getId())
                 .build());
     }
 }

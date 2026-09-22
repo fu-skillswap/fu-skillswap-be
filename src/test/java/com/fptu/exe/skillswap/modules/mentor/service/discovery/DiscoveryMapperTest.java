@@ -60,14 +60,6 @@ class DiscoveryMapperTest {
                 10,
                 50,
                 LocalDateTime.now(),
-                UUID.randomUUID(),
-                "HCM",
-                UUID.randomUUID(),
-                "SE",
-                UUID.randomUUID(),
-                "Backend",
-                8,
-                false,
                 15,
                 10,
                 0,
@@ -108,11 +100,7 @@ class DiscoveryMapperTest {
                 new BigDecimal("0.00"),
                 0,
                 0,
-                LocalDateTime.now(),
-                mockRow.campusId(), mockRow.campusName(),
-                mockRow.programId(), mockRow.programName(),
-                mockRow.specializationId(), mockRow.specializationName(),
-                8, false, 0, 0, 0, LocalDateTime.now(), 0.0
+                LocalDateTime.now(), 0, 0, 0, LocalDateTime.now(), 0.0
         );
 
         MentorDiscoveryCardResponse response = discoveryMapper.toCardResponse(

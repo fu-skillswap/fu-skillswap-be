@@ -24,11 +24,9 @@ class PublicApiGrowthGateSecurityTest {
     private MockMvc mockMvc;
 
     @Test
-    void anonymousShouldAccessPublicCatalogAndForumTopics() throws Exception {
-        mockMvc.perform(get("/api/campuses"))
-                .andExpect(status().isOk())
-                .andExpect(header().string("Cache-Control", "public, max-age=86400"))
-                .andExpect(header().string("ETag", "\"academic-catalog-v1\""));
+    void anonymousShouldAccessCanonicalCatalogAndForumTopics() throws Exception {
+        mockMvc.perform(get("/api/catalog/provinces"))
+                .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/forum/topics"))
                 .andExpect(status().isOk())

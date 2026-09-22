@@ -11,14 +11,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -27,56 +22,24 @@ public class DiscoveryCandidateProvider {
     private static final String ACCENTED_CHARACTERS = "àáạảãăắằẳẵặâấầẩẫậđèéẹẻẽêếềểễệìíịỉĩòóọỏõôốồổỗộơớờởỡợùúụủũưứừửữựỳýỵỷỹ";
     private static final String PLAIN_CHARACTERS = "aaaaaaaaaaaaaaaaadeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyy";
     private final MentorProfileRepository mentorProfileRepository;
-    private final DataSource dataSource;
-    private volatile Boolean postgresDetected = null;
-    private final Object postgresDetectionLock = new Object();
 
-    public CandidateWindow recallForSearch(
+    public CandidatePage searchPage(
             MentorDiscoverySearchRequest request,
-            String normalizedKeyword,
             String keywordPattern,
             String normalizedKeywordPattern,
-            boolean relevanceSort,
             List<Sort.Order> orders,
-            LocalDateTime now,
-            int defaultRecallWindowSize
+            LocalDateTime now
     ) {
-        int requestedPage = Math.max(request.getPage(), 0);
-        int requestedSize = Math.min(
-                Math.max(request.getSize(), 1),
-                MentorDiscoverySearchRequest.MAX_PAGE_SIZE
-        );
-        int recallWindowSize = recallWindowSize(requestedPage, requestedSize, relevanceSort, defaultRecallWindowSize);
-        boolean hasKeyword = normalizedKeyword != null && !normalizedKeyword.isBlank();
-
-        if (hasKeyword && isPostgresDataSource()) {
-            return findCandidatesByFts(normalizedKeyword, request, now, recallWindowSize);
-        }
-
-        Pageable pageable = PageRequest.of(0, recallWindowSize, Sort.by(orders));
-        Page<UUID> candidatePage;
-        if (hasKeyword) {
-            candidatePage = mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
-                    MentorStatus.ACTIVE,
-                    request.getCampusId(),
-                    request.getSpecializationId(),
-                    keywordPattern,
-                    normalizedKeywordPattern,
-                    ACCENTED_CHARACTERS,
-                    PLAIN_CHARACTERS,
-                    now,
-                    pageable
-            );
-        } else {
-            candidatePage = mentorProfileRepository.findDiscoverableCandidateIds(
-                    MentorStatus.ACTIVE,
-                    request.getCampusId(),
-                    request.getSpecializationId(),
-                    now,
-                    pageable
-            );
-        }
-        return new CandidateWindow(candidatePage.getContent(), candidatePage.getTotalElements());
+        int page = Math.min(Math.max(request.getPage(), 0), 19);
+        int size = Math.min(Math.max(request.getSize(), 1), MentorDiscoverySearchRequest.MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(orders));
+        boolean hasKeyword = normalizedKeywordPattern != null && !normalizedKeywordPattern.isBlank();
+        Page<UUID> result = hasKeyword
+                ? mentorProfileRepository.findDiscoverableCandidateIdsWithKeyword(
+                        MentorStatus.ACTIVE, keywordPattern, normalizedKeywordPattern,
+                        ACCENTED_CHARACTERS, PLAIN_CHARACTERS, now, pageable)
+                : mentorProfileRepository.findDiscoverableCandidateIds(MentorStatus.ACTIVE, now, pageable);
+        return new CandidatePage(result.getContent(), result.getTotalElements());
     }
 
     public List<MentorDiscoveryQueryRow> recallForRecommendation(
@@ -98,55 +61,6 @@ public class DiscoveryCandidateProvider {
         );
     }
 
-    public int recallWindowSize(int requestedPage, int requestedSize, boolean relevanceSort, int defaultRecallWindowSize) {
-        int minimumWindow = Math.max(defaultRecallWindowSize, (requestedPage + 1) * requestedSize);
-        if (!relevanceSort) {
-            return Math.min(minimumWindow, 600);
-        }
-        return Math.min(Math.max(minimumWindow, (requestedPage + 1) * requestedSize * 5), 600);
-    }
 
-    private CandidateWindow findCandidatesByFts(
-            String normalizedKeyword,
-            MentorDiscoverySearchRequest request,
-            LocalDateTime now,
-            int recallWindowSize
-    ) {
-        List<UUID> ids = mentorProfileRepository.findDiscoverableCandidateIdsByFts(
-                normalizedKeyword,
-                request.getCampusId(),
-                request.getSpecializationId(),
-                now,
-                recallWindowSize,
-                0
-        );
 
-        long totalCount = mentorProfileRepository.countDiscoverableCandidatesByFts(
-                normalizedKeyword,
-                request.getCampusId(),
-                request.getSpecializationId(),
-                now
-        );
-
-        return new CandidateWindow(ids, totalCount);
-    }
-
-    public boolean isPostgresDataSource() {
-        if (postgresDetected != null) {
-            return postgresDetected;
-        }
-        synchronized (postgresDetectionLock) {
-            if (postgresDetected != null) {
-                return postgresDetected;
-            }
-            try (Connection conn = dataSource.getConnection()) {
-                DatabaseMetaData meta = conn.getMetaData();
-                String productName = meta.getDatabaseProductName();
-                postgresDetected = productName != null && productName.toLowerCase(Locale.ROOT).contains("postgresql");
-            } catch (Exception ex) {
-                postgresDetected = false;
-            }
-            return postgresDetected;
-        }
-    }
 }

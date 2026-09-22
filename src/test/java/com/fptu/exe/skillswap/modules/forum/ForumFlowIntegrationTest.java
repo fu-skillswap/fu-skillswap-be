@@ -105,7 +105,7 @@ class ForumFlowIntegrationTest {
     }
 
     @Test
-    void commentThreading_shouldSeparateRootCommentsAndReplies_withIndependentPaginationAndSecurity() {
+    void commentThreading_shouldSeparateRootCommentsAndReplies_withIndependentPaginationAndSecurity() throws InterruptedException {
         var post = forumPostService.createPost(author.getId(), new ForumPostUpsertRequest(
                 "Thảo luận về Spring Boot",
                 "Mọi người cùng thảo luận về kiến trúc phân tầng trong Spring Boot.",
@@ -116,6 +116,7 @@ class ForumFlowIntegrationTest {
         // 1. Tạo 2 Root comments: A và B
         var rootA = forumPostService.createComment(author.getId(), post.postId(),
                 new ForumCommentUpsertRequest("Bình luận gốc A", List.of(), null));
+        Thread.sleep(25);
         var rootB = forumPostService.createComment(commenter.getId(), post.postId(),
                 new ForumCommentUpsertRequest("Bình luận gốc B", List.of(), null));
 
@@ -125,8 +126,10 @@ class ForumFlowIntegrationTest {
         // 2. Tạo 3 câu trả lời (replies) cho comment gốc A
         var replyA1 = forumPostService.createComment(commenter.getId(), post.postId(),
                 new ForumCommentUpsertRequest("Phản hồi 1 cho A", List.of(), rootA.commentId()));
+        Thread.sleep(25);
         var replyA2 = forumPostService.createComment(author.getId(), post.postId(),
                 new ForumCommentUpsertRequest("Phản hồi 2 cho A", List.of(), rootA.commentId()));
+        Thread.sleep(25);
         var replyA3 = forumPostService.createComment(commenter.getId(), post.postId(),
                 new ForumCommentUpsertRequest("Phản hồi 3 cho A", List.of(), rootA.commentId()));
 

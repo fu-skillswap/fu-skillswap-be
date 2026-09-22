@@ -108,9 +108,6 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 .endAt(request.endAt())
                 .budgetScoin(request.budgetScoin() == null ? 0 : request.budgetScoin())
                 .audienceRoleCodes(request.audienceRoleCodes() == null ? new HashSet<>() : new HashSet<>(request.audienceRoleCodes()))
-                .audienceCampusIds(request.audienceCampusIds() == null ? new HashSet<>() : new HashSet<>(request.audienceCampusIds()))
-                .audienceProgramIds(request.audienceProgramIds() == null ? new HashSet<>() : new HashSet<>(request.audienceProgramIds()))
-                .audienceSpecializationIds(request.audienceSpecializationIds() == null ? new HashSet<>() : new HashSet<>(request.audienceSpecializationIds()))
                 .build();
 
         Campaign saved = campaignRepository.save(campaign);
@@ -156,9 +153,6 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         campaign.setEndAt(request.endAt());
 
         if (request.audienceRoleCodes() != null) campaign.setAudienceRoleCodes(new HashSet<>(request.audienceRoleCodes()));
-        if (request.audienceCampusIds() != null) campaign.setAudienceCampusIds(new HashSet<>(request.audienceCampusIds()));
-        if (request.audienceProgramIds() != null) campaign.setAudienceProgramIds(new HashSet<>(request.audienceProgramIds()));
-        if (request.audienceSpecializationIds() != null) campaign.setAudienceSpecializationIds(new HashSet<>(request.audienceSpecializationIds()));
 
         Campaign saved = campaignRepository.save(campaign);
         log.info("Admin {} updated campaign {}", adminUserId, saved.getId());
@@ -384,9 +378,6 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 used,
                 remaining,
                 c.getAudienceRoleCodes(),
-                c.getAudienceCampusIds(),
-                c.getAudienceProgramIds(),
-                c.getAudienceSpecializationIds(),
                 benefitCount,
                 totalBookings,
                 c.getCreatedAt(),
@@ -413,11 +404,11 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         );
     }
 
-    private CampaignAdminPort.CampaignView view(AdminCampaignResponse r) { return new CampaignAdminPort.CampaignView(r.id(), r.name(), r.description(), r.status().name(), r.fundingSource().name(), r.startAt(), r.endAt(), r.budgetScoin(), r.budgetUsedScoin(), r.budgetRemainingScoin(), r.audienceRoleCodes(), r.audienceCampusIds(), r.audienceProgramIds(), r.audienceSpecializationIds(), r.benefitCount(), r.totalBookingsCreated(), r.createdAt(), r.updatedAt()); }
+    private CampaignAdminPort.CampaignView view(AdminCampaignResponse r) { return new CampaignAdminPort.CampaignView(r.id(), r.name(), r.description(), r.status().name(), r.fundingSource().name(), r.startAt(), r.endAt(), r.budgetScoin(), r.budgetUsedScoin(), r.budgetRemainingScoin(), r.audienceRoleCodes(), r.benefitCount(), r.totalBookingsCreated(), r.createdAt(), r.updatedAt()); }
     private CampaignAdminPort.CampaignBenefitView benefitView(AdminCampaignBenefitResponse r) { return new CampaignAdminPort.CampaignBenefitView(r.id(), r.campaignId(), r.benefitType().name(), r.creditScoin(), r.couponCode(), r.couponDiscountType() == null ? null : r.couponDiscountType().name(), r.couponDiscountValue(), r.couponMaxDiscountScoin(), r.couponQuotaTotal(), r.couponQuotaPerUser(), r.couponMinOrderValueScoin(), r.active(), r.createdAt(), r.updatedAt()); }
     private AdminCampaignListRequest listRequest(CampaignAdminPort.CampaignListQuery q) { AdminCampaignListRequest r = new AdminCampaignListRequest(); if(q==null)return r; r.setStatus(q.status()==null?null:enumValue(CampaignStatus.class,q.status())); r.setFundingSource(q.fundingSource()==null?null:enumValue(FundingSource.class,q.fundingSource())); r.setKeyword(q.keyword()); r.setPage(Math.max(0,q.page())); r.setSize(Math.max(1,q.size())); r.setSortBy(q.sortBy()); r.setDirection(q.direction()); return r; }
-    private AdminCampaignCreateRequest createRequest(CampaignAdminPort.CreateCampaignCommand c) { return new AdminCampaignCreateRequest(c.name(),c.description(),enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
-    private AdminCampaignUpdateRequest updateRequest(CampaignAdminPort.UpdateCampaignCommand c) { return new AdminCampaignUpdateRequest(c.name(),c.description(),c.fundingSource()==null?null:enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
+    private AdminCampaignCreateRequest createRequest(CampaignAdminPort.CreateCampaignCommand c) { return new AdminCampaignCreateRequest(c.name(),c.description(),enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes()); }
+    private AdminCampaignUpdateRequest updateRequest(CampaignAdminPort.UpdateCampaignCommand c) { return new AdminCampaignUpdateRequest(c.name(),c.description(),c.fundingSource()==null?null:enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes()); }
     private AdminCampaignBenefitCreateRequest createBenefitRequest(CampaignAdminPort.CreateCampaignBenefitCommand c) { return new AdminCampaignBenefitCreateRequest(enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin()); }
     private AdminCampaignBenefitUpdateRequest updateBenefitRequest(CampaignAdminPort.UpdateCampaignBenefitCommand c) { return new AdminCampaignBenefitUpdateRequest(c.benefitType()==null?null:enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin(),c.active()); }
     private <E extends Enum<E>> E enumValue(Class<E> type, String value) { try { return Enum.valueOf(type, value); } catch (RuntimeException e) { throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị campaign không hợp lệ"); } }

@@ -110,7 +110,6 @@ public class OpenApiConfig {
                 .tags(List.of(
                         new Tag().name("Authentication").description("Nhóm API dùng cho đăng nhập Google, làm mới token, đăng xuất và lấy thông tin user hiện tại. FE dùng nhóm này ở đầu luồng onboarding và khi cần khôi phục phiên đăng nhập."),
                         new Tag().name("Google Calendar").description("Kết nối hoặc ngắt kết nối Google Calendar. FE dùng để cấp quyền trước khi hệ thống đồng bộ lịch booking và tạo Google Meet."),
-                        new Tag().name("Academic Catalog").description("Danh sách campus, program và specialization để điền form hồ sơ. FE chỉ cần đọc và hiển thị lựa chọn phù hợp."),
                         new Tag().name("Onboarding").description("Cho biết người dùng đã hoàn thành bước nào và nên làm gì tiếp theo trong onboarding."),
                         new Tag().name("Academic Profile").description("Xem và lưu hồ sơ học tập của người dùng hiện tại."),
                         new Tag().name("Mentee Matching Profile").description("Nhóm API lấy 5 câu hỏi nhu cầu mentoring và lưu câu trả lời flat của mentee để phục vụ Smart Matching."),

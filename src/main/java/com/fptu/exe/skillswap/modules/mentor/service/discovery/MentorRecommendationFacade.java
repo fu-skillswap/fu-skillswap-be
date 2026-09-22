@@ -9,7 +9,7 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +21,6 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class MentorRecommendationFacade {
 
     private final UserQueryPort userQueryPort;
@@ -31,6 +30,21 @@ public class MentorRecommendationFacade {
     private final DiscoveryRankingService discoveryRankingService;
     private final DiscoveryMapper discoveryMapper;
     private final DiscoveryProperties discoveryProperties;
+
+    @Autowired
+    public MentorRecommendationFacade(UserQueryPort userQueryPort,
+                                      DiscoveryCandidateProvider discoveryCandidateProvider,
+                                      DiscoveryEnrichmentService discoveryEnrichmentService,
+                                      DiscoveryRankingService discoveryRankingService,
+                                      DiscoveryMapper discoveryMapper,
+                                      DiscoveryProperties discoveryProperties) {
+        this.userQueryPort = userQueryPort;
+        this.discoveryCandidateProvider = discoveryCandidateProvider;
+        this.discoveryEnrichmentService = discoveryEnrichmentService;
+        this.discoveryRankingService = discoveryRankingService;
+        this.discoveryMapper = discoveryMapper;
+        this.discoveryProperties = discoveryProperties;
+    }
 
     @Transactional(readOnly = true)
     public List<MentorRecommendationResponse> getRecommendations(UUID currentUserId, int limit) {
@@ -48,13 +62,9 @@ public class MentorRecommendationFacade {
                 DateTimeUtil.now(),
                 discoveryProperties.recommendationAlgorithmVersion()
         );
-        boolean richProfile = menteeProfile != null
-                && menteeProfile.getProgram() != null
-                && menteeProfile.getSpecialization() != null;
-
         List<MentorDiscoveryQueryRow> candidates = discoveryCandidateProvider.recallForRecommendation(
                 context.menteeUserId(),
-                richProfile,
+                false,
                 safeLimit,
                 context.evaluatedAt(),
                 discoveryProperties.recallWindowSize()
@@ -91,7 +101,8 @@ public class MentorRecommendationFacade {
                 .sorted(Comparator
                         .comparing((RankedRecommendation ranked) -> ranked.response().matchScore(), Comparator.nullsLast(BigDecimal::compareTo)).reversed()
                         .thenComparing(ranked -> defaultInteger(ranked.candidate().completedSessions()), Comparator.reverseOrder())
-                        .thenComparing(ranked -> defaultDecimal(ranked.candidate().ratingAverage()), Comparator.reverseOrder()))
+                        .thenComparing(ranked -> defaultDecimal(ranked.candidate().ratingAverage()), Comparator.reverseOrder())
+                        .thenComparing(ranked -> ranked.candidate().mentorUserId()))
                 .limit(safeLimit)
                 .map(RankedRecommendation::response)
                 .toList();

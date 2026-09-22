@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "springdoc.swagger-ui.enabled=true",
         "application.openapi.version=0.1.0-beta",
         "application.openapi.include-all-group=true",
+        "application.openapi.warmup.enabled=true",
         "application.openapi.warmup.async=false",
         "application.openapi.warmup.initial-delay-ms=0",
         "application.openapi.warmup.group-delay-ms=0"
@@ -63,7 +64,18 @@ class SwaggerExposureEnabledIntegrationTest {
         java.util.Set<String> mentorDetailSections = new java.util.LinkedHashSet<>();
         mentorDetailSchema.path("properties").fieldNames().forEachRemaining(mentorDetailSections::add);
         assertThat(mentorDetailSections).containsExactly(
-                "identity", "mentoring", "services", "evidence", "reputation", "availability");
+                "identity", "mentoring", "services", "evidence", "reputation", "availability", "education");
+        assertThat(document.path("components").path("schemas").path("PublicMentorEducationResponse")
+                .path("nullable").asBoolean()).isTrue();
+        assertThat(mentorDetailSchema.path("properties").path("education").path("$ref").asText())
+                .endsWith("/PublicMentorEducationResponse");
+
+        JsonNode publicEducationSchema = document.path("components").path("schemas").path("PublicMentorEducationResponse");
+        assertThat(publicEducationSchema.path("properties").fieldNames()).toIterable()
+                .containsExactly("type", "schoolName", "province", "institution", "fieldGroup", "major");
+        assertThat(publicEducationSchema.path("properties").path("type").path("enum"))
+                .extracting(JsonNode::asText).containsExactly("SCHOOL_STUDENT", "UNIVERSITY_STUDENT", "ALUMNI");
+        assertThat(document.path("components").path("schemas").has("MentorEducationResponse")).isFalse();
 
         JsonNode reputationSchema = document.path("components").path("schemas")
                 .path("MentorReputationResponse");

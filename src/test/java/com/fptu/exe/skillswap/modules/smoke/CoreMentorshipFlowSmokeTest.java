@@ -1,9 +1,9 @@
 package com.fptu.exe.skillswap.modules.smoke;
 
 import com.fptu.exe.skillswap.modules.identity.dto.request.StudentProfileRequest;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.service.AcademicService;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRepeatType;
 import com.fptu.exe.skillswap.modules.booking.domain.AvailabilityRuleType;
@@ -89,22 +89,15 @@ class CoreMentorshipFlowSmokeTest {
     @Autowired private CreditLedgerService creditLedgerService;
     @Autowired private SessionFeedbackService feedbackService;
     
-    @Autowired private CampusRepository campusRepository;
-    @Autowired private AcademicProgramRepository programRepository;
-    @Autowired private SpecializationRepository specializationRepository;
+    @Autowired private AdministrativeProvinceRepository provinceRepository;
+    @Autowired private StudentProfileRepository studentProfileRepository;
     @Autowired private StorageGateway storageGateway;
 
     private User admin;
-    private UUID campusId;
-    private UUID programId;
-    private UUID specializationId;
 
     @BeforeEach
     void setUp() {
         admin = createUser("admin-smoke@test.com", "Admin Smoke", Set.of(RoleCode.ADMIN));
-        campusId = campusRepository.findAll().getFirst().getId();
-        programId = programRepository.findAll().getFirst().getId();
-        specializationId = specializationRepository.findAll().getFirst().getId();
     }
 
     private User createUser(String email, String name, Set<RoleCode> roles) {
@@ -128,42 +121,30 @@ class CoreMentorshipFlowSmokeTest {
         return saved;
     }
 
-    private void completeAcademic(UUID userId, String mssv) {
+    private void completeAcademic(UUID userId) {
         StudentProfileRequest req = new StudentProfileRequest();
-        req.setStudentCode(mssv);
-        req.setCampusId(campusId);
-        req.setProgramId(programId);
-        req.setSpecializationId(specializationId);
-        req.setSemester(5);
-        req.setIntakeYear(2022);
-        req.setIsAlumni(false);
+        req.setProfileType(StudentProfileType.SCHOOL_STUDENT);
+        req.setCustomInstitutionName("Test secondary school");
+        req.setCustomInstitutionProvinceId(provinceRepository.findByCode("01").orElseThrow().getId());
         academicService.updateStudentProfile(userId, req);
     }
 
     @Test
-    void test1_academicDuplicateMssvIsAllowed() {
+    void test1_menteeOnboardingCreatesCanonicalSchoolProfiles() {
         User u1 = createUser("mentee1-smoke@test.com", "Mentee One", new HashSet<>(Set.of(RoleCode.MENTEE)));
         User u2 = createUser("mentee2-smoke@test.com", "Mentee Two", new HashSet<>(Set.of(RoleCode.MENTEE)));
 
-        // Both complete profile with same MSSV
-        completeAcademic(u1.getId(), "SE123456");
-        completeAcademic(u2.getId(), "se123456 "); // should normalize
+        completeAcademic(u1.getId());
+        completeAcademic(u2.getId());
 
-        // Admin checks users
-        AdminUserListFilterRequest req = new AdminUserListFilterRequest();
-        PageResponse<UserListItem> res = adminUserService.getVisibleUsers(req);
-        
-        List<UserListItem> conflicts = res.getContent().stream()
-            .filter(u -> u.academicProfile() != null && "SE123456".equals(u.academicProfile().claimedStudentCode()))
-            .toList();
-
-        assertEquals(2, conflicts.size(), "Should find both users");
+        assertTrue(studentProfileRepository.findById(u1.getId()).orElseThrow().isOnboardingCompleted());
+        assertTrue(studentProfileRepository.findById(u2.getId()).orElseThrow().isOnboardingCompleted());
     }
 
     @Test
     void test2_mentorVerificationApprovalUnlocksDiscovery() {
         User mentorApplicant = createUser("applicant-smoke@test.com", "Mentor App", new HashSet<>(Set.of(RoleCode.MENTEE)));
-        completeAcademic(mentorApplicant.getId(), "SE999999");
+        completeAcademic(mentorApplicant.getId());
         // Initialize draft request
         mentorVerificationService.requestToBecomeMentor(mentorApplicant.getId());
         entityManager.flush();
@@ -264,9 +245,9 @@ class CoreMentorshipFlowSmokeTest {
         availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.of(slot, mentorService.getId()));
 
         // 3 Mentees book
-        User m1 = createUser("m1@test.com", "M1", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m1.getId(), "M111");
-        User m2 = createUser("m2@test.com", "M2", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m2.getId(), "M222");
-        User m3 = createUser("m3@test.com", "M3", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m3.getId(), "M333");
+        User m1 = createUser("m1@test.com", "M1", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m1.getId());
+        User m2 = createUser("m2@test.com", "M2", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m2.getId());
+        User m3 = createUser("m3@test.com", "M3", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m3.getId());
 
         CreateBookingRequest bReq = new CreateBookingRequest(
                 slot.getId(),
@@ -298,7 +279,7 @@ class CoreMentorshipFlowSmokeTest {
         assertEquals(BookingStatus.REJECTED, r3.status());
 
         // Fourth booking fails
-        User m4 = createUser("m4@test.com", "M4", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m4.getId(), "M444");
+        User m4 = createUser("m4@test.com", "M4", new HashSet<>(Set.of(RoleCode.MENTEE))); completeAcademic(m4.getId());
         assertThrows(BaseException.class, () -> bookingService.createBooking(m4.getId(), bReq));
     }
 
@@ -332,7 +313,7 @@ class CoreMentorshipFlowSmokeTest {
         entityManager.clear();
 
         User mentee = createUser("fb-mentee@test.com", "FB Mentee", new HashSet<>(Set.of(RoleCode.MENTEE)));
-        completeAcademic(mentee.getId(), "FB111");
+        completeAcademic(mentee.getId());
 
         // Add slot manually to avoid async event issues
         MentorAvailabilitySlot slot = new MentorAvailabilitySlot();

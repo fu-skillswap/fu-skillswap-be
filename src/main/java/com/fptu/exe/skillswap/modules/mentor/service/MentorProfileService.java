@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorAchievement;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorFeaturedProject;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorSubjectResult;
 import com.fptu.exe.skillswap.modules.mentor.event.MentorAvailabilityChangedEvent;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.MentorSubjectResultRequest;
@@ -17,6 +18,12 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorAchievementReposit
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorFeaturedProjectRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorSubjectResultRepository;
+import com.fptu.exe.skillswap.modules.catalog.domain.AdministrativeProvince;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationalInstitution;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationFieldGroup;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
 import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -51,6 +58,9 @@ public class MentorProfileService {
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final UserQueryPort userQueryPort;
     private final PublicAssetUploadPort publicAssetUploadPort;
+    private final EducationalInstitutionRepository educationalInstitutionRepository;
+    private final AdministrativeProvinceRepository administrativeProvinceRepository;
+    private final EducationFieldGroupRepository educationFieldGroupRepository;
 
     @Autowired
     public MentorProfileService(
@@ -61,7 +71,10 @@ public class MentorProfileService {
             ApplicationEventPublisher eventPublisher,
             MentorBookingPolicyService mentorBookingPolicyService,
             UserQueryPort userQueryPort,
-            PublicAssetUploadPort publicAssetUploadPort
+            PublicAssetUploadPort publicAssetUploadPort,
+            @Autowired(required = false) EducationalInstitutionRepository educationalInstitutionRepository,
+            @Autowired(required = false) AdministrativeProvinceRepository administrativeProvinceRepository,
+            @Autowired(required = false) EducationFieldGroupRepository educationFieldGroupRepository
     ) {
         this.mentorProfileRepository = mentorProfileRepository;
         this.mentorSubjectResultRepository = mentorSubjectResultRepository;
@@ -71,6 +84,9 @@ public class MentorProfileService {
         this.mentorBookingPolicyService = mentorBookingPolicyService;
         this.userQueryPort = userQueryPort;
         this.publicAssetUploadPort = publicAssetUploadPort;
+        this.educationalInstitutionRepository = educationalInstitutionRepository;
+        this.administrativeProvinceRepository = administrativeProvinceRepository;
+        this.educationFieldGroupRepository = educationFieldGroupRepository;
     }
 
     public MentorProfileService(
@@ -85,6 +101,9 @@ public class MentorProfileService {
                 mentorFeaturedProjectRepository,
                 mentorAchievementRepository,
                 eventPublisher,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null);
@@ -120,6 +139,31 @@ public class MentorProfileService {
         profile.setOutputReviewSupportLevel(validateSupportLevel(request.outputReviewSupportLevel(), "review output"));
         profile.setDirectionSupportLevel(validateSupportLevel(request.directionSupportLevel(), "định hướng"));
         profile.setPhoneNumber(clean(request.phoneNumber()));
+        if (request.hasAffiliationOrFieldGroupSpecified()) {
+            validateAffiliationAndFieldGroup(request);
+            profile.setInstitutionId(request.institutionId());
+            profile.setCustomInstitutionName(cleanNullable(request.customInstitutionName()));
+            profile.setCustomInstitutionProvinceId(request.customInstitutionProvinceId());
+            profile.setCompanyOrOrganization(cleanNullable(request.companyOrOrganization()));
+            profile.setPrimaryFieldGroupId(request.primaryFieldGroupId());
+        } else if (!hasValidAffiliation(profile) && userQueryPort != null) {
+            userQueryPort.findStudentProfileWithDetailsByUserId(userId).ifPresent(sp -> {
+                if (profile.getInstitutionId() == null && profile.getCustomInstitutionName() == null && profile.getCompanyOrOrganization() == null) {
+                    profile.setInstitutionId(sp.getInstitutionId());
+                    profile.setCustomInstitutionName(cleanNullable(sp.getCustomInstitutionName()));
+                    profile.setCustomInstitutionProvinceId(sp.getCustomInstitutionProvinceId());
+                }
+                if (profile.getPrimaryFieldGroupId() == null) {
+                    profile.setPrimaryFieldGroupId(sp.getFieldGroupId());
+                }
+            });
+            if (profile.getPrimaryFieldGroupId() == null && educationFieldGroupRepository != null) {
+                educationFieldGroupRepository.findAll().stream()
+                        .filter(EducationFieldGroup::isActive)
+                        .findFirst()
+                        .ifPresent(fg -> profile.setPrimaryFieldGroupId(fg.getId()));
+            }
+        }
         if (request.isAvailable() != null) {
             previousAvailability = profile.isAvailable();
             currentAvailability = request.isAvailable();
@@ -142,6 +186,44 @@ public class MentorProfileService {
         replaceSubjectResults(savedProfile, request.subjectResults());
         publishAvailabilityChangedEventIfNeeded(savedProfile, previousAvailability, currentAvailability);
         return mapToResponse(savedProfile);
+    }
+
+    public void validateAffiliationAndFieldGroup(MentorProfileUpsertRequest request) {
+        if (request == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Yêu cầu không được để trống");
+        }
+        boolean hasCatalogInstitution = request.institutionId() != null;
+        boolean hasCustomInstitutionName = hasText(request.customInstitutionName());
+        boolean hasCustomProvince = request.customInstitutionProvinceId() != null;
+        boolean hasCompany = hasText(request.companyOrOrganization());
+
+        if (!hasCatalogInstitution && !hasCustomInstitutionName && !hasCompany) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Bắt buộc chọn trường từ Catalog hoặc nhập trường ngoài kèm tỉnh hoặc điền đơn vị công tác");
+        }
+        if (hasCustomInstitutionName != hasCustomProvince) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Trường tự nhập cần cả tên trường và tỉnh/thành");
+        }
+        if (hasCatalogInstitution && (hasCustomInstitutionName || hasCustomProvince)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Không nhập trường ngoài khi đã chọn trường từ Catalog");
+        }
+        if (request.primaryFieldGroupId() == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Bắt buộc chọn nhóm ngành/lĩnh vực cố vấn chính từ Catalog");
+        }
+        if (hasCatalogInstitution && educationalInstitutionRepository != null) {
+            educationalInstitutionRepository.findById(request.institutionId())
+                    .filter(EducationalInstitution::isActive)
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy trường đang hoạt động trong Catalog"));
+        }
+        if (hasCustomProvince && administrativeProvinceRepository != null) {
+            administrativeProvinceRepository.findById(request.customInstitutionProvinceId())
+                    .filter(AdministrativeProvince::isActive)
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tỉnh/thành đang hoạt động trong Catalog"));
+        }
+        if (request.primaryFieldGroupId() != null && educationFieldGroupRepository != null) {
+            educationFieldGroupRepository.findById(request.primaryFieldGroupId())
+                    .filter(EducationFieldGroup::isActive)
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy nhóm ngành đang hoạt động trong Catalog"));
+        }
     }
 
     private MentorProfile getOrCreateProfile(UUID userId) {
@@ -194,19 +276,56 @@ public class MentorProfileService {
                 .ratingAverage(profile.getAverageRating())
                 .reviewCount(profile.getTotalReviews())
                 .completedSessions(profile.getTotalCompletedSessions())
+                .institutionId(profile.getInstitutionId())
+                .customInstitutionName(profile.getCustomInstitutionName())
+                .customInstitutionProvinceId(profile.getCustomInstitutionProvinceId())
+                .companyOrOrganization(profile.getCompanyOrOrganization())
+                .primaryFieldGroupId(profile.getPrimaryFieldGroupId())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
                 .build();
     }
 
     private boolean isRequiredFieldsCompleted(MentorProfile profile) {
-        return hasText(profile.getHeadline())
+        if (profile == null) {
+            return false;
+        }
+        boolean basicCompleted = hasText(profile.getHeadline())
                 && hasText(profile.getExpertiseDescription())
                 && hasText(profile.getPhoneNumber())
                 && isValidSupportLevel(profile.getFoundationSupportLevel())
                 && isValidSupportLevel(profile.getOutputReviewSupportLevel())
                 && isValidSupportLevel(profile.getDirectionSupportLevel())
                 && !mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(profile.getUserId()).isEmpty();
+
+        if (!basicCompleted) {
+            return false;
+        }
+
+        if (profile.getStatus() == MentorStatus.ACTIVE && profile.getVerifiedAt() != null) {
+            return true;
+        }
+
+        return (hasValidAffiliation(profile) && profile.getPrimaryFieldGroupId() != null)
+                || hasStudentProfileAffiliation(profile.getUserId());
+    }
+
+    private boolean hasStudentProfileAffiliation(UUID userId) {
+        if (userQueryPort == null) {
+            return false;
+        }
+        return userQueryPort.findStudentProfileWithDetailsByUserId(userId)
+                .map(sp -> sp.getInstitutionId() != null
+                        || (hasText(sp.getCustomInstitutionName()) && sp.getCustomInstitutionProvinceId() != null))
+                .orElse(false);
+    }
+
+    private boolean hasValidAffiliation(MentorProfile profile) {
+        boolean hasCatalogInstitution = profile.getInstitutionId() != null;
+        boolean hasCustomInstitution = hasText(profile.getCustomInstitutionName())
+                && profile.getCustomInstitutionProvinceId() != null;
+        boolean hasCompany = hasText(profile.getCompanyOrOrganization());
+        return hasCatalogInstitution || hasCustomInstitution || hasCompany;
     }
 
     private boolean isValidSupportLevel(Integer level) {

@@ -71,8 +71,6 @@ public class DiscoveryMapper {
                         row.expertiseDescription(), row.foundationSupportLevel(),
                         row.outputReviewSupportLevel(), row.directionSupportLevel()))
                 .evidence(new MentorDiscoveryCardResponse.Evidence(
-                        row.campusId(), row.campusName(), row.programId(), row.programName(),
-                        row.specializationId(), row.specializationName(),
                         subjectResults == null ? List.of() : subjectResults.stream().limit(2).toList(),
                         featuredProjects == null ? List.of() : featuredProjects.stream().limit(2).toList(),
                         achievements == null ? List.of() : achievements.stream().limit(2).toList()))

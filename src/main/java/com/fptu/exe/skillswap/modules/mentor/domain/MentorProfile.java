@@ -15,7 +15,10 @@ import java.util.UUID;
     @Index(name = "idx_mentor_profiles_available", columnList = "is_available"),
     @Index(name = "idx_mentor_profiles_teaching_mode", columnList = "teaching_mode"),
     @Index(name = "idx_mentor_profiles_booking_suspended_until", columnList = "booking_suspended_until"),
-    @Index(name = "idx_mentor_profiles_last_active_at", columnList = "last_active_at")
+    @Index(name = "idx_mentor_profiles_last_active_at", columnList = "last_active_at"),
+    @Index(name = "idx_mentor_profiles_institution", columnList = "institution_id"),
+    @Index(name = "idx_mentor_profiles_custom_province", columnList = "custom_institution_province_id"),
+    @Index(name = "idx_mentor_profiles_primary_field_group", columnList = "primary_field_group_id")
 })
 @Getter
 @Setter
@@ -41,9 +44,6 @@ public class MentorProfile {
 
     @Column(name = "supporting_subjects", columnDefinition = "TEXT")
     private String supportingSubjects;
-
-    @Column(name = "search_document", columnDefinition = "TEXT")
-    private String searchDocument;
 
     @Column(name = "foundation_support_level")
     private Integer foundationSupportLevel;
@@ -73,6 +73,33 @@ public class MentorProfile {
 
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
+
+    @Column(name = "institution_id")
+    private UUID institutionId;
+
+    @Column(name = "custom_institution_name", length = 200)
+    private String customInstitutionName;
+
+    @Column(name = "custom_institution_province_id")
+    private UUID customInstitutionProvinceId;
+
+    @Column(name = "company_or_organization", length = 200)
+    private String companyOrOrganization;
+
+    @Column(name = "primary_field_group_id")
+    private UUID primaryFieldGroupId;
+
+    public boolean hasValidAffiliation() {
+        boolean hasCatalogInstitution = institutionId != null;
+        boolean hasCustomInstitution = customInstitutionName != null && !customInstitutionName.isBlank()
+                && customInstitutionProvinceId != null;
+        boolean hasCompany = companyOrOrganization != null && !companyOrOrganization.isBlank();
+        return hasCatalogInstitution || hasCustomInstitution || hasCompany;
+    }
+
+    public boolean hasValidFieldGroup() {
+        return primaryFieldGroupId != null;
+    }
 
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @Builder.Default

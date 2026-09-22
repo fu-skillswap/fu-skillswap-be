@@ -26,6 +26,8 @@ spring:
 application:
   openapi:
     include-all-group: true
+    warmup:
+      enabled: false
   group-sessions:
     enabled: true
   cors:

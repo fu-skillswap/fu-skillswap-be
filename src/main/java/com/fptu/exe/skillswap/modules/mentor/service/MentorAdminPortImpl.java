@@ -83,9 +83,6 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thông tin mentor"));
 
         UserSummaryRecord user = userQueryPort.findUserSummaryById(mentorUserId).orElse(null);
-        String primaryLabel = userQueryPort.findStudentProfileWithDetailsByUserId(mentorUserId)
-                .map(sp -> sp.getProgram() == null ? null : sp.getProgram().getCode())
-                .orElse(null);
         List<MentorSubjectResultResponse> subjectResults = mentorSubjectResultRepository == null
                 ? List.of()
                 : mentorSubjectResultRepository.findByMentorProfileUserIdOrderByDisplayOrderAscCreatedAtAsc(mentorUserId)
@@ -133,7 +130,6 @@ public class MentorAdminPortImpl implements MentorAdminPort {
                 .portfolioUrl(profile.getPortfolioUrl())
                 .linkedinUrl(profile.getLinkedinUrl())
                 .githubUrl(profile.getGithubUrl())
-                .primaryLabel(primaryLabel)
                 .verifiedAt(profile.getVerifiedAt())
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())

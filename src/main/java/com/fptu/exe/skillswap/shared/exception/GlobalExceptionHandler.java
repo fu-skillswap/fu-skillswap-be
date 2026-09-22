@@ -196,6 +196,13 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler({org.springframework.dao.OptimisticLockingFailureException.class, jakarta.persistence.OptimisticLockException.class})
+    public ResponseEntity<ApiResponse<Object>> handleOptimisticLockingFailure(
+            Exception ex) {
+        return buildResponse(ErrorCode.CONCURRENT_PROFILE_UPDATE,
+                ErrorCode.CONCURRENT_PROFILE_UPDATE.getMessage(), null, null, Map.of(), null);
+    }
+
     @ExceptionHandler({DataAccessException.class, JpaSystemException.class})
     public ResponseEntity<ApiResponse<Object>> handleDataAccess(Exception ex) {
         return buildResponse(ErrorCode.DATABASE_ERROR, ErrorCode.DATABASE_ERROR.getMessage(), null, null, Map.of(), ex);

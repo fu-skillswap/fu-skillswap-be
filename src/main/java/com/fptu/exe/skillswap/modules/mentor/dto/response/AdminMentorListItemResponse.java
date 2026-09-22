@@ -24,9 +24,6 @@ public record AdminMentorListItemResponse(
         @Schema(description = "Mentor's avatar image URL", example = "https://lh3.googleusercontent.com/...")
         String avatarUrl,
 
-        @Schema(description = "Primary label badge, usually maps to AcademicProgram code", example = "CNTT", nullable = true)
-        String primaryLabel,
-
         @Schema(description = "Number of completed mentoring sessions", example = "15")
         Integer completedSessions,
 
@@ -39,26 +36,4 @@ public record AdminMentorListItemResponse(
         @Schema(description = "Date and time when the mentor profile was first created", example = "2026-06-22T21:20:25")
         LocalDateTime createdAt
 ) {
-    // Explicit public constructor to guarantee JPQL constructor projection compatibility
-    public AdminMentorListItemResponse(
-            UUID mentorUserId,
-            String displayName,
-            String email,
-            String avatarUrl,
-            String primaryLabel,
-            Integer completedSessions,
-            BigDecimal ratingAverage,
-            MentorStatus mentorStatus,
-            LocalDateTime createdAt
-    ) {
-        this.mentorUserId = mentorUserId;
-        this.displayName = displayName;
-        this.email = email;
-        this.avatarUrl = avatarUrl;
-        this.primaryLabel = primaryLabel;
-        this.completedSessions = completedSessions;
-        this.ratingAverage = ratingAverage;
-        this.mentorStatus = mentorStatus;
-        this.createdAt = createdAt;
-    }
 }

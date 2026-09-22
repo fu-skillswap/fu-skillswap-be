@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import org.springframework.data.domain.Sort;
 
-import java.util.UUID;
 
 @Data
 public class MentorDiscoverySearchRequest {
@@ -19,10 +18,6 @@ public class MentorDiscoverySearchRequest {
     private String sortBy = "relevance";
     @Schema(description = "Chiều sắp xếp", example = "DESC", defaultValue = "DESC")
     private Sort.Direction direction = Sort.Direction.DESC;
-    @Schema(description = "Từ khóa tìm theo headline, profile, môn - điểm, project, achievement và service", example = "OJT CV project")
+    @Schema(description = "Từ khóa tìm theo tên mentor, headline, mô tả, kỹ năng, project, achievement và service", example = "OJT CV project")
     private String keyword;
-    @Schema(description = "Lọc theo campus ID")
-    private UUID campusId;
-    @Schema(description = "Lọc theo specialization ID")
-    private UUID specializationId;
 }

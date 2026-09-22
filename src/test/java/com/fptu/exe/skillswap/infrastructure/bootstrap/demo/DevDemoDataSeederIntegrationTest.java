@@ -1,11 +1,11 @@
 package com.fptu.exe.skillswap.infrastructure.bootstrap.demo;
 
-import com.fptu.exe.skillswap.modules.identity.domain.CampusCode;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
@@ -29,20 +29,20 @@ import com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationReques
 import com.fptu.exe.skillswap.modules.mentor.service.MentorDiscoveryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
 @Transactional
+@Timeout(value = 5, unit = TimeUnit.MINUTES)
 class DevDemoDataSeederIntegrationTest {
 
     @Autowired
@@ -50,11 +50,11 @@ class DevDemoDataSeederIntegrationTest {
     @Autowired
     private OauthAccountRepository oauthAccountRepository;
     @Autowired
-    private CampusRepository campusRepository;
+    private AdministrativeProvinceRepository provinceRepository;
     @Autowired
-    private AcademicProgramRepository academicProgramRepository;
+    private EducationalInstitutionRepository institutionRepository;
     @Autowired
-    private SpecializationRepository specializationRepository;
+    private EducationFieldGroupRepository fieldGroupRepository;
     @Autowired
     private StudentProfileRepository studentProfileRepository;
     @Autowired
@@ -83,9 +83,9 @@ class DevDemoDataSeederIntegrationTest {
         seeder = new DevDemoDataSeeder(
                 userRepository,
                 oauthAccountRepository,
-                campusRepository,
-                academicProgramRepository,
-                specializationRepository,
+                provinceRepository,
+                institutionRepository,
+                fieldGroupRepository,
                 studentProfileRepository,
                 mentorProfileRepository,
                 mentorVerificationRequestRepository,
@@ -100,16 +100,22 @@ class DevDemoDataSeederIntegrationTest {
     }
 
     @Test
-    void run_shouldSeedAtLeastThirtyQualifiedHcmMentorsAndStayIdempotent() throws Exception {
+    void run_shouldSeedCanonicalProfilesAndRemainIdempotent() throws Exception {
         seeder.run();
-        long firstRunQualifiedHcmMentors = countQualifiedHcmMentors();
-
-        assertTrue(firstRunQualifiedHcmMentors >= 30, "Expected at least 30 qualified HCM mentors after first seed run");
+        List<StudentProfile> profilesAfterFirstRun = studentProfileRepository.findAll();
+        assertTrue(profilesAfterFirstRun.stream().anyMatch(p -> p.getProfileType() == StudentProfileType.SCHOOL_STUDENT));
+        assertTrue(profilesAfterFirstRun.stream().anyMatch(p -> p.getProfileType() == StudentProfileType.UNIVERSITY_STUDENT));
+        assertTrue(profilesAfterFirstRun.stream().anyMatch(p -> p.getProfileType() == StudentProfileType.ALUMNI));
+        assertTrue(profilesAfterFirstRun.stream().filter(p -> p.getProfileType() == StudentProfileType.SCHOOL_STUDENT)
+                .allMatch(p -> p.getCustomInstitutionName() != null && p.getCustomInstitutionProvinceId() != null));
+        assertTrue(profilesAfterFirstRun.stream().filter(p -> p.getProfileType() != StudentProfileType.SCHOOL_STUDENT)
+                .allMatch(p -> p.getInstitutionId() != null && p.getFieldGroupId() != null));
         assertFalse(searchByKeyword("spring").isEmpty());
         assertFalse(searchByKeyword("react").isEmpty());
         assertFalse(searchByKeyword("database").isEmpty());
         assertFalse(searchByKeyword("SWP391").isEmpty());
         assertFalse(searchByKeyword("OJT").isEmpty());
+        long profileCountAfterSearchSetup = studentProfileRepository.count();
 
         long mentorUserCountAfterFirstRun = countMentorUsers();
         long mentorProfileCountAfterFirstRun = mentorProfileRepository.count();
@@ -117,7 +123,7 @@ class DevDemoDataSeederIntegrationTest {
 
         seeder.run();
 
-        assertEquals(firstRunQualifiedHcmMentors, countQualifiedHcmMentors());
+        assertEquals(profileCountAfterSearchSetup, studentProfileRepository.count());
         assertEquals(mentorUserCountAfterFirstRun, countMentorUsers());
         assertEquals(mentorProfileCountAfterFirstRun, mentorProfileRepository.count());
         assertEquals(mentorServiceCountAfterFirstRun, mentorServiceRepository.count());
@@ -129,30 +135,6 @@ class DevDemoDataSeederIntegrationTest {
         request.setKeyword(keyword);
         request.setSize(10);
         return mentorDiscoveryService.searchMentors(mentee.getId(), request).getContent();
-    }
-
-    private long countQualifiedHcmMentors() {
-        Map<UUID, StudentProfile> studentProfiles = studentProfileRepository.findAll().stream()
-                .filter(profile -> profile.getUser() != null && profile.getUser().getId() != null)
-                .collect(Collectors.toMap(profile -> profile.getUser().getId(), Function.identity(), (left, right) -> left));
-
-        return mentorProfileRepository.findByStatus(MentorStatus.ACTIVE).stream()
-                .filter(profile -> profile.getUserId() != null
-                        && userRepository.findById(profile.getUserId())
-                        .map(user -> user.getStatus() == UserStatus.ACTIVE)
-                        .orElse(false))
-                .filter(profile -> profile.getVerifiedAt() != null)
-                .filter(MentorProfile::isAvailable)
-                .filter(profile -> profile.getTeachingMode() != null && profile.getSessionDuration() != null)
-                .filter(profile -> hasText(profile.getHeadline()) && hasText(profile.getExpertiseDescription()) && hasText(profile.getSupportingSubjects()))
-                .filter(profile -> {
-                    StudentProfile studentProfile = studentProfiles.get(profile.getUserId());
-                    return studentProfile != null
-                            && studentProfile.getCampus() != null
-                            && studentProfile.getCampus().getCode() == CampusCode.HCM;
-                })
-                .filter(profile -> mentorServiceRepository.existsByMentorProfileUserIdAndIsActiveTrue(profile.getUserId()))
-                .count();
     }
 
     private long countMentorUsers() {
@@ -173,12 +155,11 @@ class DevDemoDataSeederIntegrationTest {
 
                     StudentProfile studentProfile = new StudentProfile();
                     studentProfile.setUser(user);
-                    studentProfile.setClaimedStudentCode("SEEDCHECK001");
-                    studentProfile.setCampus(campusRepository.findByCode(CampusCode.HCM).orElseThrow());
-                    studentProfile.setProgram(academicProgramRepository.findByCode("CNTT").orElseThrow());
-                    studentProfile.setSpecialization(specializationRepository.findByCode("CNTT_KTPM").orElseThrow());
-                    studentProfile.setSemester(6);
-                    studentProfile.setIntakeYear(2022);
+                    studentProfile.setProfileType(StudentProfileType.UNIVERSITY_STUDENT);
+                    studentProfile.setInstitutionId(institutionRepository.findAll().stream().filter(i -> i.isActive()).findFirst().orElseThrow().getId());
+                    studentProfile.setFieldGroupId(fieldGroupRepository.findAll().stream().filter(g -> g.isActive()).findFirst().orElseThrow().getId());
+                    studentProfile.setMajorName("Computer science");
+                    studentProfile.setEnrollmentYear(2022);
                     studentProfile.setBio("Mentee dùng để kiểm tra discovery search.");
                     studentProfileRepository.save(studentProfile);
                     return user;

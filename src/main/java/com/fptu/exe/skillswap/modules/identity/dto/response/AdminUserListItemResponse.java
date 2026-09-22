@@ -27,8 +27,6 @@ public record AdminUserListItemResponse(
         @Schema(description = "Thời điểm đăng nhập gần nhất")
         LocalDateTime lastLoginAt,
         @Schema(description = "Thời điểm tạo tài khoản")
-        LocalDateTime createdAt,
-        @Schema(description = "Hồ sơ học thuật của user")
-        AdminUserAcademicResponse academicProfile
+        LocalDateTime createdAt
 ) {
 }

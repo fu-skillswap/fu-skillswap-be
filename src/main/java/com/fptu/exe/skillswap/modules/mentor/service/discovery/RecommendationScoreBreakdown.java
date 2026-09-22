@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 
 public record RecommendationScoreBreakdown(
-        BigDecimal academicScore,
         BigDecimal qualityScore,
         BigDecimal capabilityScore,
         BigDecimal serviceScore,
@@ -16,7 +15,6 @@ public record RecommendationScoreBreakdown(
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
     public RecommendationScoreBreakdown {
-        academicScore = normalize(academicScore, "academicScore");
         qualityScore = normalize(qualityScore, "qualityScore");
         capabilityScore = normalize(capabilityScore, "capabilityScore");
         serviceScore = normalize(serviceScore, "serviceScore");
@@ -27,12 +25,11 @@ public record RecommendationScoreBreakdown(
     }
 
     public static RecommendationScoreBreakdown empty() {
-        return new RecommendationScoreBreakdown(ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO);
+        return new RecommendationScoreBreakdown(ZERO, ZERO, ZERO, ZERO, ZERO, ZERO, ZERO);
     }
 
     public BigDecimal componentTotal() {
-        return academicScore
-                .add(qualityScore)
+        return qualityScore
                 .add(capabilityScore)
                 .add(serviceScore)
                 .add(availabilityScore)

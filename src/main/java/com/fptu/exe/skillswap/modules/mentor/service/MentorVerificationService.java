@@ -166,7 +166,7 @@ public class MentorVerificationService {
         List<MentorVerificationProgressResponse.Step> steps = List.of(
                 step("ACADEMIC_PROFILE", checklist.academicProfileCompleted(), true, false, "/profile", "Hoàn tất thông tin học thuật"),
                 step("MENTOR_PROFILE", checklist.mentorProfileCompleted(), true, false, "/me/mentor-profile", "Điền thông tin giới thiệu mentor"),
-                step("AFFILIATION_PROOF", checklist.hasAffiliationProof(), true, false, "/me/mentor-verification", "Tải lên minh chứng sinh viên FPTU"),
+                step("AFFILIATION_PROOF", checklist.hasAffiliationProof(), true, false, "/me/mentor-verification", "Tải lên minh chứng cơ sở đào tạo hoặc đơn vị công tác"),
                 step("EXPERTISE_PROOF", checklist.hasExpertiseProof(), true, false, "/me/mentor-verification", "Tải lên minh chứng năng lực mentoring"),
                 step("SUBMITTED", request.map(r -> r.getStatus() != VerificationStatus.DRAFT).orElse(false), true, false, "/me/mentor-verification", "Nộp hồ sơ để admin duyệt"),
                 step("APPROVED", approved, false, true, null, "Admin phê duyệt hồ sơ"),
@@ -383,8 +383,23 @@ public class MentorVerificationService {
         boolean wasNeedsRevision = request.getStatus() == VerificationStatus.NEEDS_REVISION;
         VerificationStatus previousStatus = request.getStatus();
 
+        if (submitRequest.documents() != null && !submitRequest.documents().isEmpty()) {
+            for (var docReq : submitRequest.documents()) {
+                uploadDocument(userId, docReq);
+            }
+        }
+
         ensureSubmissionEligible(userId, request);
         ensureTermsAccepted(submitRequest, request);
+
+        MentorProfile mentorProfileSnapshot = mentorProfileRepository.findWithUserByUserId(userId).orElse(null);
+        if (mentorProfileSnapshot != null) {
+            request.setInstitutionId(mentorProfileSnapshot.getInstitutionId());
+            request.setCustomInstitutionName(mentorProfileSnapshot.getCustomInstitutionName());
+            request.setCustomInstitutionProvinceId(mentorProfileSnapshot.getCustomInstitutionProvinceId());
+            request.setCompanyOrOrganization(mentorProfileSnapshot.getCompanyOrOrganization());
+            request.setPrimaryFieldGroupId(mentorProfileSnapshot.getPrimaryFieldGroupId());
+        }
 
         request.setStatus(VerificationStatus.PENDING_REVIEW);
         request.setSubmittedAt(DateTimeUtil.now());
@@ -508,11 +523,17 @@ public class MentorVerificationService {
     }
 
     private MentorVerificationRequest createDraftRequest(UUID userId, MentorVerificationRequest previousRequest) {
+        MentorProfile profileSnapshot = mentorProfileRepository.findWithUserByUserId(userId).orElse(null);
         MentorVerificationRequest request = MentorVerificationRequest.builder()
                 .mentorUserId(userId)
                 .method(VerificationMethod.MANUAL)
                 .status(VerificationStatus.DRAFT)
                 .previousRequest(previousRequest)
+                .institutionId(profileSnapshot != null ? profileSnapshot.getInstitutionId() : null)
+                .customInstitutionName(profileSnapshot != null ? profileSnapshot.getCustomInstitutionName() : null)
+                .customInstitutionProvinceId(profileSnapshot != null ? profileSnapshot.getCustomInstitutionProvinceId() : null)
+                .companyOrOrganization(profileSnapshot != null ? profileSnapshot.getCompanyOrOrganization() : null)
+                .primaryFieldGroupId(profileSnapshot != null ? profileSnapshot.getPrimaryFieldGroupId() : null)
                 .build();
         MentorVerificationRequest savedRequest = mentorVerificationRequestRepository.save(request);
         appendEvent(savedRequest, MentorVerificationEventType.REQUEST_CREATED, userId, null, VerificationStatus.DRAFT, null);
@@ -578,16 +599,16 @@ public class MentorVerificationService {
         if (requireCompletedMentorProfile && !mentorProfileService.hasCompletedMentorProfile(userId)) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Cần hoàn tất hồ sơ mentor trước khi nộp xác thực mentor");
         }
-        long affiliationProofCount = mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
+        long affiliationProofCount = mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeInAndIsActiveTrue(
                 request.getId(),
-                VerificationDocumentType.FPTU_AFFILIATION_PROOF
+                List.of(VerificationDocumentType.FPTU_AFFILIATION_PROOF, VerificationDocumentType.AFFILIATION_PROOF)
         );
         long expertiseProofCount = mentorVerificationDocumentRepository.countByRequestIdAndDocumentTypeAndIsActiveTrue(
                 request.getId(),
                 VerificationDocumentType.EXPERTISE_PROOF
         );
         if (affiliationProofCount == 0) {
-            throw new BaseException(ErrorCode.BAD_REQUEST, "Cần tải lên ít nhất một minh chứng FPTU");
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Cần tải lên ít nhất một minh chứng cơ sở đào tạo hoặc đơn vị công tác");
         }
         if (expertiseProofCount == 0) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Cần tải lên ít nhất một minh chứng năng lực mentoring");
@@ -708,6 +729,11 @@ public class MentorVerificationService {
                 .timeline(timeline)
                 .checklist(checklist)
                 .allowedActions(allowedActions)
+                .institutionId(request.getInstitutionId())
+                .customInstitutionName(request.getCustomInstitutionName())
+                .customInstitutionProvinceId(request.getCustomInstitutionProvinceId())
+                .companyOrOrganization(request.getCompanyOrOrganization())
+                .primaryFieldGroupId(request.getPrimaryFieldGroupId())
                 .build();
     }
 
@@ -751,7 +777,8 @@ public class MentorVerificationService {
         boolean mentorProfileEligible = !requireCompletedMentorProfile || hasMentorProfile;
         boolean hasAffiliationProof = documents.stream()
                 .anyMatch(document -> document.isActive()
-                        && document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF);
+                        && (document.documentType() == VerificationDocumentType.FPTU_AFFILIATION_PROOF
+                                || document.documentType() == VerificationDocumentType.AFFILIATION_PROOF));
         boolean hasExpertiseProof = documents.stream()
                 .anyMatch(document -> document.isActive()
                         && document.documentType() == VerificationDocumentType.EXPERTISE_PROOF);

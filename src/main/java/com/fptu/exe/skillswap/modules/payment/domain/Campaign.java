@@ -71,24 +71,6 @@ public class Campaign {
     @Column(name = "role_code", nullable = false, length = 40)
     private Set<String> audienceRoleCodes = new HashSet<>();
 
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "campaign_audience_campus_ids", joinColumns = @JoinColumn(name = "campaign_id"))
-    @Column(name = "campus_id", nullable = false)
-    private Set<UUID> audienceCampusIds = new HashSet<>();
-
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "campaign_audience_program_ids", joinColumns = @JoinColumn(name = "campaign_id"))
-    @Column(name = "program_id", nullable = false)
-    private Set<UUID> audienceProgramIds = new HashSet<>();
-
-    @Builder.Default
-    @ElementCollection(fetch = FetchType.LAZY)
-    @CollectionTable(name = "campaign_audience_specialization_ids", joinColumns = @JoinColumn(name = "campaign_id"))
-    @Column(name = "specialization_id", nullable = false)
-    private Set<UUID> audienceSpecializationIds = new HashSet<>();
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

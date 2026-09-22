@@ -9,7 +9,6 @@ import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
 import java.util.Set;
-import java.util.UUID;
 
 @Schema(description = "Request tạo campaign mới cho admin.")
 public record AdminCampaignCreateRequest(
@@ -36,16 +35,7 @@ public record AdminCampaignCreateRequest(
         @Min(value = 0, message = "Ngân sách phải >= 0")
         Integer budgetScoin,
 
-        @Schema(description = "Tập hợp mã vai trò áp dụng (VD: STUDENT, MENTOR). Để trống = tất cả")
-        Set<String> audienceRoleCodes,
-
-        @Schema(description = "Tập hợp campus ID áp dụng. Để trống = tất cả")
-        Set<UUID> audienceCampusIds,
-
-        @Schema(description = "Tập hợp program ID áp dụng. Để trống = tất cả")
-        Set<UUID> audienceProgramIds,
-
-        @Schema(description = "Tập hợp specialization ID áp dụng. Để trống = tất cả")
-        Set<UUID> audienceSpecializationIds
+        @Schema(description = "Tập hợp mã vai trò áp dụng (VD: MENTEE, MENTOR). Để trống = tất cả")
+        Set<String> audienceRoleCodes
 ) {
 }

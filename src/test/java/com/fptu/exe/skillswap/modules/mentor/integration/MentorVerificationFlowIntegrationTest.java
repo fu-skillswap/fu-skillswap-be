@@ -1,16 +1,14 @@
 package com.fptu.exe.skillswap.modules.mentor.integration;
 
-import com.fptu.exe.skillswap.modules.identity.domain.Campus;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
 import com.fptu.exe.skillswap.modules.catalog.domain.Tag;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagStatus;
 import com.fptu.exe.skillswap.modules.catalog.domain.TagType;
+import com.fptu.exe.skillswap.modules.catalog.domain.AdministrativeProvince;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationalInstitution;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationFieldGroup;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTag;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagId;
 import com.fptu.exe.skillswap.modules.catalog.domain.MentorTagType;
@@ -47,6 +45,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
+import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,15 +71,6 @@ class MentorVerificationFlowIntegrationTest {
     private StudentProfileRepository studentProfileRepository;
 
     @Autowired
-    private CampusRepository campusRepository;
-
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
-    @Autowired
-    private SpecializationRepository specializationRepository;
-
-    @Autowired
     private TagRepository tagRepository;
 
     @Autowired
@@ -88,6 +78,15 @@ class MentorVerificationFlowIntegrationTest {
 
     @Autowired
     private MentorProfileService mentorProfileService;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository educationalInstitutionRepository;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository provinceRepository;
+
+    @Autowired
+    private com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository educationFieldGroupRepository;
 
     @Autowired
     private com.fptu.exe.skillswap.modules.mentor.repository.MentorVerificationRequestRepository mentorVerificationRequestRepository;
@@ -105,9 +104,23 @@ class MentorVerificationFlowIntegrationTest {
     private User otherUser;
     private User adminUser;
     private User secondAdminUser;
+    private UUID sampleInstitutionId;
+    private UUID sampleFieldGroupId;
 
     @BeforeEach
     void setUp() {
+        var province = provinceRepository.save(AdministrativeProvince.builder()
+                .code("99").name("Test Province").normalizedName("test province").unitType("TINH")
+                .active(true).sortOrder(1).effectiveFrom(LocalDate.of(2025, 1, 1)).build());
+        var institution = educationalInstitutionRepository.save(EducationalInstitution.builder()
+                .slug("test-institution-" + UUID.randomUUID()).name("Test University").shortName("TU")
+                .province(province).institutionType("UNIVERSITY").normalizedName("test university")
+                .active(true).sortOrder(1).build());
+        var fieldGroup = educationFieldGroupRepository.save(EducationFieldGroup.builder()
+                .officialCode("99999").name("Test field").normalizedName("test field")
+                .active(true).sortOrder(1).build());
+        sampleInstitutionId = institution.getId();
+        sampleFieldGroupId = fieldGroup.getId();
         // Setup admin and mentor users
         adminUser = userRepository.save(User.builder()
                 .email("admin-flow@test.com")
@@ -146,18 +159,12 @@ class MentorVerificationFlowIntegrationTest {
         assertEquals(VerificationStatus.DRAFT, draft.status());
 
         // 2. Mock completing StudentProfile and MentorProfile to allow submission
-        Campus campus = campusRepository.findAll().stream().findFirst().orElseThrow();
-        AcademicProgram program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
-        Specialization specialization = specializationRepository.findAll().stream().findFirst().orElseThrow();
-
         studentProfileRepository.save(StudentProfile.builder()
                 .user(mentorUser)
-                .claimedStudentCode("SE123456")
-                .campus(campus)
-                .program(program)
-                .specialization(specialization)
-                .semester(5)
-                .intakeYear(2022)
+                .profileType(StudentProfileType.UNIVERSITY_STUDENT)
+                .onboardingCompleted(true)
+                .institutionId(sampleInstitutionId)
+                .fieldGroupId(sampleFieldGroupId)
                 .build());
 
         Tag activeTag = tagRepository.save(Tag.builder()
@@ -177,7 +184,12 @@ class MentorVerificationFlowIntegrationTest {
                 2,
                 "https://github.com",
                 "https://portfolio.com",
-                "0912345678"
+                "0912345678",
+                getSampleInstitutionId(),
+                null,
+                null,
+                null,
+                getSampleFieldGroupId()
         ));
 
         var savedProfile = mentorProfileService.getMyProfile(mentorId);
@@ -600,18 +612,12 @@ class MentorVerificationFlowIntegrationTest {
         User candidate = userRepository.findById(mentorId).orElseThrow();
         mentorVerificationService.requestToBecomeMentor(mentorId);
 
-        Campus campus = campusRepository.findAll().stream().findFirst().orElseThrow();
-        AcademicProgram program = academicProgramRepository.findAll().stream().findFirst().orElseThrow();
-        Specialization specialization = specializationRepository.findAll().stream().findFirst().orElseThrow();
-
         studentProfileRepository.save(StudentProfile.builder()
                 .user(candidate)
-                .claimedStudentCode("SE" + Math.abs(mentorId.hashCode()))
-                .campus(campus)
-                .program(program)
-                .specialization(specialization)
-                .semester(5)
-                .intakeYear(2022)
+                .profileType(StudentProfileType.UNIVERSITY_STUDENT)
+                .onboardingCompleted(true)
+                .institutionId(sampleInstitutionId)
+                .fieldGroupId(sampleFieldGroupId)
                 .build());
 
         Tag activeTag = tagRepository.save(Tag.builder()
@@ -631,7 +637,12 @@ class MentorVerificationFlowIntegrationTest {
                 2,
                 "https://github.com/test",
                 "https://portfolio.com/test",
-                "0912345678"
+                "0912345678",
+                getSampleInstitutionId(),
+                null,
+                null,
+                null,
+                getSampleFieldGroupId()
         ));
 
         uploadVerificationDocument(mentorId, VerificationDocumentType.FPTU_AFFILIATION_PROOF, "fptu-proof.png", 1024L);
@@ -652,5 +663,13 @@ class MentorVerificationFlowIntegrationTest {
         entityManager.flush();
         return mentorVerificationService.uploadDocument(mentorId,
                 new MentorVerificationDocumentUploadRequest(type, uploadIntentResponse.uploadIntentId()));
+    }
+
+    private UUID getSampleInstitutionId() {
+        return sampleInstitutionId;
+    }
+
+    private UUID getSampleFieldGroupId() {
+        return sampleFieldGroupId;
     }
 }

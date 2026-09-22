@@ -15,7 +15,10 @@ import java.util.UUID;
     @Index(name = "idx_mentor_verification_method", columnList = "method"),
     @Index(name = "idx_mentor_verification_status_submitted_at", columnList = "status, submitted_at"),
     @Index(name = "idx_mentor_verification_status_submitted_at_id", columnList = "status, submitted_at, id"),
-    @Index(name = "idx_mentor_verification_mentor_status", columnList = "mentor_user_id, status")
+    @Index(name = "idx_mentor_verification_mentor_status", columnList = "mentor_user_id, status"),
+    @Index(name = "idx_mentor_verification_institution", columnList = "institution_id"),
+    @Index(name = "idx_mentor_verification_custom_province", columnList = "custom_institution_province_id"),
+    @Index(name = "idx_mentor_verification_primary_field_group", columnList = "primary_field_group_id")
 })
 @Getter
 @Setter
@@ -46,6 +49,21 @@ public class MentorVerificationRequest {
 
     @Column(name = "review_note", columnDefinition = "TEXT")
     private String reviewNote;
+
+    @Column(name = "institution_id")
+    private UUID institutionId;
+
+    @Column(name = "custom_institution_name", length = 200)
+    private String customInstitutionName;
+
+    @Column(name = "custom_institution_province_id")
+    private UUID customInstitutionProvinceId;
+
+    @Column(name = "company_or_organization", length = 200)
+    private String companyOrOrganization;
+
+    @Column(name = "primary_field_group_id")
+    private UUID primaryFieldGroupId;
 
     @Column(name = "revision_count", nullable = false)
     @Builder.Default

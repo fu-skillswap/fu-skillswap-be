@@ -10,10 +10,14 @@ import com.fptu.exe.skillswap.modules.booking.dto.response.AvailabilitySlotServi
 import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidateItem;
 import com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidates;
-import com.fptu.exe.skillswap.modules.identity.domain.AcademicProgram;
-import com.fptu.exe.skillswap.modules.identity.domain.Campus;
-import com.fptu.exe.skillswap.modules.identity.domain.Specialization;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
+import com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType;
+import com.fptu.exe.skillswap.modules.catalog.domain.AdministrativeProvince;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationFieldGroup;
+import com.fptu.exe.skillswap.modules.catalog.domain.EducationalInstitution;
+import com.fptu.exe.skillswap.modules.catalog.repository.AdministrativeProvinceRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationFieldGroupRepository;
+import com.fptu.exe.skillswap.modules.catalog.repository.EducationalInstitutionRepository;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -25,11 +29,10 @@ import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
-import com.fptu.exe.skillswap.modules.mentor.service.discovery.CandidateWindow;
+import com.fptu.exe.skillswap.modules.mentor.service.discovery.CandidatePage;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryCandidateProvider;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryEnrichmentService;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryKeywordSupport;
-import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryRankingService;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorEnrichedData;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.MentorRecommendationFacade;
 import com.fptu.exe.skillswap.modules.mentor.service.discovery.DiscoveryMapper;
@@ -77,163 +80,62 @@ public class MentorDiscoveryService {
     private final DiscoveryKeywordSupport discoveryKeywordSupport;
     private final DiscoveryEnrichmentService discoveryEnrichmentService;
     private final DiscoveryCandidateProvider discoveryCandidateProvider;
-    private final DiscoveryRankingService discoveryRankingService;
     private final DiscoveryMapper discoveryMapper;
 
     private final DiscoveryProperties discoveryProperties;
     private final MentorRecommendationFacade mentorRecommendationFacade;
     private final MentorBookingPolicyService mentorBookingPolicyService;
     private final BlogQueryPort blogQueryPort;
+    private final AdministrativeProvinceRepository administrativeProvinceRepository;
+    private final EducationalInstitutionRepository educationalInstitutionRepository;
+    private final EducationFieldGroupRepository educationFieldGroupRepository;
 
     @Transactional(readOnly = true)
     public PageResponse<MentorDiscoveryCardResponse> searchMentors(UUID currentUserId, MentorDiscoverySearchRequest request) {
         MentorDiscoverySearchRequest safeRequest = request == null ? new MentorDiscoverySearchRequest() : request;
-        StudentProfile menteeProfile = loadStudentProfileSafely(currentUserId);
-
-        boolean hasKeyword = safeRequest.getKeyword() != null && !safeRequest.getKeyword().isBlank();
         String normalizedKeyword = discoveryKeywordSupport.normalizeSearchText(safeRequest.getKeyword());
         String keywordPattern = discoveryKeywordSupport.toLikePattern(safeRequest.getKeyword());
         String normalizedKeywordPattern = discoveryKeywordSupport.toLikePattern(normalizedKeyword);
 
-        int requestedPage = Math.min(Math.max(safeRequest.getPage(), 0), 19);
-        int requestedSize = Math.min(Math.max(safeRequest.getSize(), 1), MentorDiscoverySearchRequest.MAX_PAGE_SIZE);
-        org.springframework.data.domain.Sort.Direction direction = safeRequest.getDirection() == org.springframework.data.domain.Sort.Direction.ASC ? org.springframework.data.domain.Sort.Direction.ASC : org.springframework.data.domain.Sort.Direction.DESC;
+        int page = Math.min(Math.max(safeRequest.getPage(), 0), 19);
+        int size = Math.min(Math.max(safeRequest.getSize(), 1), MentorDiscoverySearchRequest.MAX_PAGE_SIZE);
         String sortBy = safeRequest.getSortBy() == null ? "relevance" : safeRequest.getSortBy().trim();
-
-        List<org.springframework.data.domain.Sort.Order> orders = new java.util.ArrayList<>();
-        switch (sortBy) {
-            case "ratingAverage" -> {
-                orders.add(new org.springframework.data.domain.Sort.Order(direction, "averageRating"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "updatedAt"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
-            }
-            case "reviewCount" -> {
-                orders.add(new org.springframework.data.domain.Sort.Order(direction, "totalReviews"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
-            }
-            case "completedSessions" -> {
-                orders.add(new org.springframework.data.domain.Sort.Order(direction, "totalCompletedSessions"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
-            }
-            case "updatedAt" -> {
-                orders.add(new org.springframework.data.domain.Sort.Order(direction, "verifiedAt"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
-            }
-            default -> {
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "averageRating"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "totalCompletedSessions"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.DESC, "updatedAt"));
-                orders.add(new org.springframework.data.domain.Sort.Order(org.springframework.data.domain.Sort.Direction.ASC, "userId"));
-            }
-        }
-        boolean relevanceSort = "relevance".equals(sortBy);
-        CandidateWindow candidateWindow = discoveryCandidateProvider.recallForSearch(
-                safeRequest,
-                normalizedKeyword,
-                keywordPattern,
-                normalizedKeywordPattern,
-                relevanceSort,
-                orders,
-                currentTime(),
-                discoveryProperties.recallWindowSize()
-        );
-
-        if (hasKeyword && candidateWindow.isEmpty()) {
-            String corrected = discoveryKeywordSupport.correctSpelling(normalizedKeyword);
-            if (!corrected.equals(normalizedKeyword)) {
-                log.info("Original search keyword '{}' produced 0 results. Fallback fuzzy search using corrected spelling: '{}'", normalizedKeyword, corrected);
-                candidateWindow = discoveryCandidateProvider.recallForSearch(
-                        safeRequest,
-                        corrected,
-                        discoveryKeywordSupport.toLikePattern(corrected),
-                        discoveryKeywordSupport.toLikePattern(corrected),
-                        relevanceSort,
-                        orders,
-                        currentTime(),
-                        discoveryProperties.recallWindowSize()
-                );
-            }
-        }
-        if (hasKeyword && candidateWindow.isEmpty()) {
-            internalTelemetryService.record(
-                    "MENTOR_SEARCH_ZERO_RESULT",
-                    currentUserId,
-                    "MENTOR_SEARCH",
-                    null,
-                    Map.of(
-                            "keyword", normalizedKeyword,
-                            "campusId", String.valueOf(safeRequest.getCampusId()),
-                            "specializationId", String.valueOf(safeRequest.getSpecializationId())
-                    )
-            );
+        Sort.Direction direction = safeRequest.getDirection() == Sort.Direction.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        List<Sort.Order> orders = switch (sortBy) {
+            case "ratingAverage" -> List.of(new Sort.Order(direction, "averageRating"),
+                    new Sort.Order(Sort.Direction.DESC, "totalCompletedSessions"),
+                    new Sort.Order(Sort.Direction.DESC, "updatedAt"), new Sort.Order(Sort.Direction.ASC, "userId"));
+            case "reviewCount" -> List.of(new Sort.Order(direction, "totalReviews"),
+                    new Sort.Order(Sort.Direction.DESC, "averageRating"),
+                    new Sort.Order(Sort.Direction.DESC, "totalCompletedSessions"),
+                    new Sort.Order(Sort.Direction.ASC, "userId"));
+            case "completedSessions" -> List.of(new Sort.Order(direction, "totalCompletedSessions"),
+                    new Sort.Order(Sort.Direction.DESC, "averageRating"), new Sort.Order(Sort.Direction.ASC, "userId"));
+            case "updatedAt" -> List.of(new Sort.Order(direction, "verifiedAt"),
+                    new Sort.Order(Sort.Direction.DESC, "averageRating"), new Sort.Order(Sort.Direction.ASC, "userId"));
+            default -> List.of(new Sort.Order(Sort.Direction.DESC, "averageRating"),
+                    new Sort.Order(Sort.Direction.DESC, "totalCompletedSessions"),
+                    new Sort.Order(Sort.Direction.DESC, "updatedAt"), new Sort.Order(Sort.Direction.ASC, "userId"));
+        };
+        CandidatePage pageResult = discoveryCandidateProvider.searchPage(
+                safeRequest, keywordPattern, normalizedKeywordPattern, orders, currentTime());
+        if (normalizedKeyword != null && !normalizedKeyword.isBlank() && pageResult.isEmpty()) {
+            internalTelemetryService.record("MENTOR_SEARCH_ZERO_RESULT", currentUserId, "MENTOR_SEARCH", null,
+                    Map.of("keyword", normalizedKeyword));
         }
 
-        List<UUID> candidateIds = candidateWindow.candidateIds();
-        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(candidateIds);
-        if (rows.isEmpty()) {
-            return PageResponse.<MentorDiscoveryCardResponse>builder()
-                    .content(List.of())
-                    .page(requestedPage)
-                    .size(requestedSize)
-                    .totalElements(candidateWindow.totalCount())
-                    .totalPages(totalPages(candidateWindow.totalCount(), requestedSize))
-                    .last(isLastPage(requestedPage, requestedSize, candidateWindow.totalCount()))
-                    .build();
-        }
-
+        List<MentorDiscoveryQueryRow> rows = loadDiscoveryRowsInPageOrder(pageResult.candidateIds());
         LocalDateTime evaluatedAt = currentTime();
-        List<MentorDiscoveryCardResponse> content;
-        if (relevanceSort) {
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(candidateIds, evaluatedAt);
-            List<DiscoveryRankingService.RankedSearchCandidate> rankedCandidates = discoveryRankingService.rankSearchCandidates(
-                    rows,
-                    menteeProfile,
-                    normalizedKeyword,
-                    enrichedDataByMentor,
-                    evaluatedAt
-            );
-
-            int fromIndex = Math.min(requestedPage * requestedSize, rankedCandidates.size());
-            int toIndex = Math.min(fromIndex + requestedSize, rankedCandidates.size());
-            content = rankedCandidates.subList(fromIndex, toIndex).stream()
-                    .map(candidate -> discoveryMapper.toCardResponseFromEnriched(candidate.row(), candidate.enrichedData(), candidate.matchScore()))
-                    .toList();
-        } else {
-            List<MentorDiscoveryQueryRow> sortedRows = discoveryRankingService.sortRowsForRequestedSort(rows, sortBy, direction);
-            int fromIndex = Math.min(requestedPage * requestedSize, sortedRows.size());
-            int toIndex = Math.min(fromIndex + requestedSize, sortedRows.size());
-            List<MentorDiscoveryQueryRow> pageRows = sortedRows.subList(fromIndex, toIndex);
-            List<UUID> pageMentorIds = pageRows.stream()
-                    .map(MentorDiscoveryQueryRow::mentorUserId)
-                    .toList();
-
-            Map<UUID, MentorEnrichedData> enrichedDataByMentor = discoveryEnrichmentService.loadMentorEnrichedData(pageMentorIds, evaluatedAt);
-
-            List<DiscoveryRankingService.RankedSearchCandidate> rankedPageRows = discoveryRankingService.rankSearchCandidates(
-                    pageRows,
-                    menteeProfile,
-                    normalizedKeyword,
-                    enrichedDataByMentor,
-                    evaluatedAt
-            );
-            content = rankedPageRows.stream()
-                    .map(candidate -> discoveryMapper.toCardResponseFromEnriched(candidate.row(), candidate.enrichedData(), candidate.matchScore()))
-                    .toList();
-        }
-
+        Map<UUID, MentorEnrichedData> enriched = discoveryEnrichmentService.loadMentorEnrichedData(
+                pageResult.candidateIds(), evaluatedAt);
+        List<MentorDiscoveryCardResponse> content = rows.stream()
+                .map(row -> discoveryMapper.toCardResponseFromEnriched(
+                        row, enriched.getOrDefault(row.mentorUserId(), MentorEnrichedData.empty()), null))
+                .toList();
         return PageResponse.<MentorDiscoveryCardResponse>builder()
-                .content(content)
-                .page(requestedPage)
-                .size(requestedSize)
-                .totalElements(candidateWindow.totalCount())
-                .totalPages(totalPages(candidateWindow.totalCount(), requestedSize))
-                .last(isLastPage(requestedPage, requestedSize, candidateWindow.totalCount()))
-                .build();
+                .content(content).page(page).size(size).totalElements(pageResult.totalCount())
+                .totalPages(totalPages(pageResult.totalCount(), size))
+                .last(isLastPage(page, size, pageResult.totalCount())).build();
     }
 
     public List<MentorRecommendationResponse> getRecommendations(UUID currentUserId, int limit) {
@@ -255,10 +157,6 @@ public class MentorDiscoveryService {
                 .stream()
                 .map(discoveryMapper::toServiceResponse)
                 .toList();
-
-        Campus campus = studentProfile == null ? null : studentProfile.getCampus();
-        AcademicProgram program = studentProfile == null ? null : studentProfile.getProgram();
-        Specialization specialization = studentProfile == null ? null : studentProfile.getSpecialization();
 
         int reviews = defaultInteger(mentorProfile.getTotalReviews());
         boolean hasActiveServices = services.stream().anyMatch(MentorServiceResponse::isActive);
@@ -287,12 +185,6 @@ public class MentorDiscoveryService {
                                 mentorProfile.getDirectionSupportLevel())))
                 .services(services)
                 .evidence(new MentorEvidenceResponse(
-                        new MentorEducationResponse(
-                                campus == null ? null : campus.getId(), campus == null ? null : campus.getName(),
-                                program == null ? null : program.getId(), program == null ? null : program.getNameVi(),
-                                specialization == null ? null : specialization.getId(), specialization == null ? null : specialization.getNameVi(),
-                                studentProfile == null ? null : studentProfile.getSemester(),
-                                studentProfile != null && studentProfile.isAlumni()),
                         subjectResults, featuredProjects, achievements, mentorProfile.getPortfolioUrl(), mentorProfile.getGithubUrl(),
                         new MentorAuthorityContentResponse(
                                 authorityCount, authorityLatest, recentPublicArticles)))
@@ -302,7 +194,44 @@ public class MentorDiscoveryService {
                         reviews, defaultInteger(mentorProfile.getTotalCompletedSessions())))
                 .availability(new MentorAvailabilityResponse(
                         mentorProfile.isAvailable(), mentorProfile.getBookingSuspendedUntil(), canRequestBooking))
+                .education(toPublicMentorEducation(studentProfile))
                 .build();
+    }
+
+    private PublicMentorEducationResponse toPublicMentorEducation(StudentProfile profile) {
+        if (profile == null || profile.getProfileType() == null) {
+            return null;
+        }
+        if (profile.getProfileType() == StudentProfileType.SCHOOL_STUDENT) {
+            PublicEducationReferenceResponse province = profile.getCustomInstitutionProvinceId() == null
+                    ? null
+                    : administrativeProvinceRepository.findByIdAndActiveTrue(profile.getCustomInstitutionProvinceId())
+                            .map(this::toPublicProvince).orElse(null);
+            return new PublicMentorEducationResponse(StudentProfileType.SCHOOL_STUDENT,
+                    profile.getCustomInstitutionName(), province, null, null, null);
+        }
+        PublicEducationReferenceResponse institution = profile.getInstitutionId() == null
+                ? null
+                : educationalInstitutionRepository.findByIdAndActiveTrue(profile.getInstitutionId())
+                        .map(this::toPublicInstitution).orElse(null);
+        PublicEducationReferenceResponse fieldGroup = profile.getFieldGroupId() == null
+                ? null
+                : educationFieldGroupRepository.findByIdAndActiveTrue(profile.getFieldGroupId())
+                        .map(this::toPublicFieldGroup).orElse(null);
+        return new PublicMentorEducationResponse(profile.getProfileType(), null, null,
+                institution, fieldGroup, profile.getMajorName());
+    }
+
+    private PublicEducationReferenceResponse toPublicProvince(AdministrativeProvince province) {
+        return new PublicEducationReferenceResponse(province.getId(), province.getName());
+    }
+
+    private PublicEducationReferenceResponse toPublicInstitution(EducationalInstitution institution) {
+        return new PublicEducationReferenceResponse(institution.getId(), institution.getName());
+    }
+
+    private PublicEducationReferenceResponse toPublicFieldGroup(EducationFieldGroup fieldGroup) {
+        return new PublicEducationReferenceResponse(fieldGroup.getId(), fieldGroup.getName());
     }
 
     private MentorPublicArticlePreviewResponse toMentorPublicArticlePreview(BlogMentorArticlePreview article) {

@@ -41,7 +41,6 @@ public class AdminUserSummaryService {
                 user.roles(),
                 user.lastLoginAt(),
                 user.createdAt(),
-                userAdminPort.getAcademicProfileSummary(userId),
                 mentorAdminPort.getMentorProfileSummary(userId),
                 new AdminUserSummaryActivityResponse(
                         bookingQueryPort.countByMenteeId(userId),

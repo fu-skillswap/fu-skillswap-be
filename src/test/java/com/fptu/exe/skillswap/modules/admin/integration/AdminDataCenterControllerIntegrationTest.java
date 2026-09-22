@@ -1,11 +1,7 @@
 package com.fptu.exe.skillswap.modules.admin.integration;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
-import com.fptu.exe.skillswap.modules.identity.domain.CampusCode;
 import com.fptu.exe.skillswap.modules.identity.domain.StudentProfile;
-import com.fptu.exe.skillswap.modules.identity.repository.AcademicProgramRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.CampusRepository;
-import com.fptu.exe.skillswap.modules.identity.repository.SpecializationRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.StudentProfileRepository;
 import com.fptu.exe.skillswap.modules.admin.domain.AuditAction;
 import com.fptu.exe.skillswap.modules.admin.domain.AuditLog;
@@ -75,15 +71,6 @@ class AdminDataCenterControllerIntegrationTest {
     private StudentProfileRepository studentProfileRepository;
 
     @Autowired
-    private CampusRepository campusRepository;
-
-    @Autowired
-    private AcademicProgramRepository academicProgramRepository;
-
-    @Autowired
-    private SpecializationRepository specializationRepository;
-
-    @Autowired
     private MentorProfileRepository mentorProfileRepository;
 
     @Autowired
@@ -124,18 +111,10 @@ class AdminDataCenterControllerIntegrationTest {
         anotherMentee = saveUser("phase2-mentee@test.com", Set.of(RoleCode.MENTEE), UserStatus.ACTIVE);
         anotherMentorUser = saveUser("phase2-mentor@test.com", Set.of(RoleCode.MENTOR), UserStatus.ACTIVE);
 
-        var campus = campusRepository.findByCode(CampusCode.HCM).orElseThrow();
-        var program = academicProgramRepository.findByCode("CNTT").orElseThrow();
-        var specialization = specializationRepository.findByCode("CNTT_TTNT").orElseThrow();
-
         studentProfileRepository.save(StudentProfile.builder()
                 .user(targetUser)
-                .claimedStudentCode("HE173001")
-                .campus(campus)
-                .program(program)
-                .specialization(specialization)
-                .semester(6)
-                .isAlumni(false)
+                .profileType(com.fptu.exe.skillswap.modules.identity.domain.StudentProfileType.UNIVERSITY_STUDENT)
+                .onboardingCompleted(true)
                 .build());
 
         targetMentorProfile = mentorProfileRepository.save(MentorProfile.builder()
@@ -257,7 +236,7 @@ class AdminDataCenterControllerIntegrationTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    void userSummary_shouldReturnAcademicMentorAndActivityData() throws Exception {
+    void userSummary_shouldReturnMentorAndActivityDataWithoutAcademicProjection() throws Exception {
         mockMvc.perform(get("/api/admin/users/{userId}/summary", targetUser.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.userId").value(targetUser.getId().toString()))
@@ -265,11 +244,7 @@ class AdminDataCenterControllerIntegrationTest {
                 .andExpect(jsonPath("$.data.roles", hasSize(2)))
                 .andExpect(jsonPath("$.data.roles[0]").value("MENTEE"))
                 .andExpect(jsonPath("$.data.roles[1]").value("MENTOR"))
-                .andExpect(jsonPath("$.data.academicProfile.studentCode").value("HE173001"))
-                .andExpect(jsonPath("$.data.academicProfile.campusCode").value("HCM"))
-                .andExpect(jsonPath("$.data.academicProfile.programCode").value("CNTT"))
-                .andExpect(jsonPath("$.data.academicProfile.specializationCode").value("CNTT_TTNT"))
-                .andExpect(jsonPath("$.data.academicProfile.semester").value(6))
+                .andExpect(jsonPath("$.data.academicProfile").doesNotExist())
                 .andExpect(jsonPath("$.data.mentorProfile.exists").value(true))
                 .andExpect(jsonPath("$.data.mentorProfile.mentorStatus").value("ACTIVE"))
                 .andExpect(jsonPath("$.data.mentorProfile.averageRating").value(4.75))

@@ -79,6 +79,21 @@ public record MentorVerificationRequestResponse(
         MentorVerificationChecklistResponse checklist,
 
         @Schema(description = "Các hành động người dùng được phép thực hiện tiếp theo")
-        MentorVerificationAllowedActionsResponse allowedActions
+        MentorVerificationAllowedActionsResponse allowedActions,
+
+        @Schema(description = "ID trường đại học/học viện từ Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID institutionId,
+
+        @Schema(description = "Tên trường ngoài Catalog", nullable = true, example = "Trường Đại học Ngoại ngữ Tin học TP.HCM")
+        String customInstitutionName,
+
+        @Schema(description = "ID tỉnh/thành phố của trường ngoài Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID customInstitutionProvinceId,
+
+        @Schema(description = "Tên doanh nghiệp hoặc tổ chức công tác", nullable = true, example = "FPT Software")
+        String companyOrOrganization,
+
+        @Schema(description = "ID nhóm ngành/lĩnh vực cố vấn chính từ Catalog", nullable = true, example = "019f1234-aaaa-bbbb-cccc-1234567890ab")
+        UUID primaryFieldGroupId
 ) {
 }
