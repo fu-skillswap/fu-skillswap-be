@@ -178,6 +178,7 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         jdbcTemplate.execute("DELETE FROM conversation_participants");
         jdbcTemplate.execute("DELETE FROM messages");
         jdbcTemplate.execute("DELETE FROM conversations");
+        jdbcTemplate.execute("DELETE FROM session_feedbacks");
         jdbcTemplate.execute("DELETE FROM sessions");
         jdbcTemplate.execute("DELETE FROM booking_events");
         jdbcTemplate.execute("DELETE FROM mentor_violation_events");

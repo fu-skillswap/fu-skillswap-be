@@ -60,11 +60,11 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
         jdbcTemplate.update("""
                 INSERT INTO courses (
                     id, mentor_profile_id, subject_code, title, description,
-                    max_students, total_sessions, price_scoin, reserved_count,
+                    total_sessions, price_scoin, reserved_count,
                     confirmed_count, status, version, created_at, updated_at,
                     total_chapters, total_lectures, total_duration_seconds,
                     average_rating, review_count, enrolled_count, total_materials
-                ) VALUES (?, ?, 'SPRING', 'Settlement schema test', NULL, 0, 0, 100,
+                ) VALUES (?, ?, 'SPRING', 'Settlement schema test', NULL, 0, 100,
                           0, 0, 'PUBLISHED', 0, ?, ?, 0, 0, 0, 0.00, 0, 0, 0)
                 """, courseId, studentId, sqlNow, sqlNow);
         jdbcTemplate.update("""
