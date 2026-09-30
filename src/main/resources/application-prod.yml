@@ -27,6 +27,7 @@ application:
     enabled: ${PRODUCTION_CONFIG_VALIDATION_ENABLED:true}
   google:
     client-id: ${GOOGLE_CLIENT_ID:}
+    mobile-client-id: ${GOOGLE_MOBILE_CLIENT_ID:${GOOGLE_CLIENT_ID:}}
     client-secret: ${GOOGLE_CLIENT_SECRET:}
     calendar-redirect-uri: ${GOOGLE_CALENDAR_REDIRECT_URI:}
     token-encryption-key: ${GOOGLE_TOKEN_ENCRYPTION_KEY:}

@@ -21,6 +21,7 @@ class GoogleLoginOAuthServiceTest {
 
     @Mock private GoogleAuthService googleAuthService;
     @Mock private GoogleLoginNonceService nonceService;
+    @Mock private GoogleMobileTokenReplayService mobileTokenReplayService;
     @InjectMocks private GoogleLoginOAuthService service;
 
     @Test
@@ -49,5 +50,31 @@ class GoogleLoginOAuthServiceTest {
         assertThrows(BaseException.class, () -> service.resolveUserInfo(request));
 
         verify(nonceService, never()).consume("nonce");
+    }
+
+    @Test
+    void resolveMobileUserInfo_shouldClaimReplayIdentityAfterTokenVerification() {
+        GoogleAuthService.GoogleUserInfo expected = new GoogleAuthService.GoogleUserInfo();
+        expected.setSub("google-sub");
+        GoogleAuthService.GoogleMobileTokenVerification verified =
+                new GoogleAuthService.GoogleMobileTokenVerification(expected, 100L, 3_700L);
+        when(googleAuthService.verifyMobileToken("mobile-id-token")).thenReturn(verified);
+
+        var result = service.resolveMobileUserInfo("mobile-id-token");
+
+        assertEquals(expected, result);
+        verify(mobileTokenReplayService).claim("google-sub", 100L, 3_700L);
+    }
+
+    @Test
+    void resolveMobileUserInfo_invalidCredential_shouldNotCallGoogleVerifier() {
+        assertThrows(BaseException.class, () -> service.resolveMobileUserInfo(" "));
+
+        verify(googleAuthService, never()).verifyMobileToken(" ");
+        verify(mobileTokenReplayService, never()).claim(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.anyLong()
+        );
     }
 }

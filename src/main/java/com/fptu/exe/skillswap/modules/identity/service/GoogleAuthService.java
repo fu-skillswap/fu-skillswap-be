@@ -27,7 +27,8 @@ import java.util.Set;
 public class GoogleAuthService {
 
     private final GoogleApiProperties googleApiProperties;
-    private volatile GoogleIdTokenVerifier verifier;
+    private volatile GoogleIdTokenVerifier webVerifier;
+    private volatile GoogleIdTokenVerifier mobileVerifier;
     private static final Set<String> ALLOWED_ISSUERS = Set.of("accounts.google.com", "https://accounts.google.com");
 
     public GoogleUserInfo verifyToken(String idToken, String expectedNonce) {
@@ -39,7 +40,7 @@ public class GoogleAuthService {
         }
 
         try {
-            GoogleIdToken googleIdToken = getVerifier().verify(idToken);
+            GoogleIdToken googleIdToken = getVerifier(false).verify(idToken);
             if (googleIdToken == null || googleIdToken.getPayload() == null) {
                 throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
             }
@@ -55,27 +56,76 @@ public class GoogleAuthService {
         }
     }
 
-    private GoogleIdTokenVerifier getVerifier() throws GeneralSecurityException, IOException {
-        GoogleIdTokenVerifier current = verifier;
+    public GoogleMobileTokenVerification verifyMobileToken(String idToken) {
+        if (!StringUtils.hasText(idToken)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Mã xác thực Google không được để trống");
+        }
+
+        try {
+            GoogleIdToken googleIdToken = getVerifier(true).verify(idToken);
+            if (googleIdToken == null || googleIdToken.getPayload() == null) {
+                throw new BaseException(ErrorCode.OAUTH_VERIFICATION_FAILED, "Xác thực Google ID Token thất bại");
+            }
+
+            GoogleIdToken.Payload payload = googleIdToken.getPayload();
+            GoogleUserInfo userInfo = verifyMobilePayload(payload);
+            Long issuedAt = payload.getIssuedAtTimeSeconds();
+            Long expiration = payload.getExpirationTimeSeconds();
+            if (issuedAt == null || expiration == null || expiration <= issuedAt) {
+                throw new BaseException(
+                        ErrorCode.OAUTH_VERIFICATION_FAILED,
+                        "Google ID Token thiếu thông tin thời hạn hợp lệ"
+                );
+            }
+            return new GoogleMobileTokenVerification(userInfo, issuedAt, expiration);
+        } catch (BaseException e) {
+            throw e;
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Error verifying Google Mobile ID token: {}", e.getMessage(), e);
+            throw new BaseException(
+                    ErrorCode.OAUTH_VERIFICATION_FAILED,
+                    "Không thể xác thực đăng nhập Google do kết nối tới hệ thống Google tạm thời không ổn định"
+            );
+        }
+    }
+
+    private GoogleIdTokenVerifier getVerifier(boolean mobile) throws GeneralSecurityException, IOException {
+        String clientId = mobile ? resolveMobileClientId() : googleApiProperties.getClientId();
+        if (!StringUtils.hasText(clientId)) {
+            throw new BaseException(
+                    ErrorCode.CONFIGURATION_ERROR,
+                    mobile
+                            ? "Thiếu cấu hình GOOGLE_MOBILE_CLIENT_ID cho đăng nhập Google Mobile"
+                            : "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google"
+            );
+        }
+
+        GoogleIdTokenVerifier current = mobile ? mobileVerifier : webVerifier;
         if (current == null) {
             synchronized (this) {
-                current = verifier;
+                current = mobile ? mobileVerifier : webVerifier;
                 if (current == null) {
-                    String clientId = googleApiProperties.getClientId();
-                    if (!StringUtils.hasText(clientId)) {
-                        throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
-                    }
                     current = new GoogleIdTokenVerifier.Builder(
                             GoogleNetHttpTransport.newTrustedTransport(),
                             GsonFactory.getDefaultInstance()
-                    )
+                            )
                             .setAudience(Collections.singletonList(clientId))
                             .build();
-                    verifier = current;
+                    if (mobile) {
+                        mobileVerifier = current;
+                    } else {
+                        webVerifier = current;
+                    }
                 }
             }
         }
         return current;
+    }
+
+    private String resolveMobileClientId() {
+        return StringUtils.hasText(googleApiProperties.getMobileClientId())
+                ? googleApiProperties.getMobileClientId()
+                : googleApiProperties.getClientId();
     }
 
     GoogleUserInfo verifyPayload(GoogleIdToken.Payload payload) {
@@ -83,7 +133,18 @@ public class GoogleAuthService {
     }
 
     GoogleUserInfo verifyPayload(GoogleIdToken.Payload payload, String expectedNonce) {
-        String expectedClientId = googleApiProperties.getClientId();
+        return verifyPayload(payload, expectedNonce, googleApiProperties.getClientId());
+    }
+
+    GoogleUserInfo verifyMobilePayload(GoogleIdToken.Payload payload) {
+        return verifyPayload(payload, null, resolveMobileClientId());
+    }
+
+    private GoogleUserInfo verifyPayload(
+            GoogleIdToken.Payload payload,
+            String expectedNonce,
+            String expectedClientId
+    ) {
         if (!StringUtils.hasText(expectedClientId)) {
             throw new BaseException(ErrorCode.CONFIGURATION_ERROR, "Thiếu cấu hình GOOGLE_CLIENT_ID cho đăng nhập Google");
         }
@@ -127,6 +188,13 @@ public class GoogleAuthService {
                 payload.get("picture") != null ? String.valueOf(payload.get("picture")) : null,
                 true
         );
+    }
+
+    public record GoogleMobileTokenVerification(
+            GoogleUserInfo userInfo,
+            long issuedAt,
+            long expiration
+    ) {
     }
 
     public GoogleUserInfo fromOpenIdProfile(String sub, String email, String name, String picture, boolean emailVerified) {

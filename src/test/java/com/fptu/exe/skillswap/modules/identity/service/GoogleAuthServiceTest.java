@@ -61,6 +61,40 @@ class GoogleAuthServiceTest {
         assertEquals(ErrorCode.OAUTH_VERIFICATION_FAILED, exception.getErrorCode());
     }
 
+    @Test
+    void verifyMobilePayload_shouldUseMobileAudienceAndNotRequireNonce() {
+        GoogleApiProperties properties = new GoogleApiProperties();
+        properties.setClientId("google-web-client-id");
+        properties.setMobileClientId("google-mobile-client-id");
+        GoogleAuthService service = new GoogleAuthService(properties);
+
+        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+        payload.setIssuer("https://accounts.google.com");
+        payload.setAudience("google-mobile-client-id");
+        payload.setSubject("google-sub");
+        payload.setEmail("user@test.com");
+        payload.setEmailVerified(true);
+
+        assertDoesNotThrow(() -> service.verifyMobilePayload(payload));
+    }
+
+    @Test
+    void verifyMobilePayload_shouldRejectWebAudience() {
+        GoogleApiProperties properties = new GoogleApiProperties();
+        properties.setClientId("google-web-client-id");
+        properties.setMobileClientId("google-mobile-client-id");
+        GoogleAuthService service = new GoogleAuthService(properties);
+
+        GoogleIdToken.Payload payload = new GoogleIdToken.Payload();
+        payload.setIssuer("accounts.google.com");
+        payload.setAudience("google-web-client-id");
+        payload.setSubject("google-sub");
+        payload.setEmail("user@test.com");
+        payload.setEmailVerified(true);
+
+        assertThrows(BaseException.class, () -> service.verifyMobilePayload(payload));
+    }
+
     private GoogleAuthService buildService() {
         GoogleApiProperties properties = new GoogleApiProperties();
         properties.setClientId("google-client-id");

@@ -57,6 +57,12 @@ public class IdentityService {
         return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
     }
 
+    public TokenResponse loginWithGoogleMobile(String credential) {
+        GoogleAuthService.GoogleUserInfo googleUser =
+                googleLoginOAuthService.resolveMobileUserInfo(credential);
+        return identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUser);
+    }
+
     @Transactional
     public TokenResponse refreshToken(String rawRefreshToken) {
         if (!StringUtils.hasText(rawRefreshToken)) {

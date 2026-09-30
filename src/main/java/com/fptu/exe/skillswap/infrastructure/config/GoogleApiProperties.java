@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Configuration;
 @Setter
 public class GoogleApiProperties {
     private String clientId;
+    /** Client ID accepted for Google ID Tokens issued by the Mobile flow. */
+    private String mobileClientId;
     private String clientSecret;
     private String calendarRedirectUri;
     private String tokenEncryptionKey;

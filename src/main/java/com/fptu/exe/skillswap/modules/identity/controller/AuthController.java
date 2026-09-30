@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleLoginNonceResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
@@ -121,6 +122,28 @@ public class AuthController {
                 "Bạn đang đăng nhập quá nhanh, vui lòng thử lại sau ít phút"
         );
         TokenResponse tokenResponse = identityService.loginWithGoogle(request);
+        addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
+        tokenResponse.setRefreshToken(null);
+        return ApiResponse.success(tokenResponse);
+    }
+
+    @Operation(
+            summary = "Đăng nhập bằng Google Mobile",
+            description = "Xác minh Google ID Token cho Mobile bằng chữ ký, audience, issuer, email_verified và chống replay theo sub/iat. Endpoint không dùng nonce claim của Web flow."
+    )
+    @PostMapping("/google/mobile")
+    public ApiResponse<TokenResponse> loginWithGoogleMobile(
+            @Valid @RequestBody GoogleMobileLoginRequest request,
+            HttpServletRequest httpServletRequest,
+            HttpServletResponse response
+    ) {
+        rateLimitService.check(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY,
+                "auth:google-mobile:" + resolveClientKey(httpServletRequest),
+                60,
+                java.time.Duration.ofMinutes(10),
+                "Bạn đang đăng nhập quá nhanh, vui lòng thử lại sau ít phút"
+        );
+        TokenResponse tokenResponse = identityService.loginWithGoogleMobile(request.getCredential());
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
         tokenResponse.setRefreshToken(null);
         return ApiResponse.success(tokenResponse);
