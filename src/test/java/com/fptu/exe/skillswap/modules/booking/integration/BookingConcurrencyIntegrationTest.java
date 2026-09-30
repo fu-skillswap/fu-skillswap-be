@@ -171,6 +171,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile)
                     .title("Spring Transaction Mentoring")
                     .description("Support Java backend and transaction handling")
+                    .expectedOutcome("A completed transaction-safe mentoring session")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)
@@ -291,12 +292,18 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
             MentorAvailabilitySlot existingSlot = createSlot(mentorProfile, base, base.plusHours(1));
             MentorAvailabilitySlot firstSlot = createSlot(mentorProfile, base.plusDays(1), base.plusDays(1).plusHours(1));
             MentorAvailabilitySlot secondSlot = createSlot(mentorProfile, base.plusDays(2), base.plusDays(2).plusHours(1));
+            List<MentorAvailabilitySlot> existingPendingSlots = List.of(
+                    existingSlot,
+                    createSlot(mentorProfile, base.plusDays(3), base.plusDays(3).plusHours(1)),
+                    createSlot(mentorProfile, base.plusDays(4), base.plusDays(4).plusHours(1)),
+                    createSlot(mentorProfile, base.plusDays(5), base.plusDays(5).plusHours(1)));
 
             var service = mentorServiceRepository.saveAndFlush(
                     com.fptu.exe.skillswap.modules.mentor.domain.MentorService.builder()
                             .mentorProfile(mentorProfile)
                             .title("Pending quota service")
                             .description("Service dùng cho concurrency quota test")
+                            .expectedOutcome("A completed quota validation session")
                             .durationMinutes(60)
                             .isFree(false)
                             .priceScoin(30_000)
@@ -309,14 +316,14 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                 bookingRepository.save( com.fptu.exe.skillswap.modules.booking.domain.Booking.builder()
                         .menteeUserId(mentee.getId())
                         .mentorUserId(mentorProfile.getUserId())
-                        .slot(existingSlot)
+                        .slot(existingPendingSlots.get(index))
                         .status(BookingStatus.PENDING)
                         .learningGoalTitle("Existing pending " + index)
                         .learningGoalDescription("Existing pending booking")
-                        .requestedStartTime(existingSlot.getStartTime())
-                        .requestedEndTime(existingSlot.getEndTime())
-                        .selectedStartTime(existingSlot.getStartTime())
-                        .selectedEndTime(existingSlot.getEndTime())
+                        .requestedStartTime(existingPendingSlots.get(index).getStartTime())
+                        .requestedEndTime(existingPendingSlots.get(index).getEndTime())
+                        .selectedStartTime(existingPendingSlots.get(index).getStartTime())
+                        .selectedEndTime(existingPendingSlots.get(index).getEndTime())
                         .build());
             }
             bookingRepository.flush();
@@ -471,6 +478,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile1)
                     .title("Service 1")
                     .description("Desc 1")
+                    .expectedOutcome("Outcome 1")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)
@@ -481,6 +489,7 @@ class BookingConcurrencyIntegrationTest extends com.fptu.exe.skillswap.infrastru
                     .mentorProfile(mentorProfile2)
                     .title("Service 2")
                     .description("Desc 2")
+                    .expectedOutcome("Outcome 2")
                     .durationMinutes(60)
                     .isFree(false)
                     .priceScoin(72_000)

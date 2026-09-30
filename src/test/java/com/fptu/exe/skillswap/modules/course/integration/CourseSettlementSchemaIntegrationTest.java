@@ -6,6 +6,7 @@ import com.fptu.exe.skillswap.modules.course.domain.CourseSettlementStatus;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentRepository;
 import com.fptu.exe.skillswap.modules.course.repository.CourseEnrollmentSettlementRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,6 +38,13 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
     @Autowired
     private CourseEnrollmentSettlementRepository settlementRepository;
 
+    @AfterEach
+    void clearPostgresData() {
+        jdbcTemplate.execute("DELETE FROM course_enrollment_settlements");
+        jdbcTemplate.execute("DELETE FROM course_enrollments");
+        jdbcTemplate.execute("DELETE FROM courses");
+    }
+
     @Test
     void settlementInsertWithoutCourseSession_shouldCommitOnPostgres() {
         UUID enrollmentId = UUID.randomUUID();
@@ -60,12 +68,12 @@ class CourseSettlementSchemaIntegrationTest extends AbstractPostgreSQLIntegratio
         jdbcTemplate.update("""
                 INSERT INTO courses (
                     id, mentor_profile_id, subject_code, title, description,
-                    price_scoin, reserved_count,
+                    max_students, total_sessions, price_scoin,
                     confirmed_count, status, version, created_at, updated_at,
                     total_chapters, total_lectures, total_duration_seconds,
                     average_rating, review_count, enrolled_count, total_materials
-                ) VALUES (?, ?, 'SPRING', 'Settlement schema test', NULL, 100,
-                          0, 0, 'PUBLISHED', 0, ?, ?, 0, 0, 0, 0.00, 0, 0, 0)
+                ) VALUES (?, ?, 'SPRING', 'Settlement schema test', NULL, 1, 0, 100,
+                          0, 'PUBLISHED', 0, ?, ?, 0, 0, 0, 0.00, 0, 0, 0)
                 """, courseId, studentId, sqlNow, sqlNow);
         jdbcTemplate.update("""
                 INSERT INTO course_enrollments (

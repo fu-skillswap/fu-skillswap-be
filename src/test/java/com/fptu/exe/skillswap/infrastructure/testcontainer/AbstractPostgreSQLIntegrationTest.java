@@ -6,10 +6,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.DockerClientFactory;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 @ExtendWith(AbstractPostgreSQLIntegrationTest.DockerAvailableCondition.class)
+@TestPropertySource(properties = {
+        "spring.flyway.enabled=true",
+        "spring.jpa.hibernate.ddl-auto=validate",
+        "spring.test.database.replace=none"
+})
 public abstract class AbstractPostgreSQLIntegrationTest {
 
     private static final String EXTERNAL_DB_URL = System.getenv("TEST_DATASOURCE_URL");

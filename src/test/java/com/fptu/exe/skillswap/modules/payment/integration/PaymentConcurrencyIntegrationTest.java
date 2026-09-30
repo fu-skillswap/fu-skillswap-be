@@ -189,7 +189,15 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         jdbcTemplate.execute("DELETE FROM payment_attempts");
         jdbcTemplate.execute("DELETE FROM payment_orders");
         jdbcTemplate.execute("DELETE FROM bookings");
+        jdbcTemplate.execute("DELETE FROM course_enrollment_settlements");
+        jdbcTemplate.execute("DELETE FROM course_enrollments");
+        jdbcTemplate.execute("DELETE FROM courses");
+        jdbcTemplate.execute("DELETE FROM availability_slot_services");
+        jdbcTemplate.execute("DELETE FROM mentor_availability_slots");
+        jdbcTemplate.execute("DELETE FROM mentor_availability_rules");
+        jdbcTemplate.execute("DELETE FROM mentor_services");
         jdbcTemplate.execute("DELETE FROM mentor_profiles");
+        jdbcTemplate.execute("DELETE FROM student_profiles");
         jdbcTemplate.execute("DELETE FROM users");
     }
 
