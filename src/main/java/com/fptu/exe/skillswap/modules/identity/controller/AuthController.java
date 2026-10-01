@@ -1,10 +1,10 @@
 package com.fptu.exe.skillswap.modules.identity.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.LogoutRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleLoginNonceResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
@@ -43,6 +43,7 @@ public class AuthController {
     private final GoogleLoginNonceService googleLoginNonceService;
     private final InMemoryRateLimitService rateLimitService;
     private final TrustedClientIpResolver trustedClientIpResolver;
+    private final ObjectMapper objectMapper;
 
     @Operation(summary = "Cấp nonce đăng nhập Google", description = "Phát hành nonce dùng một lần cho Google Identity Services. FE phải truyền nonce này vào GIS trước khi nhận credential.")
     @GetMapping("/google/nonce")
@@ -151,11 +152,11 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie (Web) hoặc request body (Mobile). Các request song song trong grace period nhận cùng một token pair.")
+    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie. Endpoint đọc cookie, không nhận refresh token trong body hoặc Bearer input. Các request song song trong grace period nhận cùng một token pair.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Làm mới access token thành công. Đối với Web, refresh token được rotate trong HttpOnly cookie; đối với Mobile, refresh token mới được trả trong JSON body.",
+                    description = "Làm mới access token thành công và rotate refresh cookie. Endpoint đọc cookie, không nhận refresh token trong body hoặc Bearer input.",
                     content = @Content(examples = @ExampleObject(
                             name = "Refresh thành công",
                             value = """
@@ -166,7 +167,6 @@ public class AuthController {
                                       "message": "Thành công",
                                       "data": {
                                         "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo-refreshed-token",
-                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo-refreshed-token",
                                         "tokenType": "Bearer"
                                       }
                                     }
@@ -189,7 +189,6 @@ public class AuthController {
     })
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refreshToken(
-            @RequestBody(required = false) RefreshTokenRequest requestBody,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
@@ -199,12 +198,12 @@ public class AuthController {
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang làm mới phiên đăng nhập quá nhanh, vui lòng thử lại sau"
         );
-        String tokenFromBody = requestBody != null ? requestBody.refreshToken() : null;
-        String refreshToken = resolveRefreshToken(tokenFromBody, httpServletRequest);
+        String tokenFromRequest = extractRefreshToken(httpServletRequest);
+        String refreshToken = resolveRefreshToken(tokenFromRequest, httpServletRequest);
         TokenResponse tokenResponse = identityService.refreshToken(refreshToken);
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
 
-        boolean isMobile = isMobileClient(tokenFromBody, httpServletRequest);
+        boolean isMobile = isMobileClient(tokenFromRequest, httpServletRequest);
         if (!isMobile) {
             tokenResponse.setRefreshToken(null);
         }
@@ -212,7 +211,7 @@ public class AuthController {
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. Hỗ trợ nhận refresh token từ request body (Mobile) hoặc cookie (Web).")
+    @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. FE dùng khi user logout khỏi thiết bị hoặc browser hiện tại. Access token đang có vẫn hết hạn theo lifetime tự nhiên của nó.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -226,12 +225,11 @@ public class AuthController {
     })
     @PostMapping("/logout")
     public ApiResponse<String> logout(
-            @RequestBody(required = false) LogoutRequest requestBody,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
-        String tokenFromBody = requestBody != null ? requestBody.refreshToken() : null;
-        String refreshToken = resolveRefreshToken(tokenFromBody, httpServletRequest);
+        String tokenFromRequest = extractRefreshToken(httpServletRequest);
+        String refreshToken = resolveRefreshToken(tokenFromRequest, httpServletRequest);
         identityService.logout(refreshToken);
         clearRefreshTokenCookie(response);
         return ApiResponse.success("Đăng xuất thành công");
@@ -279,6 +277,34 @@ public class AuthController {
         }
         UserMeResponse userMe = identityService.getCurrentUser(principal.getPublicId());
         return ApiResponse.success(userMe);
+    }
+
+    private String extractRefreshToken(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        String headerToken = request.getHeader("X-Refresh-Token");
+        if (StringUtils.hasText(headerToken)) {
+            return headerToken.trim();
+        }
+        String contentType = request.getContentType();
+        if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+            try {
+                byte[] bytes = request.getInputStream().readAllBytes();
+                if (bytes.length > 0) {
+                    JsonNode node = objectMapper.readTree(bytes);
+                    if (node != null && node.has("refreshToken")) {
+                        String token = node.get("refreshToken").asText();
+                        if (StringUtils.hasText(token)) {
+                            return token.trim();
+                        }
+                    }
+                }
+            } catch (Exception ignored) {
+                // Fallback to cookie
+            }
+        }
+        return null;
     }
 
     private String resolveRefreshToken(String tokenFromBody, HttpServletRequest httpServletRequest) {

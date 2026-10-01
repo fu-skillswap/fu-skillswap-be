@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.LogoutRequest;
-import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleLoginNonceService;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
@@ -20,10 +18,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+
+import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -48,10 +49,11 @@ class AuthControllerTest {
     @Mock
     private TrustedClientIpResolver trustedClientIpResolver;
 
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
+
     @InjectMocks
     private AuthController authController;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
@@ -116,7 +118,6 @@ class AuthControllerTest {
     @Test
     @DisplayName("Mobile Refresh with token in body returns new refreshToken in JSON body")
     void refreshToken_mobileWithBody_returnsRefreshTokenInBody() throws Exception {
-        RefreshTokenRequest body = new RefreshTokenRequest(DUMMY_REFRESH);
         TokenResponse newPair = TokenResponse.builder()
                 .accessToken(DUMMY_ACCESS)
                 .refreshToken(DUMMY_REFRESH)
@@ -125,9 +126,11 @@ class AuthControllerTest {
         when(identityService.refreshToken(DUMMY_REFRESH)).thenReturn(newPair);
 
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        servletRequest.setContentType("application/json");
+        servletRequest.setContent(("{\"refreshToken\":\"" + DUMMY_REFRESH + "\"}").getBytes(StandardCharsets.UTF_8));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ApiResponse<TokenResponse> response = authController.refreshToken(body, servletRequest, servletResponse);
+        ApiResponse<TokenResponse> response = authController.refreshToken(servletRequest, servletResponse);
 
         assertNotNull(response.getData());
         assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
@@ -152,7 +155,7 @@ class AuthControllerTest {
         servletRequest.addHeader("X-Client-Type", "mobile");
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ApiResponse<TokenResponse> response = authController.refreshToken(null, servletRequest, servletResponse);
+        ApiResponse<TokenResponse> response = authController.refreshToken(servletRequest, servletResponse);
 
         assertNotNull(response.getData());
         assertEquals(DUMMY_REFRESH, response.getData().getRefreshToken());
@@ -172,7 +175,7 @@ class AuthControllerTest {
         servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ApiResponse<TokenResponse> response = authController.refreshToken(null, servletRequest, servletResponse);
+        ApiResponse<TokenResponse> response = authController.refreshToken(servletRequest, servletResponse);
 
         assertNotNull(response.getData());
         assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
@@ -190,7 +193,7 @@ class AuthControllerTest {
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         BaseException ex = assertThrows(BaseException.class, () ->
-                authController.refreshToken(null, servletRequest, servletResponse)
+                authController.refreshToken(servletRequest, servletResponse)
         );
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
     }
@@ -198,11 +201,12 @@ class AuthControllerTest {
     @Test
     @DisplayName("Mobile Logout with token in body revokes token via IdentityService")
     void logout_mobileWithBody_revokesToken() {
-        LogoutRequest body = new LogoutRequest(DUMMY_REFRESH);
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        servletRequest.setContentType("application/json");
+        servletRequest.setContent(("{\"refreshToken\":\"" + DUMMY_REFRESH + "\"}").getBytes(StandardCharsets.UTF_8));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ApiResponse<String> response = authController.logout(body, servletRequest, servletResponse);
+        ApiResponse<String> response = authController.logout(servletRequest, servletResponse);
 
         assertEquals("Đăng xuất thành công", response.getData());
         verify(identityService).logout(DUMMY_REFRESH);
@@ -215,7 +219,7 @@ class AuthControllerTest {
         servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
-        ApiResponse<String> response = authController.logout(null, servletRequest, servletResponse);
+        ApiResponse<String> response = authController.logout(servletRequest, servletResponse);
 
         assertEquals("Đăng xuất thành công", response.getData());
         verify(identityService).logout(DUMMY_COOKIE_REFRESH);
@@ -229,7 +233,7 @@ class AuthControllerTest {
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         BaseException ex = assertThrows(BaseException.class, () ->
-                authController.logout(null, servletRequest, servletResponse)
+                authController.logout(servletRequest, servletResponse)
         );
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
     }
