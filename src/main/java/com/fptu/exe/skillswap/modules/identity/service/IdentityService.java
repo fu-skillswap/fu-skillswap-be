@@ -8,6 +8,9 @@ import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSessionState;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
+import com.fptu.exe.skillswap.modules.identity.domain.DataDeletionRequest;
+import com.fptu.exe.skillswap.modules.identity.domain.DataDeletionRequestStatus;
+import com.fptu.exe.skillswap.shared.event.UserDeletedEvent;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
@@ -43,6 +46,8 @@ public class IdentityService {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final RefreshTokenCookieProperties refreshTokenCookieProperties;
+    private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+    private final com.fptu.exe.skillswap.modules.identity.repository.DataDeletionRequestRepository dataDeletionRequestRepository;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -298,6 +303,41 @@ public class IdentityService {
             return;
         }
         userSessionRepository.findById(sessionId).ifPresent(childSession -> revokeSessionFamily(childSession, UserSessionState.REVOKED));
+    }
+
+    @Transactional
+    public void deleteMyAccount(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy người dùng"));
+
+        if (user.getStatus() == UserStatus.DELETED || user.getDeletedAt() != null) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản đã bị xóa khỏi hệ thống");
+        }
+
+        // Anonymize PII and soft delete
+        user.setFullName("Người dùng đã xóa");
+        user.setAvatarUrl(null);
+        user.setEmail("deleted." + user.getId() + "@deleted.skillswap.local");
+        user.setStatus(UserStatus.DELETED);
+        user.setDeletedAt(timeProvider.nowBusiness());
+        userRepository.save(user);
+
+        // Revoke all active sessions
+        userSessionRepository.revokeAllByUserId(userId);
+
+        // Publish domain event for cascading cleanup
+        applicationEventPublisher.publishEvent(new UserDeletedEvent(user.getId()));
+    }
+
+    @Transactional
+    public void submitDataDeletionRequest(String email, String reason, String ipAddress) {
+        DataDeletionRequest request = DataDeletionRequest.builder()
+                .email(email.trim().toLowerCase())
+                .reason(reason)
+                .ipAddress(ipAddress)
+                .status(DataDeletionRequestStatus.PENDING)
+                .build();
+        dataDeletionRequestRepository.save(request);
     }
 
     private record TokenIssuance(TokenResponse tokenResponse, UserSession session) {}

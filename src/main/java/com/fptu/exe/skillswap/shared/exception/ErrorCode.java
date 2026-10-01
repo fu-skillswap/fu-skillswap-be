@@ -45,6 +45,7 @@ public enum ErrorCode {
     INSUFFICIENT_BALANCE(400, "PAY_5002", "error.pay.insufficient_balance", "Số dư không đủ để thực hiện thao tác này"),
     PAYMENT_EXPIRED(409, "PAY_5003", "error.pay.expired", "Phiên thanh toán đã hết hạn"),
     PAYMENT_CHECKOUT_FAILED(502, "PAY_5004", "error.pay.checkout_failed", "Không thể tạo thanh toán"),
+    PAYMENT_METHOD_NOT_SUPPORTED_ON_MOBILE(403, "PAY_4031", "error.pay.not_supported_on_mobile", "Phương thức thanh toán trực tiếp không hỗ trợ trên ứng dụng di động"),
     VIDEO_PROVIDER_ERROR(502, "VIDEO_5001", "error.video.provider_error", "Dịch vụ video tạm thời không khả dụng, vui lòng thử lại sau"),
 
     // Khóa học.

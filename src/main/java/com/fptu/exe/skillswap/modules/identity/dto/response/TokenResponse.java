@@ -19,8 +19,7 @@ public class TokenResponse {
     @Schema(description = "JWT access token used for accessing protected endpoints", example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...")
     private String accessToken;
 
-    @JsonIgnore
-    @Schema(hidden = true)
+    @Schema(description = "Refresh token dùng cho client di động (Flutter). Web browser nhận qua HttpOnly cookie và trường này sẽ null.", example = "eyJhbGciOiJIUzI1NiIsIn...")
     private String refreshToken;
 
     @Schema(description = "The authorization header scheme type", example = "Bearer")

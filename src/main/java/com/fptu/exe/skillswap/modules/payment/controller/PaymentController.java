@@ -20,6 +20,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -90,8 +91,16 @@ public class PaymentController {
                                       "couponCode": "WELCOME10"
                                     }
                                     """)))
-            PaymentCheckoutRequest request) {
+            PaymentCheckoutRequest request,
+            HttpServletRequest httpServletRequest) {
         ensureAuthenticated(principal);
+        String clientPlatform = httpServletRequest != null ? httpServletRequest.getHeader("X-Client-Platform") : null;
+        if (clientPlatform != null && "android".equalsIgnoreCase(clientPlatform.trim())) {
+            throw new BaseException(
+                    ErrorCode.PAYMENT_METHOD_NOT_SUPPORTED_ON_MOBILE,
+                    "Tính năng nạp tiền và thanh toán trực tiếp không khả dụng trên phiên bản ứng dụng di động."
+            );
+        }
         rateLimitService.check(
                 RateLimitScope.SECURITY,
                 "payment:checkout:" + principal.getPublicId(),

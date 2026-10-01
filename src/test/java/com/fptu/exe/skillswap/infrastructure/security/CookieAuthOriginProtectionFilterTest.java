@@ -76,9 +76,54 @@ class CookieAuthOriginProtectionFilterTest {
         assertTrue(response.getStatus() == 403);
     }
 
+    @Test
+    void refreshWithoutOriginWithMobileClientTypePasses() throws Exception {
+        MockHttpServletRequest request = postRequest("/api/auth/refresh", null);
+        request.addHeader("X-Client-Type", "mobile");
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) -> proceeded.set(true));
+
+        assertTrue(proceeded.get());
+    }
+
+    @Test
+    void refreshWithoutOriginWithAndroidPlatformPasses() throws Exception {
+        MockHttpServletRequest request = postRequest("/api/auth/refresh", null);
+        request.addHeader("X-Client-Platform", "android");
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) -> proceeded.set(true));
+
+        assertTrue(proceeded.get());
+    }
+
+    @Test
+    void refreshWithoutOriginWithIosPlatformPasses() throws Exception {
+        MockHttpServletRequest request = postRequest("/api/auth/refresh", null);
+        request.addHeader("X-Client-Platform", "ios");
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) -> proceeded.set(true));
+
+        assertTrue(proceeded.get());
+    }
+
+    @Test
+    void logoutWithoutOriginWithMobileClientTypePasses() throws Exception {
+        MockHttpServletRequest request = postRequest("/api/auth/logout", null);
+        request.addHeader("X-Client-Type", "mobile");
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        filter.doFilter(request, new MockHttpServletResponse(), (ignoredRequest, ignoredResponse) -> proceeded.set(true));
+
+        assertTrue(proceeded.get());
+    }
+
     private MockHttpServletRequest postRequest(String path, String origin) {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
         request.setServletPath(path);
+        request.setRequestURI(path);
         if (origin != null) {
             request.addHeader("Origin", origin);
         }

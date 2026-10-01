@@ -44,8 +44,23 @@ public class CookieAuthOriginProtectionFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !"POST".equalsIgnoreCase(request.getMethod())
-                || !PROTECTED_PATHS.contains(request.getRequestURI());
+        if (!"POST".equalsIgnoreCase(request.getMethod())
+                || !PROTECTED_PATHS.contains(request.getRequestURI())) {
+            return true;
+        }
+
+        String clientType = request.getHeader("X-Client-Type");
+        if (StringUtils.hasText(clientType) && "mobile".equalsIgnoreCase(clientType.trim())) {
+            return true;
+        }
+
+        String clientPlatform = request.getHeader("X-Client-Platform");
+        if (StringUtils.hasText(clientPlatform)
+                && ("android".equalsIgnoreCase(clientPlatform.trim()) || "ios".equalsIgnoreCase(clientPlatform.trim()))) {
+            return true;
+        }
+
+        return false;
     }
 
     @Override

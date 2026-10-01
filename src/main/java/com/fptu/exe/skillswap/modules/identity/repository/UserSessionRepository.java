@@ -31,6 +31,16 @@ public interface UserSessionRepository extends JpaRepository<UserSession, UUID> 
     List<UserSession> findByUserIdAndIsRevokedFalse(UUID userId);
 
     @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("""
+            UPDATE UserSession s
+            SET s.isRevoked = true,
+                s.revokedAt = CURRENT_TIMESTAMP,
+                s.sessionState = com.fptu.exe.skillswap.modules.identity.domain.UserSessionState.REVOKED
+            WHERE s.user.id = :userId AND s.isRevoked = false
+            """)
+    int revokeAllByUserId(@Param("userId") UUID userId);
+
+    @org.springframework.data.jpa.repository.Modifying
     @org.springframework.data.jpa.repository.Query(value = """
             DELETE FROM user_sessions
             WHERE id IN (

@@ -3,6 +3,8 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.LogoutRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.RefreshTokenRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleLoginNonceResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
@@ -129,7 +131,7 @@ public class AuthController {
 
     @Operation(
             summary = "Đăng nhập bằng Google Mobile",
-            description = "Xác minh Google ID Token cho Mobile bằng chữ ký, audience, issuer, email_verified và chống replay theo sub/iat. Endpoint không dùng nonce claim của Web flow."
+            description = "Xác minh Google ID Token cho Mobile bằng chữ ký, audience, issuer, email_verified và chống replay theo sub/iat. Endpoint không dùng nonce claim của Web flow. Trả thẳng refreshToken trong JSON response cho Mobile client."
     )
     @PostMapping("/google/mobile")
     public ApiResponse<TokenResponse> loginWithGoogleMobile(
@@ -145,15 +147,15 @@ public class AuthController {
         );
         TokenResponse tokenResponse = identityService.loginWithGoogleMobile(request.getCredential());
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
-        tokenResponse.setRefreshToken(null);
+        // For mobile clients, return refreshToken directly in JSON body.
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie. Endpoint không nhận refresh token trong body. Các request song song trong grace period nhận cùng một token pair.")
+    @Operation(summary = "Làm mới access token", description = "Cấp access token mới từ refresh token trong HttpOnly cookie (Web) hoặc request body (Mobile). Các request song song trong grace period nhận cùng một token pair.")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
-                    description = "Làm mới access token thành công và rotate refresh cookie. Endpoint đọc cookie, không nhận refresh token trong body hoặc Bearer input.",
+                    description = "Làm mới access token thành công. Đối với Web, refresh token được rotate trong HttpOnly cookie; đối với Mobile, refresh token mới được trả trong JSON body.",
                     content = @Content(examples = @ExampleObject(
                             name = "Refresh thành công",
                             value = """
@@ -164,6 +166,7 @@ public class AuthController {
                                       "message": "Thành công",
                                       "data": {
                                         "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo-refreshed-token",
+                                        "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.demo-refreshed-token",
                                         "tokenType": "Bearer"
                                       }
                                     }
@@ -186,6 +189,7 @@ public class AuthController {
     })
     @PostMapping("/refresh")
     public ApiResponse<TokenResponse> refreshToken(
+            @RequestBody(required = false) RefreshTokenRequest requestBody,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
@@ -195,14 +199,20 @@ public class AuthController {
                 java.time.Duration.ofMinutes(10),
                 "Bạn đang làm mới phiên đăng nhập quá nhanh, vui lòng thử lại sau"
         );
-        String refreshToken = resolveRefreshToken(httpServletRequest);
+        String tokenFromBody = requestBody != null ? requestBody.refreshToken() : null;
+        String refreshToken = resolveRefreshToken(tokenFromBody, httpServletRequest);
         TokenResponse tokenResponse = identityService.refreshToken(refreshToken);
         addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
-        tokenResponse.setRefreshToken(null);
+
+        boolean isMobile = isMobileClient(tokenFromBody, httpServletRequest);
+        if (!isMobile) {
+            tokenResponse.setRefreshToken(null);
+        }
+
         return ApiResponse.success(tokenResponse);
     }
 
-    @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. FE dùng khi user logout khỏi thiết bị hoặc browser hiện tại. Access token đang có vẫn hết hạn theo lifetime tự nhiên của nó.")
+    @Operation(summary = "Đăng xuất phiên hiện tại", description = "Thu hồi refresh token hiện tại và kết thúc khả năng gia hạn phiên đăng nhập của user. Hỗ trợ nhận refresh token từ request body (Mobile) hoặc cookie (Web).")
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "200",
@@ -216,10 +226,12 @@ public class AuthController {
     })
     @PostMapping("/logout")
     public ApiResponse<String> logout(
+            @RequestBody(required = false) LogoutRequest requestBody,
             HttpServletRequest httpServletRequest,
             HttpServletResponse response
     ) {
-        String refreshToken = resolveRefreshToken(httpServletRequest);
+        String tokenFromBody = requestBody != null ? requestBody.refreshToken() : null;
+        String refreshToken = resolveRefreshToken(tokenFromBody, httpServletRequest);
         identityService.logout(refreshToken);
         clearRefreshTokenCookie(response);
         return ApiResponse.success("Đăng xuất thành công");
@@ -269,7 +281,10 @@ public class AuthController {
         return ApiResponse.success(userMe);
     }
 
-    private String resolveRefreshToken(HttpServletRequest httpServletRequest) {
+    private String resolveRefreshToken(String tokenFromBody, HttpServletRequest httpServletRequest) {
+        if (StringUtils.hasText(tokenFromBody)) {
+            return tokenFromBody.trim();
+        }
         if (httpServletRequest != null && httpServletRequest.getCookies() != null) {
             String cookieName = identityService.getRefreshTokenCookieName();
             for (var cookie : httpServletRequest.getCookies()) {
@@ -279,6 +294,22 @@ public class AuthController {
             }
         }
         throw new BaseException(ErrorCode.BAD_REQUEST, "Refresh token không được để trống");
+    }
+
+    private boolean isMobileClient(String tokenFromBody, HttpServletRequest request) {
+        if (StringUtils.hasText(tokenFromBody)) {
+            return true;
+        }
+        if (request == null) {
+            return false;
+        }
+        String clientType = request.getHeader("X-Client-Type");
+        if (StringUtils.hasText(clientType) && "mobile".equalsIgnoreCase(clientType.trim())) {
+            return true;
+        }
+        String clientPlatform = request.getHeader("X-Client-Platform");
+        return StringUtils.hasText(clientPlatform)
+                && ("android".equalsIgnoreCase(clientPlatform.trim()) || "ios".equalsIgnoreCase(clientPlatform.trim()));
     }
 
     private void addRefreshTokenCookie(HttpServletResponse response, String refreshToken) {

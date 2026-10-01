@@ -71,6 +71,12 @@ class IdentityServiceTest {
     @Mock
     private RefreshTokenCookieProperties refreshTokenCookieProperties;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
+    @Mock
+    private com.fptu.exe.skillswap.modules.identity.repository.DataDeletionRequestRepository dataDeletionRequestRepository;
+
     private JwtProperties jwtProperties;
 
     private IdentityService identityService;
@@ -104,7 +110,9 @@ class IdentityServiceTest {
                 academicService,
                 jwtTokenProvider,
                 jwtProperties,
-                refreshTokenCookieProperties
+                refreshTokenCookieProperties,
+                applicationEventPublisher,
+                dataDeletionRequestRepository
         );
     }
 
@@ -265,5 +273,45 @@ class IdentityServiceTest {
         assertTrue(replacementSession.isRevoked());
         assertEquals(UserSessionState.REVOKED, replacementSession.getSessionState());
         verify(userSessionRepository, times(2)).save(any(UserSession.class));
+    }
+
+    @Test
+    void deleteMyAccount_shouldAnonymizePii_revokeSessions_andPublishEvent() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        identityService.deleteMyAccount(userId);
+
+        assertEquals("Người dùng đã xóa", user.getFullName());
+        assertEquals(null, user.getAvatarUrl());
+        assertEquals("deleted." + userId + "@deleted.skillswap.local", user.getEmail());
+        assertEquals(UserStatus.DELETED, user.getStatus());
+        assertNotNull(user.getDeletedAt());
+
+        verify(userRepository).save(user);
+        verify(userSessionRepository).revokeAllByUserId(userId);
+        verify(applicationEventPublisher).publishEvent(any(com.fptu.exe.skillswap.shared.event.UserDeletedEvent.class));
+    }
+
+    @Test
+    void deleteMyAccount_whenUserAlreadyDeleted_shouldThrowException() {
+        user.setStatus(UserStatus.DELETED);
+        user.setDeletedAt(LocalDateTime.now());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        var ex = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> identityService.deleteMyAccount(userId));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.USER_NOT_FOUND, ex.getErrorCode());
+        verify(userRepository, never()).save(any());
+        verify(userSessionRepository, never()).revokeAllByUserId(any());
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void submitDataDeletionRequest_shouldSavePendingRequest() {
+        identityService.submitDataDeletionRequest("user@fpt.edu.vn", "No longer needed", "127.0.0.1");
+
+        verify(dataDeletionRequestRepository).save(any(com.fptu.exe.skillswap.modules.identity.domain.DataDeletionRequest.class));
     }
 }

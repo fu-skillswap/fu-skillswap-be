@@ -80,7 +80,11 @@ public class SecurityConfig {
                                     "/swagger-ui.html",
                                     "/share/**",
                                     "/sitemap.xml",
-                                    "/robots.txt"
+                                    "/robots.txt",
+                                    "/data-deletion.html",
+                                    "/api/public/data-deletion-requests",
+                                    "/api/public/app-config",
+                                    "/api/system/app-version"
                             ).permitAll();
                     auth
                             .requestMatchers(HttpMethod.GET,
@@ -112,7 +116,7 @@ public class SecurityConfig {
                     auth
                             .requestMatchers(HttpMethod.POST,
                                     "/api/blog/posts/*/view"
-                            ).permitAll();
+                             ).permitAll();
 
                     // Các endpoint còn lại phải xác thực.
                     auth.anyRequest().authenticated();
