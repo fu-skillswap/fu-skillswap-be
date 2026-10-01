@@ -195,7 +195,24 @@ if ! docker exec skillswap-postgres psql --username "${POSTGRES_USER}" --dbname 
 fi
 
 "${COMPOSE[@]}" up -d --wait postgres-db rabbitmq
-docker exec skillswap-rabbitmq rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS"
+
+echo "Waiting for RabbitMQ authentication to become ready..."
+rabbitmq_auth_ok=false
+for i in {1..15}; do
+  if docker exec skillswap-rabbitmq rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS" >/dev/null 2>&1; then
+    echo "RabbitMQ authentication verified."
+    rabbitmq_auth_ok=true
+    break
+  fi
+  sleep 2
+done
+
+if [[ "$rabbitmq_auth_ok" != "true" ]]; then
+  echo "::error::RabbitMQ authentication failed after 30s timeout" >&2
+  docker exec skillswap-rabbitmq rabbitmqctl authenticate_user "$RABBITMQ_DEFAULT_USER" "$RABBITMQ_DEFAULT_PASS"
+  exit 1
+fi
+
 "${COMPOSE[@]}" up -d --wait spring-backend
 curl --fail --silent --show-error http://127.0.0.1:8080/actuator/health/readiness
 
