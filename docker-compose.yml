@@ -25,25 +25,25 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.30"
-          memory: 256M
+          cpus: "2.00"
+          memory: 2048M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
-    cpus: "0.30"
-    mem_limit: 256m
+    cpus: "2.00"
+    mem_limit: 2048m
 
     command:
       - postgres
       - -c
-      - shared_buffers=64MB
+      - shared_buffers=512MB
       - -c
-      - max_connections=20
+      - max_connections=100
       - -c
-      - work_mem=2MB
+      - work_mem=16MB
       - -c
-      - maintenance_work_mem=24MB
+      - maintenance_work_mem=128MB
       - -c
-      - effective_cache_size=128MB
+      - effective_cache_size=1536MB
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -70,16 +70,16 @@ services:
       - ./ops/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - rabbitmq_data:/var/lib/rabbitmq
 
-    # Nâng giới hạn RAM để Erlang VM không bị OOM khi chạy diagnostics
+    # Cấu hình tài nguyên RabbitMQ cho môi trường VPS 16GB
     deploy:
       resources:
         limits:
-          cpus: "0.20"
-          memory: 384M
+          cpus: "1.00"
+          memory: 1024M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
-    cpus: "0.20"
-    mem_limit: 384m
+    cpus: "1.00"
+    mem_limit: 1024m
 
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
@@ -103,15 +103,14 @@ services:
 
     environment:
       - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:?SPRING_PROFILES_ACTIVE is required}
-      # Keep JVM sizing explicit and strictly bounded within the 768 MiB container limit.
-      # Heap: 512m · Metaspace: 192m · Direct: 48m · Threads/Native: ~16m → total ≈ 768m
-      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xms128m -Xmx512m -XX:+UseG1GC -XX:MaxMetaspaceSize=192m -XX:MaxDirectMemorySize=48m -XX:+UseContainerSupport -XX:ActiveProcessorCount=2 -Xss512k -XX:+ExitOnOutOfMemoryError}
+      # Cấu hình JVM tối ưu cho VPS 16GB, giới hạn trong container 3072 MiB
+      # Heap: 2048m · Metaspace: 384m · Direct: 128m · Threads/Native: ~200m → total ≈ 2760m
+      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--Xms512m -Xmx2048m -XX:+UseG1GC -XX:MaxMetaspaceSize=384m -XX:MaxDirectMemorySize=128m -XX:+UseContainerSupport -XX:ActiveProcessorCount=2 -Xss512k -XX:+ExitOnOutOfMemoryError}
       - TZ=UTC
       - SPRING_SHUTDOWN_TIMEOUT=${SPRING_SHUTDOWN_TIMEOUT:-30s}
-      - TOMCAT_MAX_THREADS=${TOMCAT_MAX_THREADS:-25}
-      # Keep the connection pool below PostgreSQL's low-memory connection cap.
-      - DB_POOL_MAX_SIZE=${DB_POOL_MAX_SIZE:-5}
-      - DB_POOL_MIN_IDLE=${DB_POOL_MIN_IDLE:-1}
+      - TOMCAT_MAX_THREADS=${TOMCAT_MAX_THREADS:-100}
+      - DB_POOL_MAX_SIZE=${DB_POOL_MAX_SIZE:-20}
+      - DB_POOL_MIN_IDLE=${DB_POOL_MIN_IDLE:-5}
       # Defaults fail closed to production; staging can explicitly allow local FE origins.
       - DEPLOY_ENV=${DEPLOY_ENV:-production}
       # R2 is the default for new videos. Bunny credentials remain optional
@@ -207,12 +206,12 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.70"
-          memory: 768M
+          cpus: "2.50"
+          memory: 3072M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
-    cpus: "0.70"
-    mem_limit: 768m
+    cpus: "2.50"
+    mem_limit: 3072m
 
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness >/dev/null 2>&1 || exit 1"]
