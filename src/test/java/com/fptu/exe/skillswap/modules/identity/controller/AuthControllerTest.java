@@ -32,6 +32,10 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
+    private static final String DUMMY_ACCESS = "test_access_token";
+    private static final String DUMMY_REFRESH = "test_refresh_token";
+    private static final String DUMMY_COOKIE_REFRESH = "test_cookie_refresh_token";
+
     @Mock
     private IdentityService identityService;
 
@@ -60,13 +64,13 @@ class AuthControllerTest {
     @Test
     @DisplayName("Mobile Login returns refreshToken in JSON body and sets cookie")
     void loginWithGoogleMobile_returnsRefreshTokenInBodyAndCookie() throws Exception {
-        GoogleMobileLoginRequest request = new GoogleMobileLoginRequest("mobile-id-token");
+        GoogleMobileLoginRequest request = new GoogleMobileLoginRequest("dummy_mobile_credential");
         TokenResponse serviceTokenResponse = TokenResponse.builder()
-                .accessToken("acc-123")
-                .refreshToken("ref-456")
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
                 .tokenType("Bearer")
                 .build();
-        when(identityService.loginWithGoogleMobile("mobile-id-token")).thenReturn(serviceTokenResponse);
+        when(identityService.loginWithGoogleMobile("dummy_mobile_credential")).thenReturn(serviceTokenResponse);
 
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
@@ -74,22 +78,22 @@ class AuthControllerTest {
         ApiResponse<TokenResponse> response = authController.loginWithGoogleMobile(request, servletRequest, servletResponse);
 
         assertNotNull(response.getData());
-        assertEquals("acc-123", response.getData().getAccessToken());
-        assertEquals("ref-456", response.getData().getRefreshToken());
-        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains("ref-456"));
+        assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
+        assertEquals(DUMMY_REFRESH, response.getData().getRefreshToken());
+        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains(DUMMY_REFRESH));
 
         // Verify JSON serialization includes refreshToken for mobile
         String json = objectMapper.writeValueAsString(response.getData());
-        assertTrue(json.contains("\"refreshToken\":\"ref-456\""));
+        assertTrue(json.contains("\"refreshToken\":\"" + DUMMY_REFRESH + "\""));
     }
 
     @Test
     @DisplayName("Web Login sets refreshToken in cookie and clears it from JSON body")
     void loginWithGoogle_web_excludesRefreshTokenFromBody() throws Exception {
-        GoogleLoginRequest request = new GoogleLoginRequest("web-cred", "nonce-1");
+        GoogleLoginRequest request = new GoogleLoginRequest("dummy_web_cred", "dummy_nonce");
         TokenResponse serviceTokenResponse = TokenResponse.builder()
-                .accessToken("acc-web")
-                .refreshToken("ref-web")
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
                 .tokenType("Bearer")
                 .build();
         when(identityService.loginWithGoogle(request)).thenReturn(serviceTokenResponse);
@@ -100,9 +104,9 @@ class AuthControllerTest {
         ApiResponse<TokenResponse> response = authController.loginWithGoogle(request, servletRequest, servletResponse);
 
         assertNotNull(response.getData());
-        assertEquals("acc-web", response.getData().getAccessToken());
+        assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
         assertNull(response.getData().getRefreshToken());
-        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains("ref-web"));
+        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains(DUMMY_REFRESH));
 
         // Verify JSON serialization does NOT include refreshToken
         String json = objectMapper.writeValueAsString(response.getData());
@@ -112,13 +116,13 @@ class AuthControllerTest {
     @Test
     @DisplayName("Mobile Refresh with token in body returns new refreshToken in JSON body")
     void refreshToken_mobileWithBody_returnsRefreshTokenInBody() throws Exception {
-        RefreshTokenRequest body = new RefreshTokenRequest("ref-mobile-current");
+        RefreshTokenRequest body = new RefreshTokenRequest(DUMMY_REFRESH);
         TokenResponse newPair = TokenResponse.builder()
-                .accessToken("acc-new")
-                .refreshToken("ref-mobile-new")
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
                 .tokenType("Bearer")
                 .build();
-        when(identityService.refreshToken("ref-mobile-current")).thenReturn(newPair);
+        when(identityService.refreshToken(DUMMY_REFRESH)).thenReturn(newPair);
 
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
@@ -126,54 +130,54 @@ class AuthControllerTest {
         ApiResponse<TokenResponse> response = authController.refreshToken(body, servletRequest, servletResponse);
 
         assertNotNull(response.getData());
-        assertEquals("acc-new", response.getData().getAccessToken());
-        assertEquals("ref-mobile-new", response.getData().getRefreshToken());
+        assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
+        assertEquals(DUMMY_REFRESH, response.getData().getRefreshToken());
 
         String json = objectMapper.writeValueAsString(response.getData());
-        assertTrue(json.contains("\"refreshToken\":\"ref-mobile-new\""));
+        assertTrue(json.contains("\"refreshToken\":\"" + DUMMY_REFRESH + "\""));
     }
 
     @Test
     @DisplayName("Mobile Refresh with X-Client-Type: mobile header returns new refreshToken in JSON body")
     void refreshToken_mobileWithHeader_returnsRefreshTokenInBody() throws Exception {
         TokenResponse newPair = TokenResponse.builder()
-                .accessToken("acc-new-2")
-                .refreshToken("ref-mobile-new-2")
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
                 .tokenType("Bearer")
                 .build();
-        when(identityService.refreshToken("ref-from-cookie")).thenReturn(newPair);
+        when(identityService.refreshToken(DUMMY_COOKIE_REFRESH)).thenReturn(newPair);
 
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
-        servletRequest.setCookies(new Cookie("refresh_token", "ref-from-cookie"));
+        servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
         servletRequest.addHeader("X-Client-Type", "mobile");
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         ApiResponse<TokenResponse> response = authController.refreshToken(null, servletRequest, servletResponse);
 
         assertNotNull(response.getData());
-        assertEquals("ref-mobile-new-2", response.getData().getRefreshToken());
+        assertEquals(DUMMY_REFRESH, response.getData().getRefreshToken());
     }
 
     @Test
     @DisplayName("Web Refresh with cookie only returns refreshToken = null in body and sets cookie")
     void refreshToken_webWithCookie_excludesRefreshTokenFromBody() throws Exception {
         TokenResponse newPair = TokenResponse.builder()
-                .accessToken("acc-web-new")
-                .refreshToken("ref-web-new")
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
                 .tokenType("Bearer")
                 .build();
-        when(identityService.refreshToken("cookie-token")).thenReturn(newPair);
+        when(identityService.refreshToken(DUMMY_COOKIE_REFRESH)).thenReturn(newPair);
 
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
-        servletRequest.setCookies(new Cookie("refresh_token", "cookie-token"));
+        servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         ApiResponse<TokenResponse> response = authController.refreshToken(null, servletRequest, servletResponse);
 
         assertNotNull(response.getData());
-        assertEquals("acc-web-new", response.getData().getAccessToken());
+        assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
         assertNull(response.getData().getRefreshToken());
-        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains("ref-web-new"));
+        assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains(DUMMY_REFRESH));
 
         String json = objectMapper.writeValueAsString(response.getData());
         assertFalse(json.contains("\"refreshToken\""));
@@ -194,27 +198,27 @@ class AuthControllerTest {
     @Test
     @DisplayName("Mobile Logout with token in body revokes token via IdentityService")
     void logout_mobileWithBody_revokesToken() {
-        LogoutRequest body = new LogoutRequest("mobile-logout-token");
+        LogoutRequest body = new LogoutRequest(DUMMY_REFRESH);
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         ApiResponse<String> response = authController.logout(body, servletRequest, servletResponse);
 
         assertEquals("Đăng xuất thành công", response.getData());
-        verify(identityService).logout("mobile-logout-token");
+        verify(identityService).logout(DUMMY_REFRESH);
     }
 
     @Test
     @DisplayName("Web Logout with cookie revokes token and clears cookie")
     void logout_webWithCookie_revokesTokenAndClearsCookie() {
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();
-        servletRequest.setCookies(new Cookie("refresh_token", "cookie-logout-token"));
+        servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
         MockHttpServletResponse servletResponse = new MockHttpServletResponse();
 
         ApiResponse<String> response = authController.logout(null, servletRequest, servletResponse);
 
         assertEquals("Đăng xuất thành công", response.getData());
-        verify(identityService).logout("cookie-logout-token");
+        verify(identityService).logout(DUMMY_COOKIE_REFRESH);
         assertTrue(servletResponse.getHeader(HttpHeaders.SET_COOKIE).contains("Max-Age=0"));
     }
 

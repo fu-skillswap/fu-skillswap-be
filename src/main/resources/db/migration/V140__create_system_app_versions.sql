@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Migration: Create system_app_versions table for Version Guard & Maintenance control
 CREATE TABLE IF NOT EXISTS system_app_versions (
     id BIGSERIAL PRIMARY KEY,

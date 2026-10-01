@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 CREATE TABLE data_deletion_requests (
     id UUID PRIMARY KEY,
     email VARCHAR(150) NOT NULL,
