@@ -57,7 +57,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     container_name: skillswap-rabbitmq
-    restart: unless-stopped
+    restart: always
     logging: *default-logging
 
     environment:
@@ -70,20 +70,21 @@ services:
       - ./ops/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - rabbitmq_data:/var/lib/rabbitmq
 
+    # Nâng giới hạn RAM để Erlang VM không bị OOM khi chạy diagnostics
     deploy:
       resources:
         limits:
           cpus: "0.20"
-          memory: 128M
+          memory: 384M
     # Keep compatibility with Docker Compose versions that do not apply
     # deploy.resources outside Swarm mode.
     cpus: "0.20"
-    mem_limit: 128m
+    mem_limit: 384m
 
     healthcheck:
       test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
       interval: 30s
-      timeout: 15s
+      timeout: 20s
       retries: 5
       start_period: 60s
 
