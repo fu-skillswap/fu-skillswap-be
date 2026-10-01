@@ -15,5 +15,14 @@ public record UpdateMentorServiceRequest(
         @NotNull Boolean isFree,
         @NotNull @Min(0) @Max(45_000_000) Integer priceScoin,
         Boolean maintainPostSessionChat,
-        @NotNull @PositiveOrZero Integer expectedVersion
-) {}
+        @NotNull @PositiveOrZero Integer expectedVersion,
+        java.util.UUID coverAssetId,
+        Boolean removeCoverImage
+) {
+    public UpdateMentorServiceRequest(
+            String title, String description, String expectedOutcome,
+            Boolean isFree, Integer priceScoin, Boolean maintainPostSessionChat,
+            Integer expectedVersion) {
+        this(title, description, expectedOutcome, isFree, priceScoin, maintainPostSessionChat, expectedVersion, null, false);
+    }
+}

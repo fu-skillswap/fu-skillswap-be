@@ -38,6 +38,9 @@ class DiscoveryMapperTest {
     @Mock
     private PaymentProperties paymentProperties;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort publicAssetUploadPort;
+
     @InjectMocks
     private DiscoveryMapper discoveryMapper;
 
@@ -165,6 +168,35 @@ class DiscoveryMapperTest {
         assertEquals(110, response.priceScoin());
         assertEquals("Actionable code review notes", response.expectedOutcome());
         assertTrue(response.maintainPostSessionChat());
+    }
+
+    @Test
+    void toServiceResponse_shouldResolveCoverImageUrlWhenCoverFileIdPresent() {
+        UUID mentorUserId = UUID.randomUUID();
+        UUID fileId = UUID.randomUUID();
+        MentorProfile profile = MentorProfile.builder().userId(mentorUserId).build();
+        com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort.FileAssetMetadata metadata =
+                new com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort.FileAssetMetadata(
+                        fileId,
+                        "https://cdn.example.com/cover.jpg",
+                        "image/jpeg",
+                        1024L
+                );
+        when(publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, fileId)).thenReturn(metadata);
+
+        MentorService service = MentorService.builder()
+                .id(UUID.randomUUID())
+                .mentorProfile(profile)
+                .title("Cover Test Service")
+                .isFree(true)
+                .priceScoin(0)
+                .coverFileId(fileId)
+                .build();
+
+        MentorServiceResponse response = discoveryMapper.toServiceResponse(service);
+
+        assertNotNull(response);
+        assertEquals("https://cdn.example.com/cover.jpg", response.coverImageUrl());
     }
 
 }

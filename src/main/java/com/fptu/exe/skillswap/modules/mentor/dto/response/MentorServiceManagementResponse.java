@@ -37,6 +37,10 @@ public record MentorServiceManagementResponse(
         boolean maintainPostSessionChat,
         @Schema(description = "Immutable delivery format.", example = "ONE_TO_ONE")
         MentorServiceDeliveryMode deliveryMode,
+        @Schema(description = "ID của file ảnh bìa dịch vụ nếu có", example = "019f3234-aaaa-bbbb-cccc-1234567890ab", nullable = true)
+        UUID coverAssetId,
+        @Schema(description = "URL public của ảnh bìa dịch vụ nếu có", example = "https://cdn.skillswap.asia/services/cover.jpg", nullable = true)
+        String coverImageUrl,
         @Schema(description = "Optimistic-lock version for management mutations", example = "4")
         Integer version,
         @Schema(description = "Service creation time", example = "2026-06-20T09:00:00")

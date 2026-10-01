@@ -93,9 +93,16 @@ interface GoogleCalendarConnectRequest {
 ## 3. Quản Lý Dịch Vụ Mentoring (Service Management)
 
 1. Gọi `GET /api/me/mentor-services/constraints` trước khi mở form tạo mới để lấy các ràng buộc về thời lượng (`durationMinutes`: 30, 60, 90, 120) và khoảng giá Scoin do nền tảng quy định (tối thiểu 500 SCoin/phút, tương ứng 30p = 15.000, 60p = 30.000, 90p = 45.000, 120p = 60.000).
-2. Tạo dịch vụ mới qua `POST /api/me/mentor-services`.
-3. Sử dụng `GET /api/me/mentor-services?isActive=true|false` để quản lý danh sách dịch vụ của mình (bỏ query `isActive` để lấy toàn bộ).
-4. Sử dụng `PUT /api/me/mentor-services/{serviceId}` để chỉnh sửa và `PATCH /api/me/mentor-services/{serviceId}/active` để bật/tắt trạng thái hoạt động.
+2. (Tùy chọn) Tải lên ảnh bìa dịch vụ:
+   - Gọi `POST /api/me/mentor-services/cover-image/upload-intents` kèm `{ filename: "cover.jpg", contentType: "image/jpeg" }` để nhận `uploadIntentId` và `uploadUrl`.
+   - Upload file ảnh trực tiếp lên `uploadUrl` qua HTTP `PUT`.
+   - Gọi `POST /api/me/mentor-services/cover-image/{intentId}/confirm` để backend xác thực và nhận `assetId` cùng `publicUrl`.
+3. Tạo dịch vụ mới qua `POST /api/me/mentor-services` (truyền `coverAssetId` nếu đã upload ảnh bìa ở bước 2).
+4. Sử dụng `GET /api/me/mentor-services?isActive=true|false` để quản lý danh sách dịch vụ của mình (bỏ query `isActive` để lấy toàn bộ).
+5. Sử dụng `PUT /api/me/mentor-services/{serviceId}` để chỉnh sửa và `PATCH /api/me/mentor-services/{serviceId}/active` để bật/tắt trạng thái hoạt động.
+6. Để gỡ ảnh bìa khỏi dịch vụ đang có:
+   - Cách 1: Gọi `DELETE /api/me/mentor-services/{serviceId}/cover-image`.
+   - Cách 2: Gọi `PUT /api/me/mentor-services/{serviceId}` với `removeCoverImage: true`.
 
 ```typescript
 interface CreateMentorServiceRequest {
@@ -107,6 +114,7 @@ interface CreateMentorServiceRequest {
   priceScoin: number;               // Giá Scoin (0 nếu isFree = true; tối thiểu 500 Scoin/phút nếu có phí)
   maintainPostSessionChat?: boolean;// Duy trì phòng chat sau buổi học
   deliveryMode?: string;            // Mặc định "ONE_TO_ONE"
+  coverAssetId?: string;            // UUID file ảnh bìa đã xác nhận qua upload-intent (Tùy chọn)
 }
 
 interface UpdateMentorServiceRequest {
@@ -117,6 +125,8 @@ interface UpdateMentorServiceRequest {
   priceScoin: number;
   maintainPostSessionChat?: boolean;
   expectedVersion: number;          // Optimistic locking version
+  coverAssetId?: string;            // UUID ảnh bìa mới (Tùy chọn)
+  removeCoverImage?: boolean;       // true nếu muốn gỡ ảnh bìa hiện tại
 }
 
 interface MentorServiceActiveRequest {
@@ -140,6 +150,26 @@ interface MentorServiceManagementResponse {
   isActive: boolean;
   maintainPostSessionChat: boolean;
   deliveryMode: string;
+  coverAssetId?: string;              // UUID ảnh bìa (nếu có)
+  coverImageUrl?: string;             // URL công khai ảnh bìa (nếu có)
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface MentorServiceResponse {
+  serviceId: string;
+  mentorUserId: string;
+  title: string;
+  description: string;
+  expectedOutcome: string;
+  durationMinutes: number;
+  isFree: boolean;
+  priceScoin: number;
+  isActive: boolean;
+  maintainPostSessionChat: boolean;
+  deliveryMode: string;
+  coverImageUrl?: string;             // URL công khai ảnh bìa (nếu có)
   version: number;
   createdAt: string;
   updatedAt: string;

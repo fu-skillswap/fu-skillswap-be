@@ -65,6 +65,9 @@ public class MentorService {
     @Builder.Default
     private MentorServiceDeliveryMode deliveryMode = MentorServiceDeliveryMode.ONE_TO_ONE;
 
+    @Column(name = "cover_file_id")
+    private UUID coverFileId;
+
     @Column(name = "is_legacy", nullable = false)
     @Builder.Default
     private boolean isLegacy = false;

@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.mentor.service;
 
 import com.fptu.exe.skillswap.modules.booking.port.MentorServiceRetirementPort;
 import com.fptu.exe.skillswap.modules.booking.service.AvailabilityTemplateService;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.modules.identity.port.GoogleCalendarConnectionPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
@@ -41,6 +42,7 @@ public class MentorServiceManagementService {
     private final PaymentProperties paymentProperties;
     private final UserQueryPort userQueryPort;
     private final MentorServiceRetirementPort mentorServiceRetirementPort;
+    private final PublicAssetUploadPort publicAssetUploadPort;
     private AvailabilityTemplateService availabilityTemplateService;
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -90,6 +92,12 @@ public class MentorServiceManagementService {
                 ? MentorServiceDeliveryMode.ONE_TO_ONE
                 : request.deliveryMode();
 
+        UUID coverFileId = null;
+        if (request.coverAssetId() != null) {
+            PublicAssetUploadPort.FileAssetMetadata cover = publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, request.coverAssetId());
+            coverFileId = cover.assetId();
+        }
+
         MentorService service = MentorService.builder()
                 .mentorProfile(mentorProfile)
                 .title(title)
@@ -101,6 +109,7 @@ public class MentorServiceManagementService {
                 .isActive(true)
                 .maintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()))
                 .deliveryMode(deliveryMode)
+                .coverFileId(coverFileId)
                 .build();
 
         touchMentorActivity(mentorProfile, DateTimeUtil.now());
@@ -125,8 +134,36 @@ public class MentorServiceManagementService {
         service.setFree(isFree);
         service.setPriceScoin(normalizePriceScoin(isFree, request.priceScoin(), service.getDurationMinutes()));
         service.setMaintainPostSessionChat(Boolean.TRUE.equals(request.maintainPostSessionChat()));
-        touchMentorActivity(mentorProfile, DateTimeUtil.now());
 
+        if (Boolean.TRUE.equals(request.removeCoverImage())) {
+            service.setCoverFileId(null);
+        } else if (request.coverAssetId() != null) {
+            PublicAssetUploadPort.FileAssetMetadata cover = publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, request.coverAssetId());
+            service.setCoverFileId(cover.assetId());
+        }
+
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
+        return toResponse(mentorServiceRepository.save(service));
+    }
+
+    @Transactional
+    public PublicAssetUploadPort.UploadIntent createCoverImageUploadIntent(UUID mentorUserId, PublicAssetUploadPort.UploadRequest request) {
+        requireEligibleMentorProfile(mentorUserId);
+        return publicAssetUploadPort.createServiceCoverIntent(mentorUserId, request);
+    }
+
+    @Transactional
+    public PublicAssetUploadPort.FileAssetMetadata confirmCoverImage(UUID mentorUserId, UUID intentId) {
+        requireEligibleMentorProfile(mentorUserId);
+        return publicAssetUploadPort.confirmServiceCover(mentorUserId, intentId);
+    }
+
+    @Transactional
+    public MentorServiceManagementResponse removeCoverImage(UUID mentorUserId, UUID serviceId) {
+        MentorProfile mentorProfile = requireEligibleMentorProfile(mentorUserId);
+        MentorService service = loadOwnedService(mentorProfile.getUserId(), serviceId);
+        service.setCoverFileId(null);
+        touchMentorActivity(mentorProfile, DateTimeUtil.now());
         return toResponse(mentorServiceRepository.save(service));
     }
 
@@ -199,10 +236,23 @@ public class MentorServiceManagementService {
                 .isActive(service.isActive())
                 .maintainPostSessionChat(service.isMaintainPostSessionChat())
                 .deliveryMode(service.getDeliveryMode())
+                .coverAssetId(service.getCoverFileId())
+                .coverImageUrl(resolveCoverUrl(service.getMentorProfile() == null ? null : service.getMentorProfile().getUserId(), service.getCoverFileId()))
                 .version(service.getVersion())
                 .createdAt(service.getCreatedAt())
                 .updatedAt(service.getUpdatedAt())
                 .build();
+    }
+
+    private String resolveCoverUrl(UUID mentorUserId, UUID coverFileId) {
+        if (coverFileId == null || publicAssetUploadPort == null || mentorUserId == null) {
+            return null;
+        }
+        try {
+            return publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, coverFileId).publicUrl();
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     private Integer validateDuration(Integer durationMinutes) {

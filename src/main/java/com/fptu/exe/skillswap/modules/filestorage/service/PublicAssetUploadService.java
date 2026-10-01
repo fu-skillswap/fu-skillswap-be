@@ -150,6 +150,71 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
                 .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Portfolio asset không hợp lệ"));
     }
 
+    @Transactional
+    @Override
+    public PublicAssetUploadPort.UploadIntent createServiceCoverIntent(UUID ownerId, PublicAssetUploadPort.UploadRequest request) {
+        String contentType = normalizeImageType(request.contentType());
+        validateFilename(request.filename());
+        String prefix = "public-assets/services/" + ownerId;
+        StorageGateway.PresignedUpload upload = storageGateway().generatePresignedUploadUrl(request.filename(), contentType, prefix);
+        LocalDateTime expiresAt = DateTimeUtil.now().plusMinutes(15);
+        PublicAssetUploadIntent intent = intentRepository.save(PublicAssetUploadIntent.builder()
+                .ownerUserId(ownerId)
+                .purpose(FilePurpose.SERVICE_COVER)
+                .objectKey(upload.objectKey())
+                .expectedContentType(contentType)
+                .expiresAt(expiresAt)
+                .build());
+        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt,
+                Map.of("Content-Type", contentType),
+                new ProviderNeutralUploadMetadata(null, intent.getId(), upload.uploadUrl(),
+                        expiresAt.toInstant(ZoneOffset.UTC), "SERVICE_COVER_IMAGE", Map.of("Content-Type", contentType)));
+    }
+
+    @Transactional
+    @Override
+    public PublicAssetUploadPort.FileAssetMetadata confirmServiceCover(UUID ownerId, UUID intentId) {
+        PublicAssetUploadIntent intent = intentRepository.findByIdForUpdate(intentId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
+        if (!intent.getOwnerUserId().equals(ownerId) || intent.getPurpose() != FilePurpose.SERVICE_COVER) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
+        }
+        if (intent.getConfirmedFile() != null) {
+            return toResponse(intent.getConfirmedFile());
+        }
+        if (intent.getExpiresAt().isBefore(DateTimeUtil.now())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Upload intent đã hết hạn");
+        }
+        StorageGateway.ObjectMetadata metadata = storageGateway().headObject(intent.getObjectKey());
+        String contentType = normalizeImageType(metadata.contentType() == null ? intent.getExpectedContentType() : metadata.contentType());
+        if (metadata.sizeBytes() > 5L * 1024 * 1024) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, "Ảnh bìa dịch vụ vượt quá 5 MiB");
+        }
+        StoredFile file = storedFileRepository.save(StoredFile.builder()
+                .ownerUserId(intent.getOwnerUserId())
+                .purpose(FilePurpose.SERVICE_COVER)
+                .originalName(intent.getObjectKey().substring(intent.getObjectKey().lastIndexOf('/') + 1))
+                .storageProvider(storageGateway().storageProviderName())
+                .storageKey(intent.getObjectKey())
+                .publicUrl(storageGateway().resolvePublicUrl(intent.getObjectKey()))
+                .mimeType(contentType)
+                .sizeBytes(metadata.sizeBytes())
+                .build());
+        intent.setConfirmedFile(file);
+        intent.setConfirmedAt(DateTimeUtil.now());
+        return toResponse(file);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public PublicAssetUploadPort.FileAssetMetadata requireOwnedServiceCover(UUID ownerId, UUID assetId) {
+        return storedFileRepository.findById(assetId)
+                .filter(file -> (file.getPurpose() == FilePurpose.SERVICE_COVER || file.getPurpose() == FilePurpose.PORTFOLIO)
+                        && file.getOwnerUserId().equals(ownerId))
+                .map(this::toResponse)
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Ảnh bìa dịch vụ không hợp lệ"));
+    }
+
     @Transactional(readOnly = true)
     @Override
     public PublicAssetUploadPort.FileAssetMetadata requireOwnedBlogImage(UUID ownerId, UUID assetId) {
@@ -167,7 +232,11 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
     }
 
     private PublicAssetUploadPort.FileAssetMetadata toResponse(StoredFile file) {
-        String assetType = file.getPurpose() == FilePurpose.BLOG_IMAGE ? "BLOG_IMAGE" : "PORTFOLIO_IMAGE";
+        String assetType = switch (file.getPurpose()) {
+            case BLOG_IMAGE -> "BLOG_IMAGE";
+            case SERVICE_COVER -> "SERVICE_COVER_IMAGE";
+            default -> "PORTFOLIO_IMAGE";
+        };
         return new PublicAssetUploadPort.FileAssetMetadata(file.getId(), file.getPublicUrl(), file.getMimeType(),
                 file.getSizeBytes() == null ? 0L : file.getSizeBytes(),
                 new ProviderNeutralUploadMetadata(file.getId(), null, file.getPublicUrl(), null, assetType, Map.of()));

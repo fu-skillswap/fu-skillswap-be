@@ -38,5 +38,15 @@ public record CreateMentorServiceRequest(
                 example = "ONE_TO_ONE",
                 allowableValues = {"ONE_TO_ONE", "GROUP"}
         )
-        MentorServiceDeliveryMode deliveryMode
-) {}
+        MentorServiceDeliveryMode deliveryMode,
+
+        @Schema(description = "ID của file ảnh bìa dịch vụ đã upload và xác nhận qua upload intent", nullable = true)
+        java.util.UUID coverAssetId
+) {
+    public CreateMentorServiceRequest(
+            String title, String description, String expectedOutcome,
+            Integer durationMinutes, Boolean isFree, Integer priceScoin,
+            Boolean maintainPostSessionChat, MentorServiceDeliveryMode deliveryMode) {
+        this(title, description, expectedOutcome, durationMinutes, isFree, priceScoin, maintainPostSessionChat, deliveryMode, null);
+    }
+}

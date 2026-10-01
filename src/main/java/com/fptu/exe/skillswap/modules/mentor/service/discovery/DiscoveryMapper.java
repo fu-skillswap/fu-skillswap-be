@@ -14,20 +14,35 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorSubjectResultRes
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorDiscoveryQueryRow;
 import com.fptu.exe.skillswap.modules.payment.service.PricingPolicy;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Component
-@RequiredArgsConstructor
 public class DiscoveryMapper {
 
     private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
     private final PaymentProperties paymentProperties;
+    private final com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort publicAssetUploadPort;
+
+    @Autowired
+    public DiscoveryMapper(
+            PaymentProperties paymentProperties,
+            com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort publicAssetUploadPort
+    ) {
+        this.paymentProperties = paymentProperties;
+        this.publicAssetUploadPort = publicAssetUploadPort;
+    }
+
+    public DiscoveryMapper(PaymentProperties paymentProperties) {
+        this(paymentProperties, null);
+    }
 
     public MentorRecommendationResponse toRecommendation(
             MentorDiscoveryQueryRow candidate,
@@ -126,10 +141,22 @@ public class DiscoveryMapper {
                 .isActive(mentorService.isActive())
                 .maintainPostSessionChat(mentorService.isMaintainPostSessionChat())
                 .deliveryMode(mentorService.getDeliveryMode())
+                .coverImageUrl(resolveCoverUrl(mentorService.getMentorProfile() == null ? null : mentorService.getMentorProfile().getUserId(), mentorService.getCoverFileId()))
                 .version(mentorService.getVersion())
                 .createdAt(mentorService.getCreatedAt())
                 .updatedAt(mentorService.getUpdatedAt())
                 .build();
+    }
+
+    private String resolveCoverUrl(UUID mentorUserId, UUID coverFileId) {
+        if (coverFileId == null || publicAssetUploadPort == null || mentorUserId == null) {
+            return null;
+        }
+        try {
+            return publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, coverFileId).publicUrl();
+        } catch (Exception ex) {
+            return null;
+        }
     }
 
     public MentorReviewResponse toMentorReviewResponse(MentorReviewProjection row) {

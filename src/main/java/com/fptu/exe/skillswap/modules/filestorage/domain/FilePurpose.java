@@ -8,5 +8,6 @@ public enum FilePurpose {
     SESSION_ATTACHMENT,
     FORUM_ATTACHMENT,
     BLOG_IMAGE,
+    SERVICE_COVER,
     OTHER
 }

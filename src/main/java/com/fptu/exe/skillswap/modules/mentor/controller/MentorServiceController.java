@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorServiceConstrain
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.service.MentorServiceManagementService;
+import com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -120,6 +122,45 @@ public class MentorServiceController {
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(mentorServiceManagementService.changeActiveStatus(principal.getPublicId(), serviceId, request));
+    }
+
+    @Operation(
+            summary = "Tạo upload intent cho ảnh bìa dịch vụ",
+            description = "Tạo một upload intent có thời hạn (15 phút) để tải trực tiếp ảnh bìa dịch vụ lên storage. FE dùng URL trả về để PUT dữ liệu ảnh."
+    )
+    @PostMapping("/cover-image/upload-intents")
+    public ApiResponse<PublicAssetUploadPort.UploadIntent> createCoverImageUploadIntent(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody PublicAssetUploadPort.UploadRequest request
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.created(mentorServiceManagementService.createCoverImageUploadIntent(principal.getPublicId(), request));
+    }
+
+    @Operation(
+            summary = "Xác nhận tải lên ảnh bìa dịch vụ",
+            description = "Xác nhận file ảnh đã upload thành công lên storage và nhận assetId cố định để gửi khi tạo/cập nhật dịch vụ."
+    )
+    @PostMapping("/cover-image/{intentId}/confirm")
+    public ApiResponse<PublicAssetUploadPort.FileAssetMetadata> confirmCoverImage(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID intentId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorServiceManagementService.confirmCoverImage(principal.getPublicId(), intentId));
+    }
+
+    @Operation(
+            summary = "Gỡ ảnh bìa khỏi dịch vụ",
+            description = "Gỡ bỏ ảnh bìa của dịch vụ mentoring hiện có mà không làm thay đổi các trường thông tin khác."
+    )
+    @DeleteMapping("/{serviceId}/cover-image")
+    public ApiResponse<MentorServiceManagementResponse> removeCoverImage(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PathVariable UUID serviceId
+    ) {
+        ensureAuthenticated(principal);
+        return ApiResponse.success(mentorServiceManagementService.removeCoverImage(principal.getPublicId(), serviceId));
     }
 
     private void ensureAuthenticated(UserPrincipal principal) {

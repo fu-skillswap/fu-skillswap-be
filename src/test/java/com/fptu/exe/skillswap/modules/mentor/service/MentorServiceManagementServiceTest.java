@@ -10,6 +10,7 @@ import com.fptu.exe.skillswap.modules.mentor.domain.MentorService;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorStatus;
 import com.fptu.exe.skillswap.modules.mentor.domain.TeachingMode;
 import com.fptu.exe.skillswap.modules.mentor.dto.request.CreateMentorServiceRequest;
+import com.fptu.exe.skillswap.modules.mentor.dto.request.UpdateMentorServiceRequest;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorServiceDeliveryMode;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorProfileRepository;
 import com.fptu.exe.skillswap.modules.mentor.repository.MentorServiceRepository;
@@ -61,6 +62,9 @@ class MentorServiceManagementServiceTest {
 
     @Mock
     private GoogleCalendarConnectionPort googleCalendarConnectionPort;
+
+    @Mock
+    private com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort publicAssetUploadPort;
 
     @Spy
     private PaymentProperties paymentProperties = new PaymentProperties();
@@ -298,5 +302,136 @@ class MentorServiceManagementServiceTest {
         assertEquals("Review project", response.title());
         assertEquals(72_000, response.basePriceScoin());
         verify(mentorServiceRepository).save(org.mockito.ArgumentMatchers.any(MentorService.class));
+    }
+
+    @Test
+    void createService_withCoverAssetId_shouldSetCoverFileIdAndReturnCoverImageUrl() {
+        UUID coverAssetId = UUID.randomUUID();
+        String coverUrl = "https://cdn.example.com/cover.jpg";
+        when(publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, coverAssetId))
+                .thenReturn(new com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort.FileAssetMetadata(coverAssetId, coverUrl, "image/jpeg", 1024L));
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> {
+                    MentorService service = inv.getArgument(0);
+                    service.setId(UUID.randomUUID());
+                    return service;
+                });
+
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
+                "Review project",
+                "Mo ta",
+                "Ket qua",
+                60,
+                false,
+                72_000,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE,
+                coverAssetId
+        );
+
+        var response = mentorServiceManagementService.createService(mentorUserId, request);
+
+        assertEquals("Review project", response.title());
+        assertEquals(coverAssetId, response.coverAssetId());
+        assertEquals(coverUrl, response.coverImageUrl());
+        verify(publicAssetUploadPort, org.mockito.Mockito.atLeastOnce()).requireOwnedServiceCover(mentorUserId, coverAssetId);
+    }
+
+    @Test
+    void createService_withInvalidCoverAssetId_shouldThrowException() {
+        UUID coverAssetId = UUID.randomUUID();
+        doThrow(new BaseException(com.fptu.exe.skillswap.shared.exception.ErrorCode.BAD_REQUEST, "Ảnh bìa dịch vụ không hợp lệ"))
+                .when(publicAssetUploadPort).requireOwnedServiceCover(mentorUserId, coverAssetId);
+
+        CreateMentorServiceRequest request = new CreateMentorServiceRequest(
+                "Review project",
+                "Mo ta",
+                "Ket qua",
+                60,
+                false,
+                72_000,
+                false,
+                MentorServiceDeliveryMode.ONE_TO_ONE,
+                coverAssetId
+        );
+
+        assertThrows(BaseException.class, () -> mentorServiceManagementService.createService(mentorUserId, request));
+        verify(mentorServiceRepository, never()).save(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void updateService_withNewCoverAssetId_shouldUpdateCoverFileId() {
+        UUID serviceId = activeService.getId();
+        UUID newCoverAssetId = UUID.randomUUID();
+        String coverUrl = "https://cdn.example.com/new-cover.jpg";
+        when(mentorServiceRepository.findByIdAndMentorProfileUserId(serviceId, mentorUserId))
+                .thenReturn(Optional.of(activeService));
+        when(publicAssetUploadPort.requireOwnedServiceCover(mentorUserId, newCoverAssetId))
+                .thenReturn(new com.fptu.exe.skillswap.modules.filestorage.port.PublicAssetUploadPort.FileAssetMetadata(newCoverAssetId, coverUrl, "image/jpeg", 1024L));
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateMentorServiceRequest request = new UpdateMentorServiceRequest(
+                "Updated title",
+                "Updated description",
+                "Updated outcome",
+                false,
+                80_000,
+                true,
+                activeService.getVersion(),
+                newCoverAssetId,
+                false
+        );
+
+        var response = mentorServiceManagementService.updateService(mentorUserId, serviceId, request);
+
+        assertEquals("Updated title", response.title());
+        assertEquals(newCoverAssetId, response.coverAssetId());
+        assertEquals(coverUrl, response.coverImageUrl());
+        verify(mentorServiceRepository).save(activeService);
+    }
+
+    @Test
+    void updateService_withRemoveCoverImage_shouldClearCoverFileId() {
+        UUID serviceId = activeService.getId();
+        activeService.setCoverFileId(UUID.randomUUID());
+        when(mentorServiceRepository.findByIdAndMentorProfileUserId(serviceId, mentorUserId))
+                .thenReturn(Optional.of(activeService));
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateMentorServiceRequest request = new UpdateMentorServiceRequest(
+                "Updated title",
+                "Updated description",
+                "Updated outcome",
+                false,
+                80_000,
+                true,
+                activeService.getVersion(),
+                null,
+                true
+        );
+
+        var response = mentorServiceManagementService.updateService(mentorUserId, serviceId, request);
+
+        org.junit.jupiter.api.Assertions.assertNull(response.coverAssetId());
+        org.junit.jupiter.api.Assertions.assertNull(response.coverImageUrl());
+        org.junit.jupiter.api.Assertions.assertNull(activeService.getCoverFileId());
+    }
+
+    @Test
+    void removeCoverImage_shouldClearCoverFileId() {
+        UUID serviceId = activeService.getId();
+        activeService.setCoverFileId(UUID.randomUUID());
+        when(mentorServiceRepository.findByIdAndMentorProfileUserId(serviceId, mentorUserId))
+                .thenReturn(Optional.of(activeService));
+        when(mentorServiceRepository.save(org.mockito.ArgumentMatchers.any(MentorService.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var response = mentorServiceManagementService.removeCoverImage(mentorUserId, serviceId);
+
+        org.junit.jupiter.api.Assertions.assertNull(response.coverAssetId());
+        org.junit.jupiter.api.Assertions.assertNull(response.coverImageUrl());
+        org.junit.jupiter.api.Assertions.assertNull(activeService.getCoverFileId());
     }
 }
