@@ -1,5 +1,8 @@
 package com.fptu.exe.skillswap.modules.mentor.service;
 
+import com.fptu.exe.skillswap.infrastructure.storage.StorageGateway;
+import com.fptu.exe.skillswap.infrastructure.storage.StorageProperties;
+import com.fptu.exe.skillswap.modules.filestorage.port.VerificationDocumentStoragePort;
 import com.fptu.exe.skillswap.modules.identity.dto.response.StudentProfileResponse;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
@@ -30,9 +33,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.text.Normalizer;
 import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -73,6 +79,9 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
     private final AcademicService academicService;
     private final MentorProfileService mentorProfileService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectProvider<StorageGateway> storageGatewayProvider;
+    private final StorageProperties storageProperties;
+    private final VerificationDocumentStoragePort verificationDocumentStoragePort;
 
     @Override
     @Transactional(readOnly = true)
@@ -120,6 +129,31 @@ public class MentorVerificationAdminPortImpl implements MentorVerificationAdminP
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ xác thực mentor"));
         claimLockIfAvailable(request, adminUserId);
         return mapDetail(request, adminUserId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MentorVerificationDocumentDownloadResponse getDocumentDownloadUrl(UUID requestId, UUID documentId) {
+        MentorVerificationDocument document = mentorVerificationDocumentRepository
+                .findByIdAndRequestId(documentId, requestId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy tài liệu trong hồ sơ"));
+        String storageKey = verificationDocumentStoragePort.findVerificationDocumentStorageKey(document.getStoredFileId())
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy file tài liệu"));
+        Duration ttl = Duration.ofMinutes(storageProperties.getPresignedTtlMinutes());
+        String filename = safeDocumentFilename(document.getOriginalFilename());
+        StorageGateway storageGateway = storageGatewayProvider.getIfAvailable();
+        if (storageGateway == null) {
+            throw new BaseException(ErrorCode.STORAGE_ERROR, "Hệ thống chưa cấu hình storage để xem tài liệu");
+        }
+        StorageGateway.PrivatePresignedDownload signed = storageGateway.generatePrivateDownloadUrl(
+                storageKey, ttl, "inline; filename=\"" + filename + "\"");
+        return new MentorVerificationDocumentDownloadResponse(signed.downloadUrl(),
+                OffsetDateTime.ofInstant(signed.expiresAt(), ZoneOffset.UTC));
+    }
+
+    private String safeDocumentFilename(String filename) {
+        if (filename == null || filename.isBlank()) return "verification-document";
+        return filename.replaceAll("[\\\\\"\\r\\n]", "_");
     }
 
     @Override

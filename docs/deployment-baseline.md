@@ -33,6 +33,10 @@ contain only the specific HTTPS frontend origin(s). Do not use `localhost`,
 rejects those values. Local development uses the `dev` profile, whose defaults
 allow the local frontend origins.
 
+Private mentor verification documents are served with short-lived signed storage
+URLs. Configure the storage bucket's CORS policy to allow `https://skillswap.asia`
+for browser preview requests; application CORS settings do not configure bucket CORS.
+
 ## Startup
 
 Build and start with:

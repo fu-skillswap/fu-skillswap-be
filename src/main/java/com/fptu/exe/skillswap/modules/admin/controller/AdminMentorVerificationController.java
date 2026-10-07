@@ -7,6 +7,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerification
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentDownloadResponse;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -72,6 +73,21 @@ public class AdminMentorVerificationController {
             @PathVariable UUID requestId
     ) {
         return ApiResponse.success(AdminMentorVerificationModerationService.getRequestDetail(requiredAdminId(principal), requestId));
+    }
+
+    @Operation(summary = "Lấy URL tạm thời xem tài liệu xác thực", description = "Chỉ ADMIN/SYSTEM_ADMIN. URL signed ngắn hạn; gọi lại endpoint khi URL hết hạn. Tài liệu phải thuộc requestId.")
+    @io.swagger.v3.oas.annotations.responses.ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Đã tạo URL xem tài liệu"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Chưa đăng nhập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Không có quyền truy cập"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Không tìm thấy tài liệu thuộc hồ sơ")
+    })
+    @GetMapping("/{requestId}/documents/{documentId}/download")
+    public ApiResponse<MentorVerificationDocumentDownloadResponse> getDocumentDownloadUrl(
+            @PathVariable UUID requestId,
+            @PathVariable UUID documentId
+    ) {
+        return ApiResponse.success(AdminMentorVerificationModerationService.getDocumentDownloadUrl(requestId, documentId));
     }
 
     private UUID requiredAdminId(UserPrincipal principal) {

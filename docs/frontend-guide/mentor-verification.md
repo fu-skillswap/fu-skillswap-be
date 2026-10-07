@@ -1,6 +1,6 @@
 # Frontend Guide — Xác Thực Mentor & Quản Trị Duyệt Hồ Sơ (Mentor Verification & Admin Review)
 
-> **Quy tắc URL:** URL upload presigned chỉ dùng để đẩy file lên lưu trữ và có thời hạn nhất định. Tuyệt đối không hiển thị, không lưu vào local storage hay tự ghép nối các URL private. Chỉ sử dụng `fileUrl` do backend trả về khi response cho phép hiển thị.
+> **Quy tắc URL:** URL upload presigned chỉ dùng để đẩy file lên lưu trữ và có thời hạn nhất định. Không lưu URL upload/download vào local storage hoặc tự ghép nối URL private. Với tài liệu xác thực mentor trong màn Admin, `fileUrl` có thể là tham chiếu `private://`; hãy gọi endpoint download riêng để nhận signed URL xem file.
 
 > **Chuẩn Envelope:** Tất cả phản hồi từ backend đều được bọc trong `ApiResponse<T>`. Vui lòng xem [identity.md](identity.md) để biết cách xử lý Access Token, Refresh Token, Validation và mã lỗi `429 Retry-After`.
 
@@ -254,12 +254,14 @@ Tất cả các endpoint bên dưới yêu cầu Bearer token với Role `ADMIN`
 |---|---|
 | `GET /api/admin/mentor-verification/requests` | Lấy danh sách hàng đợi cần duyệt |
 | `GET /api/admin/mentor-verification/requests/{requestId}` | Mở xem chi tiết và tự động nhận quyền khóa mềm (Claim Soft Lock) |
+| `GET /api/admin/mentor-verification/requests/{requestId}/documents/{documentId}/download` | Lấy signed URL ngắn hạn để xem minh chứng; gọi lại khi URL hết hạn |
 | `GET /api/admin/mentor-verification/requests/{requestId}/lock` | Kiểm tra trạng thái khóa hiện tại của request |
 | `POST /api/admin/mentor-verification/requests/{requestId}/lock/refresh` | Gia hạn thời gian khóa của reviewer hiện tại |
 | `POST /api/admin/mentor-verification/requests/{requestId}/lock/release` | Reviewer chủ động nhả khóa; `SYSTEM_ADMIN` có quyền Force Release |
 
 - **Bộ lọc hàng đợi**: Hỗ trợ `status`, `keyword`, `submittedFrom`, `submittedTo`, phân trang và sắp xếp. Mặc định là `status=PENDING_REVIEW`, `sortBy=submittedAt`, `direction=ASC`, `size=20`.
 - **Chi tiết hồ sơ**: Trả về thông tin request, danh sách minh chứng, timeline, checklist, Mentor Profile và Academic Profile.
+- **Xem minh chứng**: `documents[].fileUrl` là tham chiếu `private://`, không phải URL trình duyệt. Khi admin mở file, gọi endpoint download ở trên và dùng `data.downloadUrl` trước `data.expiresAt`; không lưu signed URL lâu dài. URL được ký inline để trình duyệt xem ảnh/PDF. Storage bucket cần cho phép CORS từ `https://skillswap.asia` nếu viewer tải nội dung bằng fetch.
 - **Xử lý Khóa duyệt (Locking)**: Khi `canReview === false`, disable các nút ra quyết định và hiển thị thông tin người đang khóa (`lockedByAdminEmail`, `lockExpiresAt`). Frontend của reviewer đang mở xem hồ sơ cần gọi API refresh lock định kỳ và release lock khi thoát màn hình.
 
 ```typescript

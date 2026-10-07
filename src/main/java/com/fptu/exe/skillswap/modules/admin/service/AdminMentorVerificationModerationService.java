@@ -5,6 +5,7 @@ import com.fptu.exe.skillswap.modules.mentor.dto.request.AdminMentorVerification
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationLockResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationQueueItemResponse;
 import com.fptu.exe.skillswap.modules.mentor.dto.response.AdminMentorVerificationRequestResponse;
+import com.fptu.exe.skillswap.modules.mentor.dto.response.MentorVerificationDocumentDownloadResponse;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorVerificationAdminPort;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.shared.dto.response.PageResponse;
@@ -33,6 +34,11 @@ public class AdminMentorVerificationModerationService {
     @Transactional
     public AdminMentorVerificationRequestResponse getRequestDetail(UUID adminUserId, UUID requestId) {
         return mentorVerificationAdminPort.getRequestDetail(adminUserId, requestId);
+    }
+
+    @Transactional(readOnly = true)
+    public MentorVerificationDocumentDownloadResponse getDocumentDownloadUrl(UUID requestId, UUID documentId) {
+        return mentorVerificationAdminPort.getDocumentDownloadUrl(requestId, documentId);
     }
 
     @Transactional(readOnly = true)

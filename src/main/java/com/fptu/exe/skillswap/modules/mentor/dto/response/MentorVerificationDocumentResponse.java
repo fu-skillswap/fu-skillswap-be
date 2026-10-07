@@ -53,7 +53,7 @@ public record MentorVerificationDocumentResponse(
         @Schema(description = "Kích thước file (bytes)", example = "150937")
         Long sizeBytes,
 
-        @Schema(description = "URL tạm thời để xem trước file nếu có quyền")
+        @Schema(description = "Tham chiếu private://, không mở trực tiếp trên trình duyệt. Admin lấy URL xem file qua endpoint download riêng.")
         String fileUrl,
 
         @Schema(description = "Trạng thái hoạt động của file")

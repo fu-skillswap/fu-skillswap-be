@@ -37,6 +37,14 @@ class AdminMentorVerificationControllerSecurityTest {
 
     @Test
     @WithMockUser(roles = "MENTEE")
+    void nonAdmin_shouldNotGetDocumentDownloadUrl() throws Exception {
+        mockMvc.perform(get("/api/admin/mentor-verification/requests/{requestId}/documents/{documentId}/download",
+                        UUID.randomUUID(), UUID.randomUUID()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
     void nonAdmin_shouldNotRefreshLock() throws Exception {
         mockMvc.perform(post("/api/admin/mentor-verification/requests/{requestId}/lock/refresh", UUID.randomUUID()))
                 .andExpect(status().isForbidden());

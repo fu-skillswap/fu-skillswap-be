@@ -35,4 +35,12 @@ class VerificationDocumentStoragePortImpl implements VerificationDocumentStorage
         return new VerificationDocumentMetadata(
                 saved.getId(), saved.getOriginalName(), saved.getMimeType(), saved.getSizeBytes(), saved.getPublicUrl());
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<String> findVerificationDocumentStorageKey(java.util.UUID fileId) {
+        return storedFileRepository.findById(fileId)
+                .filter(file -> file.getPurpose() == FilePurpose.VERIFICATION_DOCUMENT)
+                .map(StoredFile::getStorageKey);
+    }
 }

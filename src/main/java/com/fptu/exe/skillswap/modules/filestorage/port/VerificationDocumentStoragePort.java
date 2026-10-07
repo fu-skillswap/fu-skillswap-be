@@ -1,11 +1,14 @@
 package com.fptu.exe.skillswap.modules.filestorage.port;
 
 import java.util.UUID;
+import java.util.Optional;
 
 /** Public file-registration API used by the Mentor verification workflow. */
 public interface VerificationDocumentStoragePort {
 
     VerificationDocumentMetadata registerVerificationDocument(VerificationDocumentRegistration command);
+
+    Optional<String> findVerificationDocumentStorageKey(UUID fileId);
 
     record VerificationDocumentRegistration(
             UUID ownerUserId,
