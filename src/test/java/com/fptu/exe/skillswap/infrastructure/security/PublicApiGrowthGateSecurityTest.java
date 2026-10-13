@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(classes = ProjectApplication.class)
@@ -22,6 +23,18 @@ class PublicApiGrowthGateSecurityTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Test
+    void anonymousShouldReachGoogleMobileLoginController() throws Exception {
+        mockMvc.perform(post("/api/auth/google/mobile")
+                        .contentType("application/json")
+                        .content("{\"credential\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VAL_3001"));
+
+        mockMvc.perform(get("/api/auth/me"))
+                .andExpect(status().isUnauthorized());
+    }
 
     @Test
     void anonymousShouldAccessPublicCatalogAndForumTopics() throws Exception {

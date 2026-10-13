@@ -60,6 +60,7 @@ public class SecurityConfig {
                     // Endpoint công khai.
                             .requestMatchers(
                                     "/api/auth/google",
+                                    "/api/auth/google/mobile",
                                     "/api/auth/google/nonce",
                                     "/api/auth/refresh",
                                     "/api/auth/logout",
