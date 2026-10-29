@@ -198,7 +198,21 @@ public class PaymentConcurrencyIntegrationTest extends AbstractPostgreSQLIntegra
         jdbcTemplate.execute("DELETE FROM mentor_services");
         jdbcTemplate.execute("DELETE FROM mentor_profiles");
         jdbcTemplate.execute("DELETE FROM student_profiles");
+        jdbcTemplate.execute("DELETE FROM oauth_accounts");
+        jdbcTemplate.execute("DELETE FROM user_roles");
         jdbcTemplate.execute("DELETE FROM users");
+
+        // Re-seed persistent AI Bot user from V141 to keep database state pristine for subsequent tests
+        jdbcTemplate.execute("""
+            INSERT INTO users (id, email, full_name, avatar_url, status, created_at, updated_at)
+            VALUES ('019f0000-0000-7000-8000-0000000000a1', 'ai-bot@skillswap.asia', 'SkillSwap AI', 'https://cdn.skillswap.asia/static/ai-bot-avatar.png', 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO NOTHING
+        """);
+        jdbcTemplate.execute("""
+            INSERT INTO user_roles (user_id, role)
+            VALUES ('019f0000-0000-7000-8000-0000000000a1', 'MENTEE')
+            ON CONFLICT (user_id, role) DO NOTHING
+        """);
     }
 
     @Test
