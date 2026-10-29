@@ -1,6 +1,10 @@
 package com.fptu.exe.skillswap.modules.payment.service;
 
 import com.fptu.exe.skillswap.modules.booking.port.BookingCheckoutSnapshot;
+import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
+import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
+import com.fptu.exe.skillswap.modules.payment.dto.response.UserCouponResponse;
+import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CouponRedemption;
@@ -18,7 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.fptu.exe.skillswap.modules.payment.strategy.DiscountStrategyRegistry;
 
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -33,6 +39,7 @@ public class CouponService {
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
     private final DiscountStrategyRegistry discountStrategyRegistry;
+    private final UserQueryPort userQueryPort;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -84,6 +91,7 @@ public class CouponService {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Giá trị đơn hàng chưa đạt mức tối thiểu của coupon");
         }
         validateQuotaAvailability(coupon, userId);
+        validateUserRoleApplicable(coupon, userId);
         if (!coupon.getApplicableServiceIds().isEmpty()
                 && (booking == null || booking.serviceId() == null
                 || !coupon.getApplicableServiceIds().contains(booking.serviceId()))) {
@@ -104,8 +112,17 @@ public class CouponService {
         }
         Coupon lockedCoupon = couponRepository.findByIdForUpdate(coupon.getId())
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy coupon"));
-        validateQuotaAvailability(lockedCoupon, redeemerUserId);
+
         CouponRedemption existing = couponRedemptionRepository.findByPaymentOrderId(paymentOrderId).orElse(null);
+        boolean alreadyReservedForThisOrder = existing != null
+                && existing.getStatus() == CouponRedemptionStatus.RESERVED
+                && lockedCoupon.getId().equals(existing.getCouponId());
+
+        if (!alreadyReservedForThisOrder) {
+            validateQuotaAvailability(lockedCoupon, redeemerUserId);
+            validateUserRoleApplicable(lockedCoupon, redeemerUserId);
+        }
+
         if (existing != null) {
             existing.setCouponId(lockedCoupon.getId());
             existing.setRedeemerUserId(redeemerUserId);
@@ -165,5 +182,83 @@ public class CouponService {
                 throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Bạn đã dùng coupon này quá số lần cho phép");
             }
         }
+    }
+
+    private void validateUserRoleApplicable(Coupon coupon, UUID userId) {
+        if (coupon == null || userId == null || userQueryPort == null) {
+            return;
+        }
+        if ("WELCOME70K".equalsIgnoreCase(coupon.getCode())) {
+            UserSummaryRecord user = userQueryPort.findUserSummaryById(userId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy thông tin người dùng"));
+            if (!user.hasRole(RoleCode.MENTEE)) {
+                throw new BaseException(ErrorCode.ACCESS_DENIED, "Coupon chào mừng chỉ dành riêng cho tài khoản Mentee");
+            }
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserCouponResponse> getAvailableCouponsForUser(UUID userId) {
+        List<Coupon> activeCoupons = couponRepository.findByStatus(CouponStatus.ACTIVE);
+        LocalDateTime now = timeProvider.nowBusiness();
+
+        return activeCoupons.stream()
+                .map(coupon -> buildUserCouponResponse(coupon, userId, now))
+                .sorted(Comparator.comparing(UserCouponResponse::isUsable).reversed()
+                        .thenComparing(UserCouponResponse::code))
+                .toList();
+    }
+
+    private UserCouponResponse buildUserCouponResponse(Coupon coupon, UUID userId, LocalDateTime now) {
+        long totalUsed = couponRedemptionRepository.countByCouponIdAndStatusIn(coupon.getId(), ACTIVE_REDEMPTION_STATUSES);
+        Integer remainingQuota = coupon.getQuotaTotal() != null
+                ? Math.max(0, coupon.getQuotaTotal() - (int) totalUsed)
+                : null;
+
+        boolean activeByDate = (coupon.getStartAt() == null || !now.isBefore(coupon.getStartAt()))
+                && (coupon.getEndAt() == null || !now.isAfter(coupon.getEndAt()));
+
+        long perUser = (userId != null && coupon.getQuotaPerUser() != null)
+                ? couponRedemptionRepository.countByCouponIdAndRedeemerUserIdAndStatusIn(coupon.getId(), userId, ACTIVE_REDEMPTION_STATUSES)
+                : 0;
+
+        boolean isMentee = true;
+        if ("WELCOME70K".equalsIgnoreCase(coupon.getCode()) && userId != null && userQueryPort != null) {
+            isMentee = userQueryPort.findUserSummaryById(userId)
+                    .map(u -> u.hasRole(RoleCode.MENTEE))
+                    .orElse(false);
+        }
+
+        boolean isUsable = true;
+        String unusableReason = null;
+
+        if (!activeByDate) {
+            isUsable = false;
+            unusableReason = "Coupon chưa bắt đầu hoặc đã hết hạn";
+        } else if (remainingQuota != null && remainingQuota <= 0) {
+            isUsable = false;
+            unusableReason = "Coupon đã hết lượt sử dụng (quota)";
+        } else if (coupon.getQuotaPerUser() != null && perUser >= coupon.getQuotaPerUser()) {
+            isUsable = false;
+            unusableReason = "Bạn đã sử dụng hết lượt coupon này";
+        } else if (!isMentee) {
+            isUsable = false;
+            unusableReason = "Coupon chào mừng chỉ dành riêng cho tài khoản Mentee";
+        }
+
+        return UserCouponResponse.builder()
+                .id(coupon.getId())
+                .code(coupon.getCode())
+                .title(coupon.getTitle())
+                .description(coupon.getDescription())
+                .discountType(coupon.getDiscountType())
+                .discountValue(coupon.getDiscountValue())
+                .maxDiscountScoin(coupon.getMaxDiscountScoin())
+                .minOrderValueScoin(coupon.getMinOrderValueScoin())
+                .quotaTotal(coupon.getQuotaTotal())
+                .remainingQuota(remainingQuota)
+                .isUsable(isUsable)
+                .unusableReason(unusableReason)
+                .build();
     }
 }

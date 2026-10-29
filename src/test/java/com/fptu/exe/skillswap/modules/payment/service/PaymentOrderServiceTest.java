@@ -12,6 +12,8 @@ import com.fptu.exe.skillswap.modules.booking.service.BookingQueryPortImpl;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.mentor.domain.MentorProfile;
+import com.fptu.exe.skillswap.modules.payment.domain.Coupon;
+import com.fptu.exe.skillswap.modules.payment.domain.CouponDiscountType;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditLedgerEntry;
 import com.fptu.exe.skillswap.modules.payment.domain.CreditOriginType;
 import com.fptu.exe.skillswap.modules.payment.domain.LedgerSourceType;
@@ -53,6 +55,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -240,6 +243,34 @@ class PaymentOrderServiceTest {
         verify(creditLedgerService).reserveCredit(eq(menteeId), eq(72_000), eq(LedgerSourceType.PAYMENT_ORDER), any(), any(), any());
         verify(creditLedgerService).consumeReservedCredit(eq(menteeId), eq(LedgerSourceType.PAYMENT_ORDER), any(), any());
         // PayOsGateway must NOT be called for credit-covered checkout
+        verify(payOsGateway, never()).createPaymentLink(any());
+    }
+
+    @Test
+    void checkout_welcome70kCouponFullyCovers_shouldCompleteInternallyWithoutPaymentLink() {
+        Coupon welcomeCoupon = Coupon.builder()
+                .id(UUID.randomUUID())
+                .code("WELCOME70K")
+                .discountType(CouponDiscountType.FIXED)
+                .discountValue(70_000)
+                .quotaTotal(60)
+                .quotaPerUser(1)
+                .build();
+
+        when(bookingRepository.findByIdForSessionUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(paymentOrderRepository.findByTargetTypeAndTargetId(PaymentTargetType.BOOKING, bookingId)).thenReturn(Optional.empty());
+        when(couponService.resolveCoupon("WELCOME70K")).thenReturn(welcomeCoupon);
+        when(couponService.calculateCouponDiscount(eq(welcomeCoupon), anyInt())).thenReturn(72_000);
+        when(campaignService.resolveCampaignCredit(eq(menteeId), any(BookingCheckoutSnapshot.class), anyInt()))
+                .thenReturn(CampaignService.CampaignCreditApplication.none());
+        when(paymentOrderRepository.save(any(PaymentOrder.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        PaymentCheckoutResponse response = paymentOrderService.checkout(menteeId, new PaymentCheckoutRequest(bookingId, "WELCOME70K"));
+
+        assertEquals(PaymentOrderStatus.PAID, response.status());
+        assertEquals(0, response.remainingPayableScoin());
+        assertNull(response.paymentLink());
+        verify(couponService).reserveCoupon(eq(welcomeCoupon), any(), eq(menteeId), eq(72_000));
         verify(payOsGateway, never()).createPaymentLink(any());
     }
 

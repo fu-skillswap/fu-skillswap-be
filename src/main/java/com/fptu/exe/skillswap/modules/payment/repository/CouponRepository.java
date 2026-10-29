@@ -10,12 +10,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 public interface CouponRepository extends JpaRepository<Coupon, UUID>, JpaSpecificationExecutor<Coupon> {
 
     Optional<Coupon> findByCode(String code);
+
+    List<Coupon> findByStatus(CouponStatus status);
 
     long countByStatus(CouponStatus status);
 

@@ -69,6 +69,9 @@ class SettlementServiceTest {
     @Mock
     private BookingPaymentSettlementPort bookingPaymentSettlementPort;
 
+    @Mock
+    private CouponService couponService;
+
     private SettlementService settlementService;
     private BookingCancellationContext booking;
     private PaymentOrder paymentOrder;
@@ -89,7 +92,8 @@ class SettlementServiceTest {
                 new PaymentProperties(),
                 creditLedgerService,
                 bookingPaymentQueryPort,
-                bookingPaymentSettlementPort
+                bookingPaymentSettlementPort,
+                couponService
         );
 
         menteeId = UUID.randomUUID();
@@ -220,6 +224,87 @@ class SettlementServiceTest {
         verify(creditLedgerService, times(1)).refundCredit(
                 eq(menteeId), eq(CreditOriginType.REFUND), eq(LedgerSourceType.BOOKING), eq(bookingId), eq(100), any());
         verify(paymentOrderRepository, times(1)).save(paymentOrder);
+    }
+
+    @Test
+    void handlePaidBookingCancelledByMentee_withCoupon_shouldOnlyRefundNetPaid() {
+        UUID couponId = UUID.randomUUID();
+        paymentOrder.setGrossScoin(100);
+        paymentOrder.setCouponDiscountScoin(70);
+        paymentOrder.setCouponId(couponId);
+
+        settlementService.handlePaidBookingCancelledByMentee(booking, paymentOrder, false);
+
+        verify(creditLedgerService).refundCredit(
+                eq(menteeId),
+                eq(CreditOriginType.REFUND),
+                eq(LedgerSourceType.BOOKING),
+                eq(bookingId),
+                eq(30),
+                any()
+        );
+        verify(couponService).voidRedemption(paymentOrder.getId());
+        assertEquals(30, paymentOrder.getRefundedScoin());
+    }
+
+    @Test
+    void handlePaidBookingCancelledByMentee_fullyCoveredByCoupon_shouldNotRefundCreditAndRestoreCoupon() {
+        UUID couponId = UUID.randomUUID();
+        paymentOrder.setGrossScoin(70);
+        paymentOrder.setCouponDiscountScoin(70);
+        paymentOrder.setCouponId(couponId);
+
+        settlementService.handlePaidBookingCancelledByMentee(booking, paymentOrder, false);
+
+        verify(creditLedgerService, never()).refundCredit(any(), any(), any(), any(), any(Integer.class), any());
+        verify(couponService).voidRedemption(paymentOrder.getId());
+        assertEquals(0, paymentOrder.getRefundedScoin());
+    }
+
+    @Test
+    void handlePaidBookingCancelledByMentor_withCoupon_shouldRefundNetAndRestoreCoupon() {
+        UUID couponId = UUID.randomUUID();
+        paymentOrder.setGrossScoin(100);
+        paymentOrder.setCouponDiscountScoin(70);
+        paymentOrder.setCouponId(couponId);
+
+        settlementService.handlePaidBookingCancelledByMentor(booking, paymentOrder);
+
+        verify(creditLedgerService).refundCredit(
+                eq(menteeId),
+                eq(CreditOriginType.REFUND),
+                eq(LedgerSourceType.BOOKING),
+                eq(bookingId),
+                eq(30),
+                any()
+        );
+        verify(couponService).voidRedemption(paymentOrder.getId());
+        assertEquals(30, paymentOrder.getRefundedScoin());
+    }
+
+    @Test
+    void refundForMentorNoShow_withCoupon_shouldRefundNetAndRestoreCoupon() {
+        UUID couponId = UUID.randomUUID();
+        paymentOrder.setGrossScoin(100);
+        paymentOrder.setCouponDiscountScoin(70);
+        paymentOrder.setCouponId(couponId);
+        when(paymentOrderRepository.findByTargetTypeAndTargetIdForUpdate(
+                com.fptu.exe.skillswap.modules.payment.domain.PaymentTargetType.BOOKING, bookingId))
+                .thenReturn(Optional.of(paymentOrder));
+
+        settlementService.refundForMentorNoShow(booking);
+
+        verify(creditLedgerService).refundCredit(
+                eq(menteeId),
+                eq(CreditOriginType.REFUND),
+                eq(LedgerSourceType.BOOKING),
+                eq(bookingId),
+                eq(30),
+                any(),
+                any()
+        );
+        verify(couponService).voidRedemption(paymentOrder.getId());
+        assertEquals(30, paymentOrder.getRefundedScoin());
     }
 
     @Test

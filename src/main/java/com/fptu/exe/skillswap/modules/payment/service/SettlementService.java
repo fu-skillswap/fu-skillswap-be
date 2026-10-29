@@ -54,6 +54,7 @@ public class SettlementService implements BookingSettlementCommandPort {
     private final CreditLedgerService creditLedgerService;
     private final BookingPaymentQueryPort bookingPaymentQueryPort;
     private final BookingPaymentSettlementPort bookingPaymentSettlementPort;
+    private final CouponService couponService;
 
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
@@ -551,24 +552,20 @@ public class SettlementService implements BookingSettlementCommandPort {
         if (paymentOrder.getSettlementStatus() == PaymentSettlementStatus.RELEASED) {
             throw new BaseException(ErrorCode.RESOURCE_CONFLICT, "Settlement đã release, không thể hoàn tiền tự động");
         }
-        int amount = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
-        if (amount == 0) {
-            paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
-            paymentOrder.setRefundedAtUtc(timeProvider.instant());
-            paymentOrder.setRefundedAt(timeProvider.nowBusiness());
-            paymentOrder.setRefundedScoin(0);
-            paymentOrder.setRefundReason("MENTOR_NO_SHOW");
-            paymentOrderRepository.save(paymentOrder);
-            return;
+        int netPaidScoin = resolveNetPaidScoin(paymentOrder);
+        if (netPaidScoin > 0) {
+            String operationKey = "PAYMENT_REFUND:" + paymentOrder.getId();
+            creditLedgerService.refundCredit(
+                    booking.payerUserId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
+                    booking.bookingId(), netPaidScoin, "Full refund for mentor no-show booking " + booking.bookingId(), operationKey);
         }
-        String operationKey = "PAYMENT_REFUND:" + paymentOrder.getId();
-        creditLedgerService.refundCredit(
-                booking.payerUserId(), CreditOriginType.REFUND, LedgerSourceType.BOOKING,
-                booking.bookingId(), amount, "Full refund for mentor no-show booking " + booking.bookingId(), operationKey);
+        if (couponService != null && paymentOrder.getCouponId() != null) {
+            couponService.voidRedemption(paymentOrder.getId());
+        }
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
         paymentOrder.setRefundedAtUtc(timeProvider.instant());
         paymentOrder.setRefundedAt(timeProvider.nowBusiness());
-        paymentOrder.setRefundedScoin(amount);
+        paymentOrder.setRefundedScoin(netPaidScoin);
         paymentOrder.setRefundReason("MENTOR_NO_SHOW");
         paymentOrderRepository.save(paymentOrder);
     }
@@ -601,19 +598,26 @@ public class SettlementService implements BookingSettlementCommandPort {
             return;
         }
 
+        int netPaidScoin = resolveNetPaidScoin(paymentOrder);
+
         if (!lateCancellation) {
-            creditLedgerService.refundCredit(
-                    booking.payerUserId(),
-                    CreditOriginType.REFUND,
-                    LedgerSourceType.BOOKING,
-                    booking.bookingId(),
-                    grossScoin,
-                    "Full refund for early mentee cancellation of booking " + booking.bookingId()
-            );
+            if (netPaidScoin > 0) {
+                creditLedgerService.refundCredit(
+                        booking.payerUserId(),
+                        CreditOriginType.REFUND,
+                        LedgerSourceType.BOOKING,
+                        booking.bookingId(),
+                        netPaidScoin,
+                        "Full refund for early mentee cancellation of booking " + booking.bookingId()
+                );
+            }
+            if (couponService != null && paymentOrder.getCouponId() != null) {
+                couponService.voidRedemption(paymentOrder.getId());
+            }
             paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
             paymentOrder.setRefundedAtUtc(timeProvider.instant());
             paymentOrder.setRefundedAt(timeProvider.nowBusiness());
-            paymentOrder.setRefundedScoin(grossScoin);
+            paymentOrder.setRefundedScoin(netPaidScoin);
             paymentOrder.setRefundReason("EARLY_MENTEE_CANCELLATION");
             paymentOrderRepository.save(paymentOrder);
             return;
@@ -622,7 +626,7 @@ public class SettlementService implements BookingSettlementCommandPort {
         int lateRefundBps = paymentProperties.getLateMenteeCancellationRefundBps();
         int lateMentorBps = paymentProperties.getLateMenteeCancellationMentorBps();
         int latePlatformBps = paymentProperties.getLateMenteeCancellationPlatformBps();
-        int refundShare = PricingPolicy.bpsAmount(grossScoin, lateRefundBps);
+        int refundShare = PricingPolicy.bpsAmount(netPaidScoin, lateRefundBps);
         int mentorShare = PricingPolicy.bpsAmount(grossScoin, lateMentorBps);
         // Platform absorbs the integer rounding remainder so the allocation always equals grossScoin.
         int platformShare = Math.max(0, grossScoin - refundShare - mentorShare);
@@ -710,18 +714,26 @@ public class SettlementService implements BookingSettlementCommandPort {
             return;
         }
 
-        creditLedgerService.refundCredit(
-                booking.payerUserId(),
-                CreditOriginType.REFUND,
-                LedgerSourceType.BOOKING,
-                booking.bookingId(),
-                grossScoin,
-                "Full refund because mentor cancelled booking " + booking.bookingId()
-        );
+        int netPaidScoin = resolveNetPaidScoin(paymentOrder);
+        if (netPaidScoin > 0) {
+            creditLedgerService.refundCredit(
+                    booking.payerUserId(),
+                    CreditOriginType.REFUND,
+                    LedgerSourceType.BOOKING,
+                    booking.bookingId(),
+                    netPaidScoin,
+                    "Full refund because mentor cancelled booking " + booking.bookingId()
+            );
+        }
+
+        if (couponService != null && paymentOrder.getCouponId() != null) {
+            couponService.voidRedemption(paymentOrder.getId());
+        }
+
         paymentOrder.setSettlementStatus(PaymentSettlementStatus.REFUNDED);
         paymentOrder.setRefundedAtUtc(timeProvider.instant());
         paymentOrder.setRefundedAt(timeProvider.nowBusiness());
-        paymentOrder.setRefundedScoin(grossScoin);
+        paymentOrder.setRefundedScoin(netPaidScoin);
         paymentOrder.setRefundReason("MENTOR_CANCELLATION");
         paymentOrderRepository.save(paymentOrder);
     }
@@ -860,5 +872,15 @@ public class SettlementService implements BookingSettlementCommandPort {
             return settlementAccountRepository.findByOwnerTypeAndOwnerId(ownerType, ownerId)
                     .orElseThrow(() -> ex);
         }
+    }
+
+    private int resolveNetPaidScoin(PaymentOrder paymentOrder) {
+        if (paymentOrder == null) {
+            return 0;
+        }
+        int gross = Math.max(0, paymentOrder.getGrossScoin() == null ? 0 : paymentOrder.getGrossScoin());
+        int couponDiscount = Math.max(0, paymentOrder.getCouponDiscountScoin() == null ? 0 : paymentOrder.getCouponDiscountScoin());
+        int campaignCredit = Math.max(0, paymentOrder.getCampaignCreditScoin() == null ? 0 : paymentOrder.getCampaignCreditScoin());
+        return Math.max(0, gross - couponDiscount - campaignCredit);
     }
 }
