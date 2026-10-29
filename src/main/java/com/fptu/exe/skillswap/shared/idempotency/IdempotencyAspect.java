@@ -169,8 +169,12 @@ public class IdempotencyAspect {
 
     private String normalizeKey(String rawKey) {
         String key = rawKey == null ? null : rawKey.trim();
-        if (key == null || !key.matches(SAFE_KEY_PATTERN)) {
+        if (key == null || key.isEmpty()) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "IDEMPOTENCY_KEY_REQUIRED");
+        }
+        if (!key.matches(SAFE_KEY_PATTERN)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST,
+                    "IDEMPOTENCY_KEY_INVALID: key chỉ được chứa chữ, số, dấu chấm, gạch dưới, gạch ngang hoặc dấu ngã; tối đa 100 ký tự");
         }
         return key;
     }

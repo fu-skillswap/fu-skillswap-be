@@ -406,6 +406,7 @@ interface CancelBookingRequest {
   cancelReason: string; // 1 - 1000 ký tự (Bắt buộc)
 }
 ```
+- **Header bắt buộc**: `Idempotency-Key`, dài 1–100 ký tự và chỉ gồm chữ, số, `.`, `_`, `~`, `-` (UUID từ `crypto.randomUUID()` hợp lệ). Tạo key mới cho lần hủy mới; nếu retry vì timeout, giữ nguyên key, endpoint và payload.
 - **Điều kiện hiển thị**: Chỉ hiển thị nút khi `canCancel === true`.
 - **Hạn mức**: Rate limit tối đa **3 request / giờ / user**.
 
@@ -454,6 +455,7 @@ Nếu quyết định bị xác định là sai, admin dùng `POST /api/admin/me
 ### 6.1 Mentee Hủy Booking (`POST /api/me/bookings/{bookingId}/cancel`)
 - **Endpoint**: `POST /api/me/bookings/{bookingId}/cancel`
 - **Request Body**: `CancelBookingRequest` (`{ cancelReason: string }`)
+- **Header bắt buộc**: `Idempotency-Key`, dài 1–100 ký tự và chỉ gồm chữ, số, `.`, `_`, `~`, `-` (UUID từ `crypto.randomUUID()` hợp lệ). Tạo key mới cho lần hủy mới; nếu retry vì timeout, giữ nguyên key, endpoint và payload.
 - **Điều kiện**: Chỉ hiển thị khi `canCancel === true`.
 - **Hạn mức**: Rate limit tối đa **3 request / giờ / user**.
 

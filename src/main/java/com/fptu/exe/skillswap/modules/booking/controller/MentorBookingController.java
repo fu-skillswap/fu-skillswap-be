@@ -99,6 +99,7 @@ public class MentorBookingController {
                     Hủy một booking đã được xác nhận thuộc về mentor hiện tại.
                     FE chỉ dùng API này sau khi booking đã được accept nhưng mentor cần dừng buổi mentoring đó.
                     Backend sẽ tự áp dụng penalty hoặc suspension tạm thời nếu mentor hủy quá sát giờ bắt đầu của lịch hẹn.
+                    Gửi Idempotency-Key duy nhất cho mỗi thao tác hủy. Nếu retry do timeout, dùng lại đúng key cùng endpoint và payload. Key dài 1–100 ký tự, gồm chữ, số, dấu chấm, gạch dưới, gạch ngang hoặc dấu ngã.
                     """
     )
     @ApiResponses({

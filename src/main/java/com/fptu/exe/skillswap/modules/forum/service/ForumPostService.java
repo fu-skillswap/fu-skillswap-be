@@ -24,6 +24,7 @@ import com.fptu.exe.skillswap.modules.forum.repository.ForumCommentReactionRepos
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostReactionRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostRepository;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumPostSpecification;
+import com.fptu.exe.skillswap.infrastructure.ai.AiForumEventPublisher;
 import com.fptu.exe.skillswap.modules.forum.repository.ForumTopicRepository;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
@@ -80,6 +81,7 @@ public class ForumPostService {
     private final ForumReactionService forumReactionService;
     private final CursorCodec cursorCodec;
     private final TransactionTemplate transactionTemplate;
+    private final AiForumEventPublisher aiForumEventPublisher;
 
     @Transactional(readOnly = true)
     public CursorPageResponse<ForumPostResponse> getPosts(UUID currentUserId, String cursor, Integer limit, String keyword, UUID forumTopicId, Boolean mine) {
@@ -208,7 +210,9 @@ public class ForumPostService {
             ForumPost saved = forumPostRepository.save(post);
             forumActionLogService.record(currentUser, ForumActionType.CREATE_POST, "POST", saved.getId(),
                     Map.of("status", ForumPostStatus.PUBLISHED.name()));
-            return toPostResponse(saved, currentUser.getId());
+            ForumPostResponse response = toPostResponse(saved, currentUser.getId());
+            aiForumEventPublisher.publishPostCreatedEvent(saved);
+            return response;
         });
     }
 

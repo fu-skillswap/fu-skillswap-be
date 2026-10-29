@@ -1,5 +1,6 @@
 package com.fptu.exe.skillswap.modules.forum.service;
 
+import com.fptu.exe.skillswap.infrastructure.ai.AiProperties;
 import com.fptu.exe.skillswap.modules.forum.domain.ForumActionType;
 import com.fptu.exe.skillswap.modules.forum.strategy.ForumActionPolicy;
 import com.fptu.exe.skillswap.modules.forum.strategy.ForumActionPolicyRegistry;
@@ -15,8 +16,14 @@ public class ForumAbuseGuardService {
 
     private final ForumDatabaseRateLimitService rateLimitService;
     private final ForumActionPolicyRegistry forumActionPolicyRegistry;
+    private final AiProperties aiProperties;
 
     public void checkAndLog(User user, ForumActionType actionType) {
+        // Bypass rate limit for system AI bot user
+        if (user != null && aiProperties.getBotUserId() != null && aiProperties.getBotUserId().equals(user.getId())) {
+            return;
+        }
+
         String key = "forum_abuse:" + user.getId().toString() + "_" + actionType.name();
 
         ForumActionPolicy policy = forumActionPolicyRegistry != null ? forumActionPolicyRegistry.getPolicy(actionType) : null;

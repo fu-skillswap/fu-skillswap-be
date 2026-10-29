@@ -94,6 +94,7 @@ public class MyBookingController {
                     Hủy một booking thuộc về mentee hiện tại.
                     FE dùng khi mentee không muốn tiếp tục một request đang PENDING hoặc một buổi đã được xác nhận và phải gửi kèm lý do hủy.
                     Backend có hành vi khác nhau khi hủy booking PENDING và booking đã xác nhận, nên FE cần handle response theo trạng thái thực tế.
+                    Gửi Idempotency-Key duy nhất cho mỗi thao tác hủy. Nếu retry do timeout, dùng lại đúng key cùng endpoint và payload. Key dài 1–100 ký tự, gồm chữ, số, dấu chấm, gạch dưới, gạch ngang hoặc dấu ngã.
                     """
     )
     @ApiResponses({

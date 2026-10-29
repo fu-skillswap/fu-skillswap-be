@@ -85,6 +85,56 @@ class BookingControllerAuthorizationTest {
         verifyNoInteractions(bookingService);
     }
 
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void cancelBooking_missingIdempotencyKeyShouldReturnSpecificBadRequest() throws Exception {
+        mockMvc.perform(post("/api/me/bookings/{bookingId}/cancel", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cancelReason\":\"Changed plans\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("IDEMPOTENCY_KEY_REQUIRED"));
+
+        verifyNoInteractions(bookingService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTEE")
+    void cancelBooking_invalidIdempotencyKeyShouldExplainAllowedFormat() throws Exception {
+        mockMvc.perform(post("/api/me/bookings/{bookingId}/cancel", UUID.randomUUID())
+                        .header("Idempotency-Key", "invalid/key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cancelReason\":\"Changed plans\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("IDEMPOTENCY_KEY_INVALID")));
+
+        verifyNoInteractions(bookingService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTOR")
+    void mentorCancelBooking_missingIdempotencyKeyShouldReturnSpecificBadRequest() throws Exception {
+        mockMvc.perform(post("/api/mentor/bookings/{bookingId}/cancel", UUID.randomUUID())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cancelReason\":\"Changed plans\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("IDEMPOTENCY_KEY_REQUIRED"));
+
+        verifyNoInteractions(bookingService);
+    }
+
+    @Test
+    @WithMockUser(roles = "MENTOR")
+    void mentorCancelBooking_invalidIdempotencyKeyShouldExplainAllowedFormat() throws Exception {
+        mockMvc.perform(post("/api/mentor/bookings/{bookingId}/cancel", UUID.randomUUID())
+                        .header("Idempotency-Key", "invalid/key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cancelReason\":\"Changed plans\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.startsWith("IDEMPOTENCY_KEY_INVALID")));
+
+        verifyNoInteractions(bookingService);
+    }
+
     private CreateBookingRequest validRequest() {
         LocalDateTime start = LocalDateTime.of(2026, 6, 26, 10, 0);
         return new CreateBookingRequest(

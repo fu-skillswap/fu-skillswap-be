@@ -334,6 +334,14 @@ booking:
     booking-reschedule:
       # Reschedule is intentionally not released. There are no public or admin API routes for it.
       enabled: ${APPLICATION_FEATURES_BOOKING_RESCHEDULE_ENABLED:false}
+  ai:
+    enabled: ${APPLICATION_AI_ENABLED:true}
+    base-url: ${AI_SERVICE_URL:http://localhost:8000}
+    internal-token: ${AI_INTERNAL_TOKEN:skillswap-internal-ai-secret}
+    connect-timeout-ms: ${APPLICATION_AI_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${APPLICATION_AI_READ_TIMEOUT_MS:3000}
+    bot-user-id: ${AI_BOT_USER_ID:019f0000-0000-7000-8000-0000000000a1}
+
 
 logging:
   pattern:

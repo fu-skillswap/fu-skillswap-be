@@ -123,7 +123,8 @@ class ForumPostServiceTest {
                         transactionTemplate
                 ),
                 cursorCodec,
-                transactionTemplate
+                transactionTemplate,
+                org.mockito.Mockito.mock(com.fptu.exe.skillswap.infrastructure.ai.AiForumEventPublisher.class)
         );
 
         mentee = User.builder()
