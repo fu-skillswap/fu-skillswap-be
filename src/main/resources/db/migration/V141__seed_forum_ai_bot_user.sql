@@ -5,7 +5,6 @@ INSERT INTO users (
     email,
     full_name,
     avatar_url,
-    gender,
     status,
     created_at,
     updated_at
@@ -15,7 +14,6 @@ VALUES (
     'ai-bot@skillswap.asia',
     'SkillSwap AI',
     'https://cdn.skillswap.asia/static/ai-bot-avatar.png',
-    'OTHER',
     'ACTIVE',
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
