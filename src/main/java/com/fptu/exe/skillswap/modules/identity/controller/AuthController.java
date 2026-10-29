@@ -3,11 +3,17 @@ package com.fptu.exe.skillswap.modules.identity.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
+import com.fptu.exe.skillswap.modules.identity.dto.request.EmailLoginRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.EmailRegisterRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.EmailResendOtpRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.EmailVerifyRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.response.EmailRegisterResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.GoogleLoginNonceResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.UserMeResponse;
+import com.fptu.exe.skillswap.modules.identity.service.EmailAuthService;
 import com.fptu.exe.skillswap.modules.identity.service.IdentityService;
 import com.fptu.exe.skillswap.modules.identity.service.GoogleLoginNonceService;
 import com.fptu.exe.skillswap.infrastructure.security.TrustedClientIpResolver;
@@ -15,6 +21,7 @@ import com.fptu.exe.skillswap.shared.dto.response.ApiResponse;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
 import com.fptu.exe.skillswap.shared.ratelimit.InMemoryRateLimitService;
+import com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,6 +40,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.util.StringUtils;
 
+import java.time.Duration;
+import java.util.Locale;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -40,10 +50,96 @@ import org.springframework.util.StringUtils;
 public class AuthController {
 
     private final IdentityService identityService;
+    private final EmailAuthService emailAuthService;
     private final GoogleLoginNonceService googleLoginNonceService;
     private final InMemoryRateLimitService rateLimitService;
     private final TrustedClientIpResolver trustedClientIpResolver;
     private final ObjectMapper objectMapper;
+
+    @Operation(
+            summary = "Đăng ký tài khoản bằng email và mật khẩu",
+            description = "Gửi mã xác thực OTP 6 chữ số đến email để kích hoạt tài khoản mới hoặc liên kết với tài khoản Google đã có."
+    )
+    @PostMapping("/register")
+    public ApiResponse<EmailRegisterResponse> register(
+            @Valid @RequestBody EmailRegisterRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:register:" + resolveClientKey(httpServletRequest),
+                10,
+                Duration.ofMinutes(10),
+                "Bạn đang đăng ký quá nhanh, vui lòng thử lại sau"
+        );
+        return ApiResponse.success(emailAuthService.register(request));
+    }
+
+    @Operation(
+            summary = "Gửi lại mã OTP xác thực",
+            description = "Gửi lại mã OTP mới đến email nếu chưa nhận được mã hoặc mã đã hết hạn."
+    )
+    @PostMapping("/resend-otp")
+    public ApiResponse<String> resendOtp(
+            @Valid @RequestBody EmailResendOtpRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:resend:" + request.email().trim().toLowerCase(Locale.ROOT),
+                1,
+                Duration.ofMinutes(1),
+                "Vui lòng đợi 60 giây trước khi yêu cầu gửi lại mã xác thực"
+        );
+        emailAuthService.resendOtp(request);
+        return ApiResponse.success("Mã xác thực mới đã được gửi tới email của bạn");
+    }
+
+    @Operation(
+            summary = "Xác thực mã OTP kích hoạt tài khoản",
+            description = "Xác thực OTP 6 chữ số để kích hoạt tài khoản mới hoặc liên kết mật khẩu vào tài khoản Google, tự động đăng nhập và phát hành JWT."
+    )
+    @PostMapping("/verify-email")
+    public ApiResponse<TokenResponse> verifyEmail(
+            @Valid @RequestBody EmailVerifyRequest request,
+            HttpServletRequest httpServletRequest,
+            HttpServletResponse response
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:verify:" + resolveClientKey(httpServletRequest),
+                15,
+                Duration.ofMinutes(10),
+                "Bạn đang thao tác quá nhanh, vui lòng thử lại sau"
+        );
+        TokenResponse tokenResponse = emailAuthService.verifyEmail(request);
+        addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
+        if (!isMobileClient(null, httpServletRequest)) {
+            tokenResponse.setRefreshToken(null);
+        }
+        return ApiResponse.success(tokenResponse);
+    }
+
+    @Operation(
+            summary = "Đăng nhập bằng email và mật khẩu",
+            description = "Xác thực email và mật khẩu, kiểm tra trạng thái tài khoản, phát hành JWT access token và set HttpOnly refresh token cookie."
+    )
+    @PostMapping("/login")
+    public ApiResponse<TokenResponse> login(
+            @Valid @RequestBody EmailLoginRequest request,
+            HttpServletRequest httpServletRequest,
+            HttpServletResponse response
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:login:" + resolveClientKey(httpServletRequest),
+                10,
+                Duration.ofMinutes(5),
+                "Bạn đã thử đăng nhập quá nhiều lần, vui lòng thử lại sau ít phút"
+        );
+        TokenResponse tokenResponse = emailAuthService.login(request);
+        addRefreshTokenCookie(response, tokenResponse.getRefreshToken());
+        if (!isMobileClient(null, httpServletRequest)) {
+            tokenResponse.setRefreshToken(null);
+        }
+        return ApiResponse.success(tokenResponse);
+    }
 
     @Operation(summary = "Cấp nonce đăng nhập Google", description = "Phát hành nonce dùng một lần cho Google Identity Services. FE phải truyền nonce này vào GIS trước khi nhận credential.")
     @GetMapping("/google/nonce")

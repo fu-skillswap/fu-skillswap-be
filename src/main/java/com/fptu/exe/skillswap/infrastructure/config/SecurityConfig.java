@@ -59,6 +59,10 @@ public class SecurityConfig {
                     auth
                     // Endpoint công khai.
                             .requestMatchers(
+                                    "/api/auth/register",
+                                    "/api/auth/resend-otp",
+                                    "/api/auth/verify-email",
+                                    "/api/auth/login",
                                     "/api/auth/google",
                                     "/api/auth/google/mobile",
                                     "/api/auth/google/nonce",

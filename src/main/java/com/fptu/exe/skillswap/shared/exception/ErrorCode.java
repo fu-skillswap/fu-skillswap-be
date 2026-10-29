@@ -27,6 +27,11 @@ public enum ErrorCode {
     USER_BANNED(403, "AUTH_1004", "error.auth.user_banned", "Tài khoản đã bị khóa"),
     USER_INACTIVE(403, "AUTH_1005", "error.auth.user_inactive", "Tài khoản chưa hoạt động"),
     OAUTH_VERIFICATION_FAILED(400, "AUTH_1006", "error.auth.oauth_failed", "Xác thực Google thất bại"),
+    INVALID_CREDENTIALS(400, "AUTH_1008", "error.auth.invalid_credentials", "Email hoặc mật khẩu không chính xác"),
+    OTP_INVALID(400, "AUTH_1009", "error.auth.otp_invalid", "Mã xác thực không chính xác"),
+    OTP_EXPIRED(400, "AUTH_1010", "error.auth.otp_expired", "Mã xác thực đã hết hạn"),
+    OTP_MAX_ATTEMPTS_EXCEEDED(429, "AUTH_1011", "error.auth.otp_max_attempts", "Đã vượt quá số lần thử mã xác thực"),
+    ACCOUNT_PASSWORD_NOT_SET(400, "AUTH_1012", "error.auth.password_not_set", "Tài khoản chưa thiết lập mật khẩu"),
 
     // Google Calendar.
     GOOGLE_CALENDAR_CONNECTION_REQUIRED(409, "CAL_4401", "error.calendar.connection_required", "Cần kết nối Google Calendar trước"),

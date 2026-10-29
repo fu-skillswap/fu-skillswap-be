@@ -136,7 +136,7 @@ public class IdentityLoginTransactionService {
         }
     }
 
-    private TokenResponse generateTokensAndCreateSession(User user) {
+    public TokenResponse generateTokensAndCreateSession(User user) {
         List<String> roleNames = user.getRoles()
                 .stream()
                 .map(RoleCode::name)
