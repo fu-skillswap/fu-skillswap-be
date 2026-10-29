@@ -19,9 +19,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,11 +37,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest
 @ActiveProfiles("test")
-@TestPropertySource(properties = {
-        "spring.datasource.hikari.maximum-pool-size=35",
-        "spring.datasource.hikari.connection-timeout=30000"
-})
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 public class CouponConcurrency60SlotsTest {
 
     @Autowired
