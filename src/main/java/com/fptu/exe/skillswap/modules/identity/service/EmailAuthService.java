@@ -219,10 +219,10 @@ public class EmailAuthService {
 
     private void sendVerificationEmail(String email, String recipientName, String otpCode, boolean isAccountLinking) {
         String subject = isAccountLinking
-                ? "[SkillSwap] Xác thực liên kết mật khẩu tài khoản"
+                ? "[SkillSwap] Mã xác thực email tài khoản SkillSwap"
                 : "[SkillSwap] Mã xác thực kích hoạt tài khoản";
         String title = isAccountLinking
-                ? "Liên kết mật khẩu tài khoản"
+                ? "Mã xác thực email tài khoản SkillSwap"
                 : "Kích hoạt tài khoản SkillSwap";
         String intro = isAccountLinking
                 ? "Chúng tôi nhận được yêu cầu thiết lập mật khẩu cho tài khoản Google của bạn trên hệ thống SkillSwap."
