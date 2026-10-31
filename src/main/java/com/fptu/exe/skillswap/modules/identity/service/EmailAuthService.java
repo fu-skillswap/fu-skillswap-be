@@ -30,6 +30,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -256,12 +257,17 @@ public class EmailAuthService {
 
         String html = HtmlEmailTemplate.render(model);
         String plainText = "Xin chào " + recipientName + ",\nMã xác thực OTP của bạn là: " + otpCode + ". Mã có hiệu lực trong 10 phút.";
-        String dedupeKey = "auth:otp:" + email + ":" + System.currentTimeMillis();
+        String dedupeKey = "auth:otp:" + email + ":" + UUID.randomUUID();
+
+        log.info("[EmailAuth] Đã sinh mã OTP cho email {}: {} (hiệu lực 10 phút, isLinked={})", email, otpCode, isAccountLinking);
 
         try {
-            emailDispatchPort.sendHtmlOnce(dedupeKey, email, subject, html, plainText, "EMAIL_VERIFICATION_OTP");
+            boolean queued = emailDispatchPort.sendHtmlOnce(dedupeKey, email, subject, html, plainText, "EMAIL_VERIFICATION_OTP");
+            if (!queued) {
+                log.warn("[EmailAuth] Không thể đưa email OTP vào outbox cho {}", email);
+            }
         } catch (Exception ex) {
-            log.warn("Không thể gửi email OTP tới {}: {}", email, ex.getMessage());
+            log.error("[EmailAuth] Lỗi khi gửi email OTP tới {}: {}", email, ex.getMessage(), ex);
         }
     }
 }

@@ -8,6 +8,8 @@ import com.fptu.exe.skillswap.modules.notification.repository.EmailOutboxReposit
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -65,6 +67,38 @@ class EmailDispatchServiceTest {
         verify(emailOutboxRepository).saveAndFlush(any(EmailOutbox.class));
         verify(emailService).sendHtmlEmail(eq("to@test.com"), eq("Subject"), eq("<p>Body</p>"), eq("Body"), anyString());
         verify(emailOutboxRepository).updateStatus(any(UUID.class), org.mockito.ArgumentMatchers.eq(NotificationStatus.SENT), org.mockito.ArgumentMatchers.isNull());
+    }
+
+    @Test
+    void sendHtmlOnce_whenSynchronizationActive_shouldDeferDispatchUntilAfterCommit() {
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            when(emailOutboxRepository.existsByDedupeKey("key-sync")).thenReturn(false);
+            when(emailOutboxRepository.saveAndFlush(any(EmailOutbox.class))).thenAnswer(invocation -> {
+                EmailOutbox outbox = invocation.getArgument(0);
+                outbox.setId(UUID.randomUUID());
+                return outbox;
+            });
+            when(emailOutboxRepository.claimForSending(any(UUID.class), any(), any(Integer.class))).thenReturn(1);
+            when(emailOutboxRepository.findById(any(UUID.class))).thenAnswer(invocation -> Optional.of(savedOutbox(invocation.getArgument(0))));
+            when(emailService.sendHtmlEmail(eq("to@test.com"), eq("Subject"), eq("<p>Body</p>"), eq("Body"), anyString())).thenReturn(true);
+
+            boolean accepted = service.sendHtmlOnce("key-sync", "to@test.com", "Subject", "<p>Body</p>", "Body", "TEMPLATE");
+
+            assertTrue(accepted);
+            // Before commit, dispatch should NOT have been invoked yet!
+            verify(emailService, never()).sendHtmlEmail(any(), any(), any(), any(), any());
+
+            // Simulate transaction commit
+            for (TransactionSynchronization sync : TransactionSynchronizationManager.getSynchronizations()) {
+                sync.afterCommit();
+            }
+
+            // Now dispatch should have run!
+            verify(emailService).sendHtmlEmail(eq("to@test.com"), eq("Subject"), eq("<p>Body</p>"), eq("Body"), anyString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

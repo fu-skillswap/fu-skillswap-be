@@ -14,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 
@@ -55,7 +57,16 @@ public class EmailDispatchService implements EmailDispatchPort {
         }
         // This is only a fast path. The durable PENDING record is also picked up by
         // EmailRetryScheduler if the process stops immediately after the transaction.
-        self.dispatchEmailAsync(outboxId);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    self.dispatchEmailAsync(outboxId);
+                }
+            });
+        } else {
+            self.dispatchEmailAsync(outboxId);
+        }
         return true;
     }
 
