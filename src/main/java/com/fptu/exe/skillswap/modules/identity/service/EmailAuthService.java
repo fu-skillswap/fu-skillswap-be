@@ -230,12 +230,12 @@ public class EmailAuthService {
 
         String detailRows = """
                 <tr>
-                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Segoe UI',Arial,sans-serif;">Mã xác thực (OTP)</td>
-                  <td style="padding:16px 20px;font-size:24px;font-weight:700;color:#0b3a67;letter-spacing:4px;font-family:'Segoe UI',Arial,sans-serif;">%s</td>
+                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Roboto',Arial,sans-serif;">Mã xác thực (OTP)</td>
+                  <td style="padding:16px 20px;font-size:24px;font-weight:700;color:#0b3a67;letter-spacing:4px;font-family:'Roboto',Arial,sans-serif;">%s</td>
                 </tr>
                 <tr>
-                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Segoe UI',Arial,sans-serif;">Thời hạn hiệu lực</td>
-                  <td style="padding:16px 20px;font-size:14px;font-weight:600;color:#102a43;font-family:'Segoe UI',Arial,sans-serif;">10 phút</td>
+                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Roboto',Arial,sans-serif;">Thời hạn hiệu lực</td>
+                  <td style="padding:16px 20px;font-size:14px;font-weight:600;color:#102a43;font-family:'Roboto',Arial,sans-serif;">10 phút</td>
                 </tr>
                 """.formatted(otpCode);
 

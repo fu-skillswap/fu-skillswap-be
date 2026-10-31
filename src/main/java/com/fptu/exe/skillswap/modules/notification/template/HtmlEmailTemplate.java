@@ -3,7 +3,7 @@ package com.fptu.exe.skillswap.modules.notification.template;
 public final class HtmlEmailTemplate {
 
     public static final String PLATFORM_URL = "https://skillswap.asia";
-    private static final String FONT_STACK = "'Segoe UI', Arial, Helvetica, sans-serif";
+    public static final String FONT_STACK = "'Roboto', 'Segoe UI', Arial, Helvetica, sans-serif";
 
     private HtmlEmailTemplate() {
     }
@@ -16,6 +16,15 @@ public final class HtmlEmailTemplate {
                   <meta charset="UTF-8">
                   <meta name="viewport" content="width=device-width, initial-scale=1.0">
                   <title>%s</title>
+                  <link rel="preconnect" href="https://fonts.googleapis.com">
+                  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+                  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+                  <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700;800&display=swap');
+                    body, table, td, p, a, div, h1, span, strong {
+                      font-family: 'Roboto', 'Segoe UI', Arial, Helvetica, sans-serif !important;
+                    }
+                  </style>
                 </head>
                 <body style="margin:0;padding:0;background:#f2f7fb;font-family:__FONT_STACK__;color:#102a43;">
                   <div style="display:none;max-height:0;overflow:hidden;color:#f2f7fb;font-family:__FONT_STACK__;">%s</div>
