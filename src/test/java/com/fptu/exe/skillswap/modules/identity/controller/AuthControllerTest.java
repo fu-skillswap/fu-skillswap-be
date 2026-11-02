@@ -6,6 +6,8 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.EmailLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailRegisterRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailResendOtpRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailVerifyRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ForgotPasswordRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ResetPasswordRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.EmailRegisterResponse;
@@ -366,5 +368,35 @@ class AuthControllerTest {
 
         assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
         assertEquals(DUMMY_REFRESH, response.getData().getRefreshToken());
+    }
+
+    @Test
+    @DisplayName("Forgot password sends OTP and returns 200")
+    void forgotPassword_success_shouldReturn200() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("student@fpt.edu.vn");
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+
+        ApiResponse<String> response = authController.forgotPassword(request, servletRequest);
+
+        assertEquals(200, response.getStatus());
+        assertTrue(response.getData().contains("gửi đến email"));
+        verify(emailAuthService).forgotPassword(request);
+        verify(rateLimitService).check(eq(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY),
+                eq("auth:forgot:127.0.0.1"), eq(5), any(), any());
+    }
+
+    @Test
+    @DisplayName("Reset password resets password and returns 200")
+    void resetPassword_success_shouldReturn200() {
+        ResetPasswordRequest request = new ResetPasswordRequest("student@fpt.edu.vn", "123456", "NewPassword@123");
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+
+        ApiResponse<String> response = authController.resetPassword(request, servletRequest);
+
+        assertEquals(200, response.getStatus());
+        assertTrue(response.getData().contains("thành công"));
+        verify(emailAuthService).resetPassword(request);
+        verify(rateLimitService).check(eq(com.fptu.exe.skillswap.shared.ratelimit.RateLimitScope.SECURITY),
+                eq("auth:reset:127.0.0.1"), eq(10), any(), any());
     }
 }

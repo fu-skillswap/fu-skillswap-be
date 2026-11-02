@@ -7,6 +7,8 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.EmailLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailRegisterRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailResendOtpRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailVerifyRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ForgotPasswordRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ResetPasswordRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.GoogleMobileLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.EmailRegisterResponse;
@@ -139,6 +141,44 @@ public class AuthController {
             tokenResponse.setRefreshToken(null);
         }
         return ApiResponse.success(tokenResponse);
+    }
+
+    @Operation(
+            summary = "Quên mật khẩu - Gửi mã OTP xác thực",
+            description = "Gửi mã OTP 6 chữ số đến email để xác minh yêu cầu đặt lại mật khẩu."
+    )
+    @PostMapping("/forgot-password")
+    public ApiResponse<String> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:forgot:" + resolveClientKey(httpServletRequest),
+                5,
+                Duration.ofMinutes(10),
+                "Bạn đã gửi quá nhiều yêu cầu, vui lòng thử lại sau ít phút"
+        );
+        emailAuthService.forgotPassword(request);
+        return ApiResponse.success("Mã xác thực đặt lại mật khẩu đã được gửi đến email của bạn");
+    }
+
+    @Operation(
+            summary = "Đặt lại mật khẩu mới bằng mã OTP",
+            description = "Xác thực mã OTP 6 chữ số và cập nhật mật khẩu mới, đồng thời thu hồi mọi phiên đăng nhập cũ vì lý do an toàn."
+    )
+    @PostMapping("/reset-password")
+    public ApiResponse<String> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request,
+            HttpServletRequest httpServletRequest
+    ) {
+        rateLimitService.check(RateLimitScope.SECURITY,
+                "auth:reset:" + resolveClientKey(httpServletRequest),
+                10,
+                Duration.ofMinutes(10),
+                "Bạn thao tác quá nhanh, vui lòng thử lại sau"
+        );
+        emailAuthService.resetPassword(request);
+        return ApiResponse.success("Đặt lại mật khẩu thành công. Vui lòng đăng nhập bằng mật khẩu mới.");
     }
 
     @Operation(summary = "Cấp nonce đăng nhập Google", description = "Phát hành nonce dùng một lần cho Google Identity Services. FE phải truyền nonce này vào GIS trước khi nhận credential.")

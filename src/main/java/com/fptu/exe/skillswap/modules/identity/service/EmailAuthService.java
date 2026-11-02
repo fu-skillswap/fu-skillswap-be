@@ -8,10 +8,13 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.EmailLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailRegisterRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailResendOtpRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailVerifyRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ForgotPasswordRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ResetPasswordRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.response.EmailRegisterResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.EmailVerificationRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.notification.port.EmailDispatchPort;
 import com.fptu.exe.skillswap.modules.notification.template.HtmlEmailTemplate;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
@@ -39,6 +42,7 @@ public class EmailAuthService {
 
     private final UserRepository userRepository;
     private final EmailVerificationRepository emailVerificationRepository;
+    private final UserSessionRepository userSessionRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailDispatchPort emailDispatchPort;
     private final IdentityLoginTransactionService identityLoginTransactionService;
@@ -111,9 +115,13 @@ public class EmailAuthService {
         verification.setExpiresAt(timeProvider.nowBusiness().plusMinutes(10));
         emailVerificationRepository.save(verification);
 
-        boolean isLinked = (verification.getType() == EmailVerificationType.LINK_GOOGLE_ACCOUNT);
         String name = verification.getFullName() != null ? verification.getFullName() : "Người dùng";
-        sendVerificationEmail(email, name, newOtpCode, isLinked);
+        if (verification.getType() == EmailVerificationType.RESET_PASSWORD) {
+            sendResetPasswordEmail(email, name, newOtpCode);
+        } else {
+            boolean isLinked = (verification.getType() == EmailVerificationType.LINK_GOOGLE_ACCOUNT);
+            sendVerificationEmail(email, name, newOtpCode, isLinked);
+        }
     }
 
     @Transactional
@@ -169,6 +177,80 @@ public class EmailAuthService {
         }
 
         return identityLoginTransactionService.generateTokensAndCreateSession(authenticatedUser);
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+        String email = normalizeEmail(request.email());
+        User user = userRepository.findByEmailIncludingDeleted(email)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy tài khoản với email này"));
+
+        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.DELETED) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản đã bị xóa khỏi hệ thống");
+        }
+        if (user.getStatus() == UserStatus.BANNED) {
+            throw new BaseException(ErrorCode.USER_BANNED, "Tài khoản của bạn đã bị khóa");
+        }
+
+        String otpCode = generateOtp();
+        LocalDateTime expiresAt = timeProvider.nowBusiness().plusMinutes(10);
+
+        EmailVerification verification = EmailVerification.builder()
+                .email(email)
+                .otpCode(otpCode)
+                .type(EmailVerificationType.RESET_PASSWORD)
+                .fullName(user.getFullName())
+                .attempts(0)
+                .expiresAt(expiresAt)
+                .build();
+        emailVerificationRepository.save(verification);
+
+        sendResetPasswordEmail(email, user.getFullName(), otpCode);
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        String email = normalizeEmail(request.email());
+        EmailVerification verification = emailVerificationRepository
+                .findTopByEmailAndTypeAndVerifiedAtIsNullOrderByCreatedAtDesc(email, EmailVerificationType.RESET_PASSWORD)
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Không tìm thấy yêu cầu đặt lại mật khẩu hoặc mã đã được sử dụng."));
+
+        if (verification.getExpiresAt().isBefore(timeProvider.nowBusiness())) {
+            throw new BaseException(ErrorCode.OTP_EXPIRED, "Mã xác thực đã hết hạn. Vui lòng yêu cầu mã mới.");
+        }
+
+        if (verification.getAttempts() >= 5) {
+            throw new BaseException(ErrorCode.OTP_MAX_ATTEMPTS_EXCEEDED, "Bạn đã nhập sai mã xác thực quá 5 lần. Vui lòng yêu cầu mã mới.");
+        }
+
+        if (!verification.getOtpCode().equals(request.otpCode().trim())) {
+            verification.setAttempts(verification.getAttempts() + 1);
+            emailVerificationRepository.save(verification);
+            throw new BaseException(ErrorCode.OTP_INVALID, "Mã xác thực không chính xác.");
+        }
+
+        verification.setVerifiedAt(timeProvider.nowBusiness());
+        emailVerificationRepository.save(verification);
+
+        User user = userRepository.findByEmailIncludingDeleted(email)
+                .orElseThrow(() -> new BaseException(ErrorCode.USER_NOT_FOUND, "Không tìm thấy tài khoản người dùng"));
+
+        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.DELETED) {
+            throw new BaseException(ErrorCode.USER_NOT_FOUND, "Tài khoản đã bị xóa khỏi hệ thống");
+        }
+        if (user.getStatus() == UserStatus.BANNED) {
+            throw new BaseException(ErrorCode.USER_BANNED, "Tài khoản của bạn đã bị khóa");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        if (user.getStatus() == UserStatus.INACTIVE) {
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        userRepository.save(user);
+
+        // Revoke all existing sessions to invalidate compromised logins
+        userSessionRepository.revokeAllByUserId(user.getId());
+        log.info("[EmailAuth] Đã đặt lại mật khẩu và thu hồi tất cả phiên đăng nhập của user: {}", user.getId());
     }
 
     @Transactional
@@ -268,6 +350,54 @@ public class EmailAuthService {
             }
         } catch (Exception ex) {
             log.error("[EmailAuth] Lỗi khi gửi email OTP tới {}: {}", email, ex.getMessage(), ex);
+        }
+    }
+
+    private void sendResetPasswordEmail(String email, String recipientName, String otpCode) {
+        String subject = "[SkillSwap] Mã xác thực đặt lại mật khẩu";
+        String title = "Đặt lại mật khẩu SkillSwap";
+        String intro = "Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản SkillSwap của bạn. Nếu bạn không gửi yêu cầu này, vui lòng bỏ qua email hoặc đổi mật khẩu để bảo vệ tài khoản.";
+
+        String detailRows = """
+                <tr>
+                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Roboto',Arial,sans-serif;">Mã xác thực (OTP)</td>
+                  <td style="padding:16px 20px;font-size:24px;font-weight:700;color:#0b3a67;letter-spacing:4px;font-family:'Roboto',Arial,sans-serif;">%s</td>
+                </tr>
+                <tr>
+                  <td style="padding:16px 20px;font-size:14px;color:#5d7083;width:40%%;font-family:'Roboto',Arial,sans-serif;">Thời hạn hiệu lực</td>
+                  <td style="padding:16px 20px;font-size:14px;font-weight:600;color:#102a43;font-family:'Roboto',Arial,sans-serif;">10 phút</td>
+                </tr>
+                """.formatted(otpCode);
+
+        HtmlEmailTemplate.Model model = new HtmlEmailTemplate.Model(
+                subject,
+                "Mã OTP đặt lại mật khẩu: " + otpCode,
+                "Bảo mật",
+                title,
+                "Yêu cầu khôi phục mật khẩu tài khoản",
+                "Mã xác thực",
+                otpCode,
+                recipientName,
+                intro,
+                detailRows,
+                "Nhập mã OTP 6 chữ số này trên ứng dụng cùng mật khẩu mới để hoàn tất việc đặt lại mật khẩu.",
+                "Mở SkillSwap",
+                HtmlEmailTemplate.PLATFORM_URL
+        );
+
+        String html = HtmlEmailTemplate.render(model);
+        String plainText = "Xin chào " + recipientName + ",\nMã xác thực đặt lại mật khẩu của bạn là: " + otpCode + ". Mã có hiệu lực trong 10 phút.";
+        String dedupeKey = "auth:otp:reset:" + email + ":" + UUID.randomUUID();
+
+        log.info("[EmailAuth] Đã sinh mã OTP đặt lại mật khẩu cho email {}: {} (hiệu lực 10 phút)", email, otpCode);
+
+        try {
+            boolean queued = emailDispatchPort.sendHtmlOnce(dedupeKey, email, subject, html, plainText, "EMAIL_VERIFICATION_OTP");
+            if (!queued) {
+                log.warn("[EmailAuth] Không thể đưa email OTP đặt lại mật khẩu vào outbox cho {}", email);
+            }
+        } catch (Exception ex) {
+            log.error("[EmailAuth] Lỗi khi gửi email OTP đặt lại mật khẩu tới {}: {}", email, ex.getMessage(), ex);
         }
     }
 }

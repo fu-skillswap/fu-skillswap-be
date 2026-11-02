@@ -8,6 +8,9 @@ import com.fptu.exe.skillswap.modules.identity.dto.request.EmailLoginRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailRegisterRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailResendOtpRequest;
 import com.fptu.exe.skillswap.modules.identity.dto.request.EmailVerifyRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ForgotPasswordRequest;
+import com.fptu.exe.skillswap.modules.identity.dto.request.ResetPasswordRequest;
+import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
 import com.fptu.exe.skillswap.modules.identity.dto.response.EmailRegisterResponse;
 import com.fptu.exe.skillswap.modules.identity.dto.response.TokenResponse;
 import com.fptu.exe.skillswap.modules.identity.repository.EmailVerificationRepository;
@@ -37,6 +40,7 @@ class EmailAuthServiceTest {
 
     private UserRepository userRepository;
     private EmailVerificationRepository emailVerificationRepository;
+    private UserSessionRepository userSessionRepository;
     private PasswordEncoder passwordEncoder;
     private EmailDispatchPort emailDispatchPort;
     private IdentityLoginTransactionService identityLoginTransactionService;
@@ -50,6 +54,7 @@ class EmailAuthServiceTest {
     void setUp() {
         userRepository = mock(UserRepository.class);
         emailVerificationRepository = mock(EmailVerificationRepository.class);
+        userSessionRepository = mock(UserSessionRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
         emailDispatchPort = mock(EmailDispatchPort.class);
         identityLoginTransactionService = mock(IdentityLoginTransactionService.class);
@@ -60,6 +65,7 @@ class EmailAuthServiceTest {
         emailAuthService = new EmailAuthService(
                 userRepository,
                 emailVerificationRepository,
+                userSessionRepository,
                 passwordEncoder,
                 emailDispatchPort,
                 identityLoginTransactionService
@@ -482,5 +488,143 @@ class EmailAuthServiceTest {
                 .isInstanceOf(BaseException.class)
                 .extracting("errorCode")
                 .isEqualTo(ErrorCode.USER_INACTIVE);
+    }
+
+    // --- FORGOT & RESET PASSWORD TESTS ---
+
+    @Test
+    void forgotPassword_whenUserNotFound_shouldThrowUserNotFound() {
+        String email = "unknown@fpt.edu.vn";
+        ForgotPasswordRequest request = new ForgotPasswordRequest(email);
+        when(userRepository.findByEmailIncludingDeleted(email)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailAuthService.forgotPassword(request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USER_NOT_FOUND);
+    }
+
+    @Test
+    void forgotPassword_whenUserBanned_shouldThrowUserBanned() {
+        String email = "banned@fpt.edu.vn";
+        ForgotPasswordRequest request = new ForgotPasswordRequest(email);
+        User user = User.builder().id(UUID.randomUUID()).email(email).status(UserStatus.BANNED).build();
+        when(userRepository.findByEmailIncludingDeleted(email)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> emailAuthService.forgotPassword(request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.USER_BANNED);
+    }
+
+    @Test
+    void forgotPassword_validUser_shouldCreateResetVerificationAndSendEmail() {
+        String email = "student@fpt.edu.vn";
+        ForgotPasswordRequest request = new ForgotPasswordRequest(email);
+        User user = User.builder()
+                .id(UUID.randomUUID())
+                .email(email)
+                .fullName("Nguyen Van A")
+                .status(UserStatus.ACTIVE)
+                .build();
+        when(userRepository.findByEmailIncludingDeleted(email)).thenReturn(Optional.of(user));
+
+        emailAuthService.forgotPassword(request);
+
+        ArgumentCaptor<EmailVerification> captor = ArgumentCaptor.forClass(EmailVerification.class);
+        verify(emailVerificationRepository).save(captor.capture());
+        EmailVerification saved = captor.getValue();
+        assertThat(saved.getEmail()).isEqualTo(email);
+        assertThat(saved.getType()).isEqualTo(EmailVerificationType.RESET_PASSWORD);
+        assertThat(saved.getOtpCode()).matches("^\\d{6}$");
+        assertThat(saved.getExpiresAt()).isEqualTo(fixedNow.plusMinutes(10));
+        verify(emailDispatchPort).sendHtmlOnce(any(), eq(email), eq("[SkillSwap] Mã xác thực đặt lại mật khẩu"), any(), any(), eq("EMAIL_VERIFICATION_OTP"));
+    }
+
+    @Test
+    void resetPassword_whenVerificationNotFound_shouldThrowBadRequest() {
+        String email = "student@fpt.edu.vn";
+        ResetPasswordRequest request = new ResetPasswordRequest(email, "123456", "NewPassword@123");
+        when(emailVerificationRepository.findTopByEmailAndTypeAndVerifiedAtIsNullOrderByCreatedAtDesc(email, EmailVerificationType.RESET_PASSWORD))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> emailAuthService.resetPassword(request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.BAD_REQUEST);
+    }
+
+    @Test
+    void resetPassword_whenOtpExpired_shouldThrowOtpExpired() {
+        String email = "student@fpt.edu.vn";
+        ResetPasswordRequest request = new ResetPasswordRequest(email, "123456", "NewPassword@123");
+        EmailVerification verification = EmailVerification.builder()
+                .email(email)
+                .otpCode("123456")
+                .type(EmailVerificationType.RESET_PASSWORD)
+                .expiresAt(fixedNow.minusMinutes(1))
+                .build();
+        when(emailVerificationRepository.findTopByEmailAndTypeAndVerifiedAtIsNullOrderByCreatedAtDesc(email, EmailVerificationType.RESET_PASSWORD))
+                .thenReturn(Optional.of(verification));
+
+        assertThatThrownBy(() -> emailAuthService.resetPassword(request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.OTP_EXPIRED);
+    }
+
+    @Test
+    void resetPassword_whenWrongOtp_shouldIncrementAttemptsAndThrowOtpInvalid() {
+        String email = "student@fpt.edu.vn";
+        ResetPasswordRequest request = new ResetPasswordRequest(email, "000000", "NewPassword@123");
+        EmailVerification verification = EmailVerification.builder()
+                .email(email)
+                .otpCode("123456")
+                .attempts(1)
+                .type(EmailVerificationType.RESET_PASSWORD)
+                .expiresAt(fixedNow.plusMinutes(5))
+                .build();
+        when(emailVerificationRepository.findTopByEmailAndTypeAndVerifiedAtIsNullOrderByCreatedAtDesc(email, EmailVerificationType.RESET_PASSWORD))
+                .thenReturn(Optional.of(verification));
+
+        assertThatThrownBy(() -> emailAuthService.resetPassword(request))
+                .isInstanceOf(BaseException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.OTP_INVALID);
+
+        assertThat(verification.getAttempts()).isEqualTo(2);
+        verify(emailVerificationRepository).save(verification);
+    }
+
+    @Test
+    void resetPassword_validOtp_shouldUpdatePassword_revokeSessions_andMarkVerified() {
+        String email = "student@fpt.edu.vn";
+        ResetPasswordRequest request = new ResetPasswordRequest(email, "123456", "NewPassword@123");
+        EmailVerification verification = EmailVerification.builder()
+                .email(email)
+                .otpCode("123456")
+                .attempts(0)
+                .type(EmailVerificationType.RESET_PASSWORD)
+                .expiresAt(fixedNow.plusMinutes(5))
+                .build();
+        UUID userId = UUID.randomUUID();
+        User user = User.builder()
+                .id(userId)
+                .email(email)
+                .passwordHash("old_hashed_password")
+                .status(UserStatus.ACTIVE)
+                .build();
+
+        when(emailVerificationRepository.findTopByEmailAndTypeAndVerifiedAtIsNullOrderByCreatedAtDesc(email, EmailVerificationType.RESET_PASSWORD))
+                .thenReturn(Optional.of(verification));
+        when(userRepository.findByEmailIncludingDeleted(email)).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("NewPassword@123")).thenReturn("new_hashed_password");
+
+        emailAuthService.resetPassword(request);
+
+        assertThat(verification.getVerifiedAt()).isEqualTo(fixedNow);
+        assertThat(user.getPasswordHash()).isEqualTo("new_hashed_password");
+        verify(userRepository).save(user);
+        verify(userSessionRepository).revokeAllByUserId(userId);
     }
 }

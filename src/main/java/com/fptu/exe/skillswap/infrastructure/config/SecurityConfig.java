@@ -63,6 +63,8 @@ public class SecurityConfig {
                                     "/api/auth/resend-otp",
                                     "/api/auth/verify-email",
                                     "/api/auth/login",
+                                    "/api/auth/forgot-password",
+                                    "/api/auth/reset-password",
                                     "/api/auth/google",
                                     "/api/auth/google/mobile",
                                     "/api/auth/google/nonce",
@@ -117,7 +119,7 @@ public class SecurityConfig {
                                     RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}$"),
                                     RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}/availability-preview$"),
                                     RegexRequestMatcher.regexMatcher(HttpMethod.GET, "^/api/mentors/[0-9a-fA-F-]{36}/reviews$")
-                            ).permitAll();
+                             ).permitAll();
                     auth
                             .requestMatchers(HttpMethod.POST,
                                     "/api/blog/posts/*/view"
