@@ -77,6 +77,9 @@ class IdentityServiceTest {
     @Mock
     private com.fptu.exe.skillswap.modules.identity.repository.DataDeletionRequestRepository dataDeletionRequestRepository;
 
+    @Mock
+    private com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository oauthAccountRepository;
+
     private JwtProperties jwtProperties;
 
     private IdentityService identityService;
@@ -112,7 +115,8 @@ class IdentityServiceTest {
                 jwtProperties,
                 refreshTokenCookieProperties,
                 applicationEventPublisher,
-                dataDeletionRequestRepository
+                dataDeletionRequestRepository,
+                oauthAccountRepository
         );
     }
 
@@ -195,6 +199,25 @@ class IdentityServiceTest {
         when(jwtTokenProvider.hashToken("refresh-token-1")).thenReturn("hash-1");
         when(userSessionRepository.findByRefreshTokenHashForUpdate("hash-1")).thenReturn(Optional.of(rotatingSession));
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+        var ex = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> identityService.refreshToken("refresh-token-1"));
+
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.SESSION_EXPIRED, ex.getErrorCode());
+        assertTrue(rotatingSession.isRevoked());
+        assertEquals(UserSessionState.EXPIRED, rotatingSession.getSessionState());
+        verify(userSessionRepository).save(rotatingSession);
+    }
+
+    @Test
+    void refreshToken_shouldNotReuseRevokedSession() {
+        UserSession revokedSession = new UserSession();
+        revokedSession.setUser(user);
+        revokedSession.setRefreshTokenHash("hash-1");
+        revokedSession.setRevoked(true);
+
+        when(jwtTokenProvider.hashToken("refresh-token-1")).thenReturn("hash-1");
+        when(userSessionRepository.findByRefreshTokenHashForUpdate("hash-1")).thenReturn(Optional.of(revokedSession));
 
         var ex = assertThrows(com.fptu.exe.skillswap.shared.exception.BaseException.class,
                 () -> identityService.refreshToken("refresh-token-1"));
@@ -290,6 +313,7 @@ class IdentityServiceTest {
 
         verify(userRepository).save(user);
         verify(userSessionRepository).revokeAllByUserId(userId);
+        verify(oauthAccountRepository).deleteAllByUserId(userId);
         verify(applicationEventPublisher).publishEvent(any(com.fptu.exe.skillswap.shared.event.UserDeletedEvent.class));
     }
 
@@ -305,6 +329,7 @@ class IdentityServiceTest {
         assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.USER_NOT_FOUND, ex.getErrorCode());
         verify(userRepository, never()).save(any());
         verify(userSessionRepository, never()).revokeAllByUserId(any());
+        verify(oauthAccountRepository, never()).deleteAllByUserId(any());
         verify(applicationEventPublisher, never()).publishEvent(any());
     }
 

@@ -4,14 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fptu.exe.skillswap.infrastructure.security.UserPrincipal;
 import com.fptu.exe.skillswap.modules.identity.domain.DataDeletionRequest;
 import com.fptu.exe.skillswap.modules.identity.domain.DataDeletionRequestStatus;
+import com.fptu.exe.skillswap.modules.identity.domain.OauthAccount;
 import com.fptu.exe.skillswap.modules.identity.domain.User;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSession;
 import com.fptu.exe.skillswap.modules.identity.domain.UserSessionState;
 import com.fptu.exe.skillswap.modules.identity.domain.UserStatus;
 import com.fptu.exe.skillswap.modules.identity.dto.request.DataDeletionPublicRequest;
 import com.fptu.exe.skillswap.modules.identity.repository.DataDeletionRequestRepository;
+import com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserRepository;
 import com.fptu.exe.skillswap.modules.identity.repository.UserSessionRepository;
+import com.fptu.exe.skillswap.modules.identity.service.GoogleAuthService;
+import com.fptu.exe.skillswap.modules.identity.service.IdentityLoginTransactionService;
 import com.fptu.exe.skillswap.shared.constant.RoleCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,6 +61,12 @@ class AccountDeletionIntegrationTest {
     private UserSessionRepository userSessionRepository;
 
     @Autowired
+    private OauthAccountRepository oauthAccountRepository;
+
+    @Autowired
+    private IdentityLoginTransactionService identityLoginTransactionService;
+
+    @Autowired
     private DataDeletionRequestRepository dataDeletionRequestRepository;
 
     private User testUser;
@@ -86,6 +96,13 @@ class AccountDeletionIntegrationTest {
                 .sessionState(UserSessionState.ACTIVE)
                 .build();
         userSessionRepository.saveAndFlush(session);
+
+        oauthAccountRepository.saveAndFlush(OauthAccount.builder()
+                .user(testUser)
+                .provider("google")
+                .providerUserId("google-sub-" + testUser.getId())
+                .providerEmail(testUser.getEmail())
+                .build());
     }
 
     @Test
@@ -108,6 +125,42 @@ class AccountDeletionIntegrationTest {
         // Verify sessions revoked
         List<UserSession> activeSessions = userSessionRepository.findByUserIdAndIsRevokedFalse(testUser.getId());
         assertTrue(activeSessions.isEmpty());
+
+        // Verify oauth accounts unlinked/deleted
+        assertTrue(oauthAccountRepository.findByProviderAndProviderUserId("google", "google-sub-" + testUser.getId()).isEmpty());
+    }
+
+    @Test
+    void deleteMyAccount_thenReRegisterWithGoogle_shouldSucceedWithNewUser() throws Exception {
+        String originalEmail = testUser.getEmail();
+        String googleSub = "google-sub-" + testUser.getId();
+
+        // 1. Delete account
+        mockMvc.perform(delete("/api/me")
+                        .with(authentication(auth(userPrincipal))))
+                .andExpect(status().isOk());
+
+        // 2. Re-login with same Google account (same sub, same email)
+        var googleUserInfo = new GoogleAuthService.GoogleUserInfo();
+        googleUserInfo.setSub(googleSub);
+        googleUserInfo.setEmail(originalEmail);
+        googleUserInfo.setName("Nguyen Van A New");
+        googleUserInfo.setPicture("https://example.com/new-avatar.jpg");
+
+        var tokenResponse = identityLoginTransactionService.loginWithVerifiedGoogleUser(googleUserInfo);
+        assertNotNull(tokenResponse);
+        assertNotNull(tokenResponse.getAccessToken());
+
+        // 3. Verify brand new user was created with original email and active status
+        User reRegisteredUser = userRepository.findByEmail(originalEmail).orElseThrow();
+        assertNotEquals(testUser.getId(), reRegisteredUser.getId());
+        assertEquals(UserStatus.ACTIVE, reRegisteredUser.getStatus());
+        assertEquals("Nguyen Van A New", reRegisteredUser.getFullName());
+        assertNull(reRegisteredUser.getDeletedAt());
+
+        // 4. Verify new oauth link is pointing to the new user
+        var newOauthAccount = oauthAccountRepository.findByProviderAndProviderUserId("google", googleSub).orElseThrow();
+        assertEquals(reRegisteredUser.getId(), newOauthAccount.getUser().getId());
     }
 
     @Test

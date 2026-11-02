@@ -48,6 +48,7 @@ public class IdentityService {
     private final RefreshTokenCookieProperties refreshTokenCookieProperties;
     private final org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
     private final com.fptu.exe.skillswap.modules.identity.repository.DataDeletionRequestRepository dataDeletionRequestRepository;
+    private final com.fptu.exe.skillswap.modules.identity.repository.OauthAccountRepository oauthAccountRepository;
     private TimeProvider timeProvider = TimeProvider.from(Clock.systemUTC());
 
     @Autowired(required = false)
@@ -325,6 +326,9 @@ public class IdentityService {
         // Revoke all active sessions
         userSessionRepository.revokeAllByUserId(userId);
 
+        // Delete/unlink oauth accounts so provider identity can be cleanly re-registered
+        oauthAccountRepository.deleteAllByUserId(userId);
+
         // Publish domain event for cascading cleanup
         applicationEventPublisher.publishEvent(new UserDeletedEvent(user.getId()));
     }
@@ -342,7 +346,3 @@ public class IdentityService {
 
     private record TokenIssuance(TokenResponse tokenResponse, UserSession session) {}
 }
-
-
-
-
