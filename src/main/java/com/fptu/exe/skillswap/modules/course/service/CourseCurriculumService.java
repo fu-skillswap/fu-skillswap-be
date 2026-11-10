@@ -4,6 +4,7 @@ import com.fptu.exe.skillswap.modules.course.domain.*;
 import com.fptu.exe.skillswap.modules.course.dto.request.*;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseCurriculumResponse;
 import com.fptu.exe.skillswap.modules.course.repository.*;
+import com.fptu.exe.skillswap.modules.course.util.YouTubeUrlUtils;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
@@ -87,6 +88,17 @@ public class CourseCurriculumService {
         if (!material.getChapter().getCourse().getId().equals(courseId) || !isCurrentActiveCourseOwner(material.getChapter().getCourse(), userId)) throw new AccessDeniedException("Only course mentor can change curriculum");
         assertVersion(material.getId(), material.getVersion(), request.expectedVersion());
         material.setTitle(request.title()); material.setPreviewable(request.previewable()); material.setPublished(request.published());
+        if (material.getStorageProviderType() == StorageProviderType.YOUTUBE) {
+            if (request.youtubeUrl() != null && !request.youtubeUrl().isBlank()) {
+                String videoId = YouTubeUrlUtils.extractVideoId(request.youtubeUrl());
+                material.setYoutubeVideoId(videoId);
+                material.setYoutubeUrl(YouTubeUrlUtils.buildCanonicalUrl(videoId));
+                material.setThumbnailUrl(YouTubeUrlUtils.buildThumbnailUrl(videoId));
+            }
+            if (request.durationSeconds() != null) {
+                material.setDurationSeconds(request.durationSeconds());
+            }
+        }
         refreshCourseTotal(material.getChapter().getCourse());
         return material;
     }
@@ -109,7 +121,30 @@ public class CourseCurriculumService {
 
     private CourseCurriculumResponse.Material toMaterial(CourseMaterial material, boolean mentor, boolean enrolled, CourseMaterialProgress progress) {
         String access = mentor || material.isPreviewable() || enrolled ? "AVAILABLE" : "LOCKED";
-        return new CourseCurriculumResponse.Material(material.getId(), material.getTitle(), material.getMaterialType(), material.getSortOrder(), material.isPreviewable(), material.isPublished(), material.getStatus(), material.getDurationSeconds(), material.getThumbnailUrl(), access, progress == null ? null : progress.getCompletionPercentage(), progress != null && progress.isCompleted(), material.getVersion());
+        boolean isAvailable = "AVAILABLE".equals(access);
+        String youtubeVideoId = (isAvailable && material.getStorageProviderType() == StorageProviderType.YOUTUBE)
+                ? material.getYoutubeVideoId() : null;
+        String embedUrl = (isAvailable && material.getStorageProviderType() == StorageProviderType.YOUTUBE && youtubeVideoId != null)
+                ? YouTubeUrlUtils.buildEmbedUrl(youtubeVideoId) : null;
+
+        return new CourseCurriculumResponse.Material(
+                material.getId(),
+                material.getTitle(),
+                material.getMaterialType(),
+                material.getSortOrder(),
+                material.isPreviewable(),
+                material.isPublished(),
+                material.getStatus(),
+                material.getDurationSeconds(),
+                material.getThumbnailUrl(),
+                access,
+                progress == null ? null : progress.getCompletionPercentage(),
+                progress != null && progress.isCompleted(),
+                material.getVersion(),
+                material.getStorageProviderType(),
+                youtubeVideoId,
+                embedUrl
+        );
     }
     private boolean hasEntitlement(UUID courseId, UUID userId) { return enrollmentRepository.findByCourseIdAndStudentUserId(courseId, userId).map(e -> e.getStatus() == EnrollmentStatus.ACTIVE || e.getStatus() == EnrollmentStatus.COMPLETED).orElse(false); }
     private Course ownedCourse(UUID userId, UUID courseId) { Course course=courseRepository.findById(courseId).orElseThrow(() -> new ResourceNotFoundException("Course not found")); if (!isCurrentActiveCourseOwner(course, userId)) throw new AccessDeniedException("Only course mentor can change curriculum"); return course; }

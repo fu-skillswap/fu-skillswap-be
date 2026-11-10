@@ -7,9 +7,11 @@ import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreatePdfMaterialUploadRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateR2VideoUploadIntentRequest;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreateYouTubeVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.response.*;
 import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.modules.course.repository.*;
+import com.fptu.exe.skillswap.modules.course.util.YouTubeUrlUtils;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
 import com.fptu.exe.skillswap.shared.exception.BadRequestException;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
@@ -51,6 +53,50 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     private final TransactionTemplate transactionTemplate;
     private final MentorOwnershipQueryPort mentorOwnershipQueryPort;
     private final TimeProvider timeProvider;
+
+    @Override
+    @Transactional
+    public CourseVideoPlaybackResponse createYouTubeVideoMaterial(UUID mentorUserId, UUID courseId, UUID chapterId,
+                                                                   CreateYouTubeVideoMaterialRequest request) {
+        CourseChapter chapter = ownedChapter(mentorUserId, courseId, chapterId);
+        assertUnusedOrder(chapterId, request.sortOrder(), null);
+
+        String videoId = YouTubeUrlUtils.extractVideoId(request.youtubeUrl());
+        String canonicalUrl = YouTubeUrlUtils.buildCanonicalUrl(videoId);
+        String embedUrl = YouTubeUrlUtils.buildEmbedUrl(videoId);
+        String thumbnailUrl = YouTubeUrlUtils.buildThumbnailUrl(videoId);
+
+        CourseMaterial material = materialRepository.save(CourseMaterial.builder()
+                .chapter(chapter)
+                .title(request.title())
+                .materialType(CourseMaterialType.VIDEO)
+                .sortOrder(request.sortOrder())
+                .isPreviewable(Boolean.TRUE.equals(request.previewable()))
+                .isPublished(!Boolean.FALSE.equals(request.published()))
+                .storageProviderType(StorageProviderType.YOUTUBE)
+                .status(MaterialStatus.READY)
+                .youtubeVideoId(videoId)
+                .youtubeUrl(canonicalUrl)
+                .thumbnailUrl(thumbnailUrl)
+                .durationSeconds(request.durationSeconds())
+                .uploadedBy(mentorUserId)
+                .uploadedAt(timeProvider.instant())
+                .build());
+
+        refreshCourseTotals(chapter.getCourse());
+
+        return CourseVideoPlaybackResponse.builder()
+                .materialId(material.getId())
+                .title(material.getTitle())
+                .playbackUrl(embedUrl)
+                .embedUrl(embedUrl)
+                .youtubeVideoId(videoId)
+                .storageProviderType(StorageProviderType.YOUTUBE)
+                .thumbnailUrl(thumbnailUrl)
+                .durationSeconds(material.getDurationSeconds())
+                .expiresAt(null)
+                .build();
+    }
 
     @Override
     public CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request) {
@@ -185,10 +231,33 @@ public class CourseVaultServiceImpl implements CourseVaultService {
         if (material.getMaterialType() != CourseMaterialType.VIDEO) throw new BadRequestException(ErrorCode.BAD_REQUEST, "Material is not a video");
         assertAvailable(userId, material);
         if (material.getStatus() != MaterialStatus.READY) throw new BadRequestException(ErrorCode.COURSE_INVALID_STATUS);
+
+        if (material.getStorageProviderType() == StorageProviderType.YOUTUBE) {
+            String videoId = material.getYoutubeVideoId();
+            String embedUrl = YouTubeUrlUtils.buildEmbedUrl(videoId);
+            return CourseVideoPlaybackResponse.builder()
+                    .materialId(material.getId())
+                    .title(material.getTitle())
+                    .playbackUrl(embedUrl)
+                    .embedUrl(embedUrl)
+                    .youtubeVideoId(videoId)
+                    .storageProviderType(StorageProviderType.YOUTUBE)
+                    .thumbnailUrl(material.getThumbnailUrl())
+                    .durationSeconds(material.getDurationSeconds())
+                    .expiresAt(null)
+                    .build();
+        }
+
         VideoStorageProvider.PlaybackUrl playback = videoStorageProvider.generatePlaybackUrl(toVideoAsset(material), clientIp);
-        return CourseVideoPlaybackResponse.builder().materialId(material.getId()).title(material.getTitle())
+        return CourseVideoPlaybackResponse.builder()
+                .materialId(material.getId())
+                .title(material.getTitle())
                 .playbackUrl(playback.url())
-                .thumbnailUrl(material.getThumbnailUrl()).durationSeconds(material.getDurationSeconds()).expiresAt(playback.expiresAt()).build();
+                .storageProviderType(material.getStorageProviderType())
+                .thumbnailUrl(material.getThumbnailUrl())
+                .durationSeconds(material.getDurationSeconds())
+                .expiresAt(playback.expiresAt())
+                .build();
     }
 
     @Override
@@ -215,7 +284,7 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     @Override @Transactional public void markWebhookEventFailed(UUID id, Throwable cause) { BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow();fail(e, cause); }
     @Override @Transactional public List<UUID> claimCourseOutboxEvents(int limit) { Instant now=timeProvider.instant(); List<UUID> ids=outboxEventRepository.findClaimableIdsForUpdateSkipLocked(now,now.minus(5,ChronoUnit.MINUTES),limit);ids.forEach(id->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSING");e.setProcessingStartedAt(now);e.setLastError(null);});return ids; }
     @Override public void processCourseOutboxEvent(UUID id) { CourseOutboxEvent e=outboxEventRepository.findById(id).orElseThrow();if(!"PROCESSING".equals(e.getStatus()))return;if(DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED.equals(e.getEventType())){initializeVideoUpload(e.getAggregateId());return;}if(DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED.equals(e.getEventType())){processMaterialDeletion(e.getAggregateId());markOutboxProcessed(id);return;}markOutboxProcessed(id); }
-    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getMaterialType()==CourseMaterialType.VIDEO)videoStorageProvider.deleteVideo(toVideoAsset(m));if(m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(timeProvider.instant());refreshCourseTotals(locked.getChapter().getCourse());}); }
+    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getMaterialType()==CourseMaterialType.VIDEO && m.getStorageProviderType()!=StorageProviderType.YOUTUBE)videoStorageProvider.deleteVideo(toVideoAsset(m));if(m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(timeProvider.instant());refreshCourseTotals(locked.getChapter().getCourse());}); }
     private void markOutboxProcessed(UUID id){transactionTemplate.executeWithoutResult(s->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSED");e.setProcessingStartedAt(null);e.setNextRetryAt(null);e.setLastError(null);});}
     @Override @Transactional public void markCourseOutboxEventFailed(UUID id,Throwable cause){fail(outboxEventRepository.findByIdForUpdate(id).orElseThrow(),cause);}
     private void fail(BunnyWebhookEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}

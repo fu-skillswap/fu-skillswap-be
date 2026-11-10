@@ -2,6 +2,7 @@ package com.fptu.exe.skillswap.modules.course.dto.response;
 
 import com.fptu.exe.skillswap.modules.course.domain.CourseMaterialType;
 import com.fptu.exe.skillswap.modules.course.domain.MaterialStatus;
+import com.fptu.exe.skillswap.modules.course.domain.StorageProviderType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -47,6 +48,17 @@ public record CourseCurriculumResponse(
             @Schema(description = "Quyền truy cập hiện tại. AVAILABLE: FE có thể mở material nếu status=READY; LOCKED: chỉ hiển thị thông tin khóa/preview và không gọi playback/download. User chưa enrollment hợp lệ thường nhận LOCKED.", example = "AVAILABLE") String access,
             @Schema(description = "Phần trăm người học đã hoàn thành tài liệu, từ 0 đến 100.", example = "50", nullable = true) Integer progressPercentage,
             @Schema(description = "Tài liệu đã hoàn thành hay chưa.", example = "false") boolean completed,
-            @Schema(description = "Technical lifecycle field - dùng để tránh ghi đè thay đổi khi cập nhật tài liệu.", example = "2") long version) {
+            @Schema(description = "Technical lifecycle field - dùng để tránh ghi đè thay đổi khi cập nhật tài liệu.", example = "2") long version,
+            @Schema(description = "Loại lưu trữ của video.", example = "YOUTUBE", nullable = true) StorageProviderType storageProviderType,
+            @Schema(description = "Mã video YouTube nếu quyền là AVAILABLE. Bị ẩn khi LOCKED.", example = "dQw4w9WgXcQ", nullable = true) String youtubeVideoId,
+            @Schema(description = "Link nhúng iframe YouTube nếu quyền là AVAILABLE. Bị ẩn khi LOCKED.", example = "https://www.youtube.com/embed/dQw4w9WgXcQ", nullable = true) String embedUrl) {
+
+        public Material(UUID materialId, String title, CourseMaterialType type, int sortOrder,
+                        boolean previewable, boolean published, MaterialStatus status,
+                        Integer durationSeconds, String thumbnailUrl, String access,
+                        Integer progressPercentage, boolean completed, long version) {
+            this(materialId, title, type, sortOrder, previewable, published, status, durationSeconds,
+                    thumbnailUrl, access, progressPercentage, completed, version, null, null, null);
+        }
     }
 }

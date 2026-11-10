@@ -84,6 +84,12 @@ public class CourseMaterial {
     @Column(name = "thumbnail_url", length = 500)
     private String thumbnailUrl;
 
+    @Column(name = "youtube_video_id", length = 64)
+    private String youtubeVideoId;
+
+    @Column(name = "youtube_url", length = 500)
+    private String youtubeUrl;
+
     @Column(name = "duration_seconds")
     private Integer durationSeconds;
 

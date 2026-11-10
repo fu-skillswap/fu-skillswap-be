@@ -2,41 +2,53 @@ package com.fptu.exe.skillswap.modules.course.service;
 
 import com.fptu.exe.skillswap.modules.course.domain.BunnyWebhookEvent;
 import com.fptu.exe.skillswap.modules.course.dto.CourseVideoWebhook;
-import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreatePdfMaterialUploadRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateR2VideoUploadIntentRequest;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreateVideoMaterialRequest;
+import com.fptu.exe.skillswap.modules.course.dto.request.CreateYouTubeVideoMaterialRequest;
+import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialDownloadResponse;
+import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse;
+import com.fptu.exe.skillswap.modules.course.dto.response.CoursePdfUploadInitResponse;
+import com.fptu.exe.skillswap.modules.course.dto.response.CourseR2VideoUploadIntentResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoUploadInitResponse;
-import com.fptu.exe.skillswap.modules.course.dto.response.CourseR2VideoUploadIntentResponse;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface CourseVaultService {
-    
+
+    CourseVideoPlaybackResponse createYouTubeVideoMaterial(UUID mentorUserId, UUID courseId, UUID chapterId, CreateYouTubeVideoMaterialRequest request);
+
     CourseVideoUploadInitResponse createVideoUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreateVideoMaterialRequest request);
+
     CourseR2VideoUploadIntentResponse createR2VideoUploadIntent(UUID mentorUserId, UUID courseId, UUID chapterId, CreateR2VideoUploadIntentRequest request);
+
     void confirmR2VideoUpload(UUID mentorUserId, UUID courseId, UUID materialId, Integer durationSeconds);
-    com.fptu.exe.skillswap.modules.course.dto.response.CoursePdfUploadInitResponse createPdfUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreatePdfMaterialUploadRequest request);
+
+    CoursePdfUploadInitResponse createPdfUpload(UUID mentorUserId, UUID courseId, UUID chapterId, CreatePdfMaterialUploadRequest request);
+
     void confirmPdfUpload(UUID mentorUserId, UUID courseId, UUID materialId, String objectKey);
-    com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId);
-    
+
+    CourseMaterialDownloadResponse getPdfDownload(UUID userId, UUID courseId, UUID materialId);
+
     CourseVideoPlaybackResponse getPlaybackAuthorization(UUID userId, UUID courseId, UUID materialId, String clientIp);
-    
+
     BunnyWebhookEvent saveWebhookAuditLog(String signature, String externalEventId, CourseVideoWebhook payload);
-    
-    java.util.List<java.util.UUID> claimWebhookEvents(int limit);
 
-    void processWebhookEventIdempotent(java.util.UUID eventId);
+    List<UUID> claimWebhookEvents(int limit);
 
-    void markWebhookEventFailed(java.util.UUID eventId, Throwable cause);
+    void processWebhookEventIdempotent(UUID eventId);
 
-    java.util.List<java.util.UUID> claimCourseOutboxEvents(int limit);
+    void markWebhookEventFailed(UUID eventId, Throwable cause);
 
-    void processCourseOutboxEvent(java.util.UUID eventId);
+    List<UUID> claimCourseOutboxEvents(int limit);
 
-    void markCourseOutboxEventFailed(java.util.UUID eventId, Throwable cause);
-    
+    void processCourseOutboxEvent(UUID eventId);
+
+    void markCourseOutboxEventFailed(UUID eventId, Throwable cause);
+
     void deleteMaterial(UUID userId, UUID courseId, UUID materialId);
-    
-    java.util.List<com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId);
+
+    List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId);
 }
