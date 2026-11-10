@@ -1,3 +1,4 @@
+-- rollout: EXPAND
 -- Migration V145: Add YouTube video support to course_materials
 ALTER TABLE course_materials
     ADD COLUMN IF NOT EXISTS youtube_video_id VARCHAR(64),
