@@ -19,7 +19,7 @@ import java.util.UUID;
 public class VideoStreamingController {
     private final VideoStreamingAuthorizationService authorizationService;
 
-    @Operation(summary = "Internal - authorize video stream", description = "Internal/System - không dùng cho FE. Nginx gửi asset ID và playback token; backend trả source URL R2 qua response header rồi Nginx proxy dữ liệu với HTTP Range.")
+    @Operation(summary = "Internal - authorize video stream", description = "Internal/System - không dùng cho FE.", hidden = true)
     @GetMapping("/authorize")
     public ResponseEntity<Void> authorize(
             @RequestHeader("X-Video-Asset-Id") UUID assetId,

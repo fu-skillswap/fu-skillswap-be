@@ -31,7 +31,7 @@ public class BunnyWebhookController {
     private final BunnyWebhookVerifier webhookVerifier;
     private final ObjectMapper objectMapper;
 
-    @Operation(summary = "Nhận callback Bunny cho trạng thái xử lý video", description = "Internal/System - không dùng cho FE. Bunny gọi callback này; FE chỉ xem trạng thái video qua API Course. Signature sai trả 401, payload không đọc được trả 400.")
+    @Operation(summary = "Nhận callback Bunny cho trạng thái xử lý video", description = "Internal/System - không dùng cho FE. Bunny gọi callback này; FE chỉ xem trạng thái video qua API Course. Signature sai trả 401, payload không đọc được trả 400.", hidden = true)
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Callback đã được tiếp nhận"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Payload provider không hợp lệ"),
