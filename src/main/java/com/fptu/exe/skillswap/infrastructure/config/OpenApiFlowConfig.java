@@ -63,6 +63,7 @@ public class OpenApiFlowConfig {
             tag("Conversation", "Trò chuyện", "Đọc, gửi tin nhắn và quản lý tệp trong cuộc trò chuyện."),
             tag("Notification", "Thông báo", "Xem thông báo và cập nhật trạng thái đã đọc."),
             tag("Wallet", "Ví", "Xem số dư và các giao dịch gần đây."),
+            tag("My Coupons", "Mã giảm giá của tôi", "Xem danh sách mã giảm giá khả dụng của người dùng."),
             tag("Mentor Payout Profiles", "Tài khoản nhận tiền", "Mentor quản lý tài khoản dùng để nhận tiền."),
             tag("Payout Requests", "Yêu cầu rút tiền", "Mentor tạo và theo dõi yêu cầu rút tiền."),
             tag("Forum", "Diễn đàn", "Đăng bài, bình luận, tương tác và báo cáo nội dung."),
@@ -244,7 +245,9 @@ public class OpenApiFlowConfig {
                 "/api/bookings/**",
                 "/api/me/bookings/**",
                 "/api/me/payment-orders/**",
-                "/api/me/credit-wallet"
+                "/api/me/credit-wallet",
+                "/api/me/coupons/**",
+                "/api/me/coupons"
         );
     }
 

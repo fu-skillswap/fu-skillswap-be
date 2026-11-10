@@ -40,6 +40,30 @@ FE Browser                      Backend API                     PayOS Gateway
 
 ---
 
+### 2.0 Danh Sách Mã Giảm Giá Khả Dụng Của Tôi (`GET /api/me/coupons`)
+- **Endpoint**: `GET /api/me/coupons`
+- **Header**: `Authorization: Bearer <accessToken>` (Yêu cầu Role `MENTEE`)
+- **Mục đích**: Trả về danh sách tất cả coupon đang hoạt động trên hệ thống, kèm trạng thái xem tài khoản hiện tại có đủ điều kiện sử dụng hay không (`isUsable`). Dùng để hiển thị danh sách mã giảm giá gợi ý trong modal hoặc màn hình thanh toán.
+
+```typescript
+interface UserCouponResponse {
+  id: string;                          // UUID của coupon
+  code: string;                        // Mã coupon (VD: "WELCOME70K")
+  title: string;                       // Tiêu đề hiển thị (VD: "Mã chào mừng thành viên mới")
+  description?: string | null;         // Mô tả chi tiết ưu đãi
+  discountType: "FIXED" | "PERCENT";   // Loại giảm giá (tiền cố định hoặc %)
+  discountValue: number;               // Giá trị giảm (VND/Scoin nếu FIXED, hoặc % nếu PERCENT)
+  maxDiscountScoin?: number | null;    // Mức giảm tối đa (nếu PERCENT)
+  minOrderValueScoin?: number | null;  // Giá trị đơn tối thiểu để áp dụng
+  quotaTotal?: number | null;          // Tổng lượt phát hành toàn sàn
+  remainingQuota?: number | null;      // Số lượt còn lại toàn sàn
+  isUsable: boolean;                   // true: tài khoản được dùng; false: bị khóa
+  unusableReason?: string | null;      // Lý do nếu isUsable = false (VD: "Bạn đã sử dụng hết lượt coupon này")
+}
+```
+
+---
+
 ### 2.1 Xem Trước Báo Giá Dịch Vụ (`GET /api/mentor-services/{serviceId}/pricing-preview`)
 - **Endpoint**: `GET /api/mentor-services/{serviceId}/pricing-preview`
 - **Header**: `Authorization: Bearer <accessToken>`
