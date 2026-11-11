@@ -4,7 +4,6 @@ import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponCreateReque
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponListRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponStatusRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCouponUpdateRequest;
-import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponRedemptionResponse;
 import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCouponResponse;
 import com.fptu.exe.skillswap.modules.identity.port.UserQueryPort;
 import com.fptu.exe.skillswap.modules.identity.port.UserSummaryRecord;
@@ -23,20 +22,22 @@ import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -46,6 +47,14 @@ public class CouponAdminPortImpl implements CouponAdminPort {
 
     private static final List<CouponRedemptionStatus> ACTIVE_REDEMPTION_STATUSES =
             List.of(CouponRedemptionStatus.RESERVED, CouponRedemptionStatus.REDEEMED);
+
+    private static final Set<String> ALLOWED_COUPON_SORT_FIELDS = Set.of(
+            "createdAt", "updatedAt", "code", "title", "discountType", "discountValue", "status", "startAt", "endAt"
+    );
+
+    private static final Set<String> ALLOWED_REDEMPTION_SORT_FIELDS = Set.of(
+            "createdAt", "updatedAt", "discountScoin", "status"
+    );
 
     private final CouponRepository couponRepository;
     private final CouponRedemptionRepository couponRedemptionRepository;
@@ -240,6 +249,10 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         long totalRedemptions = couponRedemptionRepository.countByCouponId(c.getId());
         long activeRedemptions = couponRedemptionRepository.countByCouponIdAndStatusIn(c.getId(), ACTIVE_REDEMPTION_STATUSES);
 
+        // Materialize lazy @ElementCollection sets within the active transaction because open-in-view is false.
+        Set<UUID> serviceIds = copyUuidSet(c.getApplicableServiceIds());
+        Set<UUID> mentorIds = copyUuidSet(c.getApplicableMentorIds());
+
         return new AdminCouponResponse(
                 c.getId(),
                 c.getCode(),
@@ -254,8 +267,8 @@ public class CouponAdminPortImpl implements CouponAdminPort {
                 c.getQuotaTotal(),
                 c.getQuotaPerUser(),
                 c.getMinOrderValueScoin(),
-                c.getApplicableServiceIds(),
-                c.getApplicableMentorIds(),
+                serviceIds,
+                mentorIds,
                 totalRedemptions,
                 activeRedemptions,
                 c.getCreatedAt(),
@@ -263,12 +276,92 @@ public class CouponAdminPortImpl implements CouponAdminPort {
         );
     }
 
-    private CouponAdminPort.CouponView view(AdminCouponResponse r) { return new CouponAdminPort.CouponView(r.id(),r.code(),r.title(),r.description(),r.discountType().name(),r.discountValue(),r.maxDiscountScoin(),r.status().name(),r.startAt(),r.endAt(),r.quotaTotal(),r.quotaPerUser(),r.minOrderValueScoin(),r.applicableServiceIds(),r.applicableMentorIds(),r.totalRedemptions(),r.activeRedemptions(),r.createdAt(),r.updatedAt()); }
-    private AdminCouponListRequest listRequest(CouponAdminPort.CouponListQuery q) { AdminCouponListRequest r=new AdminCouponListRequest(); if(q==null)return r; r.setStatus(q.status()==null?null:enumValue(CouponStatus.class,q.status())); r.setDiscountType(q.discountType()==null?null:enumValue(CouponDiscountType.class,q.discountType())); r.setKeyword(q.keyword()); r.setPage(Math.max(0,q.page())); r.setSize(Math.max(1,q.size())); r.setSortBy(q.sortBy()); r.setDirection(q.direction()); return r; }
-    private AdminCouponCreateRequest createRequest(CouponAdminPort.CreateCouponCommand c) { return new AdminCouponCreateRequest(c.code(),c.title(),c.description(),enumValue(CouponDiscountType.class,c.discountType()),c.discountValue(),c.maxDiscountScoin(),c.startAt(),c.endAt(),c.quotaTotal(),c.quotaPerUser(),c.minOrderValueScoin(),c.applicableServiceIds(),c.applicableMentorIds()); }
-    private AdminCouponUpdateRequest updateRequest(CouponAdminPort.UpdateCouponCommand c) { return new AdminCouponUpdateRequest(c.code(),c.title(),c.description(),c.discountType()==null?null:enumValue(CouponDiscountType.class,c.discountType()),c.discountValue(),c.maxDiscountScoin(),c.startAt(),c.endAt(),c.quotaTotal(),c.quotaPerUser(),c.minOrderValueScoin(),c.applicableServiceIds(),c.applicableMentorIds()); }
-    private Pageable pageRequest(CouponAdminPort.CouponPageQuery q) { int page=q==null?0:Math.max(0,q.page()); int size=q==null?20:Math.min(100,Math.max(1,q.size())); String sort=q==null||q.sortBy()==null?"createdAt":q.sortBy(); org.springframework.data.domain.Sort.Direction dir; try {dir=org.springframework.data.domain.Sort.Direction.valueOf(q==null||q.direction()==null?"DESC":q.direction().toUpperCase(Locale.ROOT));}catch(Exception e){dir=org.springframework.data.domain.Sort.Direction.DESC;} return org.springframework.data.domain.PageRequest.of(page,size,org.springframework.data.domain.Sort.by(dir,sort)); }
-    private <E extends Enum<E>> E enumValue(Class<E> type,String value) { try{return Enum.valueOf(type,value);}catch(RuntimeException e){throw new BaseException(ErrorCode.BAD_REQUEST,"Giá trị coupon không hợp lệ");} }
+    private Set<UUID> copyUuidSet(Set<UUID> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(new HashSet<>(source));
+    }
+
+    private CouponAdminPort.CouponView view(AdminCouponResponse r) {
+        return new CouponAdminPort.CouponView(
+                r.id(), r.code(), r.title(), r.description(), r.discountType().name(),
+                r.discountValue(), r.maxDiscountScoin(), r.status().name(), r.startAt(), r.endAt(),
+                r.quotaTotal(), r.quotaPerUser(), r.minOrderValueScoin(), r.applicableServiceIds(),
+                r.applicableMentorIds(), r.totalRedemptions(), r.activeRedemptions(), r.createdAt(), r.updatedAt()
+        );
+    }
+
+    private AdminCouponListRequest listRequest(CouponAdminPort.CouponListQuery q) {
+        AdminCouponListRequest r = new AdminCouponListRequest();
+        if (q == null) {
+            return r;
+        }
+        r.setStatus(isBlank(q.status()) ? null : enumValue(CouponStatus.class, q.status()));
+        r.setDiscountType(isBlank(q.discountType()) ? null : enumValue(CouponDiscountType.class, q.discountType()));
+        r.setKeyword(isBlank(q.keyword()) ? null : q.keyword().trim());
+        r.setPage(q.page() == null ? 0 : Math.max(0, q.page()));
+        r.setSize(q.size() == null ? 20 : Math.min(100, Math.max(1, q.size())));
+        if (!isBlank(q.sortBy())) {
+            String sortBy = q.sortBy().trim();
+            if (!ALLOWED_COUPON_SORT_FIELDS.contains(sortBy)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Trường sắp xếp không hợp lệ: " + sortBy);
+            }
+            r.setSortBy(sortBy);
+        }
+        if (!isBlank(q.direction())) {
+            r.setDirection(q.direction().trim().toUpperCase(Locale.ROOT));
+        }
+        return r;
+    }
+
+    private AdminCouponCreateRequest createRequest(CouponAdminPort.CreateCouponCommand c) {
+        return new AdminCouponCreateRequest(
+                c.code(), c.title(), c.description(), enumValue(CouponDiscountType.class, c.discountType()),
+                c.discountValue(), c.maxDiscountScoin(), c.startAt(), c.endAt(), c.quotaTotal(),
+                c.quotaPerUser(), c.minOrderValueScoin(), c.applicableServiceIds(), c.applicableMentorIds()
+        );
+    }
+
+    private AdminCouponUpdateRequest updateRequest(CouponAdminPort.UpdateCouponCommand c) {
+        return new AdminCouponUpdateRequest(
+                c.code(), c.title(), c.description(),
+                isBlank(c.discountType()) ? null : enumValue(CouponDiscountType.class, c.discountType()),
+                c.discountValue(), c.maxDiscountScoin(), c.startAt(), c.endAt(), c.quotaTotal(),
+                c.quotaPerUser(), c.minOrderValueScoin(), c.applicableServiceIds(), c.applicableMentorIds()
+        );
+    }
+
+    private Pageable pageRequest(CouponAdminPort.CouponPageQuery q) {
+        int page = (q == null || q.page() == null) ? 0 : Math.max(0, q.page());
+        int size = (q == null || q.size() == null) ? 20 : Math.min(100, Math.max(1, q.size()));
+        String sort = (q == null || isBlank(q.sortBy())) ? "createdAt" : q.sortBy().trim();
+        if (!ALLOWED_REDEMPTION_SORT_FIELDS.contains(sort)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Trường sắp xếp không hợp lệ: " + sort);
+        }
+        Sort.Direction dir;
+        try {
+            dir = Sort.Direction.valueOf((q == null || isBlank(q.direction())) ? "DESC" : q.direction().trim().toUpperCase(Locale.ROOT));
+        } catch (Exception e) {
+            dir = Sort.Direction.DESC;
+        }
+        return PageRequest.of(page, size, Sort.by(dir, sort));
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value) {
+        if (isBlank(value)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị coupon không hợp lệ");
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException e) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị coupon không hợp lệ");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
 
     private Specification<Coupon> buildSpecification(AdminCouponListRequest request) {
         return (root, query, cb) -> {
