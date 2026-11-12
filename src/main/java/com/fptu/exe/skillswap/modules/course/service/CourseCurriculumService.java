@@ -35,7 +35,7 @@ public class CourseCurriculumService {
     public CourseChapter createChapter(UUID userId, UUID courseId, CreateCourseChapterRequest request) {
         Course course = ownedCourse(userId, courseId);
         CourseChapter chapter = CourseChapter.builder().course(course).title(request.title()).description(request.description())
-                .sortOrder(chapterRepository.countByCourseId(courseId) + 1).isPublished(!Boolean.FALSE.equals(request.published())).build();
+                .sortOrder(chapterRepository.findMaxSortOrderByCourseId(courseId) + 1).isPublished(!Boolean.FALSE.equals(request.published())).build();
         course.setTotalChapters(course.getTotalChapters() + 1);
         return chapterRepository.save(chapter);
     }
@@ -122,10 +122,12 @@ public class CourseCurriculumService {
     private CourseCurriculumResponse.Material toMaterial(CourseMaterial material, boolean mentor, boolean enrolled, CourseMaterialProgress progress) {
         String access = mentor || material.isPreviewable() || enrolled ? "AVAILABLE" : "LOCKED";
         boolean isAvailable = "AVAILABLE".equals(access);
-        String youtubeVideoId = (isAvailable && material.getStorageProviderType() == StorageProviderType.YOUTUBE)
-                ? material.getYoutubeVideoId() : null;
-        String embedUrl = (isAvailable && material.getStorageProviderType() == StorageProviderType.YOUTUBE && youtubeVideoId != null)
+        boolean isYouTube = material.getStorageProviderType() == StorageProviderType.YOUTUBE;
+        String youtubeVideoId = (isAvailable && isYouTube) ? material.getYoutubeVideoId() : null;
+        String embedUrl = (isAvailable && isYouTube && youtubeVideoId != null)
                 ? YouTubeUrlUtils.buildEmbedUrl(youtubeVideoId) : null;
+        // Hide YouTube thumbnail URL when locked because img.youtube.com/vi/{videoId}/... exposes the video ID.
+        String thumbnailUrl = (!isAvailable && isYouTube) ? null : material.getThumbnailUrl();
 
         return new CourseCurriculumResponse.Material(
                 material.getId(),
@@ -136,7 +138,7 @@ public class CourseCurriculumService {
                 material.isPublished(),
                 material.getStatus(),
                 material.getDurationSeconds(),
-                material.getThumbnailUrl(),
+                thumbnailUrl,
                 access,
                 progress == null ? null : progress.getCompletionPercentage(),
                 progress != null && progress.isCompleted(),

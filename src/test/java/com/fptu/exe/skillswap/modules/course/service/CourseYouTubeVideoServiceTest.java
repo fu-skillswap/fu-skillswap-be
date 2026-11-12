@@ -6,10 +6,12 @@ import com.fptu.exe.skillswap.modules.course.domain.*;
 import com.fptu.exe.skillswap.modules.course.dto.request.CreateYouTubeVideoMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.request.UpdateCourseMaterialRequest;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseCurriculumResponse;
+import com.fptu.exe.skillswap.modules.course.dto.response.CourseMaterialSummaryResponse;
 import com.fptu.exe.skillswap.modules.course.dto.response.CourseVideoPlaybackResponse;
 import com.fptu.exe.skillswap.modules.course.port.VideoStorageProvider;
 import com.fptu.exe.skillswap.modules.course.repository.*;
 import com.fptu.exe.skillswap.modules.mentor.port.MentorOwnershipQueryPort;
+import com.fptu.exe.skillswap.shared.exception.ResourceNotFoundException;
 import com.fptu.exe.skillswap.shared.time.TimeProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -164,7 +167,7 @@ class CourseYouTubeVideoServiceTest {
     }
 
     @Test
-    @DisplayName("getCurriculum hides youtubeVideoId and embedUrl when access is LOCKED (anti-leak protection)")
+    @DisplayName("getCurriculum hides youtubeVideoId, embedUrl, and YouTube thumbnailUrl when access is LOCKED")
     void getCurriculum_lockedMaterial_hidesYouTubeInfo() {
         CourseMaterial material = CourseMaterial.builder()
                 .id(materialId)
@@ -197,11 +200,73 @@ class CourseYouTubeVideoServiceTest {
         assertThat(matRes.access()).isEqualTo("LOCKED");
         assertThat(matRes.youtubeVideoId()).isNull();
         assertThat(matRes.embedUrl()).isNull();
+        assertThat(matRes.thumbnailUrl()).isNull();
         assertThat(matRes.storageProviderType()).isEqualTo(StorageProviderType.YOUTUBE);
     }
 
     @Test
-    @DisplayName("getCurriculum returns youtubeVideoId and embedUrl when access is AVAILABLE")
+    @DisplayName("getCourseMaterials hides YouTube thumbnail when locked and throws 404 when course missing")
+    void getCourseMaterials_lockedMasksThumbnailAndMissingCourseThrows404() {
+        CourseMaterial material = CourseMaterial.builder()
+                .id(materialId)
+                .chapter(testChapter)
+                .title("Locked YouTube Lesson")
+                .materialType(CourseMaterialType.VIDEO)
+                .storageProviderType(StorageProviderType.YOUTUBE)
+                .status(MaterialStatus.READY)
+                .sortOrder(1)
+                .isPublished(true)
+                .isPreviewable(false)
+                .youtubeVideoId("dQw4w9WgXcQ")
+                .thumbnailUrl("https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg")
+                .build();
+
+        when(courseRepository.findMentorUserIdByCourseId(courseId)).thenReturn(Optional.of(mentorUserId));
+        when(mentorOwnershipQueryPort.isActiveOwner(mentorUserId, studentUserId)).thenReturn(false);
+        when(enrollmentRepository.findByCourseIdAndStudentUserId(courseId, studentUserId)).thenReturn(Optional.empty());
+        when(materialRepository.findActiveByCourseIdOrderByCurriculum(courseId)).thenReturn(List.of(material));
+
+        List<CourseMaterialSummaryResponse> list = vaultService.getCourseMaterials(studentUserId, courseId);
+        assertThat(list).hasSize(1);
+        assertThat(list.getFirst().isAvailable()).isFalse();
+        assertThat(list.getFirst().getThumbnailUrl()).isNull();
+
+        UUID missingCourseId = UUID.randomUUID();
+        when(courseRepository.findMentorUserIdByCourseId(missingCourseId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> vaultService.getCourseMaterials(studentUserId, missingCourseId))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("deleteMaterial immediately releases sortOrder and sets deletedAt")
+    void deleteMaterial_releasesSortOrderAndMarksDeletedAt() {
+        Instant now = Instant.parse("2026-11-11T10:00:00Z");
+        CourseMaterial material = CourseMaterial.builder()
+                .id(materialId)
+                .chapter(testChapter)
+                .title("To Delete")
+                .materialType(CourseMaterialType.VIDEO)
+                .storageProviderType(StorageProviderType.YOUTUBE)
+                .status(MaterialStatus.READY)
+                .sortOrder(1)
+                .build();
+
+        when(materialRepository.findActiveWithCurriculumById(materialId)).thenReturn(Optional.of(material));
+        when(courseRepository.findMentorUserIdByCourseId(courseId)).thenReturn(Optional.of(mentorUserId));
+        when(mentorOwnershipQueryPort.isActiveOwner(mentorUserId, mentorUserId)).thenReturn(true);
+        when(materialRepository.findMinSortOrderByChapterId(chapterId)).thenReturn(1);
+        when(timeProvider.instant()).thenReturn(now);
+
+        vaultService.deleteMaterial(mentorUserId, courseId, materialId);
+
+        assertThat(material.getStatus()).isEqualTo(MaterialStatus.DELETING);
+        assertThat(material.getDeletedAt()).isEqualTo(now);
+        assertThat(material.getSortOrder()).isLessThan(-10000);
+        verify(outboxEventRepository).save(any(CourseOutboxEvent.class));
+    }
+
+    @Test
+    @DisplayName("getCurriculum returns youtubeVideoId, embedUrl, and thumbnailUrl when access is AVAILABLE")
     void getCurriculum_availableMaterial_returnsYouTubeInfo() {
         CourseMaterial material = CourseMaterial.builder()
                 .id(materialId)
@@ -234,6 +299,7 @@ class CourseYouTubeVideoServiceTest {
         assertThat(matRes.access()).isEqualTo("AVAILABLE");
         assertThat(matRes.youtubeVideoId()).isEqualTo("dQw4w9WgXcQ");
         assertThat(matRes.embedUrl()).isEqualTo("https://www.youtube.com/embed/dQw4w9WgXcQ");
+        assertThat(matRes.thumbnailUrl()).isEqualTo("https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg");
     }
 
     @Test

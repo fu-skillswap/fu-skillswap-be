@@ -234,6 +234,9 @@ public class CourseVaultServiceImpl implements CourseVaultService {
 
         if (material.getStorageProviderType() == StorageProviderType.YOUTUBE) {
             String videoId = material.getYoutubeVideoId();
+            if (videoId == null || videoId.isBlank()) {
+                throw new BadRequestException(ErrorCode.COURSE_INVALID_STATUS, "Video YouTube chưa có mã hợp lệ");
+            }
             String embedUrl = YouTubeUrlUtils.buildEmbedUrl(videoId);
             return CourseVideoPlaybackResponse.builder()
                     .materialId(material.getId())
@@ -284,15 +287,57 @@ public class CourseVaultServiceImpl implements CourseVaultService {
     @Override @Transactional public void markWebhookEventFailed(UUID id, Throwable cause) { BunnyWebhookEvent e=webhookEventRepository.findByIdForUpdate(id).orElseThrow();fail(e, cause); }
     @Override @Transactional public List<UUID> claimCourseOutboxEvents(int limit) { Instant now=timeProvider.instant(); List<UUID> ids=outboxEventRepository.findClaimableIdsForUpdateSkipLocked(now,now.minus(5,ChronoUnit.MINUTES),limit);ids.forEach(id->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSING");e.setProcessingStartedAt(now);e.setLastError(null);});return ids; }
     @Override public void processCourseOutboxEvent(UUID id) { CourseOutboxEvent e=outboxEventRepository.findById(id).orElseThrow();if(!"PROCESSING".equals(e.getStatus()))return;if(DomainEventOutboxEventTypes.COURSE_MATERIAL_UPLOAD_INITIALIZATION_REQUESTED.equals(e.getEventType())){initializeVideoUpload(e.getAggregateId());return;}if(DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED.equals(e.getEventType())){processMaterialDeletion(e.getAggregateId());markOutboxProcessed(id);return;}markOutboxProcessed(id); }
-    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getMaterialType()==CourseMaterialType.VIDEO && m.getStorageProviderType()!=StorageProviderType.YOUTUBE)videoStorageProvider.deleteVideo(toVideoAsset(m));if(m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);locked.setDeletedAt(timeProvider.instant());refreshCourseTotals(locked.getChapter().getCourse());}); }
+    private void processMaterialDeletion(UUID id) { CourseMaterial m=materialRepository.findById(id).orElseThrow();if(m.getMaterialType()==CourseMaterialType.VIDEO && m.getStorageProviderType()!=StorageProviderType.YOUTUBE)videoStorageProvider.deleteVideo(toVideoAsset(m));if(m.getDocumentObjectKey()!=null)storageGateway.deletePrivateObject(m.getDocumentObjectKey());transactionTemplate.executeWithoutResult(s->{CourseMaterial locked=materialRepository.findById(id).orElseThrow();locked.setStatus(MaterialStatus.DELETED);if(locked.getDeletedAt()==null){locked.setDeletedAt(timeProvider.instant());}refreshCourseTotals(locked.getChapter().getCourse());}); }
     private void markOutboxProcessed(UUID id){transactionTemplate.executeWithoutResult(s->{CourseOutboxEvent e=outboxEventRepository.findByIdForUpdate(id).orElseThrow();e.setStatus("PROCESSED");e.setProcessingStartedAt(null);e.setNextRetryAt(null);e.setLastError(null);});}
     @Override @Transactional public void markCourseOutboxEventFailed(UUID id,Throwable cause){fail(outboxEventRepository.findByIdForUpdate(id).orElseThrow(),cause);}
     private void fail(BunnyWebhookEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}
     private void fail(CourseOutboxEvent e,Throwable cause){int n=e.getRetryCount()+1;e.setRetryCount(n);e.setProcessingStartedAt(null);e.setLastError(truncate(cause.getMessage()));if(n>=5)e.setStatus("DEAD_LETTER");else{e.setStatus("FAILED");e.setNextRetryAt(nextRetry(n));}}
     private Instant nextRetry(int n){long[] s={10,30,60,300};return timeProvider.instant().plusSeconds(s[Math.min(n-1,s.length-1)]);} private String truncate(String s){return s==null?"Unknown failure":s.substring(0,Math.min(s.length(),500));}
 
-    @Override @Transactional(readOnly=true) public List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId) { boolean owner = isCourseMentor(userId, courseId); return materialRepository.findActiveByCourseIdOrderByCurriculum(courseId).stream().filter(m -> owner || isPublishedForLearner(m)).map(m -> { boolean available = canAccess(userId, m); return CourseMaterialSummaryResponse.builder().materialId(m.getId()).chapterId(m.getChapter().getId()).title(m.getTitle()).materialType(m.getMaterialType()).storageProviderType(m.getStorageProviderType()).status(m.getStatus()).durationSeconds(m.getDurationSeconds()).thumbnailUrl(m.getThumbnailUrl()).uploadedAt(m.getUploadedAt()).available(available).lockedReason(available?null:"NOT_ENROLLED").userActionMessage(CourseMaterialSummaryResponse.userActionMessage(available, m.getStatus())).retryable(CourseMaterialSummaryResponse.retryable(available, m.getStatus())).build(); }).toList(); }
-    @Override @Transactional public void deleteMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=ownedMaterial(userId,courseId,materialId);if(m.getStatus()==MaterialStatus.DELETED||m.getStatus()==MaterialStatus.DELETING)return;m.setStatus(MaterialStatus.DELETING);outboxEventRepository.save(outbox(m.getId(),DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED));}
+    @Override
+    @Transactional(readOnly = true)
+    public List<CourseMaterialSummaryResponse> getCourseMaterials(UUID userId, UUID courseId) {
+        UUID mentorUserId = courseRepository.findMentorUserIdByCourseId(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found"));
+        boolean owner = mentorOwnershipQueryPort.isActiveOwner(mentorUserId, userId);
+        return materialRepository.findActiveByCourseIdOrderByCurriculum(courseId).stream()
+                .filter(m -> owner || isPublishedForLearner(m))
+                .map(m -> {
+                    boolean available = canAccess(userId, m);
+                    String thumbnailUrl = (!available && m.getStorageProviderType() == StorageProviderType.YOUTUBE)
+                            ? null : m.getThumbnailUrl();
+                    return CourseMaterialSummaryResponse.builder()
+                            .materialId(m.getId())
+                            .chapterId(m.getChapter().getId())
+                            .title(m.getTitle())
+                            .materialType(m.getMaterialType())
+                            .storageProviderType(m.getStorageProviderType())
+                            .status(m.getStatus())
+                            .durationSeconds(m.getDurationSeconds())
+                            .thumbnailUrl(thumbnailUrl)
+                            .uploadedAt(m.getUploadedAt())
+                            .available(available)
+                            .lockedReason(available ? null : "NOT_ENROLLED")
+                            .userActionMessage(CourseMaterialSummaryResponse.userActionMessage(available, m.getStatus()))
+                            .retryable(CourseMaterialSummaryResponse.retryable(available, m.getStatus()))
+                            .build();
+                }).toList();
+    }
+
+    @Override
+    @Transactional
+    public void deleteMaterial(UUID userId, UUID courseId, UUID materialId) {
+        CourseMaterial m = ownedMaterial(userId, courseId, materialId);
+        if (m.getStatus() == MaterialStatus.DELETED || m.getStatus() == MaterialStatus.DELETING) {
+            return;
+        }
+        int minSortOrder = materialRepository.findMinSortOrderByChapterId(m.getChapter().getId());
+        m.setSortOrder(Math.min(-10000, minSortOrder) - 1);
+        m.setDeletedAt(timeProvider.instant());
+        m.setStatus(MaterialStatus.DELETING);
+        refreshCourseTotals(m.getChapter().getCourse());
+        outboxEventRepository.save(outbox(m.getId(), DomainEventOutboxEventTypes.COURSE_MATERIAL_DELETE_REQUESTED));
+    }
 
     private CourseChapter ownedChapter(UUID userId,UUID courseId,UUID chapterId){CourseChapter c=chapterRepository.findById(chapterId).orElseThrow(()->new ResourceNotFoundException("Chapter not found"));if(!c.getCourse().getId().equals(courseId))throw new BadRequestException(ErrorCode.BAD_REQUEST,"Chapter does not belong to course");if(!isCourseMentor(userId, courseId))throw new AccessDeniedException("Only course mentor can change curriculum");return c;}
     private CourseMaterial ownedMaterial(UUID userId,UUID courseId,UUID materialId){CourseMaterial m=materialForCourse(courseId,materialId);if(!isCourseMentor(userId, courseId))throw new AccessDeniedException("Only course mentor can change curriculum");return m;}

@@ -47,13 +47,28 @@ class CourseCurriculumServiceTest {
         Course course = course();
         when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
         when(mentorOwnershipQueryPort.isActiveOwner(ownerId, ownerId)).thenReturn(true);
-        when(chapterRepository.countByCourseId(courseId)).thenReturn(0);
+        when(chapterRepository.findMaxSortOrderByCourseId(courseId)).thenReturn(0);
         when(chapterRepository.save(any(CourseChapter.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CourseChapter result = service.createChapter(ownerId, courseId,
                 new com.fptu.exe.skillswap.modules.course.dto.request.CreateCourseChapterRequest("Chapter", null, true));
 
         assertThat(result.getCourse()).isEqualTo(course);
+        assertThat(result.getSortOrder()).isEqualTo(1);
+    }
+
+    @Test
+    void createChapterUsesMaxSortOrderToAvoidCollisionAfterDeletion() {
+        Course course = course();
+        when(courseRepository.findById(courseId)).thenReturn(Optional.of(course));
+        when(mentorOwnershipQueryPort.isActiveOwner(ownerId, ownerId)).thenReturn(true);
+        when(chapterRepository.findMaxSortOrderByCourseId(courseId)).thenReturn(3);
+        when(chapterRepository.save(any(CourseChapter.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CourseChapter result = service.createChapter(ownerId, courseId,
+                new com.fptu.exe.skillswap.modules.course.dto.request.CreateCourseChapterRequest("Chapter 4", null, true));
+
+        assertThat(result.getSortOrder()).isEqualTo(4);
     }
 
     @Test

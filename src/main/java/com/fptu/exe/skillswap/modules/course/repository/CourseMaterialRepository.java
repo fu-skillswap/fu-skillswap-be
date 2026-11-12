@@ -14,6 +14,9 @@ public interface CourseMaterialRepository extends JpaRepository<CourseMaterial, 
 
     List<CourseMaterial> findByChapterIdAndDeletedAtIsNullOrderBySortOrderAsc(UUID chapterId);
 
+    @Query("select coalesce(min(m.sortOrder), 0) from CourseMaterial m where m.chapter.id = :chapterId")
+    int findMinSortOrderByChapterId(UUID chapterId);
+
     @Query("""
             select material from CourseMaterial material
             join fetch material.chapter chapter
