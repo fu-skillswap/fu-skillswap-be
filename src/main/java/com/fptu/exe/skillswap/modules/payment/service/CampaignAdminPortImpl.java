@@ -6,7 +6,6 @@ import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignCreateReq
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignListRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignStatusRequest;
 import com.fptu.exe.skillswap.modules.payment.dto.request.AdminCampaignUpdateRequest;
-import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignAnalyticsResponse;
 import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignBenefitResponse;
 import com.fptu.exe.skillswap.modules.payment.dto.response.AdminCampaignResponse;
 import com.fptu.exe.skillswap.modules.payment.domain.Campaign;
@@ -40,8 +39,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -51,6 +53,10 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
     private static final List<PaymentOrderStatus> EXCLUDED_STATUSES =
             List.of(PaymentOrderStatus.FAILED, PaymentOrderStatus.CANCELLED, PaymentOrderStatus.EXPIRED);
+
+    private static final Set<String> ALLOWED_CAMPAIGN_SORT_FIELDS = Set.of(
+            "createdAt", "updatedAt", "name", "status", "fundingSource", "startAt", "endAt", "budgetScoin"
+    );
 
     private final CampaignRepository campaignRepository;
     private final CampaignBenefitRepository campaignBenefitRepository;
@@ -246,7 +252,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 .campaign(campaign)
                 .benefitType(request.benefitType())
                 .creditScoin(request.creditScoin())
-                .couponCode(request.couponCode() == null ? null : request.couponCode().trim().toUpperCase())
+                .couponCode(request.couponCode() == null ? null : request.couponCode().trim().toUpperCase(Locale.ROOT))
                 .couponDiscountType(request.couponDiscountType())
                 .couponDiscountValue(request.couponDiscountValue())
                 .couponMaxDiscountScoin(request.couponMaxDiscountScoin())
@@ -275,7 +281,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
 
         if (request.benefitType() != null) benefit.setBenefitType(request.benefitType());
         if (request.creditScoin() != null) benefit.setCreditScoin(request.creditScoin());
-        if (request.couponCode() != null) benefit.setCouponCode(request.couponCode().trim().toUpperCase());
+        if (request.couponCode() != null) benefit.setCouponCode(request.couponCode().trim().toUpperCase(Locale.ROOT));
         if (request.couponDiscountType() != null) benefit.setCouponDiscountType(request.couponDiscountType());
         if (request.couponDiscountValue() != null) benefit.setCouponDiscountValue(request.couponDiscountValue());
         if (request.couponMaxDiscountScoin() != null) benefit.setCouponMaxDiscountScoin(request.couponMaxDiscountScoin());
@@ -372,6 +378,12 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         long benefitCount = campaignBenefitRepository.countByCampaignId(c.getId());
         long totalBookings = paymentOrderRepository.countByCampaignIdAndStatusNotIn(c.getId(), EXCLUDED_STATUSES);
 
+        // Materialize lazy @ElementCollection sets within the active transaction because open-in-view is false.
+        Set<String> roleCodes = copySet(c.getAudienceRoleCodes());
+        Set<UUID> campusIds = copySet(c.getAudienceCampusIds());
+        Set<UUID> programIds = copySet(c.getAudienceProgramIds());
+        Set<UUID> specializationIds = copySet(c.getAudienceSpecializationIds());
+
         return new AdminCampaignResponse(
                 c.getId(),
                 c.getName(),
@@ -383,15 +395,22 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 budget,
                 used,
                 remaining,
-                c.getAudienceRoleCodes(),
-                c.getAudienceCampusIds(),
-                c.getAudienceProgramIds(),
-                c.getAudienceSpecializationIds(),
+                roleCodes,
+                campusIds,
+                programIds,
+                specializationIds,
                 benefitCount,
                 totalBookings,
                 c.getCreatedAt(),
                 c.getUpdatedAt()
         );
+    }
+
+    private <T> Set<T> copySet(Set<T> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(new HashSet<>(source));
     }
 
     private AdminCampaignBenefitResponse toBenefitResponse(CampaignBenefit b) {
@@ -413,14 +432,99 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
         );
     }
 
-    private CampaignAdminPort.CampaignView view(AdminCampaignResponse r) { return new CampaignAdminPort.CampaignView(r.id(), r.name(), r.description(), r.status().name(), r.fundingSource().name(), r.startAt(), r.endAt(), r.budgetScoin(), r.budgetUsedScoin(), r.budgetRemainingScoin(), r.audienceRoleCodes(), r.audienceCampusIds(), r.audienceProgramIds(), r.audienceSpecializationIds(), r.benefitCount(), r.totalBookingsCreated(), r.createdAt(), r.updatedAt()); }
-    private CampaignAdminPort.CampaignBenefitView benefitView(AdminCampaignBenefitResponse r) { return new CampaignAdminPort.CampaignBenefitView(r.id(), r.campaignId(), r.benefitType().name(), r.creditScoin(), r.couponCode(), r.couponDiscountType() == null ? null : r.couponDiscountType().name(), r.couponDiscountValue(), r.couponMaxDiscountScoin(), r.couponQuotaTotal(), r.couponQuotaPerUser(), r.couponMinOrderValueScoin(), r.active(), r.createdAt(), r.updatedAt()); }
-    private AdminCampaignListRequest listRequest(CampaignAdminPort.CampaignListQuery q) { AdminCampaignListRequest r = new AdminCampaignListRequest(); if(q==null)return r; r.setStatus(q.status()==null?null:enumValue(CampaignStatus.class,q.status())); r.setFundingSource(q.fundingSource()==null?null:enumValue(FundingSource.class,q.fundingSource())); r.setKeyword(q.keyword()); r.setPage(Math.max(0,q.page())); r.setSize(Math.max(1,q.size())); r.setSortBy(q.sortBy()); r.setDirection(q.direction()); return r; }
-    private AdminCampaignCreateRequest createRequest(CampaignAdminPort.CreateCampaignCommand c) { return new AdminCampaignCreateRequest(c.name(),c.description(),enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
-    private AdminCampaignUpdateRequest updateRequest(CampaignAdminPort.UpdateCampaignCommand c) { return new AdminCampaignUpdateRequest(c.name(),c.description(),c.fundingSource()==null?null:enumValue(FundingSource.class,c.fundingSource()),c.startAt(),c.endAt(),c.budgetScoin(),c.audienceRoleCodes(),c.audienceCampusIds(),c.audienceProgramIds(),c.audienceSpecializationIds()); }
-    private AdminCampaignBenefitCreateRequest createBenefitRequest(CampaignAdminPort.CreateCampaignBenefitCommand c) { return new AdminCampaignBenefitCreateRequest(enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin()); }
-    private AdminCampaignBenefitUpdateRequest updateBenefitRequest(CampaignAdminPort.UpdateCampaignBenefitCommand c) { return new AdminCampaignBenefitUpdateRequest(c.benefitType()==null?null:enumValue(CampaignBenefitType.class,c.benefitType()),c.creditScoin(),c.couponCode(),c.couponDiscountType()==null?null:enumValue(CouponDiscountType.class,c.couponDiscountType()),c.couponDiscountValue(),c.couponMaxDiscountScoin(),c.couponQuotaTotal(),c.couponQuotaPerUser(),c.couponMinOrderValueScoin(),c.active()); }
-    private <E extends Enum<E>> E enumValue(Class<E> type, String value) { try { return Enum.valueOf(type, value); } catch (RuntimeException e) { throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị campaign không hợp lệ"); } }
+    private CampaignAdminPort.CampaignView view(AdminCampaignResponse r) {
+        return new CampaignAdminPort.CampaignView(
+                r.id(), r.name(), r.description(), r.status().name(), r.fundingSource().name(),
+                r.startAt(), r.endAt(), r.budgetScoin(), r.budgetUsedScoin(), r.budgetRemainingScoin(),
+                r.audienceRoleCodes(), r.audienceCampusIds(), r.audienceProgramIds(),
+                r.audienceSpecializationIds(), r.benefitCount(), r.totalBookingsCreated(),
+                r.createdAt(), r.updatedAt()
+        );
+    }
+
+    private CampaignAdminPort.CampaignBenefitView benefitView(AdminCampaignBenefitResponse r) {
+        return new CampaignAdminPort.CampaignBenefitView(
+                r.id(), r.campaignId(), r.benefitType().name(), r.creditScoin(), r.couponCode(),
+                r.couponDiscountType() == null ? null : r.couponDiscountType().name(),
+                r.couponDiscountValue(), r.couponMaxDiscountScoin(), r.couponQuotaTotal(),
+                r.couponQuotaPerUser(), r.couponMinOrderValueScoin(), r.active(),
+                r.createdAt(), r.updatedAt()
+        );
+    }
+
+    private AdminCampaignListRequest listRequest(CampaignAdminPort.CampaignListQuery q) {
+        AdminCampaignListRequest r = new AdminCampaignListRequest();
+        if (q == null) {
+            return r;
+        }
+        r.setStatus(isBlank(q.status()) ? null : enumValue(CampaignStatus.class, q.status()));
+        r.setFundingSource(isBlank(q.fundingSource()) ? null : enumValue(FundingSource.class, q.fundingSource()));
+        r.setKeyword(isBlank(q.keyword()) ? null : q.keyword().trim());
+        r.setPage(q.page() == null ? 0 : Math.max(0, q.page()));
+        r.setSize(q.size() == null ? 20 : Math.min(100, Math.max(1, q.size())));
+        if (!isBlank(q.sortBy())) {
+            String sortBy = q.sortBy().trim();
+            if (!ALLOWED_CAMPAIGN_SORT_FIELDS.contains(sortBy)) {
+                throw new BaseException(ErrorCode.BAD_REQUEST, "Trường sắp xếp không hợp lệ: " + sortBy);
+            }
+            r.setSortBy(sortBy);
+        }
+        if (!isBlank(q.direction())) {
+            r.setDirection(q.direction().trim().toUpperCase(Locale.ROOT));
+        }
+        return r;
+    }
+
+    private AdminCampaignCreateRequest createRequest(CampaignAdminPort.CreateCampaignCommand c) {
+        return new AdminCampaignCreateRequest(
+                c.name(), c.description(), enumValue(FundingSource.class, c.fundingSource()),
+                c.startAt(), c.endAt(), c.budgetScoin(), c.audienceRoleCodes(),
+                c.audienceCampusIds(), c.audienceProgramIds(), c.audienceSpecializationIds()
+        );
+    }
+
+    private AdminCampaignUpdateRequest updateRequest(CampaignAdminPort.UpdateCampaignCommand c) {
+        return new AdminCampaignUpdateRequest(
+                c.name(), c.description(),
+                isBlank(c.fundingSource()) ? null : enumValue(FundingSource.class, c.fundingSource()),
+                c.startAt(), c.endAt(), c.budgetScoin(), c.audienceRoleCodes(),
+                c.audienceCampusIds(), c.audienceProgramIds(), c.audienceSpecializationIds()
+        );
+    }
+
+    private AdminCampaignBenefitCreateRequest createBenefitRequest(CampaignAdminPort.CreateCampaignBenefitCommand c) {
+        return new AdminCampaignBenefitCreateRequest(
+                enumValue(CampaignBenefitType.class, c.benefitType()), c.creditScoin(), c.couponCode(),
+                isBlank(c.couponDiscountType()) ? null : enumValue(CouponDiscountType.class, c.couponDiscountType()),
+                c.couponDiscountValue(), c.couponMaxDiscountScoin(), c.couponQuotaTotal(),
+                c.couponQuotaPerUser(), c.couponMinOrderValueScoin()
+        );
+    }
+
+    private AdminCampaignBenefitUpdateRequest updateBenefitRequest(CampaignAdminPort.UpdateCampaignBenefitCommand c) {
+        return new AdminCampaignBenefitUpdateRequest(
+                isBlank(c.benefitType()) ? null : enumValue(CampaignBenefitType.class, c.benefitType()),
+                c.creditScoin(), c.couponCode(),
+                isBlank(c.couponDiscountType()) ? null : enumValue(CouponDiscountType.class, c.couponDiscountType()),
+                c.couponDiscountValue(), c.couponMaxDiscountScoin(), c.couponQuotaTotal(),
+                c.couponQuotaPerUser(), c.couponMinOrderValueScoin(), c.active()
+        );
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value) {
+        if (isBlank(value)) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị campaign không hợp lệ");
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException e) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Giá trị campaign không hợp lệ");
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
 
     private Specification<Campaign> buildSpecification(AdminCampaignListRequest request) {
         return (root, query, cb) -> {
@@ -433,7 +537,7 @@ public class CampaignAdminPortImpl implements CampaignAdminPort {
                 predicates.add(cb.equal(root.get("fundingSource"), request.getFundingSource()));
             }
             if (request.getKeyword() != null && !request.getKeyword().isBlank()) {
-                String kw = "%" + request.getKeyword().trim().toLowerCase() + "%";
+                String kw = "%" + request.getKeyword().trim().toLowerCase(Locale.ROOT) + "%";
                 predicates.add(cb.like(cb.lower(root.get("name")), kw));
             }
 
