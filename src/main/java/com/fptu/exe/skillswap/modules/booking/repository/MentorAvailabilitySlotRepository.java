@@ -79,6 +79,7 @@ public interface MentorAvailabilitySlotRepository extends JpaRepository<MentorAv
     @Query("""
             select distinct slot from MentorAvailabilitySlot slot
             left join fetch slot.slotServices ss
+            left join fetch slot.template
             where slot.mentorUserId = :mentorUserId
               and slot.startTimeUtc < :endTime
               and slot.endTimeUtc > :startTime

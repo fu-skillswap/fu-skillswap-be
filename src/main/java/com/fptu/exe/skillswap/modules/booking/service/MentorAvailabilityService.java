@@ -107,10 +107,16 @@ public class MentorAvailabilityService {
     private final PaymentProperties paymentProperties;
 
     private AvailabilityTemplateService availabilityTemplateService;
+    private AvailabilityMentorMutationLocker mutationLocker;
 
     @Autowired(required = false)
     void setAvailabilityTemplateService(AvailabilityTemplateService availabilityTemplateService) {
         this.availabilityTemplateService = availabilityTemplateService;
+    }
+
+    @Autowired(required = false)
+    void setMutationLocker(AvailabilityMentorMutationLocker mutationLocker) {
+        this.mutationLocker = mutationLocker;
     }
 
     @Autowired
@@ -138,6 +144,7 @@ public class MentorAvailabilityService {
     public MentorManagedAvailabilitySlotResponse createSlotDirectly(UUID mentorUserId, CreateAvailabilitySlotRequest request) {
         requireUserId(mentorUserId);
         validateManagedActiveMentor(mentorUserId);
+        lockMentorIfConfigured(mentorUserId);
 
         LocalDateTime start = toUtcLocal(request.legacyJavaBridge() ? request.startAt() : normalizeToWholeMinute(request.startAt()));
         LocalDateTime end = toUtcLocal(request.legacyJavaBridge() ? request.endAt() : normalizeToWholeMinute(request.endAt()));
@@ -153,8 +160,11 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể tạo slot rảnh ở quá khứ");
         }
 
+        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
+        validateServicesFitSlotDuration(Duration.between(start, end).toMinutes(), services);
+
         if (availabilityTemplateService != null) {
-            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end,
+            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end, null,
                     Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
                     request.expectedTemplateVersions());
         }
@@ -174,14 +184,7 @@ public class MentorAvailabilityService {
                 .build();
         MentorAvailabilitySlot savedSlot = mentorAvailabilitySlotRepository.save(slot);
 
-        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
-
-        if (!services.isEmpty()) {
-            List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> AvailabilitySlotService.of(savedSlot, service.serviceId()))
-                    .toList();
-            replaceSlotServices(savedSlot, slotServices);
-        }
+        syncSlotServices(savedSlot, services);
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         return toManagedSlotResponse(savedSlot);
@@ -193,6 +196,7 @@ public class MentorAvailabilityService {
         if (slotId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
         }
+        lockMentorIfConfigured(mentorUserId);
 
         MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
@@ -217,8 +221,11 @@ public class MentorAvailabilityService {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Không thể sửa slot rảnh thành thời gian quá khứ");
         }
 
+        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
+        validateServicesFitSlotDuration(Duration.between(start, end).toMinutes(), services);
+
         if (availabilityTemplateService != null) {
-            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end,
+            availabilityTemplateService.replaceGeneratedOccurrences(mentorUserId, start, end, slotId,
                     Boolean.TRUE.equals(request.replaceGeneratedOccurrences()), Boolean.TRUE.equals(request.rejectPendingBookings()),
                     request.expectedTemplateVersions());
         }
@@ -260,17 +267,7 @@ public class MentorAvailabilityService {
         slot.setEndTime(end);
         slot.setNote(trimToNull(request.note()));
 
-        availabilitySlotServiceRepository.deleteBySlotId(slotId);
-        slot.getSlotServices().clear();
-
-        List<ServiceSlotCandidate> services = resolveManagedServices(mentorUserId, request.serviceIds());
-
-        if (!services.isEmpty()) {
-            List<AvailabilitySlotService> slotServices = services.stream()
-                    .map(service -> AvailabilitySlotService.of(slot, service.serviceId()))
-                    .toList();
-            replaceSlotServices(slot, slotServices);
-        }
+        syncSlotServices(slot, services);
         if (availabilityTemplateService != null) availabilityTemplateService.markMentorDue(mentorUserId);
 
         MentorAvailabilitySlot updatedSlot = mentorAvailabilitySlotRepository.save(slot);
@@ -283,6 +280,7 @@ public class MentorAvailabilityService {
         if (slotId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "Mã slot không hợp lệ");
         }
+        lockMentorIfConfigured(mentorUserId);
 
         MentorAvailabilitySlot slot = findSlotForUpdateOrLegacyRead(slotId);
         validateMentorOwnsSlot(mentorUserId, slot);
@@ -376,7 +374,10 @@ public class MentorAvailabilityService {
                 hasLockingBookings(slot.getId()),
                 timeMutationCapability(slot),
                 deactivationCapability(slot),
-                true
+                true,
+                slot.getTemplate() != null ? slot.getTemplate().getId() : null,
+                slot.getTemplate() != null ? slot.getTemplate().getConfigVersion() : null,
+                slot.getTemplate() != null
         );
     }
 
@@ -919,6 +920,50 @@ public class MentorAvailabilityService {
             }
         }
         return new ArrayList<>(services.values());
+    }
+
+    private void lockMentorIfConfigured(UUID mentorUserId) {
+        if (mutationLocker == null || mentorUserId == null || !mentorBookingQueryPort.existsById(mentorUserId)) {
+            return;
+        }
+        mutationLocker.lock(mentorUserId);
+    }
+
+    private void validateServicesFitSlotDuration(long slotDurationMinutes, Collection<ServiceSlotCandidate> services) {
+        if (services == null || services.isEmpty()) {
+            return;
+        }
+        for (ServiceSlotCandidate service : services) {
+            if (service.durationMinutes() == null || service.durationMinutes() <= 0 || service.durationMinutes() > slotDurationMinutes) {
+                throw new BaseException(
+                        ErrorCode.BAD_REQUEST,
+                        "Thời lượng slot rảnh (" + slotDurationMinutes + " phút) phải lớn hơn hoặc bằng thời lượng dịch vụ \""
+                                + service.title() + "\" (" + service.durationMinutes() + " phút)"
+                );
+            }
+        }
+    }
+
+    private void syncSlotServices(MentorAvailabilitySlot slot, List<ServiceSlotCandidate> services) {
+        Set<UUID> targetIds = services == null
+                ? Set.of()
+                : services.stream()
+                        .map(ServiceSlotCandidate::serviceId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (slot.getSlotServices() == null) {
+            slot.setSlotServices(new LinkedHashSet<>());
+        }
+        slot.getSlotServices().removeIf(binding -> binding.getServiceId() == null || !targetIds.contains(binding.getServiceId()));
+        Set<UUID> retainedIds = slot.getSlotServices().stream()
+                .map(AvailabilitySlotService::getServiceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (UUID serviceId : targetIds) {
+            if (!retainedIds.contains(serviceId)) {
+                slot.getSlotServices().add(AvailabilitySlotService.of(slot, serviceId));
+            }
+        }
     }
 
     private UpsertAvailabilityRuleRequest validateRuleRequest(UpsertAvailabilityRuleRequest request) {

@@ -78,6 +78,7 @@ public interface AvailabilitySlotServiceRepository extends JpaRepository<Availab
             @Param("now") LocalDateTime now
     );
 
-    @Modifying
-    void deleteBySlotId(UUID slotId);
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("delete from AvailabilitySlotService slotService where slotService.slot.id = :slotId")
+    void deleteBySlotId(@Param("slotId") UUID slotId);
 }

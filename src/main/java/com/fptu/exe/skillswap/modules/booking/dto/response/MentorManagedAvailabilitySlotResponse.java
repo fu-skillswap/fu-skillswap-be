@@ -23,8 +23,31 @@ public record MentorManagedAvailabilitySlotResponse(
         boolean hasLockingBooking,
         SlotMutationCapabilityResponse timeMutation,
         SlotMutationCapabilityResponse deactivation,
-        boolean canEditNote
+        boolean canEditNote,
+        UUID templateId,
+        Integer templateVersion,
+        boolean generatedFromTemplate
 ) {
+    public MentorManagedAvailabilitySlotResponse(
+            UUID slotId,
+            Instant startAt,
+            Instant endAt,
+            String timezone,
+            boolean isActive,
+            String note,
+            List<AvailabilitySlotServiceBasicResponse> services,
+            Integer version,
+            int pendingBookingCount,
+            int lockingBookingCount,
+            boolean hasLockingBooking,
+            SlotMutationCapabilityResponse timeMutation,
+            SlotMutationCapabilityResponse deactivation,
+            boolean canEditNote
+    ) {
+        this(slotId, startAt, endAt, timezone, isActive, note, services, version, pendingBookingCount,
+                lockingBookingCount, hasLockingBooking, timeMutation, deactivation, canEditNote, null, null, false);
+    }
+
     @Deprecated(forRemoval = true)
     public java.time.LocalDateTime startTime() {
         return startAt == null ? null : java.time.LocalDateTime.ofInstant(startAt, java.time.ZoneId.of("Asia/Ho_Chi_Minh"));

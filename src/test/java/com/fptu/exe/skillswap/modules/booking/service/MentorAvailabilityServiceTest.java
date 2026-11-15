@@ -45,6 +45,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -225,8 +226,6 @@ class MentorAvailabilityServiceTest {
                 List.of(requestedServiceId)
         );
 
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlot(mentorUserId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
-                .thenReturn(false);
         when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
                 .thenReturn(java.util.Map.of());
 
@@ -234,6 +233,29 @@ class MentorAvailabilityServiceTest {
                 mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
 
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void createSlotDirectly_whenSlotShorterThanServiceDuration_throwsBadRequest() {
+        UUID serviceId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.now().plusDays(1);
+        CreateAvailabilitySlotRequest request = new CreateAvailabilitySlotRequest(
+                start,
+                start.plusMinutes(45),
+                "Short slot",
+                List.of(serviceId)
+        );
+
+        when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
+                .thenReturn(java.util.Map.of(serviceId, new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        serviceId, mentorUserId, "1:1 Mentoring", null, null, 60, 100, false, true,
+                        "ONE_TO_ONE", null, false)));
+
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.createSlotDirectly(mentorUserId, request));
+
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(mentorAvailabilitySlotRepository, never()).save(any());
     }
 
     @Test
@@ -325,8 +347,6 @@ class MentorAvailabilityServiceTest {
                 .build();
 
         when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
-        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(mentorUserId, slotId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
-                .thenReturn(false);
         when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
                 .thenReturn(java.util.Map.of());
 
@@ -334,6 +354,91 @@ class MentorAvailabilityServiceTest {
                 mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
 
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void updateSlotDirectly_whenSlotShorterThanServiceDuration_throwsBadRequest() {
+        UUID slotId = UUID.randomUUID();
+        UUID serviceId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.now().plusDays(2);
+        UpdateAvailabilitySlotRequest request = new UpdateAvailabilitySlotRequest(
+                start,
+                start.plusMinutes(30),
+                "Updated Note",
+                List.of(serviceId)
+        );
+
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorUserId(mentorUserId)
+                .startTime(LocalDateTime.now().plusDays(1))
+                .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .isActive(true)
+                .isBooked(false)
+                .build();
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(mentorBookingQueryPort.getServicesByIds(request.serviceIds()))
+                .thenReturn(java.util.Map.of(serviceId, new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                        serviceId, mentorUserId, "1:1 Mentoring", null, null, 60, 100, false, true,
+                        "ONE_TO_ONE", null, false)));
+
+        BaseException ex = assertThrows(BaseException.class, () ->
+                mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request));
+
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(mentorAvailabilitySlotRepository, never()).save(any());
+    }
+
+    @Test
+    void updateSlotDirectly_preservingExistingService_keepsCompositeBindingWithoutDelete() {
+        UUID slotId = UUID.randomUUID();
+        UUID keptServiceId = UUID.randomUUID();
+        UUID addedServiceId = UUID.randomUUID();
+        LocalDateTime start = LocalDateTime.now().plusDays(2);
+        UpdateAvailabilitySlotRequest request = new UpdateAvailabilitySlotRequest(
+                start,
+                start.plusHours(2),
+                "Updated Note",
+                List.of(keptServiceId, addedServiceId)
+        );
+
+        MentorAvailabilitySlot slot = MentorAvailabilitySlot.builder()
+                .id(slotId)
+                .mentorUserId(mentorUserId)
+                .startTime(LocalDateTime.now().plusDays(1))
+                .endTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .isActive(true)
+                .isBooked(false)
+                .build();
+        AvailabilitySlotService existingBinding = AvailabilitySlotService.of(slot, keptServiceId);
+        slot.getSlotServices().add(existingBinding);
+
+        when(mentorAvailabilitySlotRepository.findById(slotId)).thenReturn(Optional.of(slot));
+        when(mentorAvailabilitySlotRepository.existsOverlappingActiveSlotExcludeSelf(
+                mentorUserId, slotId, BookingTime.toInstant(request.startTime()), BookingTime.toInstant(request.endTime())))
+                .thenReturn(false);
+        when(mentorBookingQueryPort.getServicesByIds(any()))
+                .thenReturn(java.util.Map.of(
+                        keptServiceId, new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                                keptServiceId, mentorUserId, "Kept Service", null, null, 60, 100, false, true,
+                                "ONE_TO_ONE", null, false),
+                        addedServiceId, new com.fptu.exe.skillswap.modules.mentor.port.ServiceSlotCandidate(
+                                addedServiceId, mentorUserId, "Added Service", null, null, 60, 100, false, true,
+                                "ONE_TO_ONE", null, false)
+                ));
+        when(mentorAvailabilitySlotRepository.save(any(MentorAvailabilitySlot.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        mentorAvailabilityService.updateSlotDirectly(mentorUserId, slotId, request);
+
+        verify(availabilitySlotServiceRepository, never()).deleteBySlotId(any());
+        assertEquals(2, slot.getSlotServices().size());
+        AvailabilitySlotService retained = slot.getSlotServices().stream()
+                .filter(b -> keptServiceId.equals(b.getServiceId()))
+                .findFirst()
+                .orElseThrow();
+        assertSame(existingBinding, retained);
     }
 
     @Test
