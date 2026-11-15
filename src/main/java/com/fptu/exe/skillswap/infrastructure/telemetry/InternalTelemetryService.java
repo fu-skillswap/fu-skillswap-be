@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
@@ -18,7 +19,7 @@ public class InternalTelemetryService {
     private final InternalTelemetryEventRepository repository;
     private final ObjectMapper objectMapper;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(String eventType, UUID userId, String subjectType, UUID subjectId, Map<String, ?> metadata) {
         try {
             repository.save(InternalTelemetryEvent.builder()

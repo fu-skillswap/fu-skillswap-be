@@ -281,7 +281,7 @@ public class MentorVerificationService {
     @Transactional(readOnly = true)
     public MentorVerificationUploadIntentStatusResponse getDocumentUploadIntentStatus(UUID userId, UUID uploadIntentId) {
         requireUserId(userId);
-        MentorVerificationUploadIntent intent = getOwnedUploadIntentForUpdate(userId, uploadIntentId);
+        MentorVerificationUploadIntent intent = getOwnedUploadIntent(userId, uploadIntentId);
         return mapUploadIntentStatus(intent);
     }
 
@@ -938,11 +938,22 @@ public class MentorVerificationService {
                 "CHECK_BOOKING_OFFER", "/me/mentor-profile", "Kiểm tra lại trạng thái nhận booking và lịch rảnh của bạn.");
     }
 
+    private MentorVerificationUploadIntent getOwnedUploadIntent(UUID userId, UUID uploadIntentId) {
+        if (uploadIntentId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "uploadIntentId không được để trống");
+        }
+        return requireOwnedIntent(userId, uploadIntentRepository.findById(uploadIntentId));
+    }
+
     private MentorVerificationUploadIntent getOwnedUploadIntentForUpdate(UUID userId, UUID uploadIntentId) {
         if (uploadIntentId == null) {
             throw new BaseException(ErrorCode.BAD_REQUEST, "uploadIntentId không được để trống");
         }
-        MentorVerificationUploadIntent intent = uploadIntentRepository.findByIdForUpdate(uploadIntentId)
+        return requireOwnedIntent(userId, uploadIntentRepository.findByIdForUpdate(uploadIntentId));
+    }
+
+    private MentorVerificationUploadIntent requireOwnedIntent(UUID userId, Optional<MentorVerificationUploadIntent> maybeIntent) {
+        MentorVerificationUploadIntent intent = maybeIntent
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
         if (!userId.equals(intent.getOwnerUserId())) {
             throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");

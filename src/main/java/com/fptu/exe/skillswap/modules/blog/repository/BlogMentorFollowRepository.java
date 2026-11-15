@@ -1,7 +1,6 @@
 package com.fptu.exe.skillswap.modules.blog.repository;
 
 import com.fptu.exe.skillswap.modules.blog.domain.BlogMentorFollow;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,7 +15,6 @@ public interface BlogMentorFollowRepository extends JpaRepository<BlogMentorFoll
     long countByUserId(UUID userId);
     void deleteByUserIdAndMentorUserId(UUID userId, UUID mentorUserId);
 
-    @EntityGraph(attributePaths = {"mentor", "mentor.user"})
     List<BlogMentorFollow> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
     @Query("select f.mentorUserId from BlogMentorFollow f where f.userId = :userId")

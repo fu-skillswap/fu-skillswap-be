@@ -28,6 +28,6 @@ public class UserBanStatusAdapter implements UserBanStatusPort {
     private Boolean loadBanStatus(UUID userId) {
         return userRepository.findById(userId)
                 .map(user -> user.getStatus() == UserStatus.BANNED)
-                .orElse(true);
+                .orElse(false);
     }
 }

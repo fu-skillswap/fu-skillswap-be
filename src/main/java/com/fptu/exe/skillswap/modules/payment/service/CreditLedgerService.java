@@ -63,8 +63,12 @@ public class CreditLedgerService {
 
     @Transactional(readOnly = true)
     public int getAvailableBalance(UUID userId) {
-        CreditLedgerAccount account = ensureUserAccount(userId);
-        return entryRepository.sumBalanceEffectByAccountId(account.getId()).intValue();
+        if (userId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "userId không được để trống");
+        }
+        return accountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.USER_CREDIT, userId)
+                .map(account -> entryRepository.sumBalanceEffectByAccountId(account.getId()).intValue())
+                .orElse(0);
     }
 
     @Transactional(readOnly = true)
@@ -98,8 +102,12 @@ public class CreditLedgerService {
 
     @Transactional(readOnly = true)
     public List<CreditLedgerEntry> getRecentTransactions(UUID userId) {
-        CreditLedgerAccount account = ensureUserAccount(userId);
-        return entryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
+        if (userId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "userId không được để trống");
+        }
+        return accountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.USER_CREDIT, userId)
+                .map(account -> entryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId()))
+                .orElse(List.of());
     }
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))

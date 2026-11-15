@@ -740,14 +740,22 @@ public class SettlementService implements BookingSettlementCommandPort {
 
     @Transactional(readOnly = true)
     public int getMentorAvailableSettlement(UUID mentorUserId) {
-        SettlementAccount account = ensureMentorAccount(mentorUserId);
-        return settlementBalance(account);
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
+        }
+        return settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId)
+                .map(this::settlementBalance)
+                .orElse(0);
     }
 
     @Transactional(readOnly = true)
     public java.util.List<SettlementEntry> getRecentTransactions(UUID mentorUserId) {
-        SettlementAccount account = ensureMentorAccount(mentorUserId);
-        return settlementEntryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId());
+        if (mentorUserId == null) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "mentorUserId không được để trống");
+        }
+        return settlementAccountRepository.findByOwnerTypeAndOwnerId(LedgerAccountType.MENTOR_SETTLEMENT, mentorUserId)
+                .map(account -> settlementEntryRepository.findTop15ByAccountIdOrderByCreatedAtDesc(account.getId()))
+                .orElse(java.util.List.of());
     }
 
     @Retryable(value = ObjectOptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 100))

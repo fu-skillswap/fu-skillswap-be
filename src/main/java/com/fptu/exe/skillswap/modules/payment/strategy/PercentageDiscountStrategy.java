@@ -18,10 +18,11 @@ public class PercentageDiscountStrategy implements DiscountCalculationStrategy {
             return 0;
         }
         int percent = Math.max(0, coupon.getDiscountValue() == null ? 0 : coupon.getDiscountValue());
-        int discount = (grossScoin * percent) / 100;
+        long rawDiscount = ((long) grossScoin * percent) / 100L;
+        int discount = (int) Math.min(rawDiscount, grossScoin);
         if (coupon.getMaxDiscountScoin() != null) {
             discount = Math.min(discount, Math.max(0, coupon.getMaxDiscountScoin()));
         }
-        return Math.min(discount, grossScoin);
+        return discount;
     }
 }

@@ -198,6 +198,30 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("Web Refresh with JSON {\"refreshToken\": null} falls back to cookie instead of treating 'null' as token")
+    void refreshToken_webWithJsonNullBody_fallsBackToCookie() {
+        TokenResponse newPair = TokenResponse.builder()
+                .accessToken(DUMMY_ACCESS)
+                .refreshToken(DUMMY_REFRESH)
+                .tokenType("Bearer")
+                .build();
+        when(identityService.refreshToken(DUMMY_COOKIE_REFRESH)).thenReturn(newPair);
+
+        MockHttpServletRequest servletRequest = new MockHttpServletRequest();
+        servletRequest.setContentType("application/json");
+        servletRequest.setContent("{\"refreshToken\":null}".getBytes(StandardCharsets.UTF_8));
+        servletRequest.setCookies(new Cookie("refresh_token", DUMMY_COOKIE_REFRESH));
+        MockHttpServletResponse servletResponse = new MockHttpServletResponse();
+
+        ApiResponse<TokenResponse> response = authController.refreshToken(servletRequest, servletResponse);
+
+        assertNotNull(response.getData());
+        assertEquals(DUMMY_ACCESS, response.getData().getAccessToken());
+        assertNull(response.getData().getRefreshToken());
+        verify(identityService).refreshToken(DUMMY_COOKIE_REFRESH);
+    }
+
+    @Test
     @DisplayName("Refresh without body and without cookie throws BAD_REQUEST")
     void refreshToken_missingToken_throwsBadRequest() {
         MockHttpServletRequest servletRequest = new MockHttpServletRequest();

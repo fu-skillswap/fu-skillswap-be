@@ -429,7 +429,7 @@ public class AuthController {
                 byte[] bytes = request.getInputStream().readAllBytes();
                 if (bytes.length > 0) {
                     JsonNode node = objectMapper.readTree(bytes);
-                    if (node != null && node.has("refreshToken")) {
+                    if (node != null && node.hasNonNull("refreshToken")) {
                         String token = node.get("refreshToken").asText();
                         if (StringUtils.hasText(token)) {
                             return token.trim();

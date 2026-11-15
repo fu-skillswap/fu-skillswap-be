@@ -63,7 +63,9 @@ public class WalletQueryService {
                 .amountScoin(entry.getAmountScoin())
                 .balanceEffectScoin(entry.getBalanceEffectScoin())
                 .memo(entry.getMemo())
-                .createdAt(entry.getCreatedAt() != null ? BusinessTime.toOffsetDateTime(entry.getCreatedAt()) : null)
+                .createdAt(entry.getCreatedAtUtc() != null
+                        ? BusinessTime.toOffsetDateTime(entry.getCreatedAtUtc())
+                        : (entry.getCreatedAt() != null ? BusinessTime.toOffsetDateTime(entry.getCreatedAt()) : null))
                 .build();
     }
 }

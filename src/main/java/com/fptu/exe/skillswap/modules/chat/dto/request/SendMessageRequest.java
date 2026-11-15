@@ -16,7 +16,7 @@ public record SendMessageRequest(
         @Schema(description = "ID tin nhắn được trả lời, nếu có. Bỏ qua hoặc để null khi gửi tin nhắn mới.", nullable = true)
         UUID replyToMessageId,
         @Schema(description = "Danh sách ID upload intent đã được tạo trước đó. Có thể để trống nếu không gửi file.", nullable = true)
-        java.util.List<UUID> attachmentIntentIds
+        java.util.List<@jakarta.validation.constraints.NotNull(message = "attachmentIntentId không được để trống") UUID> attachmentIntentIds
 ) {
     /** Compatibility bridge for Java callers; HTTP clients must provide a stable clientMessageId. */
     public SendMessageRequest(String content) { this(UUID.randomUUID(), content, null, java.util.List.of()); }

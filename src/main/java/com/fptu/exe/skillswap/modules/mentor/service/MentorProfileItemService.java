@@ -135,13 +135,13 @@ public class MentorProfileItemService {
         mentorAchievementRepository.delete(achievement);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PublicAssetUploadPort.UploadIntent createAchievementPictureUploadIntent(UUID mentorUserId, PublicAssetUploadPort.UploadRequest request) {
         requireProfile(mentorUserId);
         return publicAssetUploadPort.createPortfolioImageIntent(mentorUserId, request);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PublicAssetUploadPort.UploadIntent createAchievementPictureUploadIntentForAchievement(UUID mentorUserId, UUID achievementId, PublicAssetUploadPort.UploadRequest request) {
         requireUserId(mentorUserId);
         mentorAchievementRepository.findByIdAndMentorProfileUserId(achievementId, mentorUserId)

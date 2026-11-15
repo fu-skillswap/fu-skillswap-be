@@ -124,7 +124,7 @@ public class EmailAuthService {
         }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = OtpInvalidAttemptException.class)
     public TokenResponse verifyEmail(EmailVerifyRequest request) {
         String email = normalizeEmail(request.email());
         EmailVerification verification = emailVerificationRepository
@@ -140,9 +140,7 @@ public class EmailAuthService {
         }
 
         if (!verification.getOtpCode().equals(request.otpCode().trim())) {
-            verification.setAttempts(verification.getAttempts() + 1);
-            emailVerificationRepository.save(verification);
-            throw new BaseException(ErrorCode.OTP_INVALID, "Mã xác thực không chính xác.");
+            recordInvalidOtpAttempt(verification);
         }
 
         verification.setVerifiedAt(timeProvider.nowBusiness());
@@ -208,7 +206,7 @@ public class EmailAuthService {
         sendResetPasswordEmail(email, user.getFullName(), otpCode);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = OtpInvalidAttemptException.class)
     public void resetPassword(ResetPasswordRequest request) {
         String email = normalizeEmail(request.email());
         EmailVerification verification = emailVerificationRepository
@@ -224,9 +222,7 @@ public class EmailAuthService {
         }
 
         if (!verification.getOtpCode().equals(request.otpCode().trim())) {
-            verification.setAttempts(verification.getAttempts() + 1);
-            emailVerificationRepository.save(verification);
-            throw new BaseException(ErrorCode.OTP_INVALID, "Mã xác thực không chính xác.");
+            recordInvalidOtpAttempt(verification);
         }
 
         verification.setVerifiedAt(timeProvider.nowBusiness());
@@ -398,6 +394,18 @@ public class EmailAuthService {
             }
         } catch (Exception ex) {
             log.error("[EmailAuth] Lỗi khi gửi email OTP đặt lại mật khẩu tới {}: {}", email, ex.getMessage(), ex);
+        }
+    }
+
+    private void recordInvalidOtpAttempt(EmailVerification verification) {
+        verification.setAttempts(verification.getAttempts() + 1);
+        emailVerificationRepository.save(verification);
+        throw new OtpInvalidAttemptException("Mã xác thực không chính xác.");
+    }
+
+    private static final class OtpInvalidAttemptException extends BaseException {
+        private OtpInvalidAttemptException(String message) {
+            super(ErrorCode.OTP_INVALID, message);
         }
     }
 }

@@ -129,6 +129,9 @@ public class ChatAttachmentService {
 
         Map<UUID, StorageGateway.ObjectMetadata> validated = new LinkedHashMap<>();
         for (UUID intentId : new LinkedHashSet<>(intentIds)) {
+            if (intentId == null) {
+                throw new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID);
+            }
             ChatUploadIntent intent = chatUploadIntentRepository.findById(intentId)
                     .orElseThrow(() -> new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID));
             if (!intent.getConversation().getId().equals(conversationId)
@@ -160,6 +163,9 @@ public class ChatAttachmentService {
         if (intentIds.size() > 5) throw new BaseException(ErrorCode.CHAT_ATTACHMENT_QUOTA_EXCEEDED);
 
         for (UUID intentId : new LinkedHashSet<>(intentIds)) {
+            if (intentId == null) {
+                throw new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID);
+            }
             ChatUploadIntent intent = chatUploadIntentRepository.findByIdForUpdate(intentId)
                     .orElseThrow(() -> new BaseException(ErrorCode.CHAT_UPLOAD_INTENT_INVALID));
             if (!intent.getConversation().getId().equals(conversation.getId())

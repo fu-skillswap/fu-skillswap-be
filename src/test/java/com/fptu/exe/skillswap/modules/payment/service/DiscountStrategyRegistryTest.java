@@ -35,6 +35,16 @@ class DiscountStrategyRegistryTest {
     }
 
     @Test
+    void calculateDiscount_percentageLargeGrossDoesNotOverflow() {
+        Coupon coupon = Coupon.builder()
+                .discountType(CouponDiscountType.PERCENT)
+                .discountValue(50)
+                .build();
+        int discount = registry.calculateDiscount(coupon, 66_000_000);
+        assertEquals(33_000_000, discount);
+    }
+
+    @Test
     void calculateDiscount_percentageWithCap() {
         Coupon coupon = Coupon.builder()
                 .discountType(CouponDiscountType.PERCENT)
