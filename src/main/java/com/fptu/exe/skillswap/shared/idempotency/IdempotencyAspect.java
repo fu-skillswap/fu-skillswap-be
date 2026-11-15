@@ -58,7 +58,11 @@ public class IdempotencyAspect {
             return joinPoint.proceed();
         }
         HttpServletRequest request = attributes.getRequest();
-        String key = scopedKey(normalizeKey(request.getHeader("Idempotency-Key")));
+        String rawHeader = request.getHeader("Idempotency-Key");
+        if (!isIdempotencyKeyRequired(joinPoint) && (rawHeader == null || rawHeader.trim().isEmpty())) {
+            return joinPoint.proceed();
+        }
+        String key = scopedKey(normalizeKey(rawHeader));
         String fingerprint = fingerprint(joinPoint.getArgs(), request.getMethod(), request.getRequestURI());
 
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
@@ -165,6 +169,14 @@ public class IdempotencyAspect {
         } catch (JsonProcessingException ex) {
             throw new BaseException(ErrorCode.DATABASE_ERROR, "Không thể lưu idempotency response", ex);
         }
+    }
+
+    private boolean isIdempotencyKeyRequired(ProceedingJoinPoint joinPoint) {
+        if (!(joinPoint.getSignature() instanceof MethodSignature signature)) {
+            return true;
+        }
+        Idempotent annotation = signature.getMethod().getAnnotation(Idempotent.class);
+        return annotation == null || annotation.required();
     }
 
     private String normalizeKey(String rawKey) {

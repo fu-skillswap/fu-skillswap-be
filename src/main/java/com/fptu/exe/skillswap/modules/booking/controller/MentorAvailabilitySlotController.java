@@ -87,7 +87,7 @@ public class MentorAvailabilitySlotController {
 
     @Operation(summary = "Ngừng nhận booking cho slot", description = "Ngừng sử dụng slot rảnh này cho booking mới. Đây là thao tác kết thúc của slot; nếu slot đang liên quan đến booking chờ xử lý, backend có thể yêu cầu confirmation token.")
     @PostMapping("/{slotId}/deactivate")
-    @com.fptu.exe.skillswap.shared.idempotency.Idempotent
+    @com.fptu.exe.skillswap.shared.idempotency.Idempotent(required = false)
     public ResponseEntity<ApiResponse<MentorManagedAvailabilitySlotResponse>> deactivateSlot(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID slotId

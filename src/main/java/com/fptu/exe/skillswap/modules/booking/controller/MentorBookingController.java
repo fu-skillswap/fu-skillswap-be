@@ -64,7 +64,7 @@ public class MentorBookingController {
     public ApiResponse<BookingResponse> acceptBooking(
             @Parameter(hidden = true) @AuthenticationPrincipal UserPrincipal principal,
             @PathVariable UUID bookingId,
-            @RequestBody(required = false) AcceptBookingRequest request
+            @jakarta.validation.Valid @RequestBody(required = false) AcceptBookingRequest request
     ) {
         ensureAuthenticated(principal);
         return ApiResponse.success(bookingService.acceptBooking(principal.getPublicId(), bookingId, request));

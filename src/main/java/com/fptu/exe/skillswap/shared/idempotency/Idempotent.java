@@ -7,9 +7,10 @@ import java.lang.annotation.Target;
 
 /**
  * Đánh dấu method có hỗ trợ idempotency.
- * Request gọi method này phải có header "Idempotency-Key".
+ * Khi {@code required = true} (mặc định), request gọi method này phải có header "Idempotency-Key".
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Idempotent {
+    boolean required() default true;
 }

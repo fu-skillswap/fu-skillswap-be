@@ -42,6 +42,10 @@ public class WebConfig {
                 "x-auth-token",
                 "X-Request-Id",
                 "X-Correlation-ID",
+                "Idempotency-Key",
+                "X-Client-Type",
+                "X-Client-Platform",
+                "X-Refresh-Token",
                 "ngrok-skip-browser-warning"
         ));
         configuration.setExposedHeaders(List.of("x-auth-token", "X-Request-Id", "X-Correlation-ID"));
