@@ -1242,7 +1242,7 @@ class BookingServiceTest {
 
         assertEquals(1, expiredCount);
         assertEquals(BookingStatus.EXPIRED, staleBooking.getStatus());
-        assertTrue(staleBooking.getRejectReason().contains("240 phút hoặc ít nhất 2 giờ trước giờ bắt đầu"));
+        assertTrue(staleBooking.getRejectReason().contains("240 phút hoặc trước giờ bắt đầu"));
         verify(paymentOrderService).expireAwaitingPayment(staleBooking.getId());
         verify(eventPublisher, org.mockito.Mockito.times(2))
                 .publishEvent(any(com.fptu.exe.skillswap.modules.notification.NotificationEvent.class));

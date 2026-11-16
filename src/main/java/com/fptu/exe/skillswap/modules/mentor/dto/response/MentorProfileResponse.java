@@ -78,7 +78,7 @@ public record MentorProfileResponse(
                 .requiredFieldsCompleted(false)
                 .userId(userId)
                 .isAvailable(true)
-                .minimumBookingLeadTimeMinutes(120)
+                .minimumBookingLeadTimeMinutes(0)
                 .maximumBookingHorizonDays(30)
                 .bookingTimezone("Asia/Ho_Chi_Minh")
                 .subjectResults(List.of())

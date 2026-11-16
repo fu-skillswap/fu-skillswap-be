@@ -25,7 +25,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class MentorBookingPolicyService implements MentorBookingPolicyQuery {
 
-    private static final int DEFAULT_LEAD_TIME_MINUTES = 120;
+    private static final int DEFAULT_LEAD_TIME_MINUTES = 0;
     private static final int DEFAULT_HORIZON_DAYS = 30;
     private static final int MAXIMUM_AVAILABILITY_QUERY_DAYS = 31;
     private static final int MAXIMUM_PARENT_SLOT_DURATION_MINUTES = 720;

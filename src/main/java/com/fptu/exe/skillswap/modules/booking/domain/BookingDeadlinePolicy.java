@@ -8,11 +8,11 @@ import java.time.LocalDateTime;
 public final class BookingDeadlinePolicy {
 
     public static final long PENDING_RESPONSE_WINDOW_HOURS = 12;
-    public static final long PENDING_RESPONSE_PREPARATION_HOURS = 3;
+    public static final long PENDING_RESPONSE_PREPARATION_HOURS = 0;
     /** Mentee has up to four hours after mentor acceptance to complete payment. */
     public static final long PAYMENT_WINDOW_MINUTES = 240;
-    /** Payment must also be completed at least two hours before the session starts. */
-    public static final long PAYMENT_PREPARATION_MINUTES = 120;
+    /** Payment can be completed anytime before the session starts. */
+    public static final long PAYMENT_PREPARATION_MINUTES = 0;
     /** Both parties get the same early-cancellation boundary: four hours before start. */
     public static final long CANCELLATION_EARLY_WINDOW_MINUTES = 240;
     /** Dispute SLA is measured from the server timestamp at issue submission/escalation. */
@@ -27,6 +27,9 @@ public final class BookingDeadlinePolicy {
     }
 
     public static String paymentDeadlineText() {
+        if (PAYMENT_PREPARATION_MINUTES <= 0) {
+            return PAYMENT_WINDOW_MINUTES + " phút hoặc trước giờ bắt đầu, tùy thời điểm nào đến trước";
+        }
         return PAYMENT_WINDOW_MINUTES + " phút hoặc ít nhất "
                 + (PAYMENT_PREPARATION_MINUTES / 60) + " giờ trước giờ bắt đầu, tùy thời điểm nào đến trước";
     }

@@ -12,17 +12,21 @@ import com.fptu.exe.skillswap.modules.booking.domain.AvailabilitySlotServiceId;
 import com.fptu.exe.skillswap.modules.booking.domain.BookingStatus;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilityRule;
 import com.fptu.exe.skillswap.modules.booking.dto.request.AcceptBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.request.BookingQuoteRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CreateBookingRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.SaveMeetingLinkRequest;
 import com.fptu.exe.skillswap.modules.booking.dto.request.CompleteBookingRequest;
+import com.fptu.exe.skillswap.modules.booking.dto.response.BookingQuoteResponse;
 import com.fptu.exe.skillswap.modules.booking.dto.response.BookingResponse;
 import com.fptu.exe.skillswap.modules.booking.domain.MeetingPlatform;
 import com.fptu.exe.skillswap.modules.booking.domain.MentorAvailabilitySlot;
 import com.fptu.exe.skillswap.modules.booking.repository.AvailabilitySlotServiceRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilityRuleRepository;
 import com.fptu.exe.skillswap.modules.booking.repository.MentorAvailabilitySlotRepository;
+import com.fptu.exe.skillswap.modules.booking.service.BookingQuoteService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingService;
 import com.fptu.exe.skillswap.modules.booking.service.BookingTime;
+import com.fptu.exe.skillswap.modules.booking.service.MentorAvailabilityService;
 import com.fptu.exe.skillswap.modules.chat.domain.ConversationSourceType;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationParticipantRepository;
 import com.fptu.exe.skillswap.modules.chat.repository.ConversationRepository;
@@ -94,6 +98,12 @@ class BookingFlowIntegrationTest {
 
     @Autowired
     private BookingService bookingService;
+
+    @Autowired
+    private BookingQuoteService bookingQuoteService;
+
+    @Autowired
+    private MentorAvailabilityService mentorAvailabilityService;
 
     @Autowired
     private com.fptu.exe.skillswap.modules.booking.repository.BookingRepository bookingRepository;
@@ -356,6 +366,64 @@ class BookingFlowIntegrationTest {
         assertEquals(SessionAttendanceSummary.BOTH, mentorResponse.attendance().summary());
         assertNotNull(storedSession.getActualStartTimeUtc());
         assertNotNull(mentorResponse.actualStartTime());
+    }
+
+    @Test
+    void testLastMinuteBooking_tenMinutesBeforeStart_succeedsThroughQuoteAcceptAndCheckout() {
+        Instant slotStartUtc = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MINUTES).plusSeconds(10 * 60);
+        Instant slotEndUtc = slotStartUtc.plusSeconds(60 * 60);
+
+        MentorAvailabilitySlot lastMinuteSlot = mentorAvailabilitySlotRepository.saveAndFlush(
+                MentorAvailabilitySlot.builder()
+                        .mentorUserId(mentorProfile.getUserId())
+                        .startTime(BookingTime.fromInstant(slotStartUtc))
+                        .endTime(BookingTime.fromInstant(slotEndUtc))
+                        .startTimeUtc(slotStartUtc)
+                        .endTimeUtc(slotEndUtc)
+                        .timezone("Asia/Ho_Chi_Minh")
+                        .isActive(true)
+                        .isBooked(false)
+                        .build()
+        );
+        availabilitySlotServiceRepository.saveAndFlush(AvailabilitySlotService.builder()
+                .id(new AvailabilitySlotServiceId(lastMinuteSlot.getId(), mentorService.getId()))
+                .slot(lastMinuteSlot)
+                .build());
+
+        var candidates = mentorAvailabilityService.getServiceSlotCandidates(
+                mentorUser.getId(), lastMinuteSlot.getId(), mentorService.getId());
+        assertEquals(1, candidates.candidateServiceSlots().size());
+        assertTrue(candidates.candidateServiceSlots().getFirst().selectable());
+
+        BookingQuoteResponse quote = bookingQuoteService.quote(
+                menteeUser.getId(),
+                new BookingQuoteRequest(lastMinuteSlot.getId(), mentorService.getId(), slotStartUtc)
+        );
+        assertEquals(0, quote.paymentPreparationBufferMinutes());
+
+        BookingResponse created = bookingService.createBooking(
+                menteeUser.getId(),
+                new CreateBookingRequest(
+                        lastMinuteSlot.getId(),
+                        mentorService.getId(),
+                        slotStartUtc,
+                        "Last minute booking",
+                        "Need urgent mentoring 10 minutes before start"
+                )
+        );
+        assertEquals(BookingStatus.PENDING, created.status());
+
+        BookingResponse accepted = bookingService.acceptBooking(
+                mentorUser.getId(),
+                created.bookingId(),
+                new AcceptBookingRequest("OK", MeetingPlatform.GOOGLE_MEET, "https://meet.google.com/last-min-ok", null)
+        );
+        assertEquals(BookingStatus.ACCEPTED_AWAITING_PAYMENT, accepted.status());
+
+        paymentOrderService.checkout(menteeUser.getId(), new PaymentCheckoutRequest(created.bookingId(), null));
+
+        BookingResponse paid = bookingService.getBookingDetail(menteeUser.getId(), created.bookingId());
+        assertEquals(BookingStatus.PAID, paid.status());
     }
 
     private void completeAcademicProfile(UUID userId, String studentCode) {

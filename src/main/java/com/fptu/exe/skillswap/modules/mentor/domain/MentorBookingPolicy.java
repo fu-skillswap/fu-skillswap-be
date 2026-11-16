@@ -29,7 +29,7 @@ public class MentorBookingPolicy {
 
     @Column(name = "minimum_booking_lead_time_minutes", nullable = false)
     @Builder.Default
-    private Integer minimumBookingLeadTimeMinutes = 120;
+    private Integer minimumBookingLeadTimeMinutes = 0;
 
     @Column(name = "maximum_booking_horizon_days", nullable = false)
     @Builder.Default
@@ -55,7 +55,7 @@ public class MentorBookingPolicy {
         createdAt = DateTimeUtil.now();
         updatedAt = DateTimeUtil.now();
         if (minimumBookingLeadTimeMinutes == null) {
-            minimumBookingLeadTimeMinutes = 120;
+            minimumBookingLeadTimeMinutes = 0;
         }
         if (maximumBookingHorizonDays == null) {
             maximumBookingHorizonDays = 30;
