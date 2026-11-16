@@ -1,3 +1,5 @@
+-- rollout: EXPAND
+
 UPDATE mentor_booking_policies
 SET minimum_booking_lead_time_minutes = 0
 WHERE minimum_booking_lead_time_minutes <> 0;
