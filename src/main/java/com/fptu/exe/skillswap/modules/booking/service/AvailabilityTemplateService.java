@@ -717,7 +717,7 @@ public class AvailabilityTemplateService {
                 .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy hồ sơ mentor"));
     }
     private void markDue(UUID templateId) { reconciliationRepository.findById(templateId).ifPresent(state -> state.setNextReconcileAt(now())); }
-    private LocalDate today() { return LocalDate.now(TEMPLATE_ZONE); }
+    private LocalDate today() { return timeProvider.localDate(TEMPLATE_ZONE); }
     private LocalDateTime now() { return timeProvider.nowBusiness(); }
     private LocalDateTime toStored(LocalDate date, LocalTime time) { return LocalDateTime.of(date, time); }
     private LocalDateTime nextRollover() { return timeProvider.nowBusiness().plusDays(1).toLocalDate().atStartOfDay().plusMinutes(1); }
