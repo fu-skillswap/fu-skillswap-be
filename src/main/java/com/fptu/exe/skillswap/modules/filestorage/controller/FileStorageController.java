@@ -198,9 +198,12 @@ public class FileStorageController {
                 && key.startsWith("public-assets/portfolio/" + principal.getPublicId() + "/");
         boolean serviceCoverPublicObject = principal != null && principal.getPublicId() != null
                 && key.startsWith("public-assets/services/" + principal.getPublicId() + "/");
+        boolean avatarPublicObject = principal != null && principal.getPublicId() != null
+                && key.startsWith("public-assets/avatars/" + principal.getPublicId() + "/");
         boolean courseMaterialObject = principal != null && principal.getPublicId() != null
                 && key.startsWith("course-materials/" + principal.getPublicId() + "/");
-        if (!verificationObject && !blogPublicObject && !portfolioPublicObject && !serviceCoverPublicObject && !courseMaterialObject) {
+        if (!verificationObject && !blogPublicObject && !portfolioPublicObject && !serviceCoverPublicObject
+                && !avatarPublicObject && !courseMaterialObject) {
             throw new BaseException(ErrorCode.ACCESS_DENIED, "objectKey không thuộc phạm vi upload của người dùng");
         }
     }

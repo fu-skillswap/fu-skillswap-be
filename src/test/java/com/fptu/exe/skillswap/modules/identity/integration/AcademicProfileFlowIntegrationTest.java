@@ -67,7 +67,6 @@ class AcademicProfileFlowIntegrationTest {
         StudentProfileResponse updated = academicService.updateStudentProfile(user.getId(), StudentProfileRequest.builder()
                 .studentCode(" se190123 ")
                 .displayName("Updated Academic User")
-                .avatarUrl("https://example.com/avatar.png")
                 .campusId(campus.getId())
                 .programId(program.getId())
                 .specializationId(specialization.getId())
@@ -91,6 +90,22 @@ class AcademicProfileFlowIntegrationTest {
         assertEquals(updated.getDisplayName(), fetched.getDisplayName());
         assertEquals(updated.getAvatarUrl(), fetched.getAvatarUrl());
         assertEquals(updated.getBio(), fetched.getBio());
+
+        com.fptu.exe.skillswap.shared.exception.BaseException rejected = assertThrows(
+                com.fptu.exe.skillswap.shared.exception.BaseException.class,
+                () -> academicService.updateStudentProfile(user.getId(), StudentProfileRequest.builder()
+                        .studentCode("SE190123")
+                        .displayName("Updated Academic User")
+                        .avatarUrl("https://evil.example.com/override.png")
+                        .campusId(campus.getId())
+                        .programId(program.getId())
+                        .specializationId(specialization.getId())
+                        .semester(5)
+                        .intakeYear(2022)
+                        .isAlumni(false)
+                        .build())
+        );
+        assertEquals(com.fptu.exe.skillswap.shared.exception.ErrorCode.BAD_REQUEST, rejected.getErrorCode());
     }
 
     @Test

@@ -38,8 +38,9 @@ public class StudentProfileRequest {
     private String displayName;
 
     @Schema(
-        description = "URL ảnh đại diện (nếu không điền sẽ giữ nguyên ảnh từ Google)",
-        example = "https://example.com/avatar.jpg"
+        description = "Trường cũ chỉ giữ tương thích khi không thay đổi; không cho phép gán URL avatar mới tại đây (vui lòng dùng /api/me/avatar)",
+        example = "https://lh3.googleusercontent.com/demo-avatar",
+        deprecated = true
     )
     private String avatarUrl;
 

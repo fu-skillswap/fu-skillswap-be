@@ -318,6 +318,8 @@ public class IdentityService {
         // Anonymize PII and soft delete
         user.setFullName("Người dùng đã xóa");
         user.setAvatarUrl(null);
+        user.setAvatarFileId(null);
+        user.setOauthAvatarUrl(null);
         user.setEmail("deleted." + user.getId() + "@deleted.skillswap.local");
         user.setStatus(UserStatus.DELETED);
         user.setDeletedAt(timeProvider.nowBusiness());

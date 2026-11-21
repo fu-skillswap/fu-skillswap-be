@@ -54,6 +54,13 @@ public class IdentityLoginTransactionService {
         checkUserStatus(user);
         assignSystemAdminRoleIfWhitelisted(user);
 
+        if (googleUser.getPicture() != null && !googleUser.getPicture().isBlank()) {
+            String mailPicture = googleUser.getPicture().trim();
+            user.setOauthAvatarUrl(mailPicture);
+            if (user.getAvatarFileId() == null && (user.getAvatarUrl() == null || user.getAvatarUrl().isBlank())) {
+                user.setAvatarUrl(mailPicture);
+            }
+        }
         user.setLastLoginAt(timeProvider.nowBusiness());
         userRepository.save(user);
 
@@ -79,6 +86,7 @@ public class IdentityLoginTransactionService {
                 .email(googleUser.getEmail())
                 .fullName(googleUser.getName() != null ? googleUser.getName() : extractDefaultName(googleUser.getEmail()))
                 .avatarUrl(googleUser.getPicture())
+                .oauthAvatarUrl(googleUser.getPicture())
                 .status(UserStatus.ACTIVE)
                 .build();
 

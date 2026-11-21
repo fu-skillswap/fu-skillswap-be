@@ -43,6 +43,12 @@ public class User {
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
+    @Column(name = "avatar_file_id")
+    private UUID avatarFileId;
+
+    @Column(name = "oauth_avatar_url", columnDefinition = "TEXT")
+    private String oauthAvatarUrl;
+
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 

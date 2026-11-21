@@ -48,6 +48,7 @@ public class OpenApiFlowConfig {
             tag("Catalog", "Dữ liệu biểu mẫu", "Các lựa chọn có sẵn để FE hiển thị trong biểu mẫu."),
             tag("Onboarding", "Trạng thái bắt đầu", "Cho FE biết người dùng cần hoàn thành bước nào tiếp theo."),
             tag("Academic Profile", "Hồ sơ sinh viên", "Xem và cập nhật thông tin học tập của người dùng."),
+            tag("Account Management", "Quản lý tài khoản", "Quản lý ảnh đại diện và tài khoản cá nhân của người dùng."),
             tag("Mentor Profile", "Hồ sơ mentor", "Tạo hồ sơ, dự án và thành tích trước khi đăng ký mentor."),
             tag("Mentor Verification", "Đăng ký mentor", "Tải minh chứng, nộp hồ sơ và theo dõi kết quả duyệt."),
             tag("Mentor Services", "Dịch vụ mentor", "Tạo và quản lý các dịch vụ mà mentee có thể đặt."),
@@ -206,7 +207,8 @@ public class OpenApiFlowConfig {
                 "/api/specializations",
                 "/api/catalog/**",
                 "/api/me/onboarding-status",
-                "/api/me/student-profile/**"
+                "/api/me/student-profile/**",
+                "/api/me/avatar/**"
         );
     }
 

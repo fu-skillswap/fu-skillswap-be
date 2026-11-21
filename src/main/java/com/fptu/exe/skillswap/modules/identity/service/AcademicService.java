@@ -160,12 +160,18 @@ public class AcademicService implements AcademicEligibilityQuery {
         // Normalize student code
         String normalizedStudentCode = request.getStudentCode().trim().toUpperCase();
 
-        // Update user fields if provided
+        // Update user fields if provided (avatarUrl changes are locked to /api/me/avatar)
         if (request.getDisplayName() != null && !request.getDisplayName().trim().isEmpty()) {
             user.setFullName(request.getDisplayName().trim());
         }
         if (request.getAvatarUrl() != null && !request.getAvatarUrl().trim().isEmpty()) {
-            user.setAvatarUrl(request.getAvatarUrl().trim());
+            String requestedAvatarUrl = request.getAvatarUrl().trim();
+            if (!requestedAvatarUrl.equals(user.getAvatarUrl())) {
+                throw new BaseException(
+                        ErrorCode.BAD_REQUEST,
+                        "Không thể thay đổi ảnh đại diện qua hồ sơ học thuật; vui lòng sử dụng /api/me/avatar"
+                );
+            }
         }
         userRepository.save(user);
 

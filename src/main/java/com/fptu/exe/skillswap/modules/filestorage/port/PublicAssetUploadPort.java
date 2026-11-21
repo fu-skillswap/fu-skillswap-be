@@ -32,6 +32,12 @@ public interface PublicAssetUploadPort {
 
     FileAssetMetadata requireOwnedServiceCover(UUID ownerUserId, UUID assetId);
 
+    UploadIntent createAvatarIntent(UUID ownerUserId, UploadRequest request);
+
+    FileAssetMetadata confirmAvatar(UUID ownerUserId, UUID intentId);
+
+    FileAssetMetadata requireOwnedAvatar(UUID ownerUserId, UUID assetId);
+
     FileAssetMetadata requireOwnedBlogImage(UUID ownerUserId, UUID assetId);
 
     void requireOwnedBlogImageUrl(UUID ownerUserId, String publicUrl);

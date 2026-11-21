@@ -215,6 +215,39 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
                 .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Ảnh bìa dịch vụ không hợp lệ"));
     }
 
+    @Transactional
+    @Override
+    public PublicAssetUploadPort.UploadIntent createAvatarIntent(UUID ownerId, PublicAssetUploadPort.UploadRequest request) {
+        return createImageIntent(
+                ownerId,
+                request,
+                FilePurpose.AVATAR,
+                "public-assets/avatars/" + ownerId,
+                "USER_AVATAR_IMAGE"
+        );
+    }
+
+    @Transactional
+    @Override
+    public PublicAssetUploadPort.FileAssetMetadata confirmAvatar(UUID ownerId, UUID intentId) {
+        return confirmImageIntent(
+                ownerId,
+                intentId,
+                FilePurpose.AVATAR,
+                5L * 1024 * 1024,
+                "Ảnh đại diện vượt quá 5 MiB"
+        );
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public PublicAssetUploadPort.FileAssetMetadata requireOwnedAvatar(UUID ownerId, UUID assetId) {
+        return storedFileRepository.findById(assetId)
+                .filter(file -> file.getPurpose() == FilePurpose.AVATAR && file.getOwnerUserId().equals(ownerId))
+                .map(this::toResponse)
+                .orElseThrow(() -> new BaseException(ErrorCode.BAD_REQUEST, "Ảnh đại diện không hợp lệ"));
+    }
+
     @Transactional(readOnly = true)
     @Override
     public PublicAssetUploadPort.FileAssetMetadata requireOwnedBlogImage(UUID ownerId, UUID assetId) {
@@ -235,11 +268,76 @@ public class PublicAssetUploadService implements PublicAssetUploadPort {
         String assetType = switch (file.getPurpose()) {
             case BLOG_IMAGE -> "BLOG_IMAGE";
             case SERVICE_COVER -> "SERVICE_COVER_IMAGE";
+            case AVATAR -> "USER_AVATAR_IMAGE";
             default -> "PORTFOLIO_IMAGE";
         };
         return new PublicAssetUploadPort.FileAssetMetadata(file.getId(), file.getPublicUrl(), file.getMimeType(),
                 file.getSizeBytes() == null ? 0L : file.getSizeBytes(),
                 new ProviderNeutralUploadMetadata(file.getId(), null, file.getPublicUrl(), null, assetType, Map.of()));
+    }
+
+    private PublicAssetUploadPort.UploadIntent createImageIntent(
+            UUID ownerId,
+            PublicAssetUploadPort.UploadRequest request,
+            FilePurpose purpose,
+            String objectPrefix,
+            String metadataType
+    ) {
+        String contentType = normalizeImageType(request.contentType());
+        validateFilename(request.filename());
+        StorageGateway.PresignedUpload upload = storageGateway().generatePresignedUploadUrl(
+                request.filename(), contentType, objectPrefix);
+        LocalDateTime expiresAt = DateTimeUtil.now().plusMinutes(15);
+        PublicAssetUploadIntent intent = intentRepository.save(PublicAssetUploadIntent.builder()
+                .ownerUserId(ownerId)
+                .purpose(purpose)
+                .objectKey(upload.objectKey())
+                .expectedContentType(contentType)
+                .expiresAt(expiresAt)
+                .build());
+        return new PublicAssetUploadPort.UploadIntent(intent.getId(), upload.uploadUrl(), expiresAt,
+                Map.of("Content-Type", contentType),
+                new ProviderNeutralUploadMetadata(null, intent.getId(), upload.uploadUrl(),
+                        expiresAt.toInstant(ZoneOffset.UTC), metadataType, Map.of("Content-Type", contentType)));
+    }
+
+    private PublicAssetUploadPort.FileAssetMetadata confirmImageIntent(
+            UUID ownerId,
+            UUID intentId,
+            FilePurpose purpose,
+            long maxBytes,
+            String tooLargeMessage
+    ) {
+        PublicAssetUploadIntent intent = intentRepository.findByIdForUpdate(intentId)
+                .orElseThrow(() -> new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent"));
+        if (!intent.getOwnerUserId().equals(ownerId) || intent.getPurpose() != purpose) {
+            throw new BaseException(ErrorCode.NOT_FOUND, "Không tìm thấy upload intent");
+        }
+        if (intent.getConfirmedFile() != null) {
+            return toResponse(intent.getConfirmedFile());
+        }
+        if (intent.getExpiresAt().isBefore(DateTimeUtil.now())) {
+            throw new BaseException(ErrorCode.BAD_REQUEST, "Upload intent đã hết hạn");
+        }
+        StorageGateway.ObjectMetadata metadata = storageGateway().headObject(intent.getObjectKey());
+        String contentType = normalizeImageType(
+                metadata.contentType() == null ? intent.getExpectedContentType() : metadata.contentType());
+        if (metadata.sizeBytes() > maxBytes) {
+            throw new BaseException(ErrorCode.PAYLOAD_TOO_LARGE, tooLargeMessage);
+        }
+        StoredFile file = storedFileRepository.save(StoredFile.builder()
+                .ownerUserId(intent.getOwnerUserId())
+                .purpose(purpose)
+                .originalName(intent.getObjectKey().substring(intent.getObjectKey().lastIndexOf('/') + 1))
+                .storageProvider(storageGateway().storageProviderName())
+                .storageKey(intent.getObjectKey())
+                .publicUrl(storageGateway().resolvePublicUrl(intent.getObjectKey()))
+                .mimeType(contentType)
+                .sizeBytes(metadata.sizeBytes())
+                .build());
+        intent.setConfirmedFile(file);
+        intent.setConfirmedAt(DateTimeUtil.now());
+        return toResponse(file);
     }
 
     private StorageGateway storageGateway() {
