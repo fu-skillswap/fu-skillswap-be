@@ -9,6 +9,7 @@ import com.fptu.exe.skillswap.modules.filestorage.repository.PublicAssetUploadIn
 import com.fptu.exe.skillswap.modules.filestorage.repository.StoredFileRepository;
 import com.fptu.exe.skillswap.shared.exception.BaseException;
 import com.fptu.exe.skillswap.shared.exception.ErrorCode;
+import com.fptu.exe.skillswap.shared.util.DateTimeUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,7 +17,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -90,7 +90,7 @@ class PublicAssetUploadServiceAvatarTest {
                 .purpose(FilePurpose.AVATAR)
                 .objectKey(key)
                 .expectedContentType("image/png")
-                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .expiresAt(DateTimeUtil.now().plusMinutes(10))
                 .build();
 
         when(intentRepository.findByIdForUpdate(intentId)).thenReturn(Optional.of(intent));
@@ -115,7 +115,7 @@ class PublicAssetUploadServiceAvatarTest {
                 .purpose(FilePurpose.AVATAR)
                 .objectKey(key)
                 .expectedContentType("image/jpeg")
-                .expiresAt(LocalDateTime.now().plusMinutes(10))
+                .expiresAt(DateTimeUtil.now().plusMinutes(10))
                 .build();
 
         when(intentRepository.findByIdForUpdate(intentId)).thenReturn(Optional.of(intent));
